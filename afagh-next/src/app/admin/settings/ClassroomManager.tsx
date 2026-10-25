@@ -68,46 +68,50 @@ const HEADERS: Array<[string, string]> = [
 /** فرم افزودن کلاس جدید — «کد» اولین فیلد است تا با ستون اول جدول هم‌نام باشد. */
 function AddForm({ faculties }: { faculties: FacultyOption[] }) {
   const [state, action, pending] = useActionState(adminSaveClassroomAction, INITIAL);
+  const LBL = 'flex min-w-0 flex-col gap-1 text-[11px] font-bold text-slate-500';
   return (
-    <form action={action} className="flex flex-wrap items-end gap-2 text-xs">
-      <label className="text-slate-500">کد کلاس
-        <input name="code" className={`${INP} mt-1 w-24 text-center font-mono`} dir="ltr" placeholder="مثلاً 201" />
+    <form
+      action={action}
+      className="grid grid-cols-2 items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:grid-cols-4 lg:grid-cols-5"
+    >
+      <label className={LBL}>کد کلاس
+        <input name="code" className={`${INP} text-center font-mono`} dir="ltr" placeholder="مثلاً 201" />
       </label>
-      <label className="text-slate-500">نام
-        <input name="name" required className={`${INP} mt-1`} placeholder="مثلاً کلاس ۳۰۵" />
+      <label className={`${LBL} col-span-2 sm:col-span-1`}>نام
+        <input name="name" required className={INP} placeholder="مثلاً کلاس ۳۰۵" />
       </label>
-      <label className="text-slate-500">ظرفیت
-        <input name="cap" type="number" min={1} required className={`${INP} mt-1 w-20`} dir="ltr" />
+      <label className={LBL}>ظرفیت
+        <input name="cap" type="number" min={1} required className={INP} dir="ltr" placeholder="۴۰" />
       </label>
-      <label className="text-slate-500">نوع
-        <select name="roomType" className={`${INP} mt-1`}>
+      <label className={LBL}>نوع
+        <select name="roomType" className={INP}>
           <option value="">—</option>
           {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </label>
-      <label className="text-slate-500">دانشکده
-        <select name="facultyId" className={`${INP} mt-1 max-w-48`}>
+      <label className={`${LBL} col-span-2`}>دانشکده
+        <select name="facultyId" className={INP}>
           <option value="">— بدون دانشکده —</option>
           {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
       </label>
-      <label className="text-slate-500">طبقه
-        <input name="floor" className={`${INP} mt-1 w-16`} dir="ltr" placeholder="۲" />
+      <label className={LBL}>طبقه
+        <input name="floor" className={INP} dir="ltr" placeholder="۲" />
       </label>
-      <label className="text-slate-500">ردیف
-        <input name="rows" type="number" min={0} className={`${INP} mt-1 w-16`} dir="ltr" />
+      <label className={LBL}>ردیف
+        <input name="rows" type="number" min={0} className={INP} dir="ltr" placeholder="۵" />
       </label>
-      <label className="text-slate-500">ستون
-        <input name="cols" type="number" min={0} className={`${INP} mt-1 w-16`} dir="ltr" />
+      <label className={LBL}>ستون
+        <input name="cols" type="number" min={0} className={INP} dir="ltr" placeholder="۸" />
       </label>
-      <label className="flex items-center gap-1 pb-2 text-slate-600">
+      <label className="flex items-center gap-1.5 pb-2 text-xs font-bold text-slate-600">
         <input type="checkbox" name="isActive" value="1" defaultChecked className="h-4 w-4" /> فعال
       </label>
       <button className="rounded-xl bg-indigo-700 px-5 py-2 text-sm font-black text-white disabled:opacity-60" disabled={pending}>
         {pending ? 'در حال افزودن…' : 'افزودن کلاس'}
       </button>
-      {state.err && <p className="text-[11px] font-bold text-rose-600">⛔ {state.err}</p>}
-      {state.msg && <p className="text-[11px] font-bold text-emerald-700">✓ {state.msg}</p>}
+      {state.err && <p className="col-span-full text-[11px] font-bold text-rose-600">⛔ {state.err}</p>}
+      {state.msg && <p className="col-span-full text-[11px] font-bold text-emerald-700">✓ {state.msg}</p>}
     </form>
   );
 }
