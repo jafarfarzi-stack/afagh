@@ -46,7 +46,7 @@ export default async function ProctorLayout({ children }: { children: React.Reac
               <p className="text-xs text-slate-400">{user.name} · نقش: مراقب آزمون و کادر اجرایی</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
             <PanelSwitcher
               roles={user.roles}
               current="proctor"

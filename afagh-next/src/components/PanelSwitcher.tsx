@@ -87,7 +87,7 @@ export default function PanelSwitcher({
   }
 
   return (
-    <div className="relative" ref={boxRef}>
+    <div className="md:relative" ref={boxRef}>
       <button
         type="button"
         onClick={() => (open ? close() : setOpen(true))}
@@ -107,7 +107,7 @@ export default function PanelSwitcher({
         <div
           role="menu"
           dir="rtl"
-          className="fixed inset-x-2 bottom-2 z-[60] max-h-[65vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-full md:mt-2 md:max-h-none md:w-80 md:overflow-hidden md:rounded-xl"
+          className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-2xl md:inset-x-auto md:right-0 md:left-auto md:w-80"
         >
           {panels.length > 0 && (
             <div className="p-2">

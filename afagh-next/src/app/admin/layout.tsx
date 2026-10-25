@@ -183,8 +183,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
 
-          {/* ردیف ۲: سوییچرهای کارتابل / نیمسال / دانشگاه — مشترک بین همهٔ نقش‌ها */}
-          <div className="hdr-controls flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* ردیف ۲: سوییچرهای کارتابل / نیمسال / دانشگاه — مشترک بین همهٔ نقش‌ها.
+              `relative` لازم است: در موبایل پنل هر سوییچر تمام‌عرض و چسبیده به
+              همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند. */}
+          <div className="hdr-controls relative flex flex-wrap items-center gap-1.5 sm:gap-2">
             {headerSwitchers}
           </div>
         </div>

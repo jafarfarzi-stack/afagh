@@ -187,7 +187,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* `relative` لازم است: در موبایل پنل سوییچرها تمام‌عرض و چسبیده به
+              همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند */}
+          <div className="relative flex flex-wrap items-center gap-2">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}

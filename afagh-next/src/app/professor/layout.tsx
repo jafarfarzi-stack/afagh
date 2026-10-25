@@ -153,7 +153,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
           {/* ردیف دوم: سوییچر نیمسال و نقش — کنار هم */}
           <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
-            <div className="hdr-controls flex flex-wrap items-center gap-2 min-w-0">
+            <div className="hdr-controls relative flex flex-wrap items-center gap-2 min-w-0">
               <TermSwitcher
                 terms={termScope.terms}
                 selectedId={termScope.selectedId}

@@ -56,7 +56,7 @@ export default async function GroupManagerLayout({ children }: { children: React
             </p>
             <p className="text-xs opacity-70">{user.name} · نقش‌ها: {user.roles.join('، ')}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex flex-wrap items-center gap-3">
             <PanelSwitcher
               roles={user.roles}
               current="group-manager"
