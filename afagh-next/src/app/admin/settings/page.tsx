@@ -56,7 +56,7 @@ export default async function AdminSettingsPage() {
       <SettingsClient settings={view} groups={[...SETTING_GROUPS]} />
 
       {/* ── داده‌های پایه (رکوردها) ── */}
-      <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <details open className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
         <summary className="cursor-pointer select-none list-none px-5 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-extrabold text-slate-800">داده‌های پایه (رکوردها)</h2>
