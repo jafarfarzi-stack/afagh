@@ -28,6 +28,16 @@ export async function adminSaveClassroomAction(
   _prev: SaveClassroomResult | null,
   fd: FormData,
 ): Promise<SaveClassroomResult> {
+  /**
+   * حذف از همان فرمِ ردیف می‌آید (دکمهٔ «حذف؟» با `intent=delete`).
+   *
+   * چرا؟ ردیف‌های جدولِ کلاس‌ها حالا هرکدام یک grid هستند و ستون‌ها باید زیر
+   * سرسطر بنشینند؛ فرمِ دومِ تودرتو (حذف) این چیدمان را می‌شکست و HTML هم
+   * فرمِ تودرتو را مجاز نمی‌داند.
+   */
+  if (String(fd.get('intent') ?? '') === 'delete') {
+    return adminDeleteClassroomAction(_prev, fd);
+  }
   try {
     await requireRole(['ADMIN', 'EDU_EXPERT']);
     const id = fd.get('id') ? Number(fd.get('id')) : 0;

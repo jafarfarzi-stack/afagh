@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, useActionState } from 'react';
-import { adminSaveClassroomAction, adminDeleteClassroomAction, type SaveClassroomResult } from './actions';
+import { useEffect, useRef, useState, useActionState, type ReactNode } from 'react';
+import { adminSaveClassroomAction, type SaveClassroomResult } from './actions';
 
 interface FacultyOption {
   id: number;
@@ -21,115 +21,267 @@ interface RoomData {
   isActive: number | null;
 }
 
-const ROOM_TYPES = ['', 'کلاس درس', 'آزمایشگاه', 'سالن', 'ورزشی'];
+const ROOM_TYPES = ['کلاس درس', 'آزمایشگاه', 'سالن', 'ورزشی', 'کارگاه', 'اداری'];
 
 const INITIAL: SaveClassroomResult = { ok: false };
 
-/** فرم افزودن کلاس جدید — همراه با فیلدِ «کد» (اختیاری). */
+/**
+ * قالبِ ستون‌ها — یک منبعِ واحد برای سرسطر و ردیف‌ها.
+ *
+ * چرا ثابتِ مشترک؟ قبلاً سرسطر ۷ عنوان داشت ولی هر ردیف یک `<td colSpan={7}>`
+ * با فرمِ flex-wrap بود؛ یعنی عنوان‌ها هیچ‌وقت روی کادرها نمی‌افتادند و معلوم
+ * نبود هر کادر مال کدام عنوان است. حالا سرسطر و هر ردیف همان template را
+ * می‌گیرند، پس ستون‌ها دقیقاً زیر هم می‌نشینند.
+ *
+ * ترتیب RTL: اولین فرزند = راست‌ترین ستون ⇒ «کد» اولین ستون است.
+ */
+const COLS =
+  'grid-cols-2 sm:grid-cols-3 ' +
+  'md:grid-cols-[4.5rem_minmax(7rem,1.2fr)_4.5rem_6.5rem_minmax(6.5rem,1fr)_3.25rem_5.75rem_5.5rem_5.75rem]';
+
+const INP =
+  'w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[13px] text-slate-800 ' +
+  'outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100';
+
+/** یک خانه: برچسب فقط در موبایل بالای کادر دیده می‌شود (سرسطر در موبایل مخفی است). */
+function Cell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <span className="mb-0.5 block text-[10px] font-bold text-slate-400 md:hidden">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+const HEADERS: Array<[string, string]> = [
+  ['کد', 'کد کلاس در سما (LT4.Code) — همان کدی که برنامهٔ هفتگی و سالن امتحان با آن کار می‌کند'],
+  ['نام کلاس', 'نامی که در انتخاب‌گر کلاس و برنامهٔ هفتگی دیده می‌شود'],
+  ['ظرفیت', 'ظرفیت اسمی اتاق (نفر)'],
+  ['نوع', 'کلاس درس / آزمایشگاه / سالن / ورزشی / کارگاه'],
+  ['دانشکده', 'دانشکدهٔ مالکِ اتاق — در سوییچ دانشگاه هم‌تراز می‌ماند'],
+  ['طبقه', 'شمارهٔ طبقه'],
+  ['نیمکت (ردیف × ستون)', 'چیدمان نیمکت‌ها برای نقشهٔ حضور و غیاب — ابتدا تعداد ردیف، بعد تعداد ستون'],
+  ['وضعیت', 'کلاس غیرفعال در انتخاب‌گر سردر کلاس نمایش داده نمی‌شود'],
+  ['عملیات', 'ذخیره یا حذف همین ردیف'],
+];
+
+/** فرم افزودن کلاس جدید — «کد» اولین فیلد است تا با ستون اول جدول هم‌نام باشد. */
 function AddForm({ faculties }: { faculties: FacultyOption[] }) {
   const [state, action, pending] = useActionState(adminSaveClassroomAction, INITIAL);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2 text-xs">
-      <label className="text-slate-500">نام<input name="name" required className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="مثلاً اتاق ۳۰۵" /></label>
-      <label className="text-slate-500">کد<input name="code" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" dir="ltr" placeholder="اختیاری" /></label>
-      <label className="text-slate-500">ظرفیت<input name="cap" type="number" min={1} required className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-20" dir="ltr" /></label>
+      <label className="text-slate-500">کد کلاس
+        <input name="code" className={`${INP} mt-1 w-24 text-center font-mono`} dir="ltr" placeholder="مثلاً 201" />
+      </label>
+      <label className="text-slate-500">نام
+        <input name="name" required className={`${INP} mt-1`} placeholder="مثلاً کلاس ۳۰۵" />
+      </label>
+      <label className="text-slate-500">ظرفیت
+        <input name="cap" type="number" min={1} required className={`${INP} mt-1 w-20`} dir="ltr" />
+      </label>
       <label className="text-slate-500">نوع
-        <select name="roomType" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm">
-          {ROOM_TYPES.map(t => <option key={t} value={t}>{t || '—'}</option>)}
+        <select name="roomType" className={`${INP} mt-1`}>
+          <option value="">—</option>
+          {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </label>
       <label className="text-slate-500">دانشکده
-        <select name="facultyId" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm max-w-48">
+        <select name="facultyId" className={`${INP} mt-1 max-w-48`}>
           <option value="">— بدون دانشکده —</option>
           {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
       </label>
-      <label className="text-slate-500">طبقه<input name="floor" className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" placeholder="مثلاً ۲" /></label>
-      <label className="text-slate-500">ردیف‌ها<input name="rows" type="number" min={0} className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" /></label>
-      <label className="text-slate-500">ستون‌ها<input name="cols" type="number" min={0} className="block mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm w-16" dir="ltr" /></label>
-      <label className="flex items-center gap-1 text-slate-600"><input type="checkbox" name="isActive" value="1" defaultChecked className="w-4 h-4" /> فعال</label>
-      <button className="rounded-xl bg-indigo-700 px-5 py-2 text-white font-black text-sm" disabled={pending}>{pending ? 'در حال افزودن…' : 'افزودن کلاس'}</button>
-      {state.err && <p className="text-[11px] text-rose-600 font-bold">⛔ {state.err}</p>}
-      {state.msg && <p className="text-[11px] text-emerald-700 font-bold">✓ {state.msg}</p>}
+      <label className="text-slate-500">طبقه
+        <input name="floor" className={`${INP} mt-1 w-16`} dir="ltr" placeholder="۲" />
+      </label>
+      <label className="text-slate-500">ردیف
+        <input name="rows" type="number" min={0} className={`${INP} mt-1 w-16`} dir="ltr" />
+      </label>
+      <label className="text-slate-500">ستون
+        <input name="cols" type="number" min={0} className={`${INP} mt-1 w-16`} dir="ltr" />
+      </label>
+      <label className="flex items-center gap-1 pb-2 text-slate-600">
+        <input type="checkbox" name="isActive" value="1" defaultChecked className="h-4 w-4" /> فعال
+      </label>
+      <button className="rounded-xl bg-indigo-700 px-5 py-2 text-sm font-black text-white disabled:opacity-60" disabled={pending}>
+        {pending ? 'در حال افزودن…' : 'افزودن کلاس'}
+      </button>
+      {state.err && <p className="text-[11px] font-bold text-rose-600">⛔ {state.err}</p>}
+      {state.msg && <p className="text-[11px] font-bold text-emerald-700">✓ {state.msg}</p>}
     </form>
   );
 }
 
-/** فرم ویرایش یک کلاس (همراه با حذف) — هر ردیف state مستقل دارد. */
+/** یک ردیف کامل = یک فرم؛ حذف هم با `intent=delete` از همین فرم می‌رود. */
 function RowForm({ room, faculties }: { room: RoomData; faculties: FacultyOption[] }) {
   const [state, action, pending] = useActionState(adminSaveClassroomAction, INITIAL);
-  const [delState, delAction, delPending] = useActionState(adminDeleteClassroomAction, INITIAL);
+  const [confirmDel, setConfirmDel] = useState(false);
 
-  // پس از ذخیرهٔ موفق، کلید فرم را می‌زنیم تا با مقادیرِ تازه (پس از revalidate)
-  // ری‌ماونت شود — در غیر این صورت React فرم را ریست می‌کرد و مقدار قدیمی می‌ماند.
+  // پس از ذخیرهٔ موفق، فرم را ری‌مانت می‌کنیم تا مقادیرِ تازه (پس از revalidate)
+  // جای مقدار قدیمی را بگیرند؛ وگرنه React فرم را ریست می‌کرد و مقدار قبلی می‌ماند.
   const lastStateRef = useRef<SaveClassroomResult | null>(null);
   const [resetKey, setResetKey] = useState(0);
   useEffect(() => {
     if (state !== lastStateRef.current && state.ok) {
       lastStateRef.current = state;
       setResetKey(k => k + 1);
+      setConfirmDel(false);
     }
   }, [state]);
 
   const isActive = room.isActive ?? 1;
+  const noCode = !room.code;
+
   return (
-    <div className="space-y-1">
-      <form key={resetKey} action={action} className="flex flex-wrap items-center gap-2">
-        <input type="hidden" name="id" value={room.id} />
-        <input name="name" defaultValue={room.name} className="border border-slate-300 rounded-lg px-2 py-1 w-32 text-sm" />
-        <input name="code" defaultValue={room.code ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-24 text-sm" dir="ltr" placeholder="کد" />
-        <input name="cap" type="number" min={1} defaultValue={room.capacity} className="border border-slate-300 rounded-lg px-2 py-1 w-16 text-sm" dir="ltr" />
-        <input name="roomType" defaultValue={room.roomType ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-24 text-sm" />
-        <select name="facultyId" defaultValue={String(room.facultyId ?? '')} className="border border-slate-300 rounded-lg px-2 py-1 w-40 text-sm">
+    <form
+      key={resetKey}
+      action={action}
+      className={`grid ${COLS} items-start gap-2 rounded-xl border border-slate-200 bg-white p-2.5 md:items-center md:gap-1.5 md:rounded-none md:border-0 md:border-t md:border-slate-100 md:p-1.5`}
+    >
+      <input type="hidden" name="id" value={room.id} />
+
+      <Cell label="کد">
+        <input
+          name="code"
+          defaultValue={room.code ?? ''}
+          placeholder="بدون کد"
+          title={noCode ? 'این اتاق در سما کد ندارد' : `کد سما: ${room.code}`}
+          dir="ltr"
+          className={`${INP} text-center font-mono ${noCode ? 'border-amber-300 bg-amber-50 placeholder:text-[10px] placeholder:font-sans placeholder:text-amber-600' : ''}`}
+        />
+      </Cell>
+
+      <Cell label="نام کلاس">
+        <input name="name" defaultValue={room.name} className={`${INP} font-bold`} />
+      </Cell>
+
+      <Cell label="ظرفیت">
+        <input name="cap" type="number" min={1} defaultValue={room.capacity} dir="ltr" className={`${INP} text-center`} />
+      </Cell>
+
+      <Cell label="نوع">
+        <input name="roomType" list="room-type-list" defaultValue={room.roomType ?? ''} placeholder="—" className={INP} />
+      </Cell>
+
+      <Cell label="دانشکده">
+        <select name="facultyId" defaultValue={String(room.facultyId ?? '')} className={INP}>
           <option value="">— بدون دانشکده —</option>
           {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
-        <input name="floor" defaultValue={room.floor ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />
-        <input name="rows" type="number" defaultValue={room.rowsCount ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />
-        <input name="cols" type="number" defaultValue={room.colsCount ?? ''} className="border border-slate-300 rounded-lg px-2 py-1 w-14 text-sm" dir="ltr" />
-        <select name="isActive" defaultValue={String(isActive)} className="border border-slate-300 rounded-lg px-2 py-1 w-20 text-sm">
+      </Cell>
+
+      <Cell label="طبقه">
+        <input name="floor" defaultValue={room.floor ?? ''} dir="ltr" placeholder="—" className={`${INP} text-center`} />
+      </Cell>
+
+      <Cell label="نیمکت (ردیف × ستون)">
+        <div className="flex items-center gap-1" dir="ltr">
+          <input name="rows" type="number" min={0} defaultValue={room.rowsCount ?? ''} placeholder="—" title="تعداد ردیف" className={`${INP} px-1 text-center`} />
+          <span className="shrink-0 text-slate-400">×</span>
+          <input name="cols" type="number" min={0} defaultValue={room.colsCount ?? ''} placeholder="—" title="تعداد ستون" className={`${INP} px-1 text-center`} />
+        </div>
+      </Cell>
+
+      <Cell label="وضعیت">
+        <select name="isActive" defaultValue={String(isActive)} className={INP}>
           <option value="1">فعال</option>
           <option value="0">غیرفعال</option>
         </select>
-        <button className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50" disabled={pending}>{pending ? '…' : 'ذخیره'}</button>
-        {state.err && <span className="text-[11px] text-rose-600 font-bold">⛔ {state.err}</span>}
-        {state.msg && <span className="text-[11px] text-emerald-700 font-bold">✓ {state.msg}</span>}
-      </form>
-      <form action={delAction} className="flex items-center gap-2">
-        <input type="hidden" name="id" value={room.id} />
-        <button className="text-red-600 hover:underline text-xs" disabled={delPending}>{delPending ? 'در حال حذف…' : 'حذف'}</button>
-        {delState.err && <span className="text-[11px] text-rose-600 font-bold">⛔ {delState.err}</span>}
-        {delState.msg && <span className="text-[11px] text-emerald-700 font-bold">✓ {delState.msg}</span>}
-      </form>
-    </div>
+      </Cell>
+
+      <Cell label="عملیات">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-white disabled:opacity-60"
+            disabled={pending}
+          >
+            {pending ? '…' : 'ذخیره'}
+          </button>
+          {confirmDel ? (
+            <>
+              <button
+                name="intent"
+                value="delete"
+                className="rounded-lg bg-rose-600 px-2 py-1.5 text-[11px] font-bold text-white"
+                disabled={pending}
+              >
+                حذف؟
+              </button>
+              <button type="button" onClick={() => setConfirmDel(false)} className="rounded-lg border border-slate-300 px-1.5 py-1.5 text-[11px] text-slate-600">
+                ✕
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDel(true)}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50"
+            >
+              حذف
+            </button>
+          )}
+        </div>
+      </Cell>
+
+      {state.err && (
+        <p className="col-span-full text-[11px] font-bold text-rose-600">⛔ {state.err}</p>
+      )}
+      {state.msg && (
+        <p className="col-span-full text-[11px] font-bold text-emerald-700">✓ {state.msg}</p>
+      )}
+    </form>
   );
 }
 
 export default function ClassroomManager({ rooms, faculties }: { rooms: RoomData[]; faculties: FacultyOption[] }) {
+  const withCode = rooms.filter(r => r.code).length;
+  const missing = rooms.length - withCode;
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
-      <h3 className="font-bold text-slate-800">کلاس‌ها (اتاق‌های درس قابل برنامه‌ریزی)</h3>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-bold text-slate-800">کلاس‌ها (اتاق‌های درس قابل برنامه‌ریزی)</h3>
+        <p className="text-[11px] text-slate-500">
+          <span className="font-bold text-slate-700">{rooms.length.toLocaleString('fa-IR')}</span> اتاق ·{' '}
+          <span className="font-bold text-emerald-700">{withCode.toLocaleString('fa-IR')}</span> دارای کد
+          {missing > 0 && (
+            <>
+              {' '}· <span className="font-bold text-amber-600">{missing.toLocaleString('fa-IR')}</span> بدون کد
+            </>
+          )}
+        </p>
+      </div>
+
+      <datalist id="room-type-list">
+        {ROOM_TYPES.map(t => <option key={t} value={t} />)}
+      </datalist>
+
       <AddForm faculties={faculties} />
-      <p className="text-[11px] text-slate-400">ردیف/ستون برای نقشهٔ حضور و غیاب. کلاس غیرفعال در انتخاب‌گر سردر کلاس نمایش داده نمی‌شود.</p>
+
+      <p className="text-[11px] text-slate-400">
+        «کد کلاس» همان <span className="font-mono">LT4.Code</span> در سامانهٔ سماست؛ برنامهٔ هفتگی و سالن امتحان
+        اتاق‌ها را با همین کد می‌شناسند. ردیف/ستون فقط برای چیدمانِ نقشهٔ حضور و غیاب است.
+      </p>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-right text-xs rt">
-          <thead>
-            <tr className="text-slate-500">
-              <th className="p-2">نام</th><th className="p-2">کد</th><th className="p-2">ظرفیت</th><th className="p-2">نوع</th>
-              <th className="p-2">دانشکده</th><th className="p-2">طبقه</th><th className="p-2">نیمکت (ر×س)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rooms.map(r => (
-              <tr key={r.id} className="border-t border-slate-100 align-top">
-                <td className="p-2" colSpan={7}>
-                  <RowForm room={r} faculties={faculties} />
-                </td>
-              </tr>
+        <div className="md:min-w-[54rem]">
+          {/* سرسطر — فقط از دسکتاپ؛ در موبایل هر کادر برچسب خودش را بالای سر دارد. */}
+          <div className={`hidden md:grid ${COLS} items-center gap-1.5 px-1.5 pb-1.5`}>
+            {HEADERS.map(([label, hint]) => (
+              <div
+                key={label}
+                title={hint}
+                className="cursor-help truncate border-b-2 border-slate-200 pb-1 text-[11px] font-black text-slate-600"
+              >
+                {label}
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+
+          <div className="space-y-2 md:space-y-0">
+            {rooms.map(r => <RowForm key={r.id} room={r} faculties={faculties} />)}
+          </div>
+        </div>
       </div>
     </div>
   );
