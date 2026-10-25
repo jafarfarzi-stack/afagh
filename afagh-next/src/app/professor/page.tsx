@@ -141,16 +141,16 @@ export default async function ProfessorHome() {
         recordings={demo ? DEMO_RECORDINGS : undefined}
       />
 
-      <div className="print:hidden grid grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="print:hidden grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
         <Link
           href="/professor/schedule"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             🗓️
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">برنامه هفتگی تدریس</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">برنامه هفتگی</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               مشاهده روزها، ساعات تشکیل، شماره کلاس فیزیکی و تواتر زوج/فرد
             </p>
@@ -161,11 +161,11 @@ export default async function ProfessorHome() {
           href="/professor/attendance"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📋
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">ثبت حضور و غیاب</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">حضور و غیاب</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               ثبت وضعیت هر جلسه، تاخیر، غیبت موجه و هشدار ماده ۳/۱۶
             </p>
@@ -176,11 +176,11 @@ export default async function ProfessorHome() {
           href="/professor/grades"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-purple-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📝
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">بارم‌بندی و ثبت نمرات</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">ثبت نمرات</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               تعیین سهم میان‌ترم و پایان‌ترم (جمع ۲۰)، نمرات مشترک و رسیدگی به اعتراضات
             </p>
@@ -191,11 +191,11 @@ export default async function ProfessorHome() {
           href="/professor/contract"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-amber-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📑
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">قرارداد تدریس و مالی</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">قرارداد و مالی</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               مشاهده فرم رسمی، جزئیات مالی، نرخ هر ساعت و امضای دیجیتال
             </p>
@@ -206,11 +206,11 @@ export default async function ProfessorHome() {
           href="/professor/availability"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-teal-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             ⏰
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">اعلام ساعات حضور ترم</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">ساعات حضور</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               اعلام بازه‌های زمانی حضور در ترم
             </p>
@@ -221,11 +221,11 @@ export default async function ProfessorHome() {
           href="/professor/performance"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-sky-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📊
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">کارنامه عملکرد</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">عملکرد</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               کارنامه عملکرد تدریس و ارزیابی‌ها
             </p>
@@ -236,11 +236,11 @@ export default async function ProfessorHome() {
           href="/professor/evaluation"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-rose-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📈
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">ارزشیابی دانشجویان</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">ارزشیابی</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               ارزشیابی دانشجویان هر کلاس
             </p>
@@ -251,11 +251,11 @@ export default async function ProfessorHome() {
           href="/professor/broadcast"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📣
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">پیام به کلاس</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">پیام به کلاس</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               ارسال پیام به دانشجویان کلاس‌های شما
             </p>
@@ -266,11 +266,11 @@ export default async function ProfessorHome() {
           href="/professor/documents"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📄
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">اسناد و امضا</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">اسناد و امضا</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               اسناد الکترونیک و امضای دیجیتال
             </p>
@@ -281,11 +281,11 @@ export default async function ProfessorHome() {
           href="/help/professor"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📖
           </div>
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900">راهنمای استاد</h3>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">راهنما</h3>
             <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
               راهنمای استفاده و PDF
             </p>

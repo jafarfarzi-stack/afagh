@@ -171,21 +171,21 @@ export default async function StudentDashboardPage() {
           <span className="text-xs text-slate-500 font-bold">سامانه یکپارچه آفاق</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
           <Link
             href="/student/enroll"
             className="card p-4 bg-white hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 🛒
               </div>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-emerald-900 transition">
-                انتخاب واحد هوشمند
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-emerald-900 transition">
+                انتخاب واحد
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 کنترل هم‌نیازی، پیش‌نیازی و تداخل
               </p>
             </div>
@@ -196,15 +196,15 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-teal-50/50 border border-slate-200 hover:border-teal-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📇
               </div>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-teal-900 transition">
-                کارت آزمون و صندلی
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-teal-900 transition">
+                کارت آزمون
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 ارزشیابی استاد و چاپ برگه A4
               </p>
             </div>
@@ -215,15 +215,15 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-lime-50/50 border border-slate-200 hover:border-lime-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 🖨️
               </div>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-lime-900 transition">
-                تأییدیه انتخاب واحد
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-lime-900 transition">
+                تأییدیه
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 چاپ برگه با QR استعلام اصالت
               </p>
             </div>
@@ -234,18 +234,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📜
               </div>
-              <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+              <span className="hidden sm:inline-flex text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
                 رسمی
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-indigo-900 transition">
-                کارنامه کل تحصیلی
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-indigo-900 transition">
+                کارنامه
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 محاسبه آیین‌نامه‌ای و حذف مردودی
               </p>
             </div>
@@ -256,18 +256,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-sky-50/50 border border-slate-200 hover:border-sky-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-sky-100 text-sky-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 💻
               </div>
-              <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-bold animate-pulse">
+              <span className="hidden sm:inline-flex text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-bold animate-pulse">
                 BBB زنده
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-sky-900 transition">
-                کلاس آنلاین و وبینار
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-sky-900 transition">
+                کلاس آنلاین
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 ورود مستقیم به جلسات مجازی LMS
               </p>
             </div>
@@ -278,18 +278,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-amber-50/50 border border-slate-200 hover:border-amber-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📅
               </div>
-              <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+              <span className="hidden sm:inline-flex text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
                 تقویم شمسی
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-amber-900 transition">
-                برنامه هفتگی و امتحانات
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-amber-900 transition">
+                برنامه و آزمون
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 شماره کلاس، ساختمان و ساعت آزمون
               </p>
             </div>
@@ -300,18 +300,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-purple-50/50 border border-slate-200 hover:border-purple-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📋
               </div>
-              <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">
+              <span className="hidden sm:inline-flex text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">
                 سجاد BPM
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-purple-900 transition">
-                میز خدمات و کمیسیون
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-purple-900 transition">
+                میز خدمات
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 درخواست مرخصی، حذف ترم و کمیسیون
               </p>
             </div>
@@ -322,18 +322,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-rose-50/50 border border-slate-200 hover:border-rose-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 🗺️
               </div>
-              <span className="text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">
+              <span className="hidden sm:inline-flex text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">
                 سرفصل‌ها
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-rose-900 transition">
-                چارت درسی مصوب
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-rose-900 transition">
+                چارت درسی
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 دروس پایه، اصلی، تخصصی و عمومی
               </p>
             </div>
@@ -344,18 +344,18 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-400 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                 📁
               </div>
-              <span className="text-[10px] bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full font-bold">
+              <span className="hidden sm:inline-flex text-[10px] bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full font-bold">
                 بایگانی
               </span>
             </div>
             <div className="mt-3">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-slate-900 transition">
-                مدارک و بایگانی پرونده
+              <h3 className="font-black text-slate-900 text-[11px] sm:text-sm leading-tight group-hover:text-slate-900 transition">
+                مدارک
               </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+              <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                 مدرک دیپلم، کارت ملی و تعهدنامه
               </p>
             </div>
@@ -409,7 +409,7 @@ export default async function StudentDashboardPage() {
                       <span className={`w-2 h-2 rounded-full ${vc.isRunning ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}`}></span>
                       <strong className="text-xs font-black text-slate-900">{vc.courseTitle}</strong>
                       {vc.isRunning && (
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                        <span className="hidden sm:inline-flex text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
                           در حال برگزاری
                         </span>
                       )}

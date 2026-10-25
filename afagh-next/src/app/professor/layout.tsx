@@ -11,8 +11,8 @@ import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
-import MobileTabBar from '@/components/MobileTabBar';
 import UserAvatar from '@/components/UserAvatar';
+import ProfessorNav from './ProfessorNav';
 import { logoutAction } from '../login/actions';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import { getProfessorMergedClasses } from '@/lib/professor-data';
@@ -242,15 +242,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       </header>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6 pb-24 md:pb-6">{children}</main>
-      <MobileTabBar
-        activeClass="text-indigo-700"
-        items={[
-          { href: '/professor', label: 'داشبورد', icon: '🏠', exact: true },
-          { href: '/professor/schedule', label: 'برنامه', icon: '🗓️' },
-          { href: '/professor/attendance', label: 'حضور و غیاب', icon: '📋' },
-          { href: '/professor/grades', label: 'نمرات', icon: '📝' },
-        ]}
-      />
+      <ProfessorNav />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );
