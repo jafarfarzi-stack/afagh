@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { classrooms, faculties, schedules } from '@/db/schema';
@@ -135,5 +135,75 @@ export async function adminDeleteClassroomAction(
     return { ok: true, msg: 'کلاس حذف شد.' };
   } catch (e) {
     return { ok: false, err: (e as Error)?.message ?? 'خطا در حذف کلاس.' };
+  }
+}
+
+/**
+ * عملیات گروهی روی کلاس‌های انتخاب‌شده (تیک‌های کنار هر ردیف).
+ *
+ * `op` یکی از: `activate` | `deactivate` | `delete` · `ids` فهرستِ جداشده با کاما.
+ *
+ * قواعد:
+ * - مالکیت تک‌تک بررسی می‌شود (`classroomOwnedBy`) — نه فقط با فیلتر دانشگاه،
+ *   تا اگر شناسه‌ای از دانشگاه دیگر در فرم دستکاری شد، بی‌صدا نادیده گرفته شود.
+ * - حذف گروهی، کلاس‌های دارای برنامهٔ هفتگی را رد می‌کند و بقیه را حذف می‌کند
+ *   (به‌جای شکستِ کلِ دسته) و نتیجه را شفاف گزارش می‌دهد.
+ */
+export async function adminBulkClassroomAction(
+  _prev: SaveClassroomResult | null,
+  fd: FormData,
+): Promise<SaveClassroomResult> {
+  try {
+    await requireRole(['ADMIN', 'EDU_EXPERT']);
+    const op = String(fd.get('op') ?? '');
+    const ids = [...new Set(
+      String(fd.get('ids') ?? '')
+        .split(',')
+        .map(s => Number(s.trim()))
+        .filter(n => Number.isInteger(n) && n > 0),
+    )];
+    if (!ids.length) return { ok: false, err: 'هیچ کلاسی انتخاب نشده است.' };
+
+    const uni = await getCurrentUniversity().catch(() => null);
+    const myUni = uni?.id ?? null;
+    const rows = await db
+      .select({ id: classrooms.id, universityId: classrooms.universityId })
+      .from(classrooms)
+      .where(inArray(classrooms.id, ids));
+    const owned = rows.filter(r => classroomOwnedBy(r.universityId ?? null, myUni)).map(r => r.id);
+    const rejected = ids.length - owned.length;
+    if (!owned.length) return { ok: false, err: 'کلاس‌های انتخاب‌شده متعلق به دانشگاه فعال نیستند.' };
+
+    const tail = rejected ? ` (${rejected} مورد خارج از دانشگاه فعال نادیده گرفته شد)` : '';
+
+    if (op === 'activate' || op === 'deactivate') {
+      const on = op === 'activate';
+      await db.update(classrooms).set({ isActive: on ? 1 : 0 }).where(inArray(classrooms.id, owned));
+      revalidatePath('/admin/settings');
+      revalidatePath('/admin/weekly-board');
+      return { ok: true, msg: `${owned.length} کلاس ${on ? 'فعال' : 'غیرفعال'} شد.${tail}` };
+    }
+
+    if (op === 'delete') {
+      const used = await db
+        .selectDistinct({ roomId: schedules.roomId })
+        .from(schedules)
+        .where(inArray(schedules.roomId, owned));
+      const usedSet = new Set(used.map(u => u.roomId));
+      const deletable = owned.filter(id => !usedSet.has(id));
+      const blocked = owned.length - deletable.length;
+      if (!deletable.length) {
+        return { ok: false, err: `هیچ‌کدام حذف نشد — هر ${blocked} کلاس در برنامهٔ هفتگی استفاده می‌شود.` };
+      }
+      await db.delete(classrooms).where(inArray(classrooms.id, deletable));
+      revalidatePath('/admin/settings');
+      revalidatePath('/admin/weekly-board');
+      const note = blocked ? ` ${blocked} کلاس به‌دلیل داشتن برنامهٔ هفتگی حذف نشد.` : '';
+      return { ok: true, msg: `${deletable.length} کلاس حذف شد.${note}${tail}` };
+    }
+
+    return { ok: false, err: 'عملیات گروهی نامعتبر است.' };
+  } catch (e) {
+    return { ok: false, err: (e as Error)?.message ?? 'خطا در عملیات گروهی.' };
   }
 }
