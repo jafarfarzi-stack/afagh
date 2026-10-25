@@ -40,7 +40,12 @@ export default function TermSwitcher({
         <span className="max-w-36 truncate">{current ? current.title : 'همهٔ نیمسال‌ها'}</span>
         <span className="text-[10px] opacity-70">▾</span>
       </summary>
-      <div className="absolute left-0 top-full mt-1 z-50 min-w-56 max-w-80 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+      {/* ⚠ `right-0` (نه `left-0`): این سوییچر در RTL چسبیده به لبهٔ راستِ
+          سربرگ است. با `left-0` پنل از لبهٔ چپِ خودِ details به سمت راست باز
+          می‌شد و در موبایل ۶۰px از صفحه بیرون می‌زد (عنوان ترم‌ها بریده
+          می‌شد). حالا لبهٔ راستِ پنل روی لبهٔ راستِ دکمه می‌نشیند و پنل به
+          سمت چپِ صفحه باز می‌شود. */}
+      <div className="absolute right-0 top-full mt-1 z-50 min-w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
         <div className="max-h-80 overflow-y-auto py-1">
           <form action="/api/scope/term" method="post" className="block">
             <input type="hidden" name="termId" value="" />
