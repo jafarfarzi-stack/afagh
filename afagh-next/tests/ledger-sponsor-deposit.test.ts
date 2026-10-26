@@ -24,7 +24,9 @@
 import {
   buildTranscript,
   isSponsorDeposit,
+  isCharityDeposit,
   isLoanDeposit,
+  ledgerCreditLabel,
   transcriptTotals,
 } from '@/lib/finance-rules/statement';
 
@@ -43,6 +45,8 @@ type Extra = {
   receiptNo?: string | null;
   payerName?: string | null;
   depositDate?: string | null;
+  /** دلیل تخفیف (از سما: PercentBates.Rem / Mab_Bates.Rem) */
+  legacyRem?: string | null;
 };
 
 const ledger = (type: string, amount: number, extra: Extra = {}, description: string | null = null) => ({
@@ -74,6 +78,13 @@ t('«وام تحصيلي» وام شمرده می‌شود، پوشش نه', () 
   eq(isLoanDeposit('وام تحصیلی'), true);
   eq(isSponsorDeposit('وام تحصيلي'), false);
   eq(isLoanDeposit('نقدي'), false);
+});
+
+t('«صندوق خيريه» پوشش خیرین است، نه بنیاد و نه پرداخت', () => {
+  eq(isCharityDeposit('صندوق خيريه'), true);
+  eq(isCharityDeposit('صندوق خیریه'), true);
+  eq(isSponsorDeposit('صندوق خيريه'), false);
+  eq(isCharityDeposit('سهم بنياد يا سازمان دولتي'), false);
 });
 
 console.log('\n── موردِ واقعی: دانشجو ۴۰۳۱۳۸۶۰۲۸ / ترم ۱۴۰۳۱ ──');
@@ -199,6 +210,85 @@ t('ترکیب پرداخت نقدی + پوشش بنیاد + وام، همه جد
   // ۱۰۰ − ۴۰ پوشش = ۶۰ خالص − ۲۰ نقد − ۱۰ وام = ۳۰ مانده
   eq(s.netPayable, 60_000_000);
   eq(s.balance, 30_000_000);
+});
+
+console.log('\n── صندوق خیریه با برچسب مستقل ──');
+
+t('واریز صندوق خیریه در «پوشش خیرین» می‌نشیند', () => {
+  const [s] = buildTranscript({
+    ledger: [
+      ledger('TUITION_FIXED', 20_000_000),
+      ledger('PAYMENT', 5_000_000, { depositType: 'صندوق خيريه' }),
+    ],
+    termTitles: { 7: 'x' }, termCodes: { 7: '14041' },
+  });
+  eq(s.charityCoverage, 5_000_000, 'خیرین:');
+  eq(s.sponsorships, 5_000_000, 'جمع پوشش:');
+  eq(s.sponsorshipsFromDeposits, 0, 'سهم بنیاد:');
+  eq(s.payments, 0, 'پرداخت:');
+  eq(s.balance, 15_000_000, 'مانده:');
+});
+
+t('رویداد خیریه نوع CHARITY می‌گیرد و فیشش می‌ماند', () => {
+  const [s] = buildTranscript({
+    ledger: [
+      ledger('TUITION_FIXED', 20_000_000),
+      ledger('PAYMENT', 5_000_000, {
+        depositType: 'صندوق خيريه', receiptNo: '123456', payerName: 'موسسه خيريه',
+      }),
+    ],
+    termTitles: { 7: 'x' }, termCodes: { 7: '14041' },
+  });
+  const ev = s.events.find((e) => e.kind === 'CHARITY');
+  if (!ev) throw new Error('رویداد CHARITY پیدا نشد');
+  eq(ev.receiptNo, '123456');
+  eq(ev.amount, 5_000_000);
+});
+
+t('بنیاد و خیرین در یک ترم جدا جمع می‌شوند', () => {
+  const [s] = buildTranscript({
+    ledger: [
+      ledger('TUITION_FIXED', 50_000_000),
+      ledger('PAYMENT', 30_000_000, { depositType: 'سهم بنياد يا سازمان دولتي' }),
+      ledger('PAYMENT', 5_000_000, { depositType: 'صندوق خيريه' }),
+    ],
+    termTitles: { 7: 'x' }, termCodes: { 7: '14041' },
+  });
+  eq(s.sponsorshipsFromDeposits, 30_000_000);
+  eq(s.charityCoverage, 5_000_000);
+  eq(s.sponsorships, 35_000_000, 'جمع پوشش:');
+  eq(s.balance, 15_000_000, 'مانده:');
+  // نمایش: پوشش بنیاد = sponsorships − charity
+  eq(s.sponsorships - (s.charityCoverage ?? 0), 30_000_000);
+});
+
+console.log('\n── دلیل تخفیف در برچسب ──');
+
+t('دلیل تخفیف به برچسب بیتس می‌چسبد', () => {
+  eq(
+    ledgerCreditLabel('TUITION_BATES', 'تخفیف بیتس (سما)', 'رياست'),
+    'تخفیف بیتس (سما) — رياست',
+  );
+});
+
+t('بدون دلیل، برچسب دست‌نخورده می‌ماند', () => {
+  eq(ledgerCreditLabel('TUITION_BATES', null, null), 'تخفیف بیتس (سما)');
+  eq(ledgerCreditLabel('TUITION_BATES', null, ''), 'تخفیف بیتس (سما)');
+  // «0» در سما یعنی «دلیلی ثبت نشده» — نباید چاپ شود
+  eq(ledgerCreditLabel('TUITION_BATES', null, '0'), 'تخفیف بیتس (سما)');
+});
+
+t('دلیل در رویداد تخفیف کارنامه دیده می‌شود', () => {
+  const [s] = buildTranscript({
+    ledger: [
+      ledger('TUITION_FIXED', 10_000_000),
+      ledger('TUITION_BATES', 3_000_000, { legacyRem: 'ايثارگري' }),
+    ],
+    termTitles: { 7: 'x' }, termCodes: { 7: '14041' },
+  });
+  const ev = s.events.find((e) => e.kind === 'DISCOUNT');
+  if (!ev) throw new Error('رویداد تخفیف پیدا نشد');
+  eq(ev.label, 'تخفیف بیتس (سما) — ايثارگري');
 });
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} موفق، ${fail} ناموفق\n`);

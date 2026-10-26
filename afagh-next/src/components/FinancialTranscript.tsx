@@ -86,6 +86,8 @@ export interface TranscriptTermView {
   sponsorships: number;
   /** بخشی از پوشش که از واریزِ واقعیِ بنیاد/سازمان دولتی آمده است */
   sponsorshipsFromDeposits?: number;
+  /** پوششِ صندوق خیریه — با برچسب مستقل «پوشش خیرین» چاپ می‌شود */
+  charityCoverage?: number;
   netPayable: number;
   payments: number;
   chequesCleared: number;
@@ -111,6 +113,7 @@ export interface TranscriptTotalsView {
   discounts: number;
   sponsorships: number;
   sponsorshipsFromDeposits?: number;
+  charityCoverage?: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -160,6 +163,7 @@ const EVENT_LABEL: Record<string, string> = {
   CHARGE: 'بدهی',
   DISCOUNT: 'تخفیف',
   SPONSOR: 'پوشش بنیاد',
+  CHARITY: 'پوشش خیرین',
   PAYMENT: 'پرداخت',
   CHEQUE: 'چک',
   LOAN: 'وام',
@@ -417,7 +421,7 @@ export default function FinancialTranscript({
               <tr className="bg-slate-100 text-slate-700">
                 <th className="border border-slate-300 px-1 py-1.5">جمع شهریه (ریال)</th>
                 <th className="border border-slate-300 px-1 py-1.5">تخفیف‌ها</th>
-                <th className="border border-slate-300 px-1 py-1.5">پوشش بنیادها</th>
+                <th className="border border-slate-300 px-1 py-1.5">پوشش بنیاد / خیرین</th>
                 <th className="border border-slate-300 px-1 py-1.5">پرداخت / چک وصولی / وام</th>
                 <th className="border border-slate-300 px-1 py-1.5">ماندهٔ نهایی</th>
               </tr>
@@ -443,6 +447,11 @@ export default function FinancialTranscript({
                   {(totals.sponsorshipsFromDeposits ?? 0) > 0 && (
                     <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
                       از واریز بنیاد {fa(totals.sponsorshipsFromDeposits ?? 0)}
+                    </span>
+                  )}
+                  {(totals.charityCoverage ?? 0) > 0 && (
+                    <span className="mt-0.5 block text-[9px] font-medium text-teal-700">
+                      از خیرین {fa(totals.charityCoverage ?? 0)}
                     </span>
                   )}
                 </td>
@@ -746,6 +755,13 @@ export default function FinancialTranscript({
  */
 function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBalance?: number }) {
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
+  /**
+   * پوششِ خیرین از «پوشش بنیاد» جدا چاپ می‌شود (درخواست کاربر: صندوق خیریه
+   * بنیاد نیست و نباید زیر همان عنوان بیاید). جمعِ این دو همان
+   * `t.sponsorships` است، پس خواننده می‌تواند هر دو را با هم ببیند.
+   */
+  const charity = t.charityCoverage ?? 0;
+  const sponsorOnly = Math.max(0, t.sponsorships - charity);
   const items: Cell[] = [
     { label: 'شهریه (بدهی)', value: fa(t.charges) },
     /**
@@ -756,7 +772,8 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
     ...(t.tuitionFixed ? [{ label: 'شهریهٔ ثابت', value: fa(t.tuitionFixed) }] : []),
     ...(t.tuitionVariable ? [{ label: 'شهریهٔ متغیر', value: fa(t.tuitionVariable) }] : []),
     { label: 'تخفیف', value: fa(t.discounts), cls: 'text-violet-700' },
-    { label: 'پوشش بنیاد', value: fa(t.sponsorships), cls: 'text-indigo-700' },
+    { label: 'پوشش بنیاد', value: fa(sponsorOnly), cls: 'text-indigo-700' },
+    ...(charity ? [{ label: 'پوشش خیرین', value: fa(charity), cls: 'text-teal-700' }] : []),
     { label: 'خالص', value: fa(t.netPayable), bold: true },
     { label: 'پرداخت', value: fa(t.payments), cls: 'text-emerald-700' },
     { label: 'چک وصول‌شده', value: fa(t.chequesCleared), cls: 'text-emerald-700' },

@@ -109,23 +109,35 @@ export const LEDGER_DISCOUNT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** برچسبِ فارسیِ ردیف‌های تخفیفِ دفتری — نامِ خامِ دیتابیس گمراه‌کننده است. */
-export function ledgerCreditLabel(type: string, description: string | null | undefined): string {
+export function ledgerCreditLabel(
+  type: string,
+  description: string | null | undefined,
+  reason?: string | null,
+): string {
   const t = String(type || '').trim().toUpperCase();
+  /**
+   * دلیلِ تخفیف از سما (`PercentBates.Rem` / `Mab_Bates.Rem`) — مثلاً
+   * «تخفيف بدستور رياست»، «رتبه برتر»، «ايثارگري». در `legacyRem` نگه داشته
+   * می‌شود. سندی که فقط بنویسد «تخفیف» و دلیلش را نگوید، برای auditing
+   * بی‌فایده است؛ پس به برچسب چسبانده می‌شود.
+   */
+  const why = String(reason ?? '').trim();
+  const suffix = why && why !== '0' ? ` — ${why}` : '';
   switch (t) {
     case 'TUITION_BATES':
       // «بیتس» در سما یعنی تخفیف درصدی/مبلغی (رتبهٔ علمی، ایثارگری، …)؛
       // برچسبِ قدیمی «بیتس شهریهٔ قدیمی» آن را شبیهِ بدهی می‌کرد.
-      return 'تخفیف بیتس (سما)';
+      return `تخفیف بیتس (سما)${suffix}`;
     case 'TUITION_ADJUST_INC':
-      return 'تعدیل افزایشی شهریه (سما)';
+      return `تعدیل افزایشی شهریه (سما)${suffix}`;
     case 'DISCOUNT_FIXED':
-      return description || 'تخفیف شهریهٔ ثابت (سما)';
+      return `${description || 'تخفیف شهریهٔ ثابت (سما)'}${suffix}`;
     case 'DISCOUNT_VARIABLE':
-      return description || 'تخفیف شهریهٔ متغیر (سما)';
+      return `${description || 'تخفیف شهریهٔ متغیر (سما)'}${suffix}`;
     case 'SUBJECT_DEDUCTIVE':
-      return description || 'کاهش مبلغ موضوعی (سما)';
+      return `${description || 'کاهش مبلغ موضوعی (سما)'}${suffix}`;
     default:
-      return description || 'تخفیف';
+      return `${description || 'تخفیف'}${suffix}`;
   }
 }
 
@@ -162,12 +174,26 @@ function normFaText(s: string): string {
  */
 const THIRD_PARTY_DEPOSIT = /سهم\s*بنیاد|سازمان\s*دولتی/;
 
+/**
+ * «صندوق خيريه» — پوششِ صندوقِ خیریه، نه پرداختِ دانشجو.
+ *
+ * چرا برچسبِ جدا از بنیاد: عنوان ردیفِ بنیاد «پوشش بنیاد» است و صندوق خیریه
+ * بنیاد نیست. کاربر خواست با برچسب مستقل دیده شود، پس ردیف «پوشش خیرین»
+ * جدا می‌شود تا سند هم دقیق بماند و هم خوانا.
+ */
+const CHARITY_DEPOSIT = /صندوق\s*خیریه/;
+
 /** واریزِ وامِ تحصیلی — از صندوق رفاه/بانک، نه از جیب دانشجو */
 const LOAN_DEPOSIT = /وام\s*تحصیلی|وام\s*دانشجویی/;
 
 export function isSponsorDeposit(depositType: string | null | undefined): boolean {
   const d = normFaText(String(depositType ?? ''));
   return d.length > 0 && THIRD_PARTY_DEPOSIT.test(d);
+}
+
+export function isCharityDeposit(depositType: string | null | undefined): boolean {
+  const d = normFaText(String(depositType ?? ''));
+  return d.length > 0 && CHARITY_DEPOSIT.test(d);
 }
 
 export function isLoanDeposit(depositType: string | null | undefined): boolean {
@@ -177,7 +203,7 @@ export function isLoanDeposit(depositType: string | null | undefined): boolean {
 
 /** رویداد کارنامهٔ مالی — «چه اتفاقی افتاده» */
 export interface StatementEvent {
-  kind: 'CHARGE' | 'DISCOUNT' | 'SPONSOR' | 'PAYMENT' | 'CHEQUE' | 'LOAN' | 'CLEARANCE';
+  kind: 'CHARGE' | 'DISCOUNT' | 'SPONSOR' | 'CHARITY' | 'PAYMENT' | 'CHEQUE' | 'LOAN' | 'CLEARANCE';
   label: string;
   amount: number;
   dateMs: number | null;
@@ -266,6 +292,11 @@ export interface TermStatement {
    * نه از جدول پوشش‌ها. برای نمایشِ «از واریز» زیر جمع کل لازم است.
    */
   sponsorshipsFromDeposits?: number;
+  /**
+   * پوششِ صندوق خیریه (از واریز) — زیرمجموعهٔ `sponsorships` است ولی در
+   * کارنامه با برچسبِ مستقل «پوشش خیرین» چاپ می‌شود.
+   */
+  charityCoverage?: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -374,6 +405,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
      * بزرگ‌تر می‌شود.
      */
     let depositSponsorships = 0;
+    let depositCharity = 0;
     let depositLoans = 0;
 
     for (const txn of inTerm(input.ledger || [])) {
@@ -402,7 +434,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
           else ledgerDiscounts += amount;
           events.push({
             kind: isLedgerSponsor ? 'SPONSOR' : 'DISCOUNT',
-            label: ledgerCreditLabel(creditType, txn.description),
+            label: ledgerCreditLabel(creditType, txn.description, txn.legacyRem),
             amount,
             dateMs,
             sign: 1,
@@ -450,6 +482,11 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
         if (isSponsorDeposit(depositType)) {
           depositSponsorships += amount;
           events.push({ ...event, kind: 'SPONSOR' });
+          continue;
+        }
+        if (isCharityDeposit(depositType)) {
+          depositCharity += amount;
+          events.push({ ...event, kind: 'CHARITY' });
           continue;
         }
         if (isLoanDeposit(depositType)) {
@@ -545,7 +582,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
      * شهریه باشد، مازادش بستانکاریِ دانشجو است. نادیده‌گرفتنش مانده را
      * به‌اندازهٔ مازاد باد می‌کرد.
      */
-    const cappedSponsorships = cappedTableSponsorships + depositSponsorships;
+    const cappedSponsorships = cappedTableSponsorships + depositSponsorships + depositCharity;
     const netPayable = charges - cappedDiscounts - cappedSponsorships;
     const balance = netPayable - payments - chequesCleared - loans;
 
@@ -567,6 +604,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       discounts: cappedDiscounts,
       sponsorships: cappedSponsorships,
       sponsorshipsFromDeposits: depositSponsorships,
+      charityCoverage: depositCharity,
       payments,
       chequesCleared,
       chequesPending,
@@ -587,6 +625,7 @@ export function transcriptTotals(statements: TermStatement[]): {
   discounts: number;
   sponsorships: number;
   sponsorshipsFromDeposits: number;
+  charityCoverage: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -602,6 +641,7 @@ export function transcriptTotals(statements: TermStatement[]): {
     discounts: sum('discounts'),
     sponsorships: sum('sponsorships'),
     sponsorshipsFromDeposits: sum('sponsorshipsFromDeposits'),
+    charityCoverage: sum('charityCoverage'),
     payments: sum('payments'),
     chequesCleared: sum('chequesCleared'),
     chequesPending: sum('chequesPending'),

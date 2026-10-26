@@ -34,6 +34,8 @@ interface StatementRow {
   sponsorships: number;
   /** بخشی از پوشش که از واریزِ واقعیِ بنیاد/سازمان دولتی آمده است */
   sponsorshipsFromDeposits?: number;
+  /** پوشش صندوق خیریه (زیرمجموعهٔ پوشش، با برچسب مستقل) */
+  charityCoverage?: number;
   canonicalPayments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -273,6 +275,7 @@ export default function StudentStatementClient({ studentId, studentName, student
             discounts: d.discounts ?? 0,
             sponsorships: d.sponsorships ?? 0,
             sponsorshipsFromDeposits: d.sponsorshipsFromDeposits ?? 0,
+            charityCoverage: d.charityCoverage ?? 0,
             netPayable: d.netPayable ?? 0,
             payments: d.canonicalPayments ?? 0,
             chequesCleared: d.chequesCleared ?? 0,

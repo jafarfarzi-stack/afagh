@@ -93,6 +93,7 @@ export async function GET(request: Request) {
       discounts: s.discounts,
       sponsorships: s.sponsorships,
       sponsorshipsFromDeposits: s.sponsorshipsFromDeposits ?? 0,
+      charityCoverage: s.charityCoverage ?? 0,
       canonicalPayments: s.payments,
       chequesCleared: s.chequesCleared,
       chequesPending: s.chequesPending,
