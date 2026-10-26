@@ -18,7 +18,7 @@ import RejectModal from './RejectModal';
 
 export default function CurriculumShell() {
   return (
-    <div className="min-h-screen bg-sky-50/70 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
+    <div className="curriculum-shell min-h-screen bg-sky-50/70 text-slate-800 p-3 sm:p-6 space-y-5" dir="rtl">
       <CurriculumToast />
       {/* سربرگ و تب‌ها در چاپ حذف می‌شوند تا فقط چارت روی کاغذ بیاید */}
       <div className="print:hidden space-y-5">

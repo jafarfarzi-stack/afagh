@@ -100,8 +100,8 @@ export default function SemestersTab() {
     <>
       {/* ترمبندی چارت — تب: ترمبندی چارت */}
       {activeTab === 'SEMESTERS' && detail && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="curriculum-print-area bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+          <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
@@ -116,13 +116,13 @@ export default function SemestersTab() {
           </div>
 
           {!isDraft && (
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
+            <div className="print:hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
               ⚠️ این نسخه «{(STATUS_UI[selectedVersion.status] ?? { label: selectedVersion.status }).label}» است و فقط مشاهده مجاز است؛ برای تغییر ترمبندی از «🔁 ایجاد نسخهٔ جدید (R+1)» یک پیشنویس بسازید.
             </div>
           )}
 
           {/* نوار فیلتر و مرتب‌سازی — روی شبکهٔ ترم‌ها و استخر «بدون ترم» هم‌زمان اثر دارد */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="print:hidden flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}

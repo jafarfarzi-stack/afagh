@@ -621,10 +621,38 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .prof-week-print .prof-week-badge { border: 1pt solid #000 !important; background: #ffffff !important; color: #000000 !important; font-weight: 800 !important; box-shadow: none !important; }
   .prof-week-print .prof-week-legend { border: 1pt solid #000 !important; border-radius: 4pt !important; padding: 2pt 4pt !important; margin-bottom: 3pt !important; color: #000000 !important; background: #ffffff !important; font-size: 8pt !important; }
   .prof-week-print .prof-week-print-head { display: block !important; direction: rtl !important; border: 1.5pt solid #000 !important; border-radius: 6pt !important; padding: 3pt 6pt !important; margin-bottom: 4pt !important; font-size: 8.5pt !important; line-height: 1.45 !important; color: #000000 !important; background: #ffffff !important; }
-  /* چاپ چارت ترم‌بندی: فقط شبکهٔ ترم‌ها چاپ شود (بدون استخر دروس و کنترل‌ها) */
-  @media print {
-    .curriculum-print-area .print\\:hidden { display: none !important; }
+  /* ══ چاپ چارت ترم‌بندی: فقط شبکهٔ ترم‌ها، فشرده و در یک صفحهٔ A4 ══
+     هنگام چاپ، دکمهٔ «چاپ چارت» کلاس printing-curriculum را به بدنه اضافه
+     می‌کند تا این قواعد فقط برای چارت اعمال شوند. سربرگ وب (header/nav)،
+     بنرها و نوار فیلتر/مرتب‌سازی همگی با print:hidden یا قواعد کلی بالا حذف
+     می‌شوند؛ اینجا فقط چیدمانِ خودِ چارت فشرده می‌شود تا در یک صفحه جا شود. */
+  body.printing-curriculum .curriculum-shell { background: #ffffff !important; padding: 0 !important; }
+  body.printing-curriculum main { padding: 0 !important; max-width: 100% !important; }
+
+  .curriculum-print-area {
+    display: block !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
   }
+  .curriculum-print-area > * + * { margin-top: 2mm !important; }
+  .curriculum-print-area,
+  .curriculum-print-area * { font-size: 7pt !important; line-height: 1.25 !important; }
+  .curriculum-print-area .font-mono { font-size: 6.5pt !important; }
+  .curriculum-print-area .grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 2mm !important; }
+  .curriculum-print-area .rounded-xl {
+    border-radius: 1.5mm !important;
+    padding: 2mm !important;
+    border-width: 0.5pt !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .curriculum-print-area,
+  .curriculum-print-area * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
 
   /* ─────────────────────────────────────────────────────────────
      سردر کلاسی (پوستر درب اتاق) — یک برگ A4 افقی: ۷ ستون شنبه→جمعه،
