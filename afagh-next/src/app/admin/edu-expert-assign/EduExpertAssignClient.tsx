@@ -82,7 +82,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
       if (!q) return true;
       return (
         r.roomName.includes(q) ||
-        (r.buildingName ?? '').includes(q) ||
+        (r.facultyName ?? r.buildingName ?? '').includes(q) ||
         r.departments.some((d) => d.includes(q)) ||
         (roomOverrides.get(r.roomId) ?? r.expertIds).some((id) => (nameOf.get(id) ?? '').includes(q))
       );
@@ -377,7 +377,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                     <div className="flex-1 min-w-0">
                       <p className="font-black text-sm">{r.roomName}</p>
                       <p className="text-[11px] text-slate-500">
-                        {[r.buildingName, r.floor ? `طبقه ${r.floor}` : null].filter(Boolean).join(' · ') || 'بدون ساختمان'}
+                        {[r.facultyName ?? r.buildingName, r.floor ? `طبقه ${r.floor}` : null].filter(Boolean).join(' · ') || 'بدون دانشکده'}
                         {' · '}
                         {r.sessionCount} سانس · {r.offeringCount} درس
                       </p>

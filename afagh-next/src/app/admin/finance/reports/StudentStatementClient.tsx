@@ -265,6 +265,9 @@ export default function StudentStatementClient({ studentId, studentName, student
             statusTitle: d.statusTitle ?? null,
             termCode: d.termCode ?? null,
             charges: d.charges ?? 0,
+            // تفکیک شهریه (سما هم ثابت و متغیر را جدا می‌نویسد)
+            tuitionFixed: d.tuitionFixed ?? 0,
+            tuitionVariable: d.tuitionVariable ?? 0,
             discounts: d.discounts ?? 0,
             sponsorships: d.sponsorships ?? 0,
             netPayable: d.netPayable ?? 0,

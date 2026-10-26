@@ -687,6 +687,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/sama-sync',
+    icon: '🔁',
+    title: 'همگام‌سازی هفتگی سما',
+    desc: 'افزودن ثبت‌نام‌ها و نمره‌های تازه از فایل سما — بدون حذف یا بازنویسی',
+    group: 'settings',
+    roles: ['ADMIN'],
+    accent: 'from-teal-900 to-emerald-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/samin',
     icon: '📡',
     title: 'هاب ثمین — سازمان امور دانشجویان',

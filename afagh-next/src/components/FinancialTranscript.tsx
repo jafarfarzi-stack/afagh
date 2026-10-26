@@ -74,6 +74,14 @@ export interface TranscriptTermView {
   /** وضعیت نیمسال دانشجو (در حال تحصیل / مرخصی / مهمان / انصراف / …) — نمایش در سرآیند ترم */
   statusTitle?: string | null;
   charges: number;
+  /**
+   * تفکیکِ شهریهٔ ترم به «ثابت» و «متغیر» (از نوعِ تراکنش دفتر مالی).
+   * سما همین دو قلم را جدا نشان می‌دهد؛ نبودشان در کارنامه یعنی کارشناس مالی
+   * نمی‌تواند بفهمد عددِ شهریه از کجا آمده. اگر ترمی این تفکیک را نداشته باشد
+   * (دادهٔ قدیمی)، ردیفش چاپ نمی‌شود.
+   */
+  tuitionFixed?: number;
+  tuitionVariable?: number;
   discounts: number;
   sponsorships: number;
   netPayable: number;
@@ -221,6 +229,22 @@ function maskNC(nc: string | null | undefined, isFinance: boolean): string {
   return nc.length > 4 ? '••••' + nc.slice(-4) : nc;
 }
 
+/**
+ * یک قلمِ فرادادهٔ پرداخت — «برچسب: مقدار» در یک تکهٔ جدا‌نشدنی.
+ *
+ * چرا کامپوننت و نه span تکراری؟ چون این اقلام ۷ تا ۸ عددند و اگر هر کدام
+ * `block` باشند، هر پرداخت ۸ سطر کاغذ می‌خورد و کارنامه پخش‌وپلا می‌شود.
+ * با `whitespace-nowrap` هر قلم سالم می‌ماند و شکستن فقط بینِ اقلام رخ می‌دهد.
+ */
+function Meta({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap" title={`${k}: ${v}`}>
+      <span className="text-slate-400">{k}:</span>
+      <b className={`font-bold text-slate-700 ${mono ? 'font-mono' : ''}`} dir={mono ? 'ltr' : undefined}>{v}</b>
+    </span>
+  );
+}
+
 export interface FinancialTranscriptProps {
   student: TranscriptStudentView;
   terms: TranscriptTermView[];
@@ -276,11 +300,15 @@ export default function FinancialTranscript({
     for (const t of terms) { priorByTermId.set(t.termId, running); running += t.balance; }
   }
 
+  // جمعِ شهریهٔ ثابت/متغیرِ کل دوره — برای تفکیکِ خانهٔ «جمع شهریه» در جدول بالا
+  const sumFixed = terms.reduce((a, t) => a + (t.tuitionFixed ?? 0), 0);
+  const sumVariable = terms.reduce((a, t) => a + (t.tuitionVariable ?? 0), 0);
+
   return (
     <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
       {/* ساختار سند به سبک کارنامهٔ تحصیلی: table.tr-doc با thead/tfoot تا سربرگ
           و بلوک امضا در همهٔ صفحات چاپ تکرار شوند و ردیف‌ها بین دو صفحه نشکنند. */}
-      <table className="tr-doc rt">
+      <table className="tr-doc rt w-full max-w-full border-collapse" style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <td className="tr-doc-cell">
@@ -393,7 +421,16 @@ export default function FinancialTranscript({
             </thead>
             <tbody>
               <tr className="font-bold">
-                <td className="border border-slate-300 px-1 py-1.5">{fa(totals.charges)}</td>
+                <td className="border border-slate-300 px-1 py-1.5">
+                  {fa(totals.charges)}
+                  {/* تفکیکِ شهریه در همان خانه — کارشناس مالی بدون بازکردن ترم‌ها
+                      می‌بیند چه سهمی ثابت و چه سهمی متغیر است. */}
+                  {(sumFixed > 0 || sumVariable > 0) && (
+                    <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
+                      ثابت {fa(sumFixed)} · متغیر {fa(sumVariable)}
+                    </span>
+                  )}
+                </td>
                 <td className="border border-slate-300 px-1 py-1.5 text-violet-700">{fa(totals.discounts)}</td>
                 <td className="border border-slate-300 px-1 py-1.5 text-indigo-700">{fa(totals.sponsorships)}</td>
                 <td className="border border-slate-300 px-1 py-1.5 text-emerald-700">{fa(paidTotal)}</td>
@@ -417,15 +454,26 @@ export default function FinancialTranscript({
           </table>
         </div>
 
-        {/* ── بلوک‌های ترم (سه‌تایی در هر ردیف) ── */}
-        <div>
-          <h3 className="mb-2 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">ریز ترم‌به‌ترم</h3>
-          {terms.length === 0 ? (
-            <p className="rounded-lg border border-slate-300 bg-slate-50 py-6 text-center text-slate-500">هیچ تراکنش مالی برای این دانشجو ثبت نشده است.</p>
-          ) : (
-            <div className="space-y-3">
-              {chunks.map((group, gi) => (
-                <div key={gi} className="tr-fin-row break-inside-avoid grid gap-2 sm:grid-cols-2">
+        {/* ── عنوان بخش ترم‌ها (همراه با جدول مشخصات/جمع در همان ردیف) ── */}
+        <h3 className="border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">ریز ترم‌به‌ترم</h3>
+        {terms.length === 0 ? (
+          <p className="rounded-lg border border-slate-300 bg-slate-50 py-6 text-center text-slate-500">هیچ تراکنش مالی برای این دانشجو ثبت نشده است.</p>
+        ) : null}
+      </div>
+            </td>
+          </tr>
+
+          {/* ── هر ردیفِ ترم‌ها یک <tr> مستقل است ──
+              چرا؟ پیش‌تر **کل** سند در یک `<tr>` جا می‌گرفت. Chrome ردیفِ
+              بسیار بلندِ جدول را بین صفحه‌ها نمی‌شکند؛ نتیجه این بود که محتوای
+              بعد از صفحهٔ اول بریده می‌شد یا از کادر بیرون می‌زد — همان
+              «چاپِ به‌هم‌ریخته»ای که کاربر گزارش کرد. با یک <tr> برای هر جفت
+              ترم، شکستنِ صفحه بینِ ردیف‌ها انجام می‌شود و هیچ کارتی نصف نمی‌شود. */}
+          {chunks.map((group, gi) => (
+            <tr key={`terms-${gi}`} className="tr-doc-row">
+              <td className="tr-doc-cell">
+                <div className="px-4 pb-2">
+                <div className="tr-fin-row break-inside-avoid grid gap-2 sm:grid-cols-2">
                   {group.map((t) => {
                     const b = balanceBadge(t.balance);
                     return (
@@ -519,34 +567,33 @@ export default function FinancialTranscript({
                                     </span>
                                   ) : null}
                                   {/* ── مستندسازت پرداخت (مهاجرت ۰۱۲۱) ──
-                                      در نمای کارشناس مالی/ادمین همه نمایش داده می‌شود
-                                      (از جمله شماره حساب و شماره کارت)؛ در نمای دانشجو
-                                      حساب ماسک‌شده و کارت/یادداشت حذف می‌شود. */}
+                                      همهٔ اقلام در **یک خطِ فشرده** با جداکنندهٔ نقطه
+                                      می‌آیند (درخواست کاربر: هر قلم یک سطر نشود و
+                                      متن «پخش‌وپلا» دیده نشود). فقط وقتی عرضِ کارت
+                                      کم بیاید، خودِ مرورگر به سطر بعد می‌شکند.
+                                      در نمای کارشناس مالی/ادمین شماره حساب و کارت
+                                      کامل است؛ در نمای دانشجو حساب ماسک و کارت حذف. */}
                                   {e.kind === 'PAYMENT' && (e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName || e.legacyRem) && (
-                                    <span className="mt-0.5 block space-y-0.5 text-[8px] leading-tight text-slate-500">
-                                      {e.receiptNo && (
-                                        <span className="block">شماره فیش: <b className="font-mono text-slate-700">{faDigits(e.receiptNo)}</b></span>
-                                      )}
+                                    <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0 text-[8px] leading-tight text-slate-500">
+                                      {e.receiptNo && <Meta k="فیش" v={faDigits(e.receiptNo)} mono />}
                                       {e.payerName && (
-                                        <span className="block">پرداخت‌کننده: <b className="text-slate-700">{e.payerName}</b>{isFinance && e.payerNationalCode ? <span className="font-mono"> ({faDigits(maskNC(e.payerNationalCode, isFinance))})</span> : null}</span>
+                                        <Meta
+                                          k="پرداخت‌کننده"
+                                          v={e.payerName + (isFinance && e.payerNationalCode ? ` (${faDigits(maskNC(e.payerNationalCode, isFinance))})` : '')}
+                                        />
                                       )}
-                                      {e.accountNo && (
-                                        <span className="block">شماره حساب: <b className="font-mono text-slate-700">{faDigits(isFinance ? e.accountNo : last4(e.accountNo))}</b></span>
-                                      )}
-                                      {isFinance && e.cardNo && (
-                                        <span className="block">شماره کارت: <b className="font-mono text-slate-700">{faDigits(e.cardNo)}</b></span>
-                                      )}
-                                      {e.payTypeCode != null && (
-                                        <span className="block">نوع پرداخت (سما): <b className="text-slate-700">{PAY_TYPE_LABELS[e.payTypeCode] ?? e.payTypeCode}</b></span>
-                                      )}
-                                      {e.voucherNo && (
-                                        <span className="block">شماره سند: <b className="font-mono text-slate-700">{faDigits(e.voucherNo)}</b></span>
-                                      )}
-                                      {isFinance && e.recorderName && (
-                                        <span className="block">ثبت‌کننده: <b className="text-slate-700">{e.recorderName}</b></span>
-                                      )}
+                                      {e.accountNo && <Meta k="حساب" v={faDigits(isFinance ? e.accountNo : last4(e.accountNo))} mono />}
+                                      {isFinance && e.cardNo && <Meta k="کارت" v={faDigits(e.cardNo)} mono />}
+                                      {e.payTypeCode != null && <Meta k="نوع" v={String(PAY_TYPE_LABELS[e.payTypeCode] ?? e.payTypeCode)} />}
+                                      {e.voucherNo && <Meta k="سند" v={faDigits(e.voucherNo)} mono />}
+                                      {isFinance && e.recorderName && <Meta k="ثبت" v={e.recorderName} />}
                                       {isFinance && e.legacyRem && (
-                                        <span className="block text-[7px] text-slate-400">یادداشت اصل: {e.legacyRem}</span>
+                                        <span
+                                          className="block w-full truncate text-[7px] text-slate-400"
+                                          title={e.legacyRem}
+                                        >
+                                          یادداشت اصل: {e.legacyRem}
+                                        </span>
                                       )}
                                     </span>
                                   )}
@@ -566,10 +613,18 @@ export default function FinancialTranscript({
                     );
                   })}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                </div>
+              </td>
+            </tr>
+          ))}
+
+          {/* ── ردیف پایانی: چک‌ها، وام‌ها و بلوک رسمیت ──
+              جدا از ردیف ترم‌ها تا اگر جای کافی نبود، یک‌جا به صفحهٔ بعد برود
+              و بین دو نیمه نشکند. */}
+          {(cheques.length > 0 || loans.length > 0 || !!verifyBlock) && (
+            <tr className="tr-doc-row">
+              <td className="tr-doc-cell">
+                <div className="space-y-3 px-4 pb-4">
 
         {/* ── چک‌ها ── */}
         {cheques.length > 0 && (
@@ -636,9 +691,10 @@ export default function FinancialTranscript({
         {/* بلوک رسمیت: QR استعلام برخط + نشانی (در چاپ هم دیده می‌شود) */}
         {verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
 
-      </div>
-            </td>
-          </tr>
+                </div>
+              </td>
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr>
@@ -674,6 +730,13 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
   const items: Cell[] = [
     { label: 'شهریه (بدهی)', value: fa(t.charges) },
+    /**
+     * تفکیکِ شهریه — همان دو قلمی که سما زیر هر ترم می‌نویسد.
+     * پیش‌تر فقط جمعِ «شهریه (بدهی)» دیده می‌شد و کارشناس مالی نمی‌توانست
+     * بفهمد چه سهمی ثابت و چه سهمی متغیر (واحد×نرخ) است.
+     */
+    ...(t.tuitionFixed ? [{ label: 'شهریهٔ ثابت', value: fa(t.tuitionFixed) }] : []),
+    ...(t.tuitionVariable ? [{ label: 'شهریهٔ متغیر', value: fa(t.tuitionVariable) }] : []),
     { label: 'تخفیف', value: fa(t.discounts), cls: 'text-violet-700' },
     { label: 'پوشش بنیاد', value: fa(t.sponsorships), cls: 'text-indigo-700' },
     { label: 'خالص', value: fa(t.netPayable), bold: true },

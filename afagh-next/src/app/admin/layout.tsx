@@ -137,9 +137,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           FINANCE_EXPERT، ARCHIVE_EXPERT، DEP_HEAD، VICE_EDU و…)، پس اصلاح
           همین‌جا برای همهٔ کارتابل‌ها اعمال می‌شود.
         */}
-        <div className="mx-auto flex max-w-[1600px] flex-col gap-2 p-3 sm:p-3.5">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 p-3 sm:p-3.5 lg:flex-nowrap lg:gap-3">
           {/* ردیف ۱: هویت + ابزارهای کاربر */}
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="order-1 flex min-w-0 flex-1 items-center gap-2">
             {/* رزروِ جای دکمهٔ شناور «منو» (AdminNav: fixed top-3 right-3) */}
             <div aria-hidden className="w-14 shrink-0" />
             {/* هویت: ارم + آواتار + عنوان */}
@@ -158,21 +158,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <p className="truncate text-[11px] sm:text-xs opacity-80">{user.name} · {user.roles.join('، ')}</p>
               </div>
             </div>
-            {/* ابزارهای کاربر — یک ارتفاع و یک تراز (`.hdr-controls` در globals.css) */}
-            <div className="hdr-controls flex shrink-0 items-center gap-1.5">
-              <Link
-                href="/help/admin"
-                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-              >
-                📖 راهنما
-              </Link>
-              <a
-                href="/help/pdfs/admin.pdf"
-                download
-                className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
-              >
-                📕 PDF
-              </a>
+          </div>
+
+          {/* ردیف ۲ (موبایل) / ستونِ میانیِ همان خط (دسکتاپ): سوییچرهای
+              کارتابل / نیمسال / دانشگاه — مشترک بین همهٔ نقش‌ها.
+              `relative` لازم است: در موبایل پنل هر سوییچر تمام‌عرض و چسبیده به
+              همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند.
+              در دسکتاپ `lg:order-2` این بلوک را بین هویت و ابزارها می‌آورد تا
+              همهٔ عناصر هدر در یک خط و هم‌تراز بنشینند (درخواست کاربر: پیش‌تر
+              سوییچرها یک سطح پایین‌تر از ابزارها بودند و پراکنده دیده می‌شدند). */}
+          <div className="hdr-controls relative order-3 flex w-full flex-wrap items-center gap-1.5 sm:gap-2 lg:order-2 lg:w-auto lg:flex-nowrap lg:justify-center">
+            {headerSwitchers}
+          </div>
+
+          {/* ابزارهای کاربر — یک ارتفاع و یک تراز (`.hdr-controls` در globals.css).
+              روی موبایل کنارِ هویت (ردیف ۱) و روی دسکتاپ انتهای همان خط. */}
+          <div className="hdr-controls order-2 flex shrink-0 items-center gap-1.5 lg:order-3">
+            <Link
+              href="/help/admin"
+              className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📖 راهنما
+            </Link>
+            <a
+              href="/help/pdfs/admin.pdf"
+              download
+              className={`hidden sm:inline-flex text-xs ${th.soft} border ${th.ring} px-3 py-1.5 rounded-lg transition-colors font-medium`}
+            >
+              📕 PDF
+            </a>
             <ThemeToggle />
             <form action={logoutAction}>
               <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
@@ -180,14 +194,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <span className="hidden sm:inline">خروج از سامانه</span>
               </button>
             </form>
-            </div>
-          </div>
-
-          {/* ردیف ۲: سوییچرهای کارتابل / نیمسال / دانشگاه — مشترک بین همهٔ نقش‌ها.
-              `relative` لازم است: در موبایل پنل هر سوییچر تمام‌عرض و چسبیده به
-              همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند. */}
-          <div className="hdr-controls relative flex flex-wrap items-center gap-1.5 sm:gap-2">
-            {headerSwitchers}
           </div>
         </div>
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />

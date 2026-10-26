@@ -287,7 +287,10 @@ export interface ClassroomSessionRow {
 export interface ClassroomAssignRow {
   roomId: number;
   roomName: string;
+  /** هم‌نویسیِ نام دانشکده در ستون قدیمیِ `buildingName` — فقط برای سازگاری */
   buildingName: string | null;
+  /** نام دانشکدهٔ مالکِ اتاق (منبع حقیقت: `classrooms.facultyId`) */
+  facultyName: string | null;
   floor: string | null;
   /** تعدادِ سانسِ هفتگیِ برگزارشده در این اتاق در این ترم */
   sessionCount: number;
@@ -366,7 +369,10 @@ export async function listClassroomExpertAssignments(
      ساختمان/طبقه/گروه مسئول همه خالی. صفحه دروغ می‌گفت ولی کسی نمی‌فهمید.
      پس حالا: اول با ستونِ تازه تلاش می‌کنیم، اگر خطای ساختار داد (مهاجرت
      اجرا نشده) بدونِ آن ستون دوباره تلاش می‌کنیم — صفحه هرگز جعلِ نام نمی‌کند. */
-  type RoomMeta = { id: number; name: string; buildingName: string | null; floor: string | null; departmentId: number | null };
+  type RoomMeta = {
+    id: number; name: string; buildingName: string | null; floor: string | null;
+    facultyId: number | null; departmentId: number | null;
+  };
   const roomMetaOf = async (withDept: boolean): Promise<RoomMeta[]> => {
     const base = db
       .select({
@@ -374,6 +380,7 @@ export async function listClassroomExpertAssignments(
         name: classrooms.name,
         buildingName: classrooms.buildingName,
         floor: classrooms.floor,
+        facultyId: classrooms.facultyId,
         ...(withDept ? { departmentId: classrooms.departmentId } : {}),
       })
       .from(classrooms)
@@ -400,6 +407,20 @@ export async function listClassroomExpertAssignments(
       .from(classroom_edu_experts).where(inArray(classroom_edu_experts.classroomId, roomIds))
       .orderBy(asc(classroom_edu_experts.id)).catch(() => []),
   ]);
+
+  /* دانشکدهٔ مالکِ اتاق.
+     «ساختمان» در سامانه موجودیت ندارد؛ از وقتی فرم کلاس‌ها به `facultyId`
+     منتقل شد، `buildingName` فقط هم‌نویسیِ نام دانشکده است (برای مصرف‌کننده‌های
+     قدیمی). اینجا نام را از منبع حقیقت می‌خوانیم و اگر نبود به همان هم‌نویسی
+     برمی‌گردیم تا کارتِ اتاق هرگز خالی نماند. */
+  const facultyIds = [...new Set(
+    rooms.map((r) => r.facultyId).filter((v): v is number => typeof v === 'number'),
+  )];
+  const facultyRows = facultyIds.length
+    ? await db.select({ id: faculties.id, name: faculties.name }).from(faculties)
+        .where(inArray(faculties.id, facultyIds)).catch(() => [])
+    : ([] as { id: number; name: string }[]);
+  const facultyNameById = new Map(facultyRows.map((f) => [f.id, f.name]));
 
   const roomById = new Map(rooms.map((r) => [r.id, r]));
   const deptName = new Map(depts.map((d) => [d.id, d.name]));
@@ -438,6 +459,9 @@ export async function listClassroomExpertAssignments(
         roomId,
         roomName: room?.name ?? `اتاق ${roomId}`,
         buildingName: room?.buildingName ?? null,
+        facultyName: room?.facultyId != null
+          ? (facultyNameById.get(room.facultyId) ?? room.buildingName ?? null)
+          : (room?.buildingName ?? null),
         floor: room?.floor ?? null,
         sessionCount: 0,
         offeringCount: 0,

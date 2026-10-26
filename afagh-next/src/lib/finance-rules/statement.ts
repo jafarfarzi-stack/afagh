@@ -167,6 +167,13 @@ export interface TermStatement {
   /** وضعیت نیمسال دانشجو (در حال تحصیل / مرخصی / مهمان / انصراف / …) — برای نمایش */
   statusTitle?: string | null;
   charges: number;
+  /**
+   * تفکیکِ شهریهٔ همان ترم به «ثابت» و «متغیر» — از نوعِ تراکنشِ دفتر مالی
+   * (`TUITION_FIXED` / `TUITION_VARIABLE`). سما همین دو قلم را جدا نشان
+   * می‌دهد و کارشناس مالی برای تطبیق باید هر دو را ببیند، نه فقط جمع را.
+   */
+  tuitionFixed?: number;
+  tuitionVariable?: number;
   discounts: number;
   sponsorships: number;
   payments: number;
@@ -254,12 +261,18 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     const events: StatementEvent[] = [];
     let charges = 0;
     let payments = 0;
+    let tuitionFixed = 0;
+    let tuitionVariable = 0;
 
     for (const txn of inTerm(input.ledger || [])) {
       const amount = toNum(txn.amount);
       const dateMs = toMs(txn.createdAt);
       if (isChargeType(txn.transactionType)) {
         charges += amount;
+        // تفکیک نمایشی: شهریهٔ ثابت و متغیر جدا شمرده می‌شوند (جمعشان بخشی از charges است)
+        const tt = String(txn.transactionType || '').trim().toUpperCase();
+        if (tt === 'TUITION_FIXED') tuitionFixed += amount;
+        else if (tt === 'TUITION_VARIABLE') tuitionVariable += amount;
         events.push({
           kind: 'CHARGE',
           label: txn.description || 'ثبت شهریه',
@@ -383,6 +396,8 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       termCode: termId === NO_TERM ? null : (input.termCodes || {})[String(termId)] ?? null,
       statusTitle: termId === NO_TERM ? null : (input.termStatuses || {})[String(termId)] ?? null,
       charges,
+      tuitionFixed,
+      tuitionVariable,
       discounts: cappedDiscounts,
       sponsorships: cappedSponsorships,
       payments,
