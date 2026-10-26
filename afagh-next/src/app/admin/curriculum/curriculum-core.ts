@@ -75,7 +75,7 @@ export interface DepWarning {
   missing: string[];
   /** کدهای ارجاع‌شده‌ای که در نسخه‌اند ولی recommendedSemester ندارند (در استخر بی‌ترم) */
   unassigned: string[];
-  /** پیش‌نیازهایی که در ترمی دیرتر یا هم‌ترم با درس وابسته‌اند (ترتیب نقض شده) */
+  /** نقض ترتیب: پیش‌نیاز در ترم دیرتر/هم‌ترم، یا هم‌نیاز در ترمِ زودتر از درس وابسته */
   badOrder: string[];
   /** درس وابسته در اولین ترمِ ممکن (ترم ۱) ثبت شده در حالی که پیش‌نیاز دارد — غیرممکن (ترم ۰ وجود ندارد) */
   impossibleTerm: boolean;
@@ -101,8 +101,10 @@ export function dependencyWarnings(
       const target = byCode.get(code);
       if (!target) { missing.push(code); continue; }
       if (target.recommendedSemester == null) { unassigned.push(code); continue; }
-      // فقط برای پیش‌نیاز: پیش‌نیاز باید در ترمی زودتر از درس وابسته باشد
+      // پیش‌نیاز باید در ترمی زودتر باشد؛ هم‌نیاز باید هم‌ترم یا در ترمی زودتر باشد (فقط ترمِ بعدتر خطاست)
       if (ruleType === 'PREREQ' && dep.recommendedSemester != null && target.recommendedSemester >= dep.recommendedSemester) {
+        badOrder.push(code);
+      } else if (ruleType === 'COREQ' && dep.recommendedSemester != null && target.recommendedSemester > dep.recommendedSemester) {
         badOrder.push(code);
       }
     }
@@ -140,7 +142,11 @@ export function dependencyWarningText(w: DepWarning): string {
     parts.push('این درس پیش‌نیاز دارد و نمی‌تواند در ترم ۱ ثبت شود — زیرا امکان گذراندن پیش‌نیاز در ترم ۰ (که وجود ندارد) وجود ندارد؛ پیش‌نیاز باید در ترمی زودتر گذرانده شود.');
   }
   if (w.badOrder.length) {
-    parts.push(`پیش‌نیاز «${w.badOrder.join('، ')}» باید در ترمی زودتر از این درس باشد (ترتیب ترمی رعایت نشده).`);
+    parts.push(
+      w.type === 'PREREQ'
+        ? `پیش‌نیاز «${w.badOrder.join('، ')}» باید در ترمی زودتر از این درس باشد (ترتیب ترمی رعایت نشده).`
+        : `هم‌نیاز «${w.badOrder.join('، ')}» در ترمی بعدتر از این درس قرار گرفته — هم‌نیاز باید هم‌ترم یا در ترمی زودتر (پیش از این درس) اخذ شود.`,
+    );
   }
   if (w.unassigned.length) {
     parts.push(

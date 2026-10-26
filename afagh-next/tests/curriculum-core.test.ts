@@ -197,6 +197,11 @@ const w5 = dependencyWarnings([dc(1, 'A', 3), dc(2, 'B', 1)], [dRule(1, 'PREREQ'
 eq('پیش‌نیاز در ترم زودتر → بدون هشدار', w5.length, 0);
 const w6 = dependencyWarnings([dc(1, 'A', 2), dc(2, 'B', 2)], [dRule(1, 'COREQ', ['B'])]);
 eq('هم‌نیاز هم‌ترم → بدون هشدار', w6.length, 0);
+const w7 = dependencyWarnings([dc(1, 'A', 4), dc(2, 'B', 2)], [dRule(1, 'COREQ', ['B'])]);
+eq('هم‌نیاز در ترم زودتر (یا هم‌ترم) → بدون هشدار', w7.length, 0);
+const w8 = dependencyWarnings([dc(1, 'A', 3), dc(2, 'B', 5)], [dRule(1, 'COREQ', ['B'])]);
+eq('هم‌نیاز در ترم بعدتر → badOrder', w8.length === 1 && w8[0].badOrder.includes('B'), true);
+eq('متن هشدار هم‌نیاز بعدتر شامل «هم‌نیاز»', dependencyWarningText(w8[0]).includes('هم‌نیاز'), true);
 const wm = dependencyWarningsMap([dc(1, 'A', 1), dc(2, 'B', 2)], [dRule(1, 'PREREQ', ['B'])]);
 eq('نگاشت بر اساس courseId', wm.get(1)?.length, 1);
 eq('متن هشدار شامل «ترم ۱»', dependencyWarningText(w3[0]).includes('ترم ۱'), true);

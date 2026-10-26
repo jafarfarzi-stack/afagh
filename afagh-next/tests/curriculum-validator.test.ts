@@ -108,10 +108,15 @@ const coreqMissing = validateCurriculumCore(baseInput({
 }));
 eq('هم‌نیاز خارج از نسخه → WARN', hasCheck(coreqMissing, 'COREQ_PRESENT', 'WARN'), true);
 
-const coreqWrongSem = validateCurriculumCore(baseInput({
-  rules: [{ courseId: 3, ruleType: 'COREQ', logicTree: { operator: 'AND', conditions: [{ course: 'CS201' }] } }], // CS201 ترم ۳، الگوریتم ترم ۴
+const coreqLater = validateCurriculumCore(baseInput({
+  rules: [{ courseId: 3, ruleType: 'COREQ', logicTree: { operator: 'AND', conditions: [{ course: 'CS401' }] } }], // CS401 ترم ۸ > الگوریتم ترم ۴
 }));
-eq('هم‌نیاز با ترم متفاوت → WARN', hasCheck(coreqWrongSem, 'COREQ_PRESENT', 'WARN'), true);
+eq('هم‌نیاز در ترم بعدتر → WARN', hasCheck(coreqLater, 'COREQ_PRESENT', 'WARN'), true);
+
+const coreqEarlierOk = validateCurriculumCore(baseInput({
+  rules: [{ courseId: 3, ruleType: 'COREQ', logicTree: { operator: 'AND', conditions: [{ course: 'CS201' }] } }], // CS201 ترم ۳ < الگوریتم ترم ۴
+}));
+eq('هم‌نیاز در ترم زودتر → بدون یافته', hasCheck(coreqEarlierOk, 'COREQ_PRESENT'), false);
 
 const coreqAutoOk = validateCurriculumCore(baseInput({
   courses: baseInput().courses.map(c => c.courseId === 3 ? { ...c, autoCorequisiteAllowed: 1 } : c),

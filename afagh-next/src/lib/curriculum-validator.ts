@@ -219,7 +219,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     ));
   }
 
-  // ── ۵) هم‌نیازها: در همین نسخه تعریف و هم‌ترم باشند (یا هم‌نیاز خودکار مجاز) ──
+  // ── ۵) هم‌نیازها: در همین نسخه تعریف و هم‌ترم یا در ترمی زودتر باشند (یا هم‌نیاز خودکار مجاز) ──
   const codesInVersion = new Set(input.courses.map((c) => c.code));
   const coreqIssues: string[] = [];
   for (const r of input.rules) {
@@ -233,15 +233,15 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       const coreq = input.courses.find((c) => c.code === code);
       const autoOk = dep?.autoCorequisiteAllowed === 1;
       if (!autoOk && coreq && dep && coreq.recommendedSemester != null && dep.recommendedSemester != null
-        && coreq.recommendedSemester !== dep.recommendedSemester) {
-        coreqIssues.push(`${code} (ترم ${coreq.recommendedSemester} ≠ ${dep.recommendedSemester})`);
+        && coreq.recommendedSemester > dep.recommendedSemester) {
+        coreqIssues.push(`${code} (ترم ${coreq.recommendedSemester} > ${dep.recommendedSemester})`);
       }
     }
   }
   if (coreqIssues.length > 0) {
     results.push(warn(
       'COREQ_PRESENT',
-      `هم‌نیازهایی که باید هم‌ترم شوند یا در نسخه تعریف شوند: ${coreqIssues.join('، ')}`,
+      `هم‌نیازهایی که باید هم‌ترم یا در ترمی زودتر باشند و در نسخه تعریف شوند: ${coreqIssues.join('، ')}`,
       coreqIssues
     ));
   }
