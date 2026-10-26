@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, degree_level_configs, loan_products, majors, payment_cheques,
@@ -87,7 +87,9 @@ export async function getStudentFinance(
 
       db.select().from(student_ledger)
         .where(eq(student_ledger.studentId, studentId))
-        .orderBy(asc(student_ledger.createdAt)),
+        // ترتیب زمانی واقعی: تاریخ واریز، و اگر نبود تاریخ ثبت.
+        // رکوردهای مهاجرتی همه createdAt یکسان (روز ایمپورت) دارند.
+        .orderBy(sql`COALESCE(${student_ledger.depositDate}, ${student_ledger.createdAt})`, asc(student_ledger.id)),
 
       db.select({
         row: student_discounts,
@@ -190,6 +192,10 @@ export async function getStudentFinance(
       amount: t.amount,
       description: t.description,
       createdAt: t.createdAt,
+      // تاریخ/نوع واقعی واریز — کارنامه باید تاریخ فیش بانکی را نشان دهد،
+      // نه createdAt را که برای رکوردهای مهاجرتی همان روز ایمپورت است.
+      depositDate: t.depositDate,
+      depositType: t.depositType,
     })),
     discounts: discountApplied,
     sponsorships: sponsorApplied,

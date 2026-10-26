@@ -32,6 +32,10 @@ export interface TranscriptEventView {
   amount: number;
   dateMs: number | null;
   sign: 1 | -1;
+  /** نوع واریز (نقدی، چک، کارت‌خوان سامان، …) — فقط رویدادهای پرداخت */
+  depositType?: string | null;
+  /** تاریخِ نمایش، تاریخ واقعی واریز است نه زمان ثبت رکورد */
+  datedByDeposit?: boolean;
 }
 
 export interface TranscriptCourseView {
@@ -396,10 +400,23 @@ export default function FinancialTranscript({
                         {showEvents && t.events.length > 0 && (
                           <ul className="space-y-0.5 border-t border-slate-200 bg-slate-50/60 px-2 py-1.5">
                             {t.events.map((e, i) => (
-                              <li key={i} className="flex items-center justify-between gap-1 text-[9px]">
-                                <span className="truncate text-slate-600">
-                                  <span className="font-bold text-slate-700">{EVENT_LABEL[e.kind] || e.kind}:</span> {e.label}
-                                  {e.dateMs ? <span className="text-slate-400"> — {jdate(new Date(e.dateMs))}</span> : null}
+                              <li key={i} className="flex items-start justify-between gap-1 text-[9px]">
+                                <span className="min-w-0 flex-1 text-slate-600">
+                                  <span className="font-bold text-slate-700">{EVENT_LABEL[e.kind] || e.kind}:</span>{' '}
+                                  <span className="break-words">{e.label}</span>
+                                  {/* نوع واریز — ستون مستقل، نه تکرارِ داخل پرانتزِ شرح */}
+                                  {e.depositType ? (
+                                    <span className="mx-1 inline-block whitespace-nowrap rounded border border-sky-300 bg-sky-50 px-1 py-px align-middle text-[8px] font-bold text-sky-800">
+                                      {e.depositType}
+                                    </span>
+                                  ) : null}
+                                  {e.dateMs ? (
+                                    <span className="text-slate-500">
+                                      {' — '}
+                                      <span dir="ltr">{jdate(new Date(e.dateMs))}</span>
+                                      {e.datedByDeposit ? ' (تاریخ واریز)' : ''}
+                                    </span>
+                                  ) : null}
                                 </span>
                                 <span className={`shrink-0 font-bold ${e.sign === 1 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                   {e.sign === 1 ? '+' : '−'}{fa(e.amount)}

@@ -20,6 +20,14 @@ export interface LedgerTxn {
   amount: number | string | null;
   description?: string | null;
   createdAt?: string | Date | null;
+  /**
+   * تاریخ واقعی واریز (از فیش بانکی / StdPays سما) — جدا از createdAt که
+   * فقط زمان «ثبت در سیستم» است. برای واریزهای مهاجرتی، createdAt تاریخ
+   * ایمپورت است و هیچ ارزشی برای کارنامه ندارد.
+   */
+  depositDate?: string | Date | null;
+  /** نوع واریز: نقدی، چک، کارت‌خوان سامان، … (از paytype سما) */
+  depositType?: string | null;
 }
 
 export interface ChequeRow {
@@ -77,6 +85,26 @@ export interface StatementEvent {
   dateMs: number | null;
   /** مثبت = به نفع دانشجو (کاهش بدهی)، منفی = به زیان او */
   sign: 1 | -1;
+  /** نوع واریز (فقط رویدادهای PAYMENT) — نمایش به‌صورت برچسب جدا از شرح */
+  depositType?: string | null;
+  /** true = تاریخِ نمایش، تاریخ واقعی واریز است نه زمان ثبت رکورد */
+  datedByDeposit?: boolean;
+}
+
+/**
+ * شرح واریز بدون «(نوع واریز)» انتهایی.
+ *
+ * هنگام مهاجرت، نوع واریز در انتهای شرح داخل پرانتز نوشته شده بود
+ * («… — فیش ۱۲۳ (نقدي)»). حالا که نوع، ستون مستقل خودش را دارد،
+ * تکرارش در متن حذف می‌شود — فقط اگر عیناً با depositType یکی باشد،
+ * تا پرانتزهای دیگرِ شرح دست‌نخورده بمانند.
+ */
+function stripDepositSuffix(label: string, depositType: string | null): string {
+  if (!depositType) return label;
+  const m = /\(([^()]*)\)\s*$/.exec(label);
+  if (!m) return label;
+  if (m[1].trim() !== depositType.trim()) return label;
+  return label.slice(0, m.index).replace(/[\s—–-]+$/, '').trim() || label;
 }
 
 export interface TermStatement {
@@ -182,12 +210,17 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
         });
       } else if (isPaymentType(txn.transactionType)) {
         payments += amount;
+        const depositType = String(txn.depositType || '').trim() || null;
+        // تاریخ واقعی واریز اولویت دارد؛ createdAt فقط تاریخ ایمپورت است
+        const paidAtMs = toMs(txn.depositDate);
         events.push({
           kind: 'PAYMENT',
-          label: txn.description || 'پرداخت',
+          label: stripDepositSuffix(txn.description || 'پرداخت', depositType),
           amount,
-          dateMs,
-          sign: 1
+          dateMs: paidAtMs ?? dateMs,
+          sign: 1,
+          depositType,
+          datedByDeposit: paidAtMs !== null
         });
       }
     }
