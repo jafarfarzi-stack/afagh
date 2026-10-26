@@ -90,6 +90,45 @@ export function isPaymentType(type: string | null): boolean {
   return PAYMENT_SET.has(String(type || '').trim().toUpperCase());
 }
 
+/**
+ * انواعِ «اعتبار» که در واقع **تخفیف/کسر** هستند، نه واریزِ دانشجو.
+ *
+ * سما این‌ها را در ستون‌های `TermAms.Fix_Bates` / `Units_Bates` / `Mab_Bates`
+ * نگه می‌داشت و فرمولش هم `TermAcc = TermPays − (fix + units + bates) + adjust`
+ * بود؛ یعنی «بیتس» از بدهی کم می‌شد. هنگام مهاجرت به آفاق، به‌صورت ردیفِ
+ * `TUITION_BATES` در دفتر مالی درج شد. اگر این ردیف در شاخهٔ «پرداخت» بیفتد،
+ * سند رسمی یک تخفیف را «واریز دانشجو» نشان می‌دهد — همان اشتباهی که کاربر
+ * دید و پرسید «بیتس شهریهٔ قدیمی یعنی چی؟».
+ */
+export const LEDGER_DISCOUNT_TYPES: ReadonlySet<string> = new Set([
+  'TUITION_BATES',
+  'DISCOUNT_FIXED',
+  'DISCOUNT_VARIABLE',
+  'SUBJECT_DEDUCTIVE',
+  'TUITION_ADJUST_INC',
+]);
+
+/** برچسبِ فارسیِ ردیف‌های تخفیفِ دفتری — نامِ خامِ دیتابیس گمراه‌کننده است. */
+export function ledgerCreditLabel(type: string, description: string | null | undefined): string {
+  const t = String(type || '').trim().toUpperCase();
+  switch (t) {
+    case 'TUITION_BATES':
+      // «بیتس» در سما یعنی تخفیف درصدی/مبلغی (رتبهٔ علمی، ایثارگری، …)؛
+      // برچسبِ قدیمی «بیتس شهریهٔ قدیمی» آن را شبیهِ بدهی می‌کرد.
+      return 'تخفیف بیتس (سما)';
+    case 'TUITION_ADJUST_INC':
+      return 'تعدیل افزایشی شهریه (سما)';
+    case 'DISCOUNT_FIXED':
+      return description || 'تخفیف شهریهٔ ثابت (سما)';
+    case 'DISCOUNT_VARIABLE':
+      return description || 'تخفیف شهریهٔ متغیر (سما)';
+    case 'SUBJECT_DEDUCTIVE':
+      return description || 'کاهش مبلغ موضوعی (سما)';
+    default:
+      return description || 'تخفیف';
+  }
+}
+
 /** رویداد کارنامهٔ مالی — «چه اتفاقی افتاده» */
 export interface StatementEvent {
   kind: 'CHARGE' | 'DISCOUNT' | 'SPONSOR' | 'PAYMENT' | 'CHEQUE' | 'LOAN' | 'CLEARANCE';
@@ -263,6 +302,19 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     let payments = 0;
     let tuitionFixed = 0;
     let tuitionVariable = 0;
+    /**
+     * تخفیف/پوششی که مستقیماً در دفتر مالی ثبت شده است (نه در جدول تخفیف‌ها).
+     *
+     * ⚠ چرا جدا شد: در واژگان کانونی، `TUITION_BATES` و `DISCOUNT_*` و
+     * `SUBJECT_DEDUCTIVE` و `TUITION_ADJUST_INC` و `SPONSORSHIP` همه «اعتبار»
+     * (کاهش بدهی) هستند. پیش‌تر همین‌ها زیرِ شاخهٔ «پرداخت» می‌افتادند و
+     * کارنامه یک تخفیف را «پرداخت» نشان می‌داد — مثلاً «بیتس» سما که تخفیف
+     * درصدی/مبلغی است، به‌عنوان واریز دانشجو چاپ می‌شد. تفکیک این دو، هیچ
+     * تغییری در مانده ایجاد نمی‌کند (هر دو از بدهی کم می‌شوند) ولی سند را
+     * درست می‌کند.
+     */
+    let ledgerDiscounts = 0;
+    let ledgerSponsorships = 0;
 
     for (const txn of inTerm(input.ledger || [])) {
       const amount = toNum(txn.amount);
@@ -281,6 +333,22 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
           sign: -1
         });
       } else if (isPaymentType(txn.transactionType)) {
+        const creditType = String(txn.transactionType || '').trim().toUpperCase();
+        // تخفیف/پوششی که در خودِ دفتر ثبت شده — «پرداخت» نیست
+        const isLedgerDiscount = LEDGER_DISCOUNT_TYPES.has(creditType);
+        const isLedgerSponsor = creditType === 'SPONSORSHIP';
+        if (isLedgerDiscount || isLedgerSponsor) {
+          if (isLedgerSponsor) ledgerSponsorships += amount;
+          else ledgerDiscounts += amount;
+          events.push({
+            kind: isLedgerSponsor ? 'SPONSOR' : 'DISCOUNT',
+            label: ledgerCreditLabel(creditType, txn.description),
+            amount,
+            dateMs,
+            sign: 1,
+          });
+          continue;
+        }
         payments += amount;
         const depositType = String(txn.depositType || '').trim() || null;
         // تاریخ واقعی واریز اولویت دارد؛ createdAt فقط تاریخ ایمپورت است
@@ -378,8 +446,13 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
 
     // 🔒 سقف: جمع تخفیف+پوشش هرگز از شهریهٔ همان ترم بیشتر نمی‌شود؛
     // خالصِ قابل‌پرداخت منفی (طلبِ کاذب به نفع دانشجو) ساخته نمی‌شود.
-    const cappedDiscounts = Math.min(discounts, charges);
-    const cappedSponsorships = Math.min(sponsorships, Math.max(0, charges - cappedDiscounts));
+    // تخفیفِ دفتری (مثل بیتسِ سما) و تخفیفِ جدول تخفیف‌ها هر دو از بدهی کم
+    // می‌کنند؛ سقف مشترک تا «خالص» منفی نشود.
+    const cappedDiscounts = Math.min(discounts + ledgerDiscounts, charges);
+    const cappedSponsorships = Math.min(
+      sponsorships + ledgerSponsorships,
+      Math.max(0, charges - cappedDiscounts),
+    );
     const netPayable = charges - cappedDiscounts - cappedSponsorships;
     const balance = netPayable - payments - chequesCleared - loans;
 
