@@ -279,6 +279,7 @@ export default function StudentStatementClient({ studentId, studentName, student
           }))}
           totals={totals}
           showEvents={false}
+          viewerRole="FINANCE"
           universityTitle={universityTitle}
           logoUrl={logoUrl}
           verifyBlock={verify ? <FinanceVerifyBlock url={verify.url} qr={verify.qr} expiresAt={verify.expiresAt} /> : undefined}

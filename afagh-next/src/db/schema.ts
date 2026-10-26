@@ -1475,6 +1475,23 @@ export const student_ledger = pgTable('student_ledger', {
   depositType: varchar('depositType', { length: 50 }),
   // تاریخ واریز واقعی. در مهاجرت از سیستم قدیمی منتقل نشده → NULL می‌ماند.
   depositDate: timestamp('depositDate'),
+  // ── مستندسازت پرداختِ مهاجرت‌یافته از سیستم قدیمی (سما) ──
+  // پر می‌شوند توسط scripts/backfill-legacy-payment-provenance.mjs (مهاجرت ۰۱۲۱).
+  // کلید اتصال: referenceId = StdPays.stdpaysId.
+  // نکتهٔ RLS: جدول از پیش RLS دارد (ستون studentId)؛ افزودن این ستون‌ها
+  // هیچ تغییری در سیاست نمی‌دهد و سخت‌گیری fail-closed رعایت می‌شود.
+  payerName: varchar('payerName', { length: 120 }),         // VW_StdPays.NAME (پرداخت‌کننده)
+  payerNationalCode: varchar('payerNationalCode', { length: 12 }), // VW_StdPays.NationalCode
+  receiptNo: varchar('receiptNo', { length: 40 }),          // StdPays.Fish_no (شماره فیش)
+  voucherNo: varchar('voucherNo', { length: 80 }),          // StdPays.SanadNumber (شماره سند)
+  payTypeCode: integer('payTypeCode'),                      // StdPays.pay_type (کد نوع پرداخت سما)
+  accountNo: varchar('accountNo', { length: 30 }),          // StdPays.Acc_No (شماره حساب وصولی دانشگاه)
+  cardNo: varchar('cardNo', { length: 30 }),               // استخراج‌شده از StdPays.Rem (شماره کارت پرداخت‌کننده)
+  bankName: varchar('bankName', { length: 60 }),            // StdPays.BankName
+  branchName: varchar('branchName', { length: 60 }),        // StdPays.BranchName
+  recorderCode: integer('recorderCode'),                    // StdPays.userCode (ثبت‌کننده)
+  recorderName: varchar('recorderName', { length: 120 }),   // Users.FullName
+  legacyRem: text('legacyRem'),                              // StdPays.Rem (یادداشت آزاد اصل — شامل کارت/بانک/حساب)
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => [
   index('idx_student_ledger_fin_term').on(t.financialTermId),

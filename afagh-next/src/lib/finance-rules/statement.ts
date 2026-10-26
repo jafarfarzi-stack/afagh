@@ -28,6 +28,19 @@ export interface LedgerTxn {
   depositDate?: string | Date | null;
   /** نوع واریز: نقدی، چک، کارت‌خوان سامان، … (از paytype سما) */
   depositType?: string | null;
+  // ── مستندسازت پرداختِ مهاجرت‌یافته از سیستم قدیمی (سما، مهاجرت ۰۱۲۱) ──
+  payerName?: string | null;
+  payerNationalCode?: string | null;
+  receiptNo?: string | null;
+  voucherNo?: string | null;
+  payTypeCode?: number | null;
+  accountNo?: string | null;
+  cardNo?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  recorderCode?: number | null;
+  recorderName?: string | null;
+  legacyRem?: string | null;
 }
 
 export interface ChequeRow {
@@ -89,7 +102,46 @@ export interface StatementEvent {
   depositType?: string | null;
   /** true = تاریخِ نمایش، تاریخ واقعی واریز است نه زمان ثبت رکورد */
   datedByDeposit?: boolean;
+  // ── مستندسازت پرداختِ مهاجرت‌یافته از سیستم قدیمی (سما، مهاجرت ۰۱۲۱) ──
+  /** پرداخت‌کننده (VW_StdPays.NAME) */
+  payerName?: string | null;
+  /** کد ملی پرداخت‌کننده (VW_StdPays.NationalCode) */
+  payerNationalCode?: string | null;
+  /** شماره فیش (StdPays.Fish_no) */
+  receiptNo?: string | null;
+  /** شماره سند (StdPays.SanadNumber) */
+  voucherNo?: string | null;
+  /** کد نوع پرداخت سما (StdPays.pay_type) */
+  payTypeCode?: number | null;
+  /** شماره حساب وصولی دانشگاه (StdPays.Acc_No) */
+  accountNo?: string | null;
+  /** شماره کارت پرداخت‌کننده (استخراج‌شده از StdPays.Rem) */
+  cardNo?: string | null;
+  /** نام بانک / شعبه (StdPays.BankName / BranchName) */
+  bankName?: string | null;
+  branchName?: string | null;
+  /** ثبت‌کننده (StdPays.userCode → Users) */
+  recorderCode?: number | null;
+  recorderName?: string | null;
+  /** یادداشت آزاد اصل (StdPays.Rem) — شامل کارت/بانک/حساب به‌صورت خام */
+  legacyRem?: string | null;
 }
+
+/** نگاشت کد نوع پرداختِ سما به برچسب فارسی (نمایش مکملِ depositType) */
+export const PAY_TYPE_LABELS: Record<number, string> = {
+  0: 'نامشخص',
+  1: 'نقدی',
+  2: 'چک',
+  3: 'کارت‌خوان',
+  4: 'انتقال',
+  6: 'ساتنا',
+  7: 'سپرده',
+  8: 'سایر',
+  102: 'اینترنتی سامان',
+  108: 'درگاه بانکی',
+  157: 'آنلاین سامان',
+  201: 'دستگاه کارت‌خوان',
+};
 
 /**
  * شرح واریز بدون «(نوع واریز)» انتهایی.
@@ -227,7 +279,19 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
           dateMs: paidAtMs ?? dateMs,
           sign: 1,
           depositType,
-          datedByDeposit: paidAtMs !== null
+          datedByDeposit: paidAtMs !== null,
+          payerName: txn.payerName ?? null,
+          payerNationalCode: txn.payerNationalCode ?? null,
+          receiptNo: txn.receiptNo ?? null,
+          voucherNo: txn.voucherNo ?? null,
+          payTypeCode: txn.payTypeCode ?? null,
+          accountNo: txn.accountNo ?? null,
+          cardNo: txn.cardNo ?? null,
+          bankName: txn.bankName ?? null,
+          branchName: txn.branchName ?? null,
+          recorderCode: txn.recorderCode ?? null,
+          recorderName: txn.recorderName ?? null,
+          legacyRem: txn.legacyRem ?? null,
         });
       }
     }

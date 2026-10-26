@@ -2,7 +2,7 @@ import 'server-only';
 import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  academic_terms, degree_level_configs, loan_products, majors, payment_cheques,
+  academic_terms, degree_level_configs, faculties, financial_clearances, loan_products, majors, payment_cheques,
   student_discounts, student_ledger, student_loans, student_sponsorships, student_term_states, students,
   tuition_discount_types, tuition_sponsors, users,
 } from '@/db/schema';
@@ -29,6 +29,13 @@ export interface StudentFinanceDetail {
     degreeTitle: string | null;
     entryYear: number | null;
     status: string | null;
+    // ── فیلدهای سربرگ کارنامه (انعکاس سیستم قدیمی) ──
+    facultyTitle: string | null;
+    quotaType: string | null;
+    courseType: string | null;
+    admissionMethod: string | null;
+    entryDate: string | null;
+    settlementDate: Date | null;
   };
   terms: { id: number; termCode: string; termTitle: string; isCurrent: number | null }[];
   discounts: (typeof student_discounts.$inferSelect & { typeTitle: string | null; typeCode: string | null })[];
@@ -60,9 +67,15 @@ export async function getStudentFinance(
     degreeTitle: degree_level_configs.title,
     entryYear: students.entryYear,
     status: students.status,
+    quotaType: students.quotaType,
+    courseType: students.tuitionType,
+    admissionMethod: students.admissionMethod,
+    entryDate: students.entryDate,
+    facultyTitle: faculties.name,
   }).from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
+    .leftJoin(faculties, eq(faculties.id, majors.facultyId))
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
     .where(
       opts.universityId === undefined
@@ -75,6 +88,13 @@ export async function getStudentFinance(
     .limit(1);
 
   if (!studentRow) return null;
+
+  // تاریخ تسویه: آخرین نیمسالِ تسویه‌شده (financial_clearances)
+  const [settlement] = await db.select({ clearedAt: financial_clearances.clearedAt })
+    .from(financial_clearances)
+    .where(and(eq(financial_clearances.studentId, studentId), eq(financial_clearances.isCleared, 1)))
+    .orderBy(desc(financial_clearances.clearedAt))
+    .limit(1);
 
   const [terms, ledger, discounts, sponsorships, cheques, loans, discountTypes, sponsors, loanProductRows] =
     await Promise.all([
@@ -211,6 +231,20 @@ export async function getStudentFinance(
       // نه createdAt را که برای رکوردهای مهاجرتی همان روز ایمپورت است.
       depositDate: t.depositDate,
       depositType: t.depositType,
+      // مستندسازت مهاجرت‌یافته از سیستم قدیمی (سما، مهاجرت ۰۱۲۱) — برای
+      // نمایش در کارنامهٔ مالی (مخصوصاً نمای کارشناس مالی).
+      payerName: t.payerName ?? null,
+      payerNationalCode: t.payerNationalCode ?? null,
+      receiptNo: t.receiptNo ?? null,
+      voucherNo: t.voucherNo ?? null,
+      payTypeCode: t.payTypeCode ?? null,
+      accountNo: t.accountNo ?? null,
+      cardNo: t.cardNo ?? null,
+      bankName: t.bankName ?? null,
+      branchName: t.branchName ?? null,
+      recorderCode: t.recorderCode ?? null,
+      recorderName: t.recorderName ?? null,
+      legacyRem: t.legacyRem ?? null,
     })),
     discounts: discountApplied,
     sponsorships: sponsorApplied,
@@ -232,6 +266,12 @@ export async function getStudentFinance(
       degreeTitle: studentRow.degreeTitle,
       entryYear: studentRow.entryYear,
       status: studentRow.status,
+      facultyTitle: studentRow.facultyTitle,
+      quotaType: studentRow.quotaType,
+      courseType: studentRow.courseType,
+      admissionMethod: studentRow.admissionMethod,
+      entryDate: studentRow.entryDate,
+      settlementDate: settlement?.clearedAt ?? null,
     },
     terms,
     discounts: discounts.map((d) => ({ ...d.row, typeTitle: d.typeTitle, typeCode: d.typeCode })),

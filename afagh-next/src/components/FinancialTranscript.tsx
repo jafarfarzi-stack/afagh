@@ -1,6 +1,7 @@
 ﻿import type { ReactNode } from 'react';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import { normalizeTermCode } from '@/lib/scheduling-core';
+import { PAY_TYPE_LABELS } from '@/lib/finance-rules/statement';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -36,6 +37,19 @@ export interface TranscriptEventView {
   depositType?: string | null;
   /** تاریخِ نمایش، تاریخ واقعی واریز است نه زمان ثبت رکورد */
   datedByDeposit?: boolean;
+  // ── مستندسازت پرداختِ مهاجرت‌یافته از سیستم قدیمی (سما، مهاجرت ۰۱۲۱) ──
+  payerName?: string | null;
+  payerNationalCode?: string | null;
+  receiptNo?: string | null;
+  voucherNo?: string | null;
+  payTypeCode?: number | null;
+  accountNo?: string | null;
+  cardNo?: string | null;
+  bankName?: string | null;
+  branchName?: string | null;
+  recorderCode?: number | null;
+  recorderName?: string | null;
+  legacyRem?: string | null;
 }
 
 export interface TranscriptCourseView {
@@ -44,6 +58,12 @@ export interface TranscriptCourseView {
   units: number;
   perUnit: number;
   amount: number;
+  /** نمرهٔ نهایی درس (اگر نهایی شده باشد) */
+  grade?: number | null;
+  /** ماهیت درس (نظری/عملی/…) */
+  courseNature?: string | null;
+  theoreticalUnits?: number;
+  practicalUnits?: number;
 }
 
 export interface TranscriptTermView {
@@ -98,6 +118,13 @@ export interface TranscriptStudentView {
   /** نیمسال ورود: ۱=مهر، ۲=بهمن، ۳=تابستان (students.entryTerm) */
   entryTerm?: number | null;
   status?: string | null;
+  // ── فیلدهای سربرگ (انعکاس سیستم قدیمی) ──
+  facultyTitle?: string | null;
+  quotaType?: string | null;
+  courseType?: string | null;
+  admissionMethod?: string | null;
+  entryDate?: string | Date | null;
+  settlementDate?: string | Date | null;
 }
 
 export interface TranscriptChequeView {
@@ -158,6 +185,19 @@ const STATUS_FA: Record<string, string> = {  ACTIVE: 'فعال',
   SUSPENDED: 'معلق',
 };
 
+/** نگاشت کد سهمیه (students.quotaType) به برچسب فارسی — ناشناخته = مقدار خام */
+const QUOTA_FA: Record<string, string> = {
+  NORMAL: 'منطقه‌ای (آزاد)',
+  REGION1: 'منطقه ۱',
+  REGION2: 'منطقه ۲',
+  REGION3: 'منطقه ۳',
+  SHAHRIYE: 'شهریه‌پرداز',
+  MARTYR: 'خانوادهٔ شهید',
+  MEMORIAL: 'ایثارگران',
+  RURAL: 'روستایی',
+};
+const quotaLabel = (q: string | null | undefined) => (q ? (QUOTA_FA[q] ?? q) : '—');
+
 function balanceBadge(balance: number): { text: string; cls: string } {
   if (balance > 0) return { text: 'بدهکار', cls: 'bg-rose-100 text-rose-800 border-rose-300' };
   if (balance < 0) return { text: 'بستانکار', cls: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
@@ -167,6 +207,18 @@ function balanceBadge(balance: number): { text: string; cls: string } {
 function toNum(v: number | string | null | undefined): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** نمایش ۴ رقم آخر (برای ماسک‌کردن شماره حساب در نمای دانشجو) */
+function last4(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.length > 4 ? '••••' + s.slice(-4) : s;
+}
+/** ماسک‌کردن کد ملی: در نمای کارشناس مالی کامل، در نمای دانشجو ۴ رقم آخر */
+function maskNC(nc: string | null | undefined, isFinance: boolean): string {
+  if (!nc) return '';
+  if (isFinance) return nc;
+  return nc.length > 4 ? '••••' + nc.slice(-4) : nc;
 }
 
 export interface FinancialTranscriptProps {
@@ -183,6 +235,8 @@ export interface FinancialTranscriptProps {
   scopeLabel?: string;
   /** رویدادهای هر ترم نمایش داده شوند؟ (پیش‌فرض: بله) */
   showEvents?: boolean;
+  /** نقش بیننده: دانشجو فقط ماسک‌شده می‌بیند؛ کارشناس مالی/ادمین مستندات کامل (شماره حساب/کارت) را می‌بیند */
+  viewerRole?: 'STUDENT' | 'FINANCE' | 'ADMIN';
   /** جدول چک‌ها / وام‌ها (اگر خالی باشند، بخششان چاپ نمی‌شود) */
   cheques?: TranscriptChequeView[];
   loans?: TranscriptLoanView[];
@@ -201,6 +255,7 @@ export default function FinancialTranscript({
   issuedAt,
   scopeLabel,
   showEvents = true,
+  viewerRole = 'STUDENT',
   cheques = [],
   loans = [],
   leadBlock,
@@ -208,10 +263,18 @@ export default function FinancialTranscript({
 }: FinancialTranscriptProps) {
   const paidTotal = totals.payments + totals.chequesCleared + totals.loans;
   const grand = balanceBadge(totals.balance);
+  const isFinance = viewerRole === 'FINANCE' || viewerRole === 'ADMIN';
 
   // دو ترم در هر ردیف — همان تعداد ستون چاپ عمودی A4 تا هیچ خانه‌ای خالی نماند
   const chunks: TranscriptTermView[][] = [];
   for (let i = 0; i < terms.length; i += 2) chunks.push(terms.slice(i, i + 2));
+
+  // ماندهٔ قبلی (انتقالی) هر ترم = جمعِ ماندهٔ همهٔ ترم‌های پیش از آن (به ترتیب زمانی)
+  const priorByTermId = new Map<number, number>();
+  {
+    let running = 0;
+    for (const t of terms) { priorByTermId.set(t.termId, running); running += t.balance; }
+  }
 
   return (
     <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
@@ -283,6 +346,24 @@ export default function FinancialTranscript({
                   ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
                   : (student.entryYear ? fa(student.entryYear) : '—')}
               </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">دانشکده</td>
+              <td className="border border-slate-300 px-2 py-1.5">{student.facultyTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">سهمیه</td>
+              <td className="border border-slate-300 px-2 py-1.5">{quotaLabel(student.quotaType)}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نوع دوره</td>
+              <td className="border border-slate-300 px-2 py-1.5">{student.courseType || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">تاریخ ورود</td>
+              <td className="border border-slate-300 px-2 py-1.5">{jdate(student.entryDate)}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">روش پذیرش</td>
+              <td className="border border-slate-300 px-2 py-1.5">{student.admissionMethod || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">تاریخ تسویه</td>
+              <td className="border border-slate-300 px-2 py-1.5">{jdate(student.settlementDate)}</td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">وضعیت مالی کل</td>
@@ -394,7 +475,16 @@ export default function FinancialTranscript({
                                   <tr key={i} className="border-t border-slate-100">
                                     <td className="px-1 py-0.5 text-center text-slate-500">{fa(i + 1)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode || '—'}</td>
-                                    <td className="tr-course-title px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
+                                    <td className="tr-course-title px-1 py-0.5 font-medium">
+                                      {c.courseTitle || '—'}
+                                      {(c.grade != null || c.courseNature || c.theoreticalUnits || c.practicalUnits) ? (
+                                        <span className="mt-0.5 block text-[8px] font-normal text-slate-500">
+                                          {c.grade != null ? <>نمره: <b className="text-slate-700">{fa(c.grade)}</b></> : null}
+                                          {c.courseNature ? <>{c.grade != null ? ' · ' : ''}ماهیت: {c.courseNature}</> : null}
+                                          {(c.theoreticalUnits || c.practicalUnits) ? <>{c.grade != null || c.courseNature ? ' · ' : ''}نظری/عملی: {fa(c.theoreticalUnits ?? 0)}/{fa(c.practicalUnits ?? 0)}</> : null}
+                                        </span>
+                                      ) : null}
+                                    </td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.units)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.perUnit)}</td>
                                     <td className="px-1 py-0.5 text-left font-bold">{fa(c.amount)}</td>
@@ -428,6 +518,38 @@ export default function FinancialTranscript({
                                       {e.datedByDeposit ? ' (تاریخ واریز)' : ''}
                                     </span>
                                   ) : null}
+                                  {/* ── مستندسازت پرداخت (مهاجرت ۰۱۲۱) ──
+                                      در نمای کارشناس مالی/ادمین همه نمایش داده می‌شود
+                                      (از جمله شماره حساب و شماره کارت)؛ در نمای دانشجو
+                                      حساب ماسک‌شده و کارت/یادداشت حذف می‌شود. */}
+                                  {e.kind === 'PAYMENT' && (e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName || e.legacyRem) && (
+                                    <span className="mt-0.5 block space-y-0.5 text-[8px] leading-tight text-slate-500">
+                                      {e.receiptNo && (
+                                        <span className="block">شماره فیش: <b className="font-mono text-slate-700">{faDigits(e.receiptNo)}</b></span>
+                                      )}
+                                      {e.payerName && (
+                                        <span className="block">پرداخت‌کننده: <b className="text-slate-700">{e.payerName}</b>{isFinance && e.payerNationalCode ? <span className="font-mono"> ({faDigits(maskNC(e.payerNationalCode, isFinance))})</span> : null}</span>
+                                      )}
+                                      {e.accountNo && (
+                                        <span className="block">شماره حساب: <b className="font-mono text-slate-700">{faDigits(isFinance ? e.accountNo : last4(e.accountNo))}</b></span>
+                                      )}
+                                      {isFinance && e.cardNo && (
+                                        <span className="block">شماره کارت: <b className="font-mono text-slate-700">{faDigits(e.cardNo)}</b></span>
+                                      )}
+                                      {e.payTypeCode != null && (
+                                        <span className="block">نوع پرداخت (سما): <b className="text-slate-700">{PAY_TYPE_LABELS[e.payTypeCode] ?? e.payTypeCode}</b></span>
+                                      )}
+                                      {e.voucherNo && (
+                                        <span className="block">شماره سند: <b className="font-mono text-slate-700">{faDigits(e.voucherNo)}</b></span>
+                                      )}
+                                      {isFinance && e.recorderName && (
+                                        <span className="block">ثبت‌کننده: <b className="text-slate-700">{e.recorderName}</b></span>
+                                      )}
+                                      {isFinance && e.legacyRem && (
+                                        <span className="block text-[7px] text-slate-400">یادداشت اصل: {e.legacyRem}</span>
+                                      )}
+                                    </span>
+                                  )}
                                 </span>
                                 <span className={`shrink-0 font-bold ${e.sign === 1 ? 'text-emerald-700' : 'text-rose-700'}`}>
                                   {e.sign === 1 ? '+' : '−'}{fa(e.amount)}
@@ -438,7 +560,7 @@ export default function FinancialTranscript({
                         )}
                         {/* خلاصهٔ ترم — پایین کارت (نه بالا)، سه قلم در هر سطر تا فشرده شود */}
                         <div className="border-t border-slate-300 bg-slate-100/70">
-                          <TermSummary t={t} />
+                          <TermSummary t={t} priorBalance={priorByTermId.get(t.termId) ?? 0} />
                         </div>
                       </div>
                     );
@@ -548,7 +670,7 @@ export default function FinancialTranscript({
  * خلاصهٔ ترم — سه قلم در هر سطر (به‌جای جدول ۸ تا ۱۰ ردیفی عمودی).
  * سه ردیف سه‌ستونه + یک ردیف «ماندهٔ ترم» در پایین؛ حدود ۵ ردیف کاغذ کمتر برای هر ترم.
  */
-function TermSummary({ t }: { t: TranscriptTermView }) {
+function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBalance?: number }) {
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
   const items: Cell[] = [
     { label: 'شهریه (بدهی)', value: fa(t.charges) },
@@ -587,6 +709,14 @@ function TermSummary({ t }: { t: TranscriptTermView }) {
             ))}
           </tr>
         ))}
+        {priorBalance !== 0 && (
+          <tr className="border-t border-slate-200 bg-slate-100/60">
+            <td colSpan={2} className="px-1 py-0.5 font-bold text-slate-600">ماندهٔ قبلی (انتقالی)</td>
+            <td className="px-1 py-0.5 text-left font-bold text-slate-700">
+              {fa(Math.abs(priorBalance))}{priorBalance > 0 ? ' بدهکار' : ' بستانکار'}
+            </td>
+          </tr>
+        )}
         <tr className="border-t border-slate-400 bg-slate-200/60">
           <td colSpan={2} className="px-1 py-0.5 font-black text-slate-800">ماندهٔ ترم</td>
           <td className={`px-1 py-0.5 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>

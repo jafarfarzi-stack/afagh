@@ -22,3 +22,7 @@ outbox/
 
 # اسکریپت‌های یک‌بارمصرفِ اتصال که اعتبارنامهٔ سما را داخل کد دارند — هرگز commit نشوند
 conn-*.mts
+
+# خروجی TSV حجیمِ بک‌فیلِ مستندسازت (با scp به سرور منتقل می‌شود، نه git)
+scripts/legacy-payment-provenance.tsv
+scripts/sama-course-nature.tsv
