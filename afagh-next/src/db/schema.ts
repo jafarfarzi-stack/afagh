@@ -1437,9 +1437,17 @@ export const student_ledger = pgTable('student_ledger', {
   description: text('description'),
   referenceId: integer('referenceId'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  // ── فیلدهای قابل گزارش/فیلتر برای بخش مالی (مهاجرت ۰۱۱۹) ──
+  // نوع واریز (نقدی/آنلاین/چک/کارت‌خوان/وام...). ردیف‌های منتقل‌شده از سیستم
+  // قدیمی از متنِ description پر می‌شوند (scripts/backfill-deposit-type.sql).
+  depositType: varchar('depositType', { length: 50 }),
+  // تاریخ واریز واقعی. در مهاجرت از سیستم قدیمی منتقل نشده → NULL می‌ماند.
+  depositDate: timestamp('depositDate'),
   createdAt: timestamp('createdAt').defaultNow()
 }, (t) => [
   index('idx_student_ledger_fin_term').on(t.financialTermId),
+  // فیلترِ گزارشِ تفکیک وصولی بر اساس نوع واریز (مهاجرت ۰۱۱۹).
+  index('idx_student_ledger_deposit_type').on(t.depositType),
   /* هر گزارش/صفحه‌ای که «بدهی یک دانشجو» یا «گردش حساب» را می‌خواند با
      studentId فیلتر می‌کند؛ بدون این ایندکس هر چنین کوئری‌ای اسکن کامل
      ۳۴۳ هزار ردیف بود (باگ ۵۰۴ کارت دانشجویی — ۱۸ اکتبر ۲۰۲۶). */

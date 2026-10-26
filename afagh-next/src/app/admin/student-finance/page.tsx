@@ -17,8 +17,15 @@ const txFa = (t: string) => TX_FA[t] ?? t;
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR');
 
-export default async function StudentFinancePage() {
+export default async function StudentFinancePage({
+  searchParams,
+}: {
+  // در Next 16 مقدار searchParams یک Promise است — بدون await، فیلترِ
+  // «نوع واریز» همیشه undefined می‌شد و بی‌صدا کار نمی‌کرد.
+  searchParams: Promise<{ depositType?: string }>;
+}) {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE']);
+  const sp = await searchParams;
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
@@ -80,6 +87,7 @@ export default async function StudentFinancePage() {
   const recent = (
     await db.execute(sql`
       select l."transactionType", l.amount::float8 as amount, l.description, l."createdAt",
+             l."depositType", l."depositDate",
              st."studentCode", u."firstName", u."lastName"
       from student_ledger l
       join students st on st.id = l."studentId"
@@ -91,10 +99,57 @@ export default async function StudentFinancePage() {
     amount: number;
     description: string | null;
     createdAt: Date | null;
+    depositType: string | null;
+    depositDate: Date | null;
     studentCode: string;
     firstName: string;
     lastName: string;
   }[];
+
+  // ── تفکیک وصولی بر اساس «نوع واریز» ──
+  // نوع واریزِ ردیف‌های منتقل‌شده از سیستم قدیمی به‌صورت متن در انتهای شرح
+  // آمده است: «پرداخت از سیستم قدیمی — فیش N (نوع واریز)». اینجا همان پرانتز
+  // را استخراج می‌کنیم تا بخش مالی بدون SQL گزارش بگیرد.
+  const payScope = currentUniversityId
+    ? sql`and (l."universityId" = ${currentUniversityId} or l."universityId" is null)`
+    : sql``;
+
+  // ── فیلتر نوع واریز (از ستون ساختاریافتهٔ جدید — مهاجرت ۰۱۱۹) ──
+  const depositTypeFilter =
+    typeof sp?.depositType === 'string' && sp.depositType.length > 0
+      ? sp.depositType
+      : null;
+  const filterSql = depositTypeFilter
+    ? sql`and l."depositType" = ${depositTypeFilter}`
+    : sql``;
+
+  // گزینه‌های فیلتر: انواع واریزِ موجود در دفتر (هم‌گام با داده پس از بک‌فیل)
+  const depositTypeOptions = (
+    await db.execute(sql`
+      select distinct coalesce(l."depositType", 'نامشخص / بدون شرح') as dt
+      from student_ledger l
+      where l."transactionType" = 'PAYMENT' ${payScope}
+      order by 1`)
+  ).rows as unknown as { dt: string }[];
+
+  // ── تفکیک وصولی بر اساس «نوع واریز» ──
+  // از ستون ساختاریافتهٔ depositType استفاده می‌کند (پس از بک‌فیلِ مهاجرت ۰۱۱۹
+  // مقدارش از متنِ description پر شده است)؛ گزارش‌گیری دیگر به متنِ شرح وابسته نیست.
+  const byMethod = (
+    await db.execute(sql`
+      select
+        coalesce(l."depositType", 'نامشخص / بدون شرح') as deposit_type,
+        count(*)::int as txn_count,
+        coalesce(sum(l.amount), 0)::float8 as total_amount
+      from student_ledger l
+      where l."transactionType" = 'PAYMENT' ${payScope} ${filterSql}
+      group by 1
+      order by 2 desc`)
+  ).rows as unknown as { deposit_type: string; txn_count: number; total_amount: number }[];
+
+  const methodTotal = byMethod.reduce((s, r) => s + r.total_amount, 0);
+  const methodCount = byMethod.reduce((s, r) => s + r.txn_count, 0);
+  const pct = (v: number) => (methodTotal ? (v / methodTotal) * 100 : 0);
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -202,6 +257,98 @@ export default async function StudentFinancePage() {
         </div>
       </div>
 
+      {/* تفکیک وصولی بر اساس نوع واریز */}
+      <div className="card">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <h2 className="font-bold text-slate-800">تفکیک وصولی بر اساس نوع واریز</h2>
+          <span className="text-xs font-bold text-slate-500">
+            {fa(methodCount)} تراکنش · جمع {fa(methodTotal)} ریال
+          </span>
+        </div>
+
+        {/* فیلتر نوع واریز — فرم GET ساده (سازگار با کامپوننت سرور) */}
+        <form method="get" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+          <label htmlFor="depositType" className="text-xs font-bold text-slate-600">فیلتر نوع واریز:</label>
+          <select
+            id="depositType"
+            name="depositType"
+            defaultValue={depositTypeFilter ?? ''}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+          >
+            <option value="">همهٔ انواع</option>
+            {depositTypeOptions.map((o) => (
+              <option key={o.dt} value={o.dt}>{o.dt}</option>
+            ))}
+          </select>
+          <button type="submit" className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white transition hover:bg-emerald-700">
+            اعمال فیلتر
+          </button>
+          {depositTypeFilter && (
+            <a href="/admin/student-finance" className="text-xs font-bold text-rose-600 hover:underline">حذف فیلتر</a>
+          )}
+        </form>
+
+        <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] font-bold leading-5 text-amber-900">
+          ⚠️ این تفکیک از متنِ شرحِ ردیف‌های منتقل‌شده از سیستم قدیمی استخراج شده است
+          («پرداخت از سیستم قدیمی — فیش N (نوع واریز)»). <b>تاریخ واریز واقعی در مهاجرت حفظ نشده</b>
+          و جداول جزئیاتِ چک و پرداخت آنلاین خالی‌اند؛ برای گزارشِ تاریخ‌دار باید داده از سیستم قدیمی دوباره وارد شود.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-sm rt">
+            <thead>
+              <tr className="text-xs text-slate-500 border-b border-slate-200">
+                <th className="p-2">نوع واریز</th>
+                <th className="p-2">تعداد تراکنش</th>
+                <th className="p-2">جمع مبلغ (ریال)</th>
+                <th className="p-2">سهم</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byMethod.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-5 text-center text-slate-400">
+                    پرداختی در دفتر مالی ثبت نشده است.
+                  </td>
+                </tr>
+              )}
+              {byMethod.map(r => (
+                <tr key={r.deposit_type} className="border-t border-slate-100">
+                  <td className="p-2 font-semibold text-slate-800">{r.deposit_type}</td>
+                  <td className="p-2 text-slate-600">{fa(r.txn_count)}</td>
+                  <td className={`p-2 font-bold ${r.total_amount < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {fa(r.total_amount)}
+                  </td>
+                  <td className="p-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-indigo-500"
+                          style={{ width: `${Math.min(100, Math.abs(pct(r.total_amount)))}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500" dir="ltr">
+                        {pct(r.total_amount).toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {byMethod.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-50 font-black text-slate-800">
+                  <td className="p-2">جمع کل</td>
+                  <td className="p-2">{fa(methodCount)}</td>
+                  <td className="p-2">{fa(methodTotal)}</td>
+                  <td className="p-2 text-xs text-slate-500">۱۰۰٪</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </div>
+
       {/* آخرین تراکنش‌ها */}
       <div className="card">
         <h2 className="font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">آخرین تراکنش‌های دفتر مالی</h2>
@@ -212,6 +359,8 @@ export default async function StudentFinancePage() {
                 <th className="p-2">تاریخ</th>
                 <th className="p-2">دانشجو</th>
                 <th className="p-2">نوع</th>
+                <th className="p-2">نوع واریز</th>
+                <th className="p-2">تاریخ واریز</th>
                 <th className="p-2">مبلغ (ریال)</th>
                 <th className="p-2">شرح</th>
               </tr>
@@ -219,7 +368,7 @@ export default async function StudentFinancePage() {
             <tbody>
               {recent.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-5 text-center text-slate-400">
+                  <td colSpan={7} className="p-5 text-center text-slate-400">
                     تراکنشی در دفتر مالی ثبت نشده است.
                   </td>
                 </tr>
@@ -234,6 +383,10 @@ export default async function StudentFinancePage() {
                     <span className="text-[10px] font-mono text-slate-400 mr-1" dir="ltr">{t.studentCode}</span>
                   </td>
                   <td className="p-2 text-xs">{txFa(t.transactionType)}</td>
+                  <td className="p-2 text-xs text-slate-600">{t.depositType ?? '—'}</td>
+                  <td className="p-2 text-xs text-slate-500">
+                    {t.depositDate ? new Date(t.depositDate).toLocaleDateString('fa-IR') : '—'}
+                  </td>
                   <td className="p-2 font-bold text-slate-700">{fa(t.amount)}</td>
                   <td className="p-2 text-xs text-slate-500 truncate max-w-[220px]">{t.description ?? '—'}</td>
                 </tr>
