@@ -214,7 +214,7 @@ try {
     'users','students','staff','sessions','enrollments','cart_items','notifications','student_requests',
     'transcript_snapshots','student_ledger','financial_clearances','seat_allocations',
     'student_class_attendance','student_documents','military_service_records','kyc_verifications',
-    'grade_appeals','grade_submission_otps','signature_otps','doc_sign_otps','professor_term_contracts',
+    'grade_appeals','grade_objections','grade_submission_otps','signature_otps','doc_sign_otps','professor_term_contracts',
     'professor_class_attendance','professor_exam_attendance','electronic_documents','payroll_statements',
     'exam_minutes','physical_access_logs','request_step_logs','request_parallel_checkpoints', // ۲۸ حساس
     'professor_availability_notes','professor_availabilities',

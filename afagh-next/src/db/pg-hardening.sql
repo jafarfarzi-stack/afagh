@@ -72,6 +72,7 @@ ALTER TABLE "student_documents" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "military_service_records" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "kyc_verifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "grade_appeals" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "grade_objections" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "grade_submission_otps" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "doc_sign_otps" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "professor_term_contracts" ENABLE ROW LEVEL SECURITY;
@@ -188,6 +189,14 @@ CREATE POLICY appeal_self_read ON "grade_appeals" FOR SELECT TO afagh_app
   USING ("enrollmentId" IN (SELECT e."id" FROM "enrollments" e
     JOIN "students" s ON s."id" = e."studentId"
     WHERE s."userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- اعتراض به نمره (grade_objections): دانشجو فقط اعتراض‌های خودش را می‌بیند.
+-- درج/به‌روزرسانی از نقش مالک (مسیر owner db، BYPASSRLS) انجام می‌شود —
+-- همانند grade_appeals؛ پس فقط سیاست خواندنِ خود-دانشجو کافی است.
+DROP POLICY IF EXISTS objection_self_read ON "grade_objections";
+CREATE POLICY objection_self_read ON "grade_objections" FOR SELECT TO afagh_app
+  USING ("studentId" IN (SELECT "id" FROM "students"
+    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
 
 -- ── کارکنان: ردیف‌های مرتبط با خودشان ──
 DROP POLICY IF EXISTS gsotp_self_read ON "grade_submission_otps";
