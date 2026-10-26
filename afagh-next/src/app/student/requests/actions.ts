@@ -17,9 +17,9 @@ import {
   submitRequestSatisfaction,
   submitStudentRequest,
 } from '@/lib/workflow-engine';
-import { issueTranscriptToken, getPublicBaseUrl } from '@/lib/verification';
+import { issueTranscriptToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
-import { getSetting } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { archiveKey, putArchiveObject } from '@/lib/objectStore';
 import { checkUpload, MAX_UPLOAD_BYTES, sanitizeRequestFormData } from '@/lib/safe-input';
 
