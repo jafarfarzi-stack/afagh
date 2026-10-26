@@ -876,6 +876,13 @@
       "when": 1794800000000,
       "tag": "0119_ledger_deposit_type_date",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0120_term_status_types",
+      "breakpoints": true
     }
   ]
 }

@@ -464,6 +464,38 @@ export const student_term_states = pgTable('student_term_states', {
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 }, (t) => ({ uq: unique('uq_student_term_states').on(t.studentId, t.termId) }));
 
+/**
+ * جدول مرجع «وضعیت‌های نیمسال» — بازتولید دقیق از دیتابیس قدیمی سما (فایل
+ * «وضعيت نيمسال.txt»). هر ردیف، یکی از ۶۷ وضعیتِ نیمسال (کد ۰ تا ۶۶) را با
+ * پرچم‌های مالی/ثبت‌نامی‌اش تعریف می‌کند (فعال در ترم، محاسبه در سنوات، شمارش
+ * در سال‌های مالی، شمول شهریه، اثر در رتبه/معدل، …). ردیف‌های مربوط‌به هر
+ * دانشجو در `student_term_states` قرار دارند و از طریق `sourceStatusCode`
+ * (کدِ سما) به این جدول ربط می‌خورند. ستون `studentTermTypeId` پیوند به نوع
+ * ترمِ دانشجو در سما است (در خروجیِ مبدأ در ستون آخر آمده بود).
+ *
+ * این جدول دادهٔ شخصی/مالی ندارد ⇒ معاف از سخت‌سازی RLS. مهاجرت: ۰۱۲۰.
+ */
+export const term_status_types = pgTable('term_status_types', {
+  id: serial('id').primaryKey(),
+  code: integer('code').notNull().unique(),
+  title: varchar('title', { length: 150 }).notNull(),
+  activeInTerm: boolean('active_in_term').notNull().default(false),
+  countInYears: boolean('count_in_years').notNull().default(false),
+  allowRegister: boolean('allow_register').notNull().default(false),
+  latinTitle: varchar('latin_title', { length: 150 }),
+  standardCode: varchar('standard_code', { length: 20 }),
+  includedTuition: boolean('included_tuition').notNull().default(false),
+  rotbehEffect: boolean('rotbeh_effect').notNull().default(false),
+  useRating: boolean('use_rating').notNull().default(false),
+  allowTermStatusChangeTermEnter: boolean('allow_term_status_change_term_enter').notNull().default(false),
+  effectFinancialYears: boolean('effect_financial_years').notNull().default(false),
+  includeTermPriceMabSubject: boolean('include_term_price_mab_subject').notNull().default(false),
+  isGraduateStatus: boolean('is_graduate_status').notNull().default(false),
+  studentTermTypeId: integer('student_term_type_id'),
+  source: varchar('source', { length: 20 }).notNull().default('SAMA'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const staff = pgTable('staff', {
   id: serial('id').primaryKey(),
   userId: integer('userId').notNull().unique().references(() => users.id),

@@ -75,6 +75,8 @@ export async function GET(request: Request) {
       termId: s.termId,
       termCode: termCodeById.get(s.termId) ?? '',
       termTitle: s.termTitle,
+      // وضعیت نیمسال دانشجو (از student_term_states — می‌تواند تهی باشد)
+      statusTitle: s.statusTitle ?? null,
       // تفکیک سما (نمایشی — از ردیف‌های خام همان ترم تحصیلی)
       tuitionFixed: get('TUITION_FIXED'),
       tuitionVariable: get('TUITION_VARIABLE'),

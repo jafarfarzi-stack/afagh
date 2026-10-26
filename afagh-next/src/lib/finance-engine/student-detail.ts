@@ -3,7 +3,7 @@ import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, degree_level_configs, loan_products, majors, payment_cheques,
-  student_discounts, student_ledger, student_loans, student_sponsorships, students,
+  student_discounts, student_ledger, student_loans, student_sponsorships, student_term_states, students,
   tuition_discount_types, tuition_sponsors, users,
 } from '@/db/schema';
 import {
@@ -133,6 +133,21 @@ export async function getStudentFinance(
         .orderBy(asc(loan_products.title)),
     ]);
 
+  // وضعیتِ هر نیمسال دانشجو (از student_term_states) — برای نمایش در کارنامهٔ
+  // مالی. اولویت: statusTitle → normalizedStatusTitle → sourceStatusTitle.
+  const termStates = await db.select({
+    termId: student_term_states.termId,
+    statusTitle: student_term_states.statusTitle,
+    normalizedStatusTitle: student_term_states.normalizedStatusTitle,
+    sourceStatusTitle: student_term_states.sourceStatusTitle,
+  }).from(student_term_states)
+    .where(eq(student_term_states.studentId, studentId));
+  const termStatuses: Record<string, string | null> = {};
+  for (const s of termStates) {
+    const title = s.statusTitle || s.normalizedStatusTitle || s.sourceStatusTitle || null;
+    if (title) termStatuses[String(s.termId)] = title;
+  }
+
   const termTitles: Record<string, string> = {};
   const termCodes: Record<string, string> = {};
   for (const t of terms) {
@@ -203,6 +218,7 @@ export async function getStudentFinance(
     loans: loans.map((l) => l.row) as LoanRow[],
     termTitles,
     termCodes,
+    termStatuses,
   });
 
   return {

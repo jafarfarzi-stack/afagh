@@ -112,6 +112,8 @@ export interface TermStatement {
   termTitle: string;
   /** کد ۵ رقمی ترم (سال+نیمسال) — برای عنوان کامل «نیمسال اول سال تحصیلی ...» */
   termCode?: string | null;
+  /** وضعیت نیمسال دانشجو (در حال تحصیل / مرخصی / مهمان / انصراف / …) — برای نمایش */
+  statusTitle?: string | null;
   charges: number;
   discounts: number;
   sponsorships: number;
@@ -141,6 +143,11 @@ export interface TranscriptInput {
    * زمانی ندارد، پس ترتیب سطرها حتماً باید از کد ترم استخراج شود.
    */
   termCodes?: Record<string, string>;
+  /**
+   * وضعیتِ هر نیمسال دانشجو (از student_term_states) برای نمایش در کارنامه؛
+   * کلید = شناسهٔ ترم. اگر ترمی وضعیت نداشته باشد، نادیده گرفته می‌شود.
+   */
+  termStatuses?: Record<string, string | null>;
 }
 
 /**
@@ -310,6 +317,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       termId,
       termTitle: termId === NO_TERM ? 'بدون ترم' : titles[String(termId)] || `ترم ${termId}`,
       termCode: termId === NO_TERM ? null : (input.termCodes || {})[String(termId)] ?? null,
+      statusTitle: termId === NO_TERM ? null : (input.termStatuses || {})[String(termId)] ?? null,
       charges,
       discounts: cappedDiscounts,
       sponsorships: cappedSponsorships,

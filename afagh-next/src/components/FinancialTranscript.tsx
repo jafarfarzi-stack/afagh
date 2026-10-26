@@ -51,6 +51,8 @@ export interface TranscriptTermView {
   termTitle: string;
   /** کد ۵ رقمی ترم؛ اگر باشد عنوان کامل «نیمسال اول سال تحصیلی ...» ساخته می‌شود */
   termCode?: string | null;
+  /** وضعیت نیمسال دانشجو (در حال تحصیل / مرخصی / مهمان / انصراف / …) — نمایش در سرآیند ترم */
+  statusTitle?: string | null;
   charges: number;
   discounts: number;
   sponsorships: number;
@@ -143,7 +145,9 @@ function TermTitle({ t }: { t: TranscriptTermView }) {
   if (!norm) return <>{t.termTitle}</>;
   if (norm.termType === 'EQUIVALENCE') return <>نیمسال معادل‌سازی</>;
   const year = <span dir="ltr">{faDigits(norm.displayYear)}</span>;
-  return <>{norm.termType === 'SUMMER' ? 'نیمسال تابستان ' : `${norm.displaySemester} سال تحصیلی `}{year}</>;
+  // ترم تابستان در کارنامه با عنوان «دوره تابستانی» آورده می‌شود (درخواست کاربر).
+  if (norm.termType === 'SUMMER') return <>دوره تابستانی {year}</>;
+  return <>{`${norm.displaySemester} سال تحصیلی `}{year}</>;
 }
 
 const STATUS_FA: Record<string, string> = {  ACTIVE: 'فعال',
@@ -346,8 +350,15 @@ export default function FinancialTranscript({
                     return (
                       <div key={t.termId} className="term-block break-inside-avoid overflow-hidden rounded-lg border border-slate-700">
                         <div className="flex items-center justify-between gap-1 border-b border-slate-700 bg-slate-100 px-2 py-1.5">
-                          <h4 className="text-[11px] font-black text-slate-900"><TermTitle t={t} /></h4>
-                          <span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
+                          <div className="min-w-0">
+                            <h4 className="text-[11px] font-black text-slate-900"><TermTitle t={t} /></h4>
+                            {t.statusTitle ? (
+                              <p className="mt-px text-[9px] font-medium text-slate-600">
+                                وضعیت: <span className="font-bold text-slate-800">{t.statusTitle}</span>
+                              </p>
+                            ) : null}
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span>
                         </div>
                         {t.courses && t.courses.length > 0 && (
                           <div className="border-t border-slate-200">

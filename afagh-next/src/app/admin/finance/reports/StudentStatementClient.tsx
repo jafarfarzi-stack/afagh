@@ -15,6 +15,8 @@ interface StatementRow {
   termId: number;
   termCode: string;
   termTitle: string;
+  /** وضعیت نیمسال دانشجو (در حال تحصیل / مرخصی / مهمان / انصراف / …) — می‌تواند تهی باشد */
+  statusTitle?: string | null;
   tuitionFixed: number;
   tuitionVariable: number;
   discountFixed: number;
@@ -260,6 +262,7 @@ export default function StudentStatementClient({ studentId, studentName, student
           terms={data.map((d) => ({
             termId: d.termId,
             termTitle: d.termTitle,
+            statusTitle: d.statusTitle ?? null,
             termCode: d.termCode ?? null,
             charges: d.charges ?? 0,
             discounts: d.discounts ?? 0,
