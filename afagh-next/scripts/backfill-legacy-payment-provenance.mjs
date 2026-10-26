@@ -118,13 +118,15 @@ const numOrNull = (s) => (s === '' || s == null ? 'NULL' : `${Number(s)}`);
     console.log('index ensured');
 
     await q(`DROP TABLE IF EXISTS _tmp_pay_prov`);
+    // شناسه‌ها باید نقل‌قول‌شده باشند وگرنه Postgres آن‌ها را lowercase می‌کند
+    // (payerName → payername) و UPDATEِ camelCase نمی‌تواند به آن‌ها ارجاع دهد.
     await q(`CREATE TEMP TABLE _tmp_pay_prov (
-      stdpaysId bigint PRIMARY KEY, payerName varchar(120), payerNationalCode varchar(12),
-      receiptNo varchar(40), voucherNo varchar(80), payTypeCode integer, accountNo varchar(30),
-      cardNo varchar(30), bankName varchar(60), branchName varchar(60), recorderCode integer,
-      recorderName varchar(120), legacyRem text)`);
+      "stdpaysId" bigint PRIMARY KEY, "payerName" varchar(120), "payerNationalCode" varchar(12),
+      "receiptNo" varchar(40), "voucherNo" varchar(80), "payTypeCode" integer, "accountNo" varchar(30),
+      "cardNo" varchar(30), "bankName" varchar(60), "branchName" varchar(60), "recorderCode" integer,
+      "recorderName" varchar(120), "legacyRem" text)`);
 
-    // درج دسته‌ای (هر ۲۰۰۰ ردیف یک VALUES)
+    // درج دسته‌ای (هر ۲۰۰۰ ردیف یک VALUES) + ON CONFLICT برای تحمل ردیف‌های تکراری
     const BATCH = 2000;
     for (let i = 0; i < rows.length; i += BATCH) {
       const chunk = rows.slice(i, i + BATCH);
@@ -136,7 +138,7 @@ const numOrNull = (s) => (s === '' || s == null ? 'NULL' : `${Number(s)}`);
             `${esc(r.bankName)}, ${esc(r.branchName)}, ${numOrNull(r.recorderCode)}, ${esc(r.recorderName)}, ${esc(r.legacyRem)})`,
         )
         .join(', ');
-      await q(`INSERT INTO _tmp_pay_prov VALUES ${vals}`);
+      await q(`INSERT INTO _tmp_pay_prov VALUES ${vals} ON CONFLICT ("stdpaysId") DO NOTHING`);
     }
     console.log('temp table loaded:', rows.length);
 
@@ -156,7 +158,7 @@ const numOrNull = (s) => (s === '' || s == null ? 'NULL' : `${Number(s)}`);
         "recorderName"      = COALESCE(NULLIF(t."recorderName", ''), l."recorderName"),
         "legacyRem"         = COALESCE(NULLIF(t."legacyRem", ''), l."legacyRem")
       FROM _tmp_pay_prov AS t
-      WHERE l."referenceId" = t.stdpaysId
+      WHERE l."referenceId" = t."stdpaysId"
         AND l."transactionType" IN ('PAYMENT', 'POS_PAYMENT')`);
     console.log('updated rows:', res.rowCount ?? JSON.stringify(res));
   } finally {
