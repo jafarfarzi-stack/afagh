@@ -84,6 +84,8 @@ export interface TranscriptTermView {
   tuitionVariable?: number;
   discounts: number;
   sponsorships: number;
+  /** بخشی از پوشش که از واریزِ واقعیِ بنیاد/سازمان دولتی آمده است */
+  sponsorshipsFromDeposits?: number;
   netPayable: number;
   payments: number;
   chequesCleared: number;
@@ -108,6 +110,7 @@ export interface TranscriptTotalsView {
   charges: number;
   discounts: number;
   sponsorships: number;
+  sponsorshipsFromDeposits?: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -432,7 +435,17 @@ export default function FinancialTranscript({
                   )}
                 </td>
                 <td className="border border-slate-300 px-1 py-1.5 text-violet-700">{fa(totals.discounts)}</td>
-                <td className="border border-slate-300 px-1 py-1.5 text-indigo-700">{fa(totals.sponsorships)}</td>
+                <td className="border border-slate-300 px-1 py-1.5 text-indigo-700">
+                  {fa(totals.sponsorships)}
+                  {/* تفکیک: چه بخشی از پوشش از واریزِ واقعیِ بنیاد آمده است.
+                      بدون این خط، کارشناس مالی نمی‌فهمد پوشش «سندِ واریز» دارد
+                      یا فقط تخفیفِ دفتری است. */}
+                  {(totals.sponsorshipsFromDeposits ?? 0) > 0 && (
+                    <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
+                      از واریز بنیاد {fa(totals.sponsorshipsFromDeposits ?? 0)}
+                    </span>
+                  )}
+                </td>
                 <td className="border border-slate-300 px-1 py-1.5 text-emerald-700">{fa(paidTotal)}</td>
                 <td className={`border border-slate-300 px-1 py-1.5 text-[13px] font-black ${totals.balance > 0 ? 'text-rose-700' : totals.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
                   {fa(Math.abs(totals.balance))}
@@ -573,7 +586,12 @@ export default function FinancialTranscript({
                                       کم بیاید، خودِ مرورگر به سطر بعد می‌شکند.
                                       در نمای کارشناس مالی/ادمین شماره حساب و کارت
                                       کامل است؛ در نمای دانشجو حساب ماسک و کارت حذف. */}
-                                  {e.kind === 'PAYMENT' && (e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName || e.legacyRem) && (
+                                  {/* گیتِ نمایشِ مستندسازت عمداً به `kind` وابسته نیست:
+                                      واریزِ بنیاد و وام هم رویدادِ SPONSOR/LOAN
+                                      می‌شوند ولی فیش و سند و پرداخت‌کننده دارند و
+                                      باید دیده شوند. هر رویدادی که این اقلام را
+                                      داشته باشد، نمایش داده می‌شود. */}
+                                  {(e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName || e.legacyRem) && (
                                     <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0 text-[8px] leading-tight text-slate-500">
                                       {e.receiptNo && <Meta k="فیش" v={faDigits(e.receiptNo)} mono />}
                                       {e.payerName && (

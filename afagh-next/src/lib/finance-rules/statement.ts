@@ -129,6 +129,52 @@ export function ledgerCreditLabel(type: string, description: string | null | und
   }
 }
 
+/**
+ * انواعِ «اعتبار» که در واقع **پوششِ شخص ثالث** هستند، نه واریزِ دانشجو.
+ * (همان تفکیکی که برای تخفیف انجام شد؛ پوشش بنیاد هم از بدهی کم می‌کند.)
+ */
+export const LEDGER_SPONSORSHIP_TYPES: ReadonlySet<string> = new Set(['SPONSORSHIP']);
+
+/**
+ * یکسان‌سازی حروف عربی/فارسی و فاصله‌ها.
+ *
+ * دادهٔ مهاجرت‌یافته از سما با `ي`/`ك` عربی ذخیره شده، ولی متنِ نمایشی و
+ * جست‌وجوهای بعدی با `ی`/`ک` فارسی نوشته می‌شوند. بدون یکسان‌سازی،
+ * تطبیقِ «سهم بنياد» به‌طور تصادفی شکست می‌خورد.
+ */
+function normFaText(s: string): string {
+  return s
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/\u200c/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * نوع واریزهایی که پرداخت‌کننده‌شان **شخص ثالث** است، نه خودِ دانشجو.
+ *
+ * سما مبلغ را در `TermAms.TermPays` می‌آورد (یعنی از نظر تراز، «واریز»
+ * است) ولی `StdPays.pay_type`/شرح نشان می‌دهد بنیاد یا سازمان دولتی
+ * پرداخت کرده. در کارنامه باید در ردیف «پوشش بنیاد» دیده شود، وگرنه
+ * کاربر ردیفِ «پوشش بنیاد: ۰» را در کنار فهرست واریزها می‌بیند و
+ * تناقض به نظر می‌رسد.
+ */
+const THIRD_PARTY_DEPOSIT = /سهم\s*بنیاد|سازمان\s*دولتی/;
+
+/** واریزِ وامِ تحصیلی — از صندوق رفاه/بانک، نه از جیب دانشجو */
+const LOAN_DEPOSIT = /وام\s*تحصیلی|وام\s*دانشجویی/;
+
+export function isSponsorDeposit(depositType: string | null | undefined): boolean {
+  const d = normFaText(String(depositType ?? ''));
+  return d.length > 0 && THIRD_PARTY_DEPOSIT.test(d);
+}
+
+export function isLoanDeposit(depositType: string | null | undefined): boolean {
+  const d = normFaText(String(depositType ?? ''));
+  return d.length > 0 && LOAN_DEPOSIT.test(d);
+}
+
 /** رویداد کارنامهٔ مالی — «چه اتفاقی افتاده» */
 export interface StatementEvent {
   kind: 'CHARGE' | 'DISCOUNT' | 'SPONSOR' | 'PAYMENT' | 'CHEQUE' | 'LOAN' | 'CLEARANCE';
@@ -215,6 +261,11 @@ export interface TermStatement {
   tuitionVariable?: number;
   discounts: number;
   sponsorships: number;
+  /**
+   * بخشی از `sponsorships` که از **واریزِ واقعیِ بنیاد/سازمان دولتی** آمده،
+   * نه از جدول پوشش‌ها. برای نمایشِ «از واریز» زیر جمع کل لازم است.
+   */
+  sponsorshipsFromDeposits?: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -315,6 +366,15 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
      */
     let ledgerDiscounts = 0;
     let ledgerSponsorships = 0;
+    /**
+     * پوشش/وامِ برخاسته از **واریزِ واقعیِ شخص ثالث** (بنیاد، سازمان دولتی،
+     * صندوق وام). این مبالغ پولِ واقعی و فیش‌دارند، پس برخلاف پوششِ جدولی
+     * **سقف نمی‌خورند**: ۴۵۵ دانشجو-ترم در دادهٔ فعلی پوششی بیش از شهریهٔ
+     * همان ترم دارند و اگر سقف بخورد، مازاد ناپدید و ماندهٔ دانشجو کاذب
+     * بزرگ‌تر می‌شود.
+     */
+    let depositSponsorships = 0;
+    let depositLoans = 0;
 
     for (const txn of inTerm(input.ledger || [])) {
       const amount = toNum(txn.amount);
@@ -336,7 +396,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
         const creditType = String(txn.transactionType || '').trim().toUpperCase();
         // تخفیف/پوششی که در خودِ دفتر ثبت شده — «پرداخت» نیست
         const isLedgerDiscount = LEDGER_DISCOUNT_TYPES.has(creditType);
-        const isLedgerSponsor = creditType === 'SPONSORSHIP';
+        const isLedgerSponsor = LEDGER_SPONSORSHIP_TYPES.has(creditType);
         if (isLedgerDiscount || isLedgerSponsor) {
           if (isLedgerSponsor) ledgerSponsorships += amount;
           else ledgerDiscounts += amount;
@@ -349,11 +409,10 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
           });
           continue;
         }
-        payments += amount;
         const depositType = String(txn.depositType || '').trim() || null;
         // تاریخ واقعی واریز اولویت دارد؛ createdAt فقط تاریخ ایمپورت است
         const paidAtMs = toMs(txn.depositDate);
-        events.push({
+        const event: StatementEvent = {
           kind: 'PAYMENT',
           label: stripDepositSuffix(txn.description || 'پرداخت', depositType),
           amount,
@@ -373,7 +432,34 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
           recorderCode: txn.recorderCode ?? null,
           recorderName: txn.recorderName ?? null,
           legacyRem: txn.legacyRem ?? null,
-        });
+        };
+
+        /**
+         * ── واریزی که پرداخت‌کننده‌اش شخص ثالث است ──
+         *
+         * سما این مبلغ را در `TermAms.TermPays` می‌آورد، پس از نظر تراز
+         * «واریز» است و مانده را درست می‌سازد. ولی در سندِ چاپی باید زیر
+         * «پوشش بنیاد»/«وام» دیده شود، وگرنه دانشجو (و کارشناس مالی)
+         * ردیفِ «پوشش بنیاد: ۰» را کنار فهرستِ واریزی می‌بیند که خودِ
+         * همان فهرست نوشته «سهم بنیاد یا سازمان دولتی» — تناقضِ آشکار.
+         *
+         * ⚠ مانده تغییر نمی‌کند: پوشش از «خالص» کم می‌شود، واریز از
+         * «مانده»؛ جابه‌جاییِ همین مبلغ بین این دو، حاصلِ جبریِ یکسان
+         * می‌دهد (به شرطِ نبودِ سقف — که برای واریزها اعمال نمی‌شود).
+         */
+        if (isSponsorDeposit(depositType)) {
+          depositSponsorships += amount;
+          events.push({ ...event, kind: 'SPONSOR' });
+          continue;
+        }
+        if (isLoanDeposit(depositType)) {
+          depositLoans += amount;
+          events.push({ ...event, kind: 'LOAN' });
+          continue;
+        }
+
+        payments += amount;
+        events.push(event);
       }
     }
 
@@ -429,7 +515,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       }
     }
 
-    let loans = 0;
+    let loans = depositLoans;
     for (const l of inTerm(input.loans || [])) {
       const status = String(l.status || '').toUpperCase();
       if (!LOAN_ACTIVE.includes(status as (typeof LOAN_ACTIVE)[number])) continue;
@@ -449,10 +535,17 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     // تخفیفِ دفتری (مثل بیتسِ سما) و تخفیفِ جدول تخفیف‌ها هر دو از بدهی کم
     // می‌کنند؛ سقف مشترک تا «خالص» منفی نشود.
     const cappedDiscounts = Math.min(discounts + ledgerDiscounts, charges);
-    const cappedSponsorships = Math.min(
+    const cappedTableSponsorships = Math.min(
       sponsorships + ledgerSponsorships,
       Math.max(0, charges - cappedDiscounts),
     );
+    /**
+     * پوششِ جدولی سقف می‌خورد (تا «خالص» منفیِ کاذب نشود)، ولی پوششِ
+     * برخاسته از واریز **نه** — آن پول واقعاً پرداخت شده و اگر بیشتر از
+     * شهریه باشد، مازادش بستانکاریِ دانشجو است. نادیده‌گرفتنش مانده را
+     * به‌اندازهٔ مازاد باد می‌کرد.
+     */
+    const cappedSponsorships = cappedTableSponsorships + depositSponsorships;
     const netPayable = charges - cappedDiscounts - cappedSponsorships;
     const balance = netPayable - payments - chequesCleared - loans;
 
@@ -473,6 +566,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       tuitionVariable,
       discounts: cappedDiscounts,
       sponsorships: cappedSponsorships,
+      sponsorshipsFromDeposits: depositSponsorships,
       payments,
       chequesCleared,
       chequesPending,
@@ -492,6 +586,7 @@ export function transcriptTotals(statements: TermStatement[]): {
   charges: number;
   discounts: number;
   sponsorships: number;
+  sponsorshipsFromDeposits: number;
   payments: number;
   chequesCleared: number;
   chequesPending: number;
@@ -506,6 +601,7 @@ export function transcriptTotals(statements: TermStatement[]): {
     charges: sum('charges'),
     discounts: sum('discounts'),
     sponsorships: sum('sponsorships'),
+    sponsorshipsFromDeposits: sum('sponsorshipsFromDeposits'),
     payments: sum('payments'),
     chequesCleared: sum('chequesCleared'),
     chequesPending: sum('chequesPending'),
