@@ -578,6 +578,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/grade-objections',
+    icon: '📝',
+    title: 'بررسی اعتراض به نمره',
+    desc: 'کارتابل اعتراض‌های دانشجویان به نمرات قطعی و ثبت نتیجهٔ کارشناس',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
+    accent: 'from-rose-950 to-red-950 border-rose-700/50',
+    iconBg: 'bg-rose-700/80 border-rose-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/workflows',
     icon: '🔀',
     title: 'فرآیندها، SLA و کارتابل (BPM)',
