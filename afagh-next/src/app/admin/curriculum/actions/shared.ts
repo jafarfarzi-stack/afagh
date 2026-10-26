@@ -13,8 +13,8 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { course_rules, courses, curriculum_courses, curriculum_versions, degree_level_configs, majors, staff } from '@/db/schema';
 import { type SessionUser } from '@/lib/auth';
-import { CheckResult, CurriculumVersionStatus, assertTransition, canEditStatus } from '@/lib/curriculum-types';
-import { parseRoleUnitTargets, validateCurriculumCore } from '@/lib/curriculum-validator';
+import { CheckResult, CurriculumVersionStatus, assertTransition, canEditStatus, collectCourseCodes } from '@/lib/curriculum-types';
+import { defaultMinRoles, parseRoleUnitTargets, validateCurriculumCore } from '@/lib/curriculum-validator';
 import { buildRulesWithCatalogFallback } from '@/lib/curriculum-rules';
 
 export type Act<T extends object = { message: string }> =
@@ -111,6 +111,10 @@ export async function loadVersionData(versionId: number) {
       // منبعِ سراسری قواعد از «جدول دروس» — برای fallback پایین
       prereqText: courses.prereqText,
       coRequisites: courses.coRequisites,
+      courseType: courses.courseType,
+      equivalentCourseCodes: courses.equivalentCourseCodes,
+      prereqMinUnits: courses.prereqMinUnits,
+      prereqMinTerm: courses.prereqMinTerm,
     })
     .from(curriculum_courses)
     .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
@@ -120,7 +124,19 @@ export async function loadVersionData(versionId: number) {
     .select()
     .from(course_rules)
     .where(eq(course_rules.syllabusId, versionId));
-  const bankCodes = await db.select({ code: courses.code }).from(courses);
+  const bankCodes = await db.select({ code: courses.code, title: courses.title }).from(courses);
+
+  const rules = buildRulesWithCatalogFallback(rows, rulesRows);
+
+  // عنوانِ دروسِ ارجاع‌شده در قواعد که در این چارت نیستند (از بانک) — تا ستون
+  // «پیش‌نیاز / هم‌نیاز» به‌جای کدِ خالی، نام درس را نشان دهد.
+  const inVersion = new Set(rows.map((r) => r.code));
+  const referenced = new Set<string>();
+  for (const r of rules) for (const code of collectCourseCodes(r.logicTree)) referenced.add(code);
+  const extraTitles: Record<string, string> = {};
+  for (const b of bankCodes) {
+    if (referenced.has(b.code) && !inVersion.has(b.code) && b.title) extraTitles[b.code] = b.title;
+  }
 
   return {
     version,
@@ -139,30 +155,26 @@ export async function loadVersionData(versionId: number) {
       autoCorequisiteAllowed: r.autoCorequisiteAllowed ?? 0,
       passGradeStatusCode: r.passGradeStatusCode,
       failGradeStatusCode: r.failGradeStatusCode,
+      courseType: r.courseType,
+      equivalentCourseCodes: r.equivalentCourseCodes,
+      prereqMinUnits: r.prereqMinUnits != null ? Number(r.prereqMinUnits) : null,
+      prereqMinTerm: r.prereqMinTerm != null ? Number(r.prereqMinTerm) : null,
     })),
-    rules: buildRulesWithCatalogFallback(rows, rulesRows),
+    rules,
+    extraTitles,
     existingCodes: new Set(bankCodes.map((c) => c.code)),
   };
 }
 
 
 /** حداقل مقرر از هر نقش در یک برنامهٔ درسی (قابل گسترش بعدی از تنظیمات) */
-
-
-/** حداقل مقرر از هر نقش در یک برنامهٔ درسی (قابل گسترش بعدی از تنظیمات) */
-export const DEFAULT_MIN_ROLES: Record<string, number> = { GENERAL: 1, CORE: 1, MAJOR: 1 };
+export const DEFAULT_MIN_ROLES: Record<string, number> = defaultMinRoles();
 
 /**
  * تکمیل ورودی خالص Validator از دادهٔ بارگیری‌شده:
  * سقف واحد ترم: override نسخه → مقطع → ۲۰ (پیش‌فرض سیستم)؛
- * برای مقاطع ارشد/دکتری وجود پایان‌نامه نیز الزامی‌شده (چک ۸).
- */
-
-
-/**
- * تکمیل ورودی خالص Validator از دادهٔ بارگیری‌شده:
- * سقف واحد ترم: override نسخه → مقطع → ۲۰ (پیش‌فرض سیستم)؛
- * برای مقاطع ارشد/دکتری وجود پایان‌نامه نیز الزامی‌شده (چک ۸).
+ * برای مقاطع ارشد/دکتری وجود پایان‌نامه نیز الزامی‌شده (چک ۸) و درس «عمومی» حذف می‌شود
+ * (ارشد/دکتری درس عمومی ندارد — هشدار قبلی کاذب بود).
  */
 export async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>) {
   let maxUnitsPerTerm: number | null = data.version.maxUnitsPerTerm;
@@ -174,8 +186,9 @@ export async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersio
     .limit(1);
   if (maxUnitsPerTerm == null) maxUnitsPerTerm = deg?.maxUnitsPerTerm ?? 20;
   // پایان‌نامه برای تحصیلات تکمیلی الزامی است: اول پرچم isGraduate، وگرنه حدس عنوان/کد (سازگار با قبل)
-  if (deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'))) {
-    minRoleCounts = { ...minRoleCounts, THESIS: 1 };
+  const isGraduate = !!deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'));
+  if (isGraduate) {
+    minRoleCounts = { ...defaultMinRoles({ isGraduate: true }), THESIS: 1 };
   }
   const parsedTargets = parseRoleUnitTargets((data.version as { minRoleUnits?: unknown }).minRoleUnits);
   return {
@@ -262,6 +275,8 @@ export interface CurriculumOverviewData {
     totalRequiredUnits: string; courseCount: number;
   }[];
   tracks: { id: number; code: string | null; title: string; majorId: number }[];
+  /** نیم‌سال‌های مالیِ فعال — برای انتخاب «نیم‌سال ورودی» نسخه در انتقال/ایجاد */
+  terms: { id: number; termCode: string; title: string }[];
 }
 
 
@@ -279,6 +294,8 @@ export type CurriculumVersionDetailData = {
     decisionNote: string | null; approvedAt: Date | null;
   }[];
   checks: CheckResult[];
+  /** عنوان دروس ارجاع‌شده که در این چارت نیستند (کد → عنوان از بانک) */
+  extraTitles: Record<string, string>;
 };
 
 
@@ -327,6 +344,8 @@ export interface CreateVersionInput {
   title?: string;
   entryYearFrom: number;
   entryYearTo?: number | null;
+  /** نیم‌سال ورودی (financial_terms.id) — در انتقال/کپی هم قابل تعیین است */
+  entryTermId?: number | null;
   totalRequiredUnits?: number;
   maxUnitsPerTerm?: number | null;
   cloneFromId?: number; // کپی عمیق (دروس + قواعد) از نسخهٔ مرجع

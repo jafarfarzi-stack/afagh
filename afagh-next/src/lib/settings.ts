@@ -211,6 +211,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'FINANCE_STMT_TTL_MINUTES', env: 'FINANCE_STMT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ مالی (دقیقه)', type: 'number', default: '10080', help: 'مدت اعتبار QR کارنامهٔ مالی دانشجو؛ پیش‌فرض ۱۰۰۸۰ دقیقه (۷ روز)' },
   { key: 'TRANSCRIPT_TTL_MINUTES', env: 'TRANSCRIPT_TTL_MINUTES', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار توکن کارنامهٔ تحصیلی (دقیقه)', type: 'number', default: '10080', help: 'مدت اعتبار QR کارنامهٔ تحصیلی دانشجو؛ پیش‌فرض ۱۰۰۸۰ دقیقه (۷ روز)' },
   { key: 'EXAM_GRADE_DEADLINE_DAYS', env: 'EXAM_GRADE_DEADLINE_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'مهلت ثبت نمرهٔ امتحان (روز)', type: 'number', default: '5' },
+  { key: 'GRADE_OBJECTION_DEADLINE', env: 'GRADE_OBJECTION_DEADLINE', group: 'ارزشیابی و هوش تجاری', label: 'مهلت اعتراض به نمره (YYYY-MM-DD) — خالی = پنجره بسته', type: 'text', default: '', help: 'تا پایان این روز (به وقت محلی) دانشجو می‌تواند به نمرات قطعی اعتراض کند؛ خالی بودن یعنی پنجره بسته و دکمه‌های اعتراض قفل می‌مانند.' },
   // ── قاعدهٔ اختیاری بارم امتحان ──
   // این تنظیم «راز» نیست؛ فقط پیکربندی سیاست آموزشی است و در پنل مدیر
   // (گروه ارزشیابی و هوش تجاری) قابل تغییر است. موتور امتحان در حال حاضر

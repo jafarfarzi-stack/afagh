@@ -508,6 +508,45 @@ export const BUILTIN_PROCESSES: ProcessTemplate[] = [
     ],
   },
   {
+    code: 'VALID_TRANSCRIPT',
+    title: 'درخواست کارنامه معتبر (با رمز تایید QR)',
+    category: 'گواهی و مدارک',
+    description: 'درخواست کارنامهٔ تحصیلی دارای اعتبار اداری و رمز تایید (QR) پس از تأیید کارشناس آموزش. کارنامهٔ مشاهده‌ای پرتال فاقد اعتبار (غیرقابل استناد) است.',
+    outputTemplate: 'VALID_TRANSCRIPT',
+    feeAmount: 0,
+    formSchema: [
+      {
+        key: 'recipientOrg',
+        label: 'نام ارگان / موسسه مقصد (اختیاری)',
+        type: 'text',
+        placeholder: 'مثال: سازمان سنجش، وزارت علوم، کارفرما',
+        helperText: 'در صورت نیاز به درج نام مقصد در مکاتبات کارشناسی وارد کنید.',
+      },
+      {
+        key: 'purpose',
+        label: 'علت درخواست',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'OFFICIAL', label: 'نیاز به کارنامهٔ معتبر اداری (ارائه به مراجع رسمی)' },
+          { value: 'EMPLOYMENT', label: 'ارائه به محل کار / تسهیلات' },
+          { value: 'CONTINUE', label: 'ادامه تحصیل در دانشگاه دیگر' },
+          { value: 'OTHER', label: 'سایر' },
+        ],
+      },
+    ],
+    steps: [
+      {
+        stepOrder: 1,
+        title: 'بررسی و تأیید صدور کارنامهٔ معتبر توسط کارشناس آموزش',
+        stepType: 'USER',
+        roleCode: 'EDU_EXPERT',
+        slaHours: 48,
+        timeoutAction: 'NOTIFY',
+      },
+    ],
+  },
+  {
     code: 'COURSE_TRANSFER',
     title: 'تطبیق واحد و معادل‌سازی دروس',
     category: 'آموزش و سرفصل',

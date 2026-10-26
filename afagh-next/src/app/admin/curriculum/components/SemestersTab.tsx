@@ -1,9 +1,13 @@
 'use client';
 
-// تب ۳: ترم‌بندی چارت با درگ‌اندراپ + سقف واحد
+// تب ۳: ترم‌بندی چارت با درگ‌اندراپ + سقف واحد + فیلتر/مرتب‌سازی زنده
+import { useMemo, useState } from 'react';
 import { useCurriculum } from '../curriculum-context';
-import { STATUS_UI, faNum, semesterUnitTotal, dependencyWarningText } from '../curriculum-core';
+import { ROLE_LABELS, STATUS_UI, faNum, semesterUnitTotal, dependencyWarningText, depWarningBadge, compareCourseCode } from '../curriculum-core';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
+import type { CourseRow } from '../types';
+
+type SortKey = 'CODE' | 'TITLE' | 'UNITS';
 
 export default function SemestersTab() {
   const {
@@ -30,18 +34,51 @@ export default function SemestersTab() {
     unassignedCourses,
   } = useCurriculum();
 
-  // کارتِ هشدار پوشش/ترم‌بندی پیش‌نیاز و هم‌نیاز — زیر هر درس
+  // ── فیلتر/مرتب‌سازی زندهٔ چارت (کد، عنوان، نقش) ──
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [sortBy, setSortBy] = useState<SortKey>('CODE');
+
+  const matches = (c: CourseRow): boolean => {
+    if (roleFilter && c.roleType !== roleFilter) return false;
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return c.code.toLowerCase().includes(needle) || c.title.toLowerCase().includes(needle);
+  };
+
+  // filter آرایهٔ جدید می‌دهد؛ sort روی همان کپی انجام می‌شود (state دست‌نخورده می‌ماند)
+  const refine = (list: CourseRow[]): CourseRow[] =>
+    list.filter(matches).sort((a, b) =>
+      sortBy === 'TITLE' ? a.title.localeCompare(b.title, 'fa')
+        : sortBy === 'UNITS' ? (Number(b.units) || 0) - (Number(a.units) || 0)
+          : compareCourseCode(a.code, b.code));
+
+  const filterActive = query.trim() !== '' || roleFilter !== '' || sortBy !== 'CODE';
+  const shownCount = useMemo(
+    () => [...semesterCourses.values()].flat().filter(matches).length + unassignedCourses.filter(matches).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [semesterCourses, unassignedCourses, query, roleFilter],
+  );
+  const totalCount = useMemo(
+    () => [...semesterCourses.values()].flat().length + unassignedCourses.length,
+    [semesterCourses, unassignedCourses],
+  );
+
+  // کارتِ هشدار پوشش/ترم‌بندی پیش‌نیاز و هم‌نیاز — با نام دروس، نه فقط کد
   const renderDepWarn = (courseId: number) => {
     const warns = depWarnings.get(courseId);
     if (!warns || warns.length === 0) return null;
-    const impossible = warns.some((w) => w.impossibleTerm);
-    const typeLabel = warns.some((w) => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز';
+    const badge = depWarningBadge(warns);
+    if (!badge) return null;
+    const toneCls = badge.tone === 'red'
+      ? 'bg-rose-600 text-white'
+      : badge.tone === 'blue' ? 'bg-sky-100 text-sky-900' : 'bg-amber-100 text-rose-700';
     return (
       <div
-        className={`mt-0.5 text-[9px] font-extrabold leading-tight rounded px-1.5 py-0.5 ${impossible ? 'bg-rose-600 text-white' : 'bg-amber-100 text-rose-700'}`}
+        className={`mt-0.5 text-[9px] font-extrabold leading-tight rounded px-1.5 py-0.5 ${toneCls}`}
         title={warns.map(dependencyWarningText).join('\n')}
       >
-        {impossible ? '⛔' : '⚠️'} {typeLabel} ناقص
+        {badge.icon} {badge.label}
       </div>
     );
   };
@@ -84,9 +121,49 @@ export default function SemestersTab() {
             </div>
           )}
 
+          {/* نوار فیلتر و مرتب‌سازی — روی شبکهٔ ترم‌ها و استخر «بدون ترم» هم‌زمان اثر دارد */}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="🔍 جست‌وجوی کد یا نام درس…"
+              className="flex-1 min-w-[180px] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold outline-none focus:border-indigo-500"
+            />
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold"
+              title="فیلتر بر اساس نقش درس"
+            >
+              <option value="">همهٔ نقش‌ها</option>
+              {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold"
+              title="ترتیب نمایش دروس"
+            >
+              <option value="CODE">مرتب: کد درس</option>
+              <option value="TITLE">مرتب: نام درس</option>
+              <option value="UNITS">مرتب: واحد (نزولی)</option>
+            </select>
+            {filterActive && (
+              <button
+                onClick={() => { setQuery(''); setRoleFilter(''); setSortBy('CODE'); }}
+                className="rounded-lg bg-slate-200 hover:bg-slate-300 px-2.5 py-1.5 text-[11px] font-extrabold text-slate-700"
+              >
+                ✕ پاک‌کردن فیلتر
+              </button>
+            )}
+            <span className={`text-[10px] font-black ${shownCount === totalCount ? 'text-slate-500' : 'text-indigo-800'}`}>
+              {faNum(shownCount)} از {faNum(totalCount)} درس
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {gridTerms.map(sem => {
-              const list = semesterCourses.get(sem) ?? [];
+              const list = refine(semesterCourses.get(sem) ?? []);
               const units = semesterUnitTotal(list);
               const over = detail.version.maxUnitsPerTerm != null && units > (detail.version.maxUnitsPerTerm as number);
               const isDropHere = isDraft && dropTarget === sem;
@@ -158,8 +235,11 @@ export default function SemestersTab() {
               <span className="text-[10px] text-slate-400 font-bold">{isDraft ? 'بکشید و روی ترم موردنظر رها کنید — یا از منوی هر درس ترم بدهید' : 'با انتخاب «ترم» از منوی هر درس، به ترمبندی اضافه میشود'}</span>
             </div>
             {unassignedCourses.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">{isDraft && dropTarget === 'pool' ? '⬇ اینجا رها کنید تا از ترم خارج شود' : 'همهٔ دروس ترمبندی شدهاند. ✓'}</div>}
+            {unassignedCourses.length > 0 && refine(unassignedCourses).length === 0 && (
+              <div className="text-[10px] text-slate-400 font-bold py-2 text-center">هیچ درسی با فیلتر فعلی مطابقت ندارد.</div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 min-h-[28px]">
-              {unassignedCourses.map(c => (
+              {refine(unassignedCourses).map(c => (
                 <div key={c.courseId} className="space-y-1.5">
                   <div
                     draggable={isDraft}

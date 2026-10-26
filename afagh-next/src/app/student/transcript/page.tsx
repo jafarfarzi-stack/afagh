@@ -1,6 +1,6 @@
-﻿import { and, asc, desc, eq } from 'drizzle-orm';
+﻿import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { ReactNode } from 'react';
-import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, majors, students, universities, users } from '@/db/schema';
+import { academic_terms, course_offerings, courses, degree_level_configs, educational_regulations, enrollments, grade_objections, majors, process_definitions, student_requests, students, universities, users } from '@/db/schema';
 import { db, withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
@@ -14,6 +14,7 @@ import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
 import { getTermScope } from '@/lib/term-scope';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
+import GradeObjectionPanel from './GradeObjectionPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,16 +202,70 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
   const totalCumulativeGpa = officialGpaData.totalUnits > 0 ? officialGpaData.gpa.toFixed(2) : '—';
   const todayFa = new Date().toLocaleDateString('fa-IR');
 
-  // ── بلوک رسمیت: QR استعلام برخط اصالت کارنامه (مقصد: /verify-transcript/<token>) ──
+  // ── درخواست‌های «کارنامه معتبر» دانشجو + بلوک رسمیت (فقط پس از تأیید) ──
+  const transcriptReqRows = await db
+    .select({
+      id: student_requests.id,
+      status: student_requests.status,
+      trackingCode: student_requests.trackingCode,
+    })
+    .from(student_requests)
+    .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
+    .where(and(eq(process_definitions.code, 'VALID_TRANSCRIPT'), eq(student_requests.studentId, me.id)))
+    .orderBy(desc(student_requests.id));
+
+  const approvedTranscriptReq = transcriptReqRows.find(r => r.status === 'APPROVED') ?? null;
+  const pendingTranscriptReq = transcriptReqRows.find(r => r.status !== 'APPROVED' && r.status !== 'REJECTED') ?? null;
+
+  // رمز تایید (QR) فقط وقتی درخواست تأیید شده باشد صادر می‌شود؛ کارنامهٔ خود‌نمایی فاقد اعتبار است.
   let transcriptQr: { url: string; qr: string; expiresAt: string | null } | null = null;
-  try {
-    const publicBaseUrl = await getPublicBaseUrl();
-    const issued = await issueTranscriptToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
-    const url = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
-    transcriptQr = { url, qr: await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 }), expiresAt: issued.expiresAt };
-  } catch (err) {
-    console.warn('transcript qr failed:', err);
+  if (approvedTranscriptReq) {
+    try {
+      const publicBaseUrl = await getPublicBaseUrl();
+      const issued = await issueTranscriptToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
+      const url = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
+      transcriptQr = { url, qr: await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 }), expiresAt: issued.expiresAt };
+    } catch (err) {
+      console.warn('transcript qr failed:', err);
+    }
   }
+
+  // ── دادهٔ پنل اعتراض به نمره (کارنامه نیمسال) ──
+  const objectionCourseIds = allRows.map(r => r.id);
+  const objectionExistingRows = objectionCourseIds.length
+    ? await db
+        .select({
+          enrollmentId: grade_objections.enrollmentId,
+          status: grade_objections.status,
+          reviewerNote: grade_objections.reviewerNote,
+        })
+        .from(grade_objections)
+        .where(and(eq(grade_objections.studentId, me.id), inArray(grade_objections.enrollmentId, objectionCourseIds)))
+    : [];
+  const objectionExisting: Record<number, { status: string; note: string | null }> = {};
+  for (const o of objectionExistingRows) {
+    objectionExisting[o.enrollmentId] = { status: o.status, note: o.reviewerNote };
+  }
+  const objectionDeadline = (await getSetting('GRADE_OBJECTION_DEADLINE').catch(() => '')) || null;
+  const objectionWindowOpen =
+    !!objectionDeadline &&
+    /^\d{4}-\d{2}-\d{2}$/.test(objectionDeadline) &&
+    new Date() <= new Date(objectionDeadline + 'T23:59:59');
+  const objectionTerms = academicYears
+    .flatMap(g => g.terms)
+    .map(t => ({
+      termTitle: t.title || `${t.normalized?.displayYear}/${t.normalized?.semester}`,
+      termCode: `${t.normalized?.displayYear ?? ''}/${t.normalized?.semester ?? ''}`,
+      isCurrent: t.isCurrent,
+      rows: t.rows.map(r => ({
+        enrollmentId: r.id,
+        code: r.code,
+        title: r.title,
+        grade: r.grade != null ? Number(r.grade) : null,
+        gradeStatus: r.gradeStatus,
+        isFinalized: r.gradeStatus === 'FINALIZED' || r.grade != null,
+      })),
+    }));
 
   return (
     <div className="space-y-4">
@@ -237,8 +292,8 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
         <div className="flex items-center gap-2">
           <span className="text-xl">📜</span>
           <div>
-            <h2 className="text-sm font-bold text-slate-800">کارنامه کل تحصیلی (نسخه رسمی اداری)</h2>
-            <p className="text-xs text-slate-500">مشاهده ریزنمرات، محاسبه صحیح دروس توصیفی و استناد به آیین‌نامه</p>
+            <h2 className="text-sm font-bold text-slate-800">کارنامه مشاهده‌ای دانشجو</h2>
+            <p className="text-xs text-slate-500">ریزنمرات شخصی — این نسخه <b>فاقد اعتبار اداری (غیرقابل استناد)</b> است</p>
           </div>
         </div>
         <PrintTranscriptButton orientation="landscape" />
@@ -522,22 +577,13 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           )}
         </div>
 
-        {/* ۵. بلوک رسمیت: استعلام برخط اصالت کارنامه */}
-        {transcriptQr && (
-          <div className="mt-4">
-            <VerifyQrBlock
-              title="استعلام برخط اصالت این کارنامه"
-              url={transcriptQr.url}
-              qr={transcriptQr.qr}
-              expiresAt={transcriptQr.expiresAt}
-            />
-          </div>
-        )}
+        {/* ۵. بلوک رسمیت: در نسخهٔ مشاهده‌ای حذف شد — رمز تایید (QR) تنها پس از تأیید درخواست
+            کارنامهٔ معتبر، در بخش تعاملیِ زیرِ سند نمایش داده می‌شود. */}
 
         {/* ۶. متن حقوقی سند و محل امضا و مهرهای رسمی */}
         <div className="mt-6 pt-3 border-t border-slate-400 text-[10px] text-slate-600 space-y-4">
           <p className="leading-relaxed">
-            <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع از وضعیت تحصیلی دانشجو صادر گردیده و هرگونه خط‌خوردگی یا تغییر در مندرجات آن، سند را از درجه اعتبار ساقط می‌نماید. نمرات دروس توصیفی در مخرج معدل عددی لحاظ نمی‌شوند.
+            <b>تذکر مهم:</b> این کارنامه صرفاً جهت اطلاع و مشاهدهٔ شخصی دانشجو صادر گردیده و <b>فاقد اعتبار اداری (غیرقابل استناد)</b> می‌باشد؛ هرگونه سوءاستفاده یا جعل قابل پیگرد قانونی است. برای دریافت کارنامهٔ معتبر با رمز تایید (QR) از بخش «درخواست‌ها → درخواست کارنامه معتبر» اقدام نمایید. نمرات دروس توصیفی در مخرج معدل عددی لحاظ نمی‌شوند.
           </p>
 
           <div className="grid grid-cols-3 text-center pt-6 pb-4 font-bold text-slate-800">
@@ -563,6 +609,40 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
         </div>
 
       </div>
+
+      {/* بخش تعاملی: دسترس به کارنامهٔ معتبر + اعتراض به نمره (زیر کارنامه — چاپ نمی‌شود) */}
+      <div className="space-y-3 print:hidden">
+        {transcriptQr ? (
+          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
+            <h3 className="font-extrabold text-emerald-900 text-sm mb-1">✅ کارنامهٔ معتبر (پس از تأیید کارشناس) — رمز تایید برخط</h3>
+            <p className="text-xs text-emerald-800 mb-3">این کارنامه دارای اعتبار اداری است و با اسکن رمز تایید (QR) در آدرس زیر قابل استعلام می‌باشد.</p>
+            <VerifyQrBlock title="استعلام برخط اصالت کارنامهٔ معتبر" url={transcriptQr.url} qr={transcriptQr.qr} expiresAt={transcriptQr.expiresAt} />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+            <h3 className="font-extrabold text-amber-900 text-sm mb-1">⚠️ این کارنامه غیرقابل استناد است</h3>
+            <p className="text-xs text-amber-800 leading-relaxed mb-3">
+              کارنامهٔ نمایش‌داده‌شده در پرتال صرفاً جهت مشاهدهٔ شخصی است و فاقد اعتبار اداری می‌باشد. برای دریافت <b>کارنامهٔ معتبر با رمز تایید (QR)</b> که در مراجع رسمی معتبر باشد، باید از بخش درخواست‌ها اقدام کنید.
+            </p>
+            {pendingTranscriptReq ? (
+              <div className="text-xs font-bold text-amber-900 bg-amber-100 border border-amber-200 rounded-lg p-2 mb-2">
+                درخواست کارنامهٔ معتبر شما در حال بررسی است (کد رهگیری: <span className="font-mono" dir="ltr">{pendingTranscriptReq.trackingCode}</span>). پس از تأیید کارشناس، رمز تایید در همین صفحه نمایش داده می‌شود.
+              </div>
+            ) : null}
+            <a href="/student/requests" className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-extrabold shadow">
+              📨 درخواست کارنامه معتبر (با QR)
+            </a>
+          </div>
+        )}
+
+        <GradeObjectionPanel
+          terms={objectionTerms}
+          windowOpen={objectionWindowOpen}
+          deadline={objectionDeadline}
+          existing={objectionExisting}
+        />
+      </div>
+
     </div>
   );
 }

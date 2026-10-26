@@ -12,7 +12,10 @@ export default function TransferTab() {
     majors,
     selectedMajorId,
     selectedVersion,
+    setTransferEntryTermId,
     setTransferMajorId,
+    terms,
+    transferEntryTermId,
     transferMajorId,
   } = useCurriculum();
 
@@ -57,6 +60,21 @@ export default function TransferTab() {
                     ))}
                   </select>
                 </label>
+                {/* نیم‌سال ورودی نسخهٔ مقصد — بدون آن، نسخهٔ کپی‌شده روی «همه نیم‌سال‌ها»
+                    می‌افتد و با چارت‌های دیگر تداخل می‌کند */}
+                <label className="flex-1 min-w-40 text-[11px] font-bold text-slate-600">
+                  نیم‌سال ورودی (اختیاری):
+                  <select
+                    value={transferEntryTermId || 0}
+                    onChange={e => setTransferEntryTermId(Number(e.target.value))}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold bg-white text-xs"
+                  >
+                    <option value={0}>همه نیم‌سال‌ها (تعیین‌نشده)</option>
+                    {terms.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}{t.termCode ? ` (${t.termCode})` : ''}</option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   onClick={handleTransferToMajor}
                   disabled={busy}
@@ -65,6 +83,10 @@ export default function TransferTab() {
                   ⇄ انتقال کاتالوگ
                 </button>
               </div>
+              <p className="text-[10px] text-slate-400 font-bold">
+                اگر «نیم‌سال ورودی» را تعیین کنید، نسخهٔ مقصد فقط به دانشجویان همان نیم‌سال ورودی تخصیص می‌یابد؛
+                تعیین‌نکردن آن یعنی نسخه برای همهٔ نیم‌سال‌ها معتبر است (و ممکن است با چارت قبلی تداخل کند).
+              </p>
             </div>
           </div>
 

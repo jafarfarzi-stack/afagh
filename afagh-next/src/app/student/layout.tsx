@@ -113,83 +113,62 @@ export default async function StudentLayout({ children }: { children: React.Reac
     <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
       {/* هدر اصلی — یک بلوک سبز ادغام‌شده: خوش‌آمدگویی + هویت تحصیلی +
           چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
+      {/* هدر دانشجو — «یک‌ردیفه»: هویت + چیپ‌های وضعیت + سوییچر ترم/نقش + دکمه‌ها
+          در یک خط (در عرض کم با wrap به خط بعد می‌روند تا چیزی بریده نشود). */}
       <header className="bg-emerald-800 text-white shadow-md print:hidden">
-        <div className="max-w-7xl mx-auto flex flex-col gap-2 p-3.5 px-4">
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              {/* ارم دانشگاه جای حرف ثابت «آ» — اگر ارمی ثبت نشده باشد،
-                  حرف «آ» به‌عنوان fallback نمایش داده می‌شود */}
-              {universityLogoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={universityLogoUrl}
-                  alt="نشان دانشگاه"
-                  className="w-9 h-9 rounded-lg bg-white object-contain p-0.5 shadow-inner shrink-0"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner shrink-0">
-                  آ
-                </div>
-              )}
-              <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-9 h-9 shrink-0" fallbackClass="bg-emerald-700" />
-              <div className="min-w-0">
-                <p className="text-sm sm:text-base font-extrabold tracking-wide truncate">
-                  خوش‌آمدی {firstName} عزیز 👋
-                </p>
-                <p className="text-[11px] sm:text-xs text-emerald-200 truncate">
-                  {majorTitle || '—'} · {levelTitle || '—'} · ورودی سال {me?.entryYear ?? '—'}
-                </p>
+        <div className="max-w-7xl mx-auto flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+
+          {/* هویت و خوش‌آمدگویی — عنوان و زیرنویس در همان یک خط */}
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 basis-72">
+            {universityLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={universityLogoUrl}
+                alt="نشان دانشگاه"
+                className="w-8 h-8 rounded-lg bg-white object-contain p-0.5 shadow-inner shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-base shadow-inner shrink-0">
+                آ
               </div>
-            </div>
-            <div className="flex flex-nowrap items-center gap-2">
-              <a
-                href="/help/student"
-                className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
-              >
-                <span>📖</span>
-                <span>راهنمای سیستم</span>
-              </a>
-              <a
-                href="/help/pdfs/student.pdf"
-                download
-                className="hidden sm:inline-flex text-xs bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-3 py-1.5 rounded-lg transition-colors font-medium items-center gap-1.5"
-              >
-                <span>📕</span>
-                <span>PDF راهنما</span>
-              </a>
-              <ThemeToggle />
-              <form action={logoutAction}>
-                <button className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
-                  <span className="sm:hidden">خروج</span>
-                  <span className="hidden sm:inline">خروج از حساب</span>
-                </button>
-              </form>
-            </div>
+            )}
+            <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-8 h-8 shrink-0" fallbackClass="bg-emerald-700" />
+            <p
+              className="min-w-0 truncate text-xs sm:text-sm font-extrabold tracking-wide"
+              title={`${majorTitle || '—'} · ${levelTitle || '—'} · ورودی سال ${me?.entryYear ?? '—'}`}
+            >
+              خوش‌آمدی {firstName} عزیز 👋
+              <span className="mr-2 text-[10px] sm:text-[11px] font-bold text-emerald-200">
+                · {majorTitle || '—'} · {levelTitle || '—'} · ورودی {me?.entryYear ?? '—'}
+              </span>
+            </p>
           </div>
-          {/* چیپ‌های وضعیت — ادغام‌شده از کارت هیروی حذف‌شدهٔ داشبورد */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs">
-            <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 font-bold text-emerald-100">
-              <span>💳 وضعیت مالی:</span>
+
+          {/* چیپ‌های وضعیت — فشرده، هم‌ردیف با بقیه */}
+          <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px] shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 font-bold text-emerald-100">
+              <span>💳 مالی:</span>
               <b className="font-black text-white">{financialLabel}</b>
             </span>
             {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معف‌اند) */}
             {userRow?.gender !== 'FEMALE' && (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-teal-500/20 border border-teal-400/30 px-2 py-0.5 font-bold text-teal-100">
-                <span>🪖 نظام وظیفه (سخا):</span>
+              <span className="inline-flex items-center gap-1 rounded-lg bg-teal-500/20 border border-teal-400/30 px-1.5 py-0.5 font-bold text-teal-100">
+                <span>🪖 سخا:</span>
                 <b className="font-black text-white">{me?.militaryStatus || 'ثبت نشده'}</b>
               </span>
             )}
-            <span className="inline-flex items-center gap-1 rounded-xl bg-indigo-500/20 border border-indigo-400/30 px-2 py-0.5 font-bold text-indigo-100">
-              <span>🎓 ترم تحصیلی:</span>
+            <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 px-1.5 py-0.5 font-bold text-indigo-100">
+              <span>🎓 ترم:</span>
               <b className="font-black text-white">
                 {(studentTermOrdinal ?? me?.currentTermNo ?? 0).toLocaleString('fa-IR')}
               </b>
             </span>
           </div>
 
+          {/* سوییچر ترم و سوییچر کارتابل */}
           {/* `relative` لازم است: در موبایل پنل سوییچرها تمام‌عرض و چسبیده به
               همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند */}
-          <div className="relative flex flex-wrap items-center gap-2">
+          <div className="relative flex items-center gap-1.5 shrink-0">
             <TermSwitcher
               terms={termScope.terms}
               selectedId={termScope.selectedId}
@@ -202,6 +181,32 @@ export default async function StudentLayout({ children }: { children: React.Reac
               permissionCount={permissionCount}
               siblings={siblings}
             />
+          </div>
+
+          {/* دکمه‌های راهنما/تم/خروج */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <a
+              href="/help/student"
+              className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
+            >
+              <span>📖</span>
+              <span>راهنمای سیستم</span>
+            </a>
+            <a
+              href="/help/pdfs/student.pdf"
+              download
+              className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
+            >
+              <span>📕</span>
+              <span>PDF راهنما</span>
+            </a>
+            <ThemeToggle />
+            <form action={logoutAction}>
+              <button className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition whitespace-nowrap">
+                <span className="md:hidden">خروج</span>
+                <span className="hidden md:inline">خروج از حساب</span>
+              </button>
+            </form>
           </div>
         </div>
       </header>

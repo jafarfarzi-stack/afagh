@@ -3,7 +3,7 @@
 // مودال: ویرایش مشخصات نسخهٔ پیش‌نویس (کد/عنوان/ورودی/واحد الزامی/سقف ترم)
 // + مدیریت دروس همان نسخه (حذف تخصیص / افزودن از بانک) — بدون خروج از مودال
 import { useCurriculum } from '../curriculum-context';
-import { ROLE_LABELS, faNum } from '../curriculum-core';
+import { ROLE_LABELS, STATUS_UI, faNum } from '../curriculum-core';
 import { roleFromBankType } from '@/lib/bank-roles';
 
 export default function EditVersionModal() {
@@ -22,6 +22,7 @@ export default function EditVersionModal() {
     handleRemoveCourse,
     handleUpdateVersion,
     isDraft,
+    majorVersions,
     modal,
     roleForBank,
     setAddCourseForm,
@@ -35,23 +36,37 @@ export default function EditVersionModal() {
   } = useCurriculum();
 
   const courses = detail && detail.version.id === editVersionId ? detail.courses : null;
+  // پس از انتشار فقط «ورودی از/تا» قابل ویرایش است (بقیهٔ محتوا فقط با نسخهٔ R+1)
+  const editingVersion = (majorVersions ?? []).find((v) => v.id === editVersionId);
+  const entryOnly = editingVersion ? editingVersion.status !== 'DRAFT' : !isDraft;
+  const lockedCls = entryOnly ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : '';
 
   return (
     <>
       {modal === 'EDIT_VERSION' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-extrabold text-slate-900 text-sm">✏️ ویرایش مشخصات نسخه (فقط پیش‌نویس)</h3>
+            <h3 className="font-extrabold text-slate-900 text-sm">
+              {entryOnly ? '🗓️ پنجرهٔ ورودی نسخه' : '✏️ ویرایش مشخصات نسخه (فقط پیش‌نویس)'}
+            </h3>
+            {entryOnly && (
+              <p className="text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
+                این نسخه «{(STATUS_UI[editingVersion?.status ?? ''] ?? { label: editingVersion?.status ?? '' }).label}» است؛
+                فقط «ورودی از/تا» قابل تغییر است. علتش این است که اگر «ورودی تا» نامشخص بماند و بعد چارت جدید بیاید،
+                دو نسخه روی یک ورودی منطبق می‌شوند و نیم‌سال‌ها تداخل می‌کنند. برای تغییر کد/عنوان/واحدها یا دروس،
+                «🔁 ایجاد نسخهٔ جدید (R+1)» را بزنید.
+              </p>
+            )}
             <div className="space-y-2 text-xs">
               <label className="block font-bold text-slate-700">
                 کد نسخه:
-                <input value={editVersionForm.versionCode} onChange={e => setEditVersionForm({ ...editVersionForm, versionCode: e.target.value })}
-                  className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-mono font-bold" />
+                <input value={editVersionForm.versionCode} disabled={entryOnly} onChange={e => setEditVersionForm({ ...editVersionForm, versionCode: e.target.value })}
+                  className={`mt-1 w-full border border-slate-300 rounded-lg p-2 font-mono font-bold ${lockedCls}`} />
               </label>
               <label className="block font-bold text-slate-700">
                 عنوان:
-                <input value={editVersionForm.title} onChange={e => setEditVersionForm({ ...editVersionForm, title: e.target.value })}
-                  className="mt-1 w-full border border-slate-300 rounded-lg p-2" />
+                <input value={editVersionForm.title} disabled={entryOnly} onChange={e => setEditVersionForm({ ...editVersionForm, title: e.target.value })}
+                  className={`mt-1 w-full border border-slate-300 rounded-lg p-2 ${lockedCls}`} />
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block font-bold text-slate-700">
@@ -66,13 +81,13 @@ export default function EditVersionModal() {
                 </label>
                 <label className="block font-bold text-slate-700">
                   کل واحد الزامی:
-                  <input type="number" value={editVersionForm.totalRequiredUnits} onChange={e => setEditVersionForm({ ...editVersionForm, totalRequiredUnits: Number(e.target.value) })}
-                    className="mt-1 w-full border border-slate-300 rounded-lg p-2" />
+                  <input type="number" value={editVersionForm.totalRequiredUnits} disabled={entryOnly} onChange={e => setEditVersionForm({ ...editVersionForm, totalRequiredUnits: Number(e.target.value) })}
+                    className={`mt-1 w-full border border-slate-300 rounded-lg p-2 ${lockedCls}`} />
                 </label>
                 <label className="block font-bold text-slate-700">
                   سقف واحد ترم:
-                  <input type="number" value={editVersionForm.maxUnitsPerTerm} onChange={e => setEditVersionForm({ ...editVersionForm, maxUnitsPerTerm: Number(e.target.value) })}
-                    className="mt-1 w-full border border-slate-300 rounded-lg p-2" />
+                  <input type="number" value={editVersionForm.maxUnitsPerTerm} disabled={entryOnly} onChange={e => setEditVersionForm({ ...editVersionForm, maxUnitsPerTerm: Number(e.target.value) })}
+                    className={`mt-1 w-full border border-slate-300 rounded-lg p-2 ${lockedCls}`} />
                 </label>
               </div>
             </div>

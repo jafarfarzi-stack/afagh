@@ -591,6 +591,13 @@ export const courses = pgTable('courses', {
    * (`src/lib/requisite-sync.ts`) — بدون این ستون، مهاجرت دوباره لازم بود.
    */
   prereqText: text('prereqText'),
+  /**
+   * «تعداد واحد گذراندهٔ لازم» برای اخذ این درس — از تعریف درس در سیستم قدیم.
+   * در درخت قاعده به شرط `unitsPassed` ترجمه می‌شود.
+   */
+  prereqMinUnits: integer('prereqMinUnits'),
+  /** «ترم لازم» — حداقل ترمی که این درس می‌تواند اخذ/ارائه شود (به شرط `minSemester` ترجمه می‌شود) */
+  prereqMinTerm: integer('prereqMinTerm'),
   facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
   /** کدهای دروس هم‌ارز (جداشده با کاما) — مثال: '101,102,103' */
   equivalentCourseCodes: text('equivalentCourseCodes'),
@@ -1381,6 +1388,27 @@ export const student_requests = pgTable('student_requests', {
   digitalStampHash: varchar('digitalStampHash', { length: 64 }),
   certificateNumber: varchar('certificateNumber', { length: 50 }),
   issuedAt: timestamp('issuedAt'),
+  createdAt: timestamp('createdAt').defaultNow(),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+});
+
+// ── اعتراض به نمره (دانشجو → کارشناس آموزش) ──
+// دانشجو در بازهٔ زمانی اعتراض (تنظیم GRADE_OBJECTION_DEADLINE) می‌تواند به
+// نمرهٔ یک درسِ قطعی اعتراض کند؛ کارشناس بررسی و نتیجه را ثبت می‌کند.
+export const grade_objections = pgTable('grade_objections', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  courseCode: varchar('courseCode', { length: 30 }),
+  courseTitle: varchar('courseTitle', { length: 200 }),
+  gradeAtObjection: numeric('gradeAtObjection', { precision: 6, scale: 2 }),
+  requestText: text('requestText').notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'), // PENDING, REVIEWED, ACCEPTED, REJECTED
+  reviewerId: integer('reviewerId').references(() => staff.id),
+  reviewerNote: text('reviewerNote'),
+  resolvedAt: timestamp('resolvedAt'),
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),

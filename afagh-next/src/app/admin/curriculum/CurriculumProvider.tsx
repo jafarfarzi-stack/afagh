@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CurriculumCtx } from './curriculum-context';
-import { allBankSelected, buildRuleTree, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
+import { allBankSelected, buildRuleTree, nonCourseConditionsOf, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
 import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
@@ -29,6 +29,7 @@ function useCurriculumWorkspace(
   const [majors, setMajors] = useState<MajorItem[]>(initial.majors);
   const [versions, setVersions] = useState<VersionRow[]>(initial.versions);
   const [tracks] = useState(initial.tracks);
+  const [terms, setTerms] = useState(initial.terms ?? []);
   const [selectedMajorId, setSelectedMajorId] = useState<number>(
     initial.versions.find(v => v.id === (initialVersionId ?? -1))?.majorId ?? initial.majors[0]?.id ?? 0
   );
@@ -66,9 +67,11 @@ function useCurriculumWorkspace(
   const [depts, setDepts] = useState<{ id: number; name: string }[]>([]);
   const [deptsLoading, setDeptsLoading] = useState(false);
   const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
-  const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '' });
+  const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '', minUnits: '', minTerm: '' });
   const [activeTab, setActiveTab] = useState<CurriculumTab>(resolveTab(initialTab));
   const [transferMajorId, setTransferMajorId] = useState(0);
+  /** نیم‌سال ورودیِ نسخهٔ مقصد در «انتقال کاتالوگ» (0 = تعیین‌نشده) */
+  const [transferEntryTermId, setTransferEntryTermId] = useState(0);
   const [dragCourseId, setDragCourseId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<number | 'pool' | null>(null);
   const [facultyFilter, setFacultyFilter] = useState('');
@@ -87,6 +90,7 @@ function useCurriculumWorkspace(
     if (!w.ok) { showToast(w.error, 'error'); return; }
     setMajors(w.data.majors.map(m => ({ ...m, code: m.code ?? String(m.id) })));
     setVersions(w.data.versions);
+    setTerms(w.data.terms ?? []);
   }, []);
 
   const reloadDetail = useCallback(async (versionId: number) => {
@@ -238,7 +242,16 @@ function useCurriculumWorkspace(
     if (editVersionId == null) return;
     const f = editVersionForm;
     if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
-    const ok = await run(() => updateCurriculumMetaAction(editVersionId, {
+    // نسخهٔ منتشرشده: فقط پنجرهٔ ورودی فرستاده می‌شود (اکشن سرور هم بقیه را رد می‌کند)
+    const editing = versions.find(v => v.id === editVersionId);
+    const entryOnly = editing ? editing.status !== 'DRAFT' : !isDraft;
+    if (entryOnly && f.entryYearTo.trim() && Number(f.entryYearTo) < f.entryYearFrom) {
+      showToast('«ورودی تا» نمی‌تواند کوچک‌تر از «ورودی از» باشد.', 'error'); return;
+    }
+    const ok = await run(() => updateCurriculumMetaAction(editVersionId, entryOnly ? {
+      entryYearFrom: f.entryYearFrom,
+      entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
+    } : {
       versionCode: f.versionCode.trim(),
       title: f.title.trim(),
       entryYearFrom: f.entryYearFrom,
@@ -275,6 +288,7 @@ function useCurriculumWorkspace(
       versionCode: `${src.entryYearFrom}-T1`,
       title: `${targetMajor.name} — کپی از نسخهٔ ${src.versionCode} (${src.title})`,
       entryYearFrom: src.entryYearFrom,
+      entryTermId: transferEntryTermId || null,
       totalRequiredUnits: Number(src.totalRequiredUnits) || 140,
       maxUnitsPerTerm: detail?.version.maxUnitsPerTerm ?? 20,
       cloneFromId: src.id,
@@ -369,12 +383,16 @@ function useCurriculumWorkspace(
     const pre = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'PREREQ');
     const co = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'COREQ');
     const course = detail?.courses.find(c => c.courseId === courseId);
+    // شرط‌های غیردرسی («۴۷ واحد پاس‌کرده» / «حداقل ترم ۷») از همان درخت خوانده می‌شوند
+    const extra = nonCourseConditionsOf(pre?.logicTree);
     setRuleForm({
       pre: leafCourseCodesOf(pre?.logicTree), preOp: pre?.logicTree.operator ?? 'AND',
       co: leafCourseCodesOf(co?.logicTree), coOp: co?.logicTree.operator ?? 'AND',
       minGrade: course?.minGrade != null ? String(course.minGrade) : '',
       passGradeStatusCode: course?.passGradeStatusCode ?? '',
       failGradeStatusCode: course?.failGradeStatusCode ?? '',
+      minUnits: extra.unitsPassed.length > 0 ? String(extra.unitsPassed[0]) : (course?.prereqMinUnits != null ? String(course.prereqMinUnits) : ''),
+      minTerm: extra.minSemester.length > 0 ? String(extra.minSemester[0]) : (course?.prereqMinTerm != null ? String(course.prereqMinTerm) : ''),
     });
     setRuleCourseId(courseId);
     setModal('RULES');
@@ -390,7 +408,12 @@ function useCurriculumWorkspace(
 
   const handleSaveRules = async () => {
     if (selectedVersionId == null || ruleCourseId == null) return;
-    const okPre = await run(() => setCoursePrerequisiteAction(selectedVersionId, ruleCourseId, buildRuleTree(ruleForm.pre, ruleForm.preOp)));
+    // شرط‌های غیردرسی هم داخل همان درخت PREREQ ذخیره می‌شوند (AND با شرط‌های درسی)
+    const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+    const okPre = await run(() => setCoursePrerequisiteAction(
+      selectedVersionId, ruleCourseId,
+      buildRuleTree(ruleForm.pre, ruleForm.preOp, { unitsPassed: numOrNull(ruleForm.minUnits), minSemester: numOrNull(ruleForm.minTerm) }),
+    ));
     if (!okPre) return;
     const okCo = await run(() => setCourseCorequisiteAction(selectedVersionId, ruleCourseId, buildRuleTree(ruleForm.co, ruleForm.coOp)));
     if (!okCo) return;
@@ -418,8 +441,10 @@ function useCurriculumWorkspace(
   const ruleText = (courseId: number, type: string): string | null => {
     const r = detail?.rules.find(x => x.courseId === courseId && x.ruleType === type);
     if (!r || (r.logicTree.conditions ?? []).length === 0) return null;
-    const titleOf = (code: string) => detail?.courses.find(x => x.code === code)?.title ?? code;
-    return describeLogicNode(r.logicTree, titleOf);
+    // عنوان از چارت، و اگر کد در چارت نبود از بانک (extraTitles) — بعد کد خام
+    const titleOf = (code: string) => detail?.courses.find(x => x.code === code)?.title ?? detail?.extraTitles?.[code] ?? code;
+    // sortByCode: دروس بر اساس کد مرتب شوند (نه ترتیب ذخیره‌شده و نه الفبای عنوان)
+    return describeLogicNode(r.logicTree, titleOf, { sortByCode: true });
   };
 
   const ruleCourse = ruleCourseId != null ? detail?.courses.find(c => c.courseId === ruleCourseId) ?? null : null;
@@ -687,6 +712,9 @@ function useCurriculumWorkspace(
     totalPlannedUnits,
     tracks,
     transferMajorId,
+    transferEntryTermId,
+    setTransferEntryTermId,
+    terms,
     typeSummary,
     unassignedCourses,
     unitsByRole,

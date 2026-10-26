@@ -63,13 +63,21 @@ export default function CatalogTab() {
                         >
                           {selectedVersionId === v.id ? 'باز است' : 'باز کردن'}
                         </button>
-                        {v.status === 'DRAFT' && (
+                        {v.status === 'DRAFT' ? (
                           <button
                             onClick={() => openEditVersion(v)}
                             title="ویرایش کد/عنوان/ورودی/واحد الزامی/سقف ترم"
                             className="px-3 py-1.5 rounded-lg font-extrabold text-[11px] transition bg-amber-100 text-amber-900 hover:bg-amber-200"
                           >
                             ✏️ ویرایش
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openEditVersion(v)}
+                            title="پس از انتشار فقط «ورودی از/تا» قابل ویرایش است — برای تغییر محتوا نسخهٔ R+1 بسازید"
+                            className="px-3 py-1.5 rounded-lg font-extrabold text-[11px] transition bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          >
+                            🗓️ ورودی
                           </button>
                         )}
                       </div>

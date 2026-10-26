@@ -148,7 +148,7 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
     const pctx = await buildPrereqContext(sid);
     const rule = pctx.ruleByCourse.get(off.courseId);
     if (rule) {
-      const ev = evaluateLogicTree(rule, pctx.passed);
+      const ev = evaluateLogicTree(rule, pctx.passed, pctx);
       if (!ev.ok) prereqViolated = ev.missing.map(c => pctx.titles.get(c) ?? c).join('، ');
     }
   } catch { /* موتور در دسترس نیست */ }
@@ -749,7 +749,7 @@ export async function getStudentCatalog(
     if (prereqCtx) {
       const rule = prereqCtx.ruleByCourse.get(r.courseId);
       if (rule) {
-        const ev = evaluateLogicTree(rule, prereqCtx.passed);
+        const ev = evaluateLogicTree(rule, prereqCtx.passed, prereqCtx);
         if (!ev.ok) prereqMissing = ev.missing.map(c => prereqCtx.titles.get(c) ?? c).join('، ');
       }
     }
@@ -788,7 +788,7 @@ export async function getStudentCatalog(
       if (prereqCtx) {
         const rule = prereqCtx.ruleByCourse.get(m.id);
         if (rule) {
-          const ev = evaluateLogicTree(rule, prereqCtx.passed);
+          const ev = evaluateLogicTree(rule, prereqCtx.passed, prereqCtx);
           if (!ev.ok) prereqMissing = ev.missing.map(c => prereqCtx.titles.get(c) ?? c).join('، ');
         }
       }

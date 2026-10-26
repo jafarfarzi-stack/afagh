@@ -342,3 +342,29 @@ UPDATE "curriculum_versions" AS v SET "universityId" = COALESCE(m."universityId"
 -- متن خام ستون «پیش‌نیاز» روی خودِ درس نگه داشته می‌شود؛ چون course_rules
 -- مقیّد به نسخهٔ برنامه است و یک درس می‌تواند در چند نسخه باشد.
 ALTER TABLE IF EXISTS "courses" ADD COLUMN IF NOT EXISTS "prereqText" text;
+
+-- ── «تعداد واحد گذراندهٔ لازم» و «ترم لازم» از تعریف درس در سیستم قدیمی ──
+-- این دو ستون در خروجی‌های متنی سما نبودند (فقط پیش‌نیاز/هم‌نیاز/هم‌ارز بود)،
+-- پس داده‌شان دستی/از فایل دیگری پر می‌شود و در درخت قاعده به
+-- unitsPassed / minSemester ترجمه می‌شوند.
+ALTER TABLE IF EXISTS "courses" ADD COLUMN IF NOT EXISTS "prereqMinUnits" integer;
+ALTER TABLE IF EXISTS "courses" ADD COLUMN IF NOT EXISTS "prereqMinTerm" integer;
+
+-- ── اعتراض به نمره (دانشجو → کارشناس آموزش) ──
+CREATE TABLE IF NOT EXISTS "grade_objections" (
+  "id" serial PRIMARY KEY,
+  "studentId" integer NOT NULL REFERENCES "students"("id"),
+  "enrollmentId" integer NOT NULL REFERENCES "enrollments"("id"),
+  "termId" integer REFERENCES "academic_terms"("id"),
+  "courseCode" varchar(30),
+  "courseTitle" varchar(200),
+  "gradeAtObjection" numeric(6,2),
+  "requestText" text NOT NULL,
+  "status" varchar(20) NOT NULL DEFAULT 'PENDING',
+  "reviewerId" integer REFERENCES "staff"("id"),
+  "reviewerNote" text,
+  "resolvedAt" timestamp,
+  "createdAt" timestamp DEFAULT now(),
+  "updatedAt" timestamp DEFAULT now(),
+  "universityId" integer REFERENCES "universities"("id")
+);

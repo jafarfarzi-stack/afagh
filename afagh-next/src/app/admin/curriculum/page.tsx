@@ -97,6 +97,7 @@ export default async function AdminCurriculumPage({
           courseCount: v.courseCount,
         })),
         tracks: ov.tracks.map((t) => ({ id: t.id, code: null, title: t.title })),
+        terms: (ov.terms ?? []).map((t) => ({ id: t.id, termCode: t.termCode, title: t.title })),
       }}
     />
   );

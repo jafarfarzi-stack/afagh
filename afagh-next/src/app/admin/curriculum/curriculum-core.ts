@@ -3,7 +3,7 @@
 //  ثابت‌های نمایشی + قاعدهٔ درختی + چارت ترمی + فیلترها.
 //  همه قابل Unit Test → tests/curriculum-core.test.ts
 // ════════════════════════════════════════════════════════════════════════
-import type { LogicNode } from '@/lib/curriculum-types';
+import { compareCourseCode, type LogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
 import type { BankCourse, CourseRow, MajorItem, CurriculumTab, RuleRow } from './types';
 
@@ -68,6 +68,41 @@ export const leafCourseCodesOf = (t: LogicNode | undefined): string[] => {
   return out;
 };
 
+/**
+ * شرط‌های «غیردرسی» درخت قاعده — همان چیزهایی که در جدول دروس قدیم به‌جای
+ * کد درس نوشته می‌شد: «۴۷ واحد پاس‌کرده» و «حداقل ترم ۷».
+ * این‌ها کمبود درس نیستند، ولی باید در متن هشدار دیده شوند.
+ */
+export const nonCourseConditionsOf = (t: LogicNode | undefined): { unitsPassed: number[]; minSemester: number[] } => {
+  const out = { unitsPassed: [] as number[], minSemester: [] as number[] };
+  const walk = (node: LogicNode | undefined) => {
+    for (const c of node?.conditions ?? []) {
+      const n = c as unknown as LogicNode;
+      if (n.operator) { walk(n); continue; }
+      const cc = c as { unitsPassed?: unknown; minSemester?: unknown };
+      if (cc.unitsPassed != null) out.unitsPassed.push(Number(cc.unitsPassed));
+      if (cc.minSemester != null) out.minSemester.push(Number(cc.minSemester));
+    }
+  };
+  walk(t);
+  return out;
+};
+
+/** متن فارسی شرط‌های غیردرسی: «۴۷ واحد پاس‌کرده»، «حداقل ترم ۷» */
+export function nonCourseConditionsText(t: LogicNode | undefined): string {
+  const { unitsPassed, minSemester } = nonCourseConditionsOf(t);
+  return [
+    ...unitsPassed.map(u => `${faNum(u)} واحد پاس‌کرده`),
+    ...minSemester.map(s => `حداقل ترم ${faNum(s)}`),
+  ].join(' · ');
+}
+
+/**
+ * مرتب‌سازی «طبیعی» کد درس — پیاده‌سازی در لایهٔ دامنه است تا هم چارت ترمی و
+ * هم متنِ قواعد از یک قاعده استفاده کنند (re-export برای سازگاری با واردکننده‌های قبلی).
+ */
+export { compareCourseCode };
+
 export const leafTotalOf = (t: LogicNode | undefined): number => {
   if (!t) return 0;
   let n = 0;
@@ -88,14 +123,42 @@ export interface DepWarning {
   courseId: number;
   code: string;
   type: 'PREREQ' | 'COREQ';
-  /** کدهای ارجاع‌شده‌ای که اصلاً در دروس نسخه نیستند */
+  /** کدهای ارجاع‌شده‌ای که اصلاً در دروس نسخه نیستند و هم‌ارزی هم برایشان پیدا نشد */
   missing: string[];
   /** کدهای ارجاع‌شده‌ای که در نسخه‌اند ولی recommendedSemester ندارند (در استخر بی‌ترم) */
   unassigned: string[];
   /** نقض ترتیب: پیش‌نیاز در ترم دیرتر/هم‌ترم، یا هم‌نیاز در ترمِ زودتر از درس وابسته */
   badOrder: string[];
+  /**
+   * کدهایی که خودشان در نسخه نیستند ولی **درس هم‌ارزشان** در نسخه هست.
+   * مثال واقعی: هم‌نیاز «54118» در چارت نیست، ولی درس «X» با آن هم‌ارز است.
+   */
+  viaEquivalent: { code: string; equivalent: string }[];
+  /** کد → عنوان درس (برای نمایش نام در بَج، نه فقط کد) */
+  names: Record<string, string>;
+  /** شرط‌های غیردرسی («۴۷ واحد پاس‌کرده»، «حداقل ترم ۷») — کمبود نیستند، ولی باید دیده شوند */
+  extra: string[];
   /** درس وابسته در اولین ترمِ ممکن (ترم ۱) ثبت شده در حالی که پیش‌نیاز دارد — غیرممکن (ترم ۰ وجود ندارد) */
   impossibleTerm: boolean;
+}
+
+/**
+ * هم‌ارزِ یک کدِ خارج از نسخه: آیا درسی در همین نسخه هست که در
+ * `equivalentCourseCodes` خودش این کد را داشته باشد؟ (یا برعکس)
+ * این همان چیزی است که در سیستم قدیمی «دروس هم ارز / متضاد» نام داشت.
+ */
+export function findEquivalentInVersion(
+  code: string,
+  courses: CourseRow[] | null | undefined,
+): CourseRow | null {
+  const target = String(code ?? '').trim().toUpperCase();
+  if (!target) return null;
+  for (const c of courses ?? []) {
+    const list = String(c.equivalentCourseCodes ?? '')
+      .split(/[,،|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (list.includes(target)) return c;
+  }
+  return null;
 }
 
 export function dependencyWarnings(
@@ -111,12 +174,22 @@ export function dependencyWarnings(
     const dep = byId.get(r.courseId);
     if (!dep) continue; // قاعدهٔ درس خارج‌از‌نسخه (توسط چک دیگری رصد می‌شود)
     const codes = leafCourseCodesOf(r.logicTree);
+    const extraText = nonCourseConditionsText(r.logicTree);
+    const names: Record<string, string> = {};
     const missing: string[] = [];
     const unassigned: string[] = [];
     const badOrder: string[] = [];
+    const viaEquivalent: { code: string; equivalent: string }[] = [];
     for (const code of codes) {
       const target = byCode.get(code);
-      if (!target) { missing.push(code); continue; }
+      if (!target) {
+        // شاید هم‌ارزش در چارت باشد — «خارج از نسخه» گفتن در این حالت گمراه‌کننده است
+        const eq = findEquivalentInVersion(code, courses);
+        if (eq) { viaEquivalent.push({ code, equivalent: eq.code }); names[code] = eq.title; }
+        else missing.push(code);
+        continue;
+      }
+      names[code] = target.title;
       if (target.recommendedSemester == null) { unassigned.push(code); continue; }
       // پیش‌نیاز باید در ترمی زودتر باشد؛ هم‌نیاز باید هم‌ترم یا در ترمی زودتر باشد (فقط ترمِ بعدتر خطاست)
       if (ruleType === 'PREREQ' && dep.recommendedSemester != null && target.recommendedSemester >= dep.recommendedSemester) {
@@ -131,8 +204,8 @@ export function dependencyWarnings(
       dep.recommendedSemester != null &&
       dep.recommendedSemester <= 1 &&
       codes.length > 0;
-    if (missing.length || unassigned.length || badOrder.length || impossibleTerm) {
-      out.push({ courseId: dep.courseId, code: dep.code, type: ruleType, missing, unassigned, badOrder, impossibleTerm });
+    if (missing.length || unassigned.length || badOrder.length || viaEquivalent.length || impossibleTerm) {
+      out.push({ courseId: dep.courseId, code: dep.code, type: ruleType, missing, unassigned, badOrder, viaEquivalent, names, extra: extraText ? [extraText] : [], impossibleTerm });
     }
   }
   return out;
@@ -152,6 +225,12 @@ export function dependencyWarningsMap(
   return m;
 }
 
+/** «کد — عنوان» برای نمایش؛ اگر عنوان نباشد فقط کد */
+const labelOf = (w: DepWarning, code: string): string => {
+  const t = w.names[code];
+  return t ? `${t} (${code})` : code;
+};
+
 /** متن فارسی هشدار — برای tooltip / نمایش زیر کارت درس */
 export function dependencyWarningText(w: DepWarning): string {
   const parts: string[] = [];
@@ -161,25 +240,56 @@ export function dependencyWarningText(w: DepWarning): string {
   if (w.badOrder.length) {
     parts.push(
       w.type === 'PREREQ'
-        ? `پیش‌نیاز «${w.badOrder.join('، ')}» باید در ترمی زودتر از این درس باشد (ترتیب ترمی رعایت نشده).`
-        : `هم‌نیاز «${w.badOrder.join('، ')}» در ترمی بعدتر از این درس قرار گرفته — هم‌نیاز باید هم‌ترم یا در ترمی زودتر (پیش از این درس) اخذ شود.`,
+        ? `پیش‌نیاز «${w.badOrder.map(c => labelOf(w, c)).join('، ')}» باید در ترمی زودتر از این درس باشد (ترتیب ترمی رعایت نشده).`
+        : `هم‌نیاز «${w.badOrder.map(c => labelOf(w, c)).join('، ')}» در ترمی بعدتر از این درس قرار گرفته — هم‌نیاز باید هم‌ترم یا در ترمی زودتر (پیش از این درس) اخذ شود.`,
     );
   }
   if (w.unassigned.length) {
     parts.push(
       w.type === 'PREREQ'
-        ? `پیش‌نیاز «${w.unassigned.join('، ')}» هنوز ترم‌بندی نشده — ابتدا آن را در یک ترم زودتر قرار دهید.`
-        : `هم‌نیاز «${w.unassigned.join('، ')}» هنوز ترم‌بندی نشده — باید هم‌ترم با این درس باشد.`,
+        ? `پیش‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده — ابتدا آن را در یک ترم زودتر قرار دهید.`
+        : `هم‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده — باید هم‌ترم با این درس باشد.`,
+    );
+  }
+  if (w.viaEquivalent.length) {
+    parts.push(
+      `این کدها در نسخه نیستند ولی درس هم‌ارزشان در چارت هست: ${w.viaEquivalent.map(v => `${v.code} ← ${labelOf(w, v.equivalent)}`).join('، ')} — ترتیب ترمی همان درس هم‌ارز را رعایت کنید یا کد قاعده را به کد هم‌ارز تغییر دهید.`,
     );
   }
   if (w.missing.length) {
     parts.push(
       w.type === 'PREREQ'
-        ? `پیش‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست — ابتدا درس پیش‌نیاز را به چارت اضافه کنید.`
-        : `هم‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست — ابتدا درس اصلی را اضافه کنید، سپس درس هم‌نیاز.`,
+        ? `پیش‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست و درس هم‌ارزی هم برایش در چارت پیدا نشد — ابتدا درس پیش‌نیاز را به چارت اضافه کنید.`
+        : `هم‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست و درس هم‌ارزی هم برایش پیدا نشد — ابتدا درس اصلی را اضافه کنید، سپس درس هم‌نیاز.`,
     );
   }
+  if (w.extra.length) {
+    parts.push(`شرط‌های غیردرسی این قاعده: ${w.extra.join(' و ')}.`);
+  }
   return parts.join(' ');
+}
+
+/**
+ * برچسب کوتاهِ بَج روی کارت درس — با **نام درس‌ها** (خواستهٔ مدیر گروه) و
+ * بدون نیاز به دو خط: «پیش‌نیاز ناقص: ساختار و تنوع گیاهی، آزمایشگاه شیمی».
+ */
+export function depWarningBadge(warns: DepWarning[]): { icon: string; label: string; tone: 'red' | 'amber' | 'blue' } | null {
+  if (!warns || warns.length === 0) return null;
+  const impossible = warns.some(w => w.impossibleTerm);
+  const type = warns.some(w => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز';
+  const codes = [...new Set(warns.flatMap(w => [...w.missing, ...w.unassigned, ...w.badOrder]))];
+  const titles = [...new Set(codes.map(c => {
+    const w = warns.find(x => x.names[c]);
+    return w ? w.names[c] : c;
+  }))];
+  const eqOnly = codes.length === 0 && warns.some(w => w.viaEquivalent.length > 0);
+  const eqTitles = [...new Set(warns.flatMap(w => w.viaEquivalent.map(v => w.names[v.equivalent] ?? v.equivalent)))];
+
+  if (eqOnly) {
+    return { icon: '🔁', label: `${type} از طریق هم‌ارزی: ${eqTitles.join('، ')}`, tone: 'blue' };
+  }
+  const head = titles.length > 0 ? `: ${titles.join('، ')}` : '';
+  return { icon: impossible ? '⛔' : '⚠️', label: `${type} ناقص${head}`, tone: impossible ? 'red' : 'amber' };
 }
 
 
@@ -196,8 +306,24 @@ export function resolveTab(raw: string | null | undefined): CurriculumTab {
 // (این چهار تابع فقط روی LogicNode کار می‌کنند: هیچ DB و React ندارند.)
 
 /** ساخت درخت AND/OR از کدهای درس — لیست خالی یعنی «بدون قاعده» (null) */
-export function buildRuleTree(codes: string[], op: 'AND' | 'OR'): LogicNode | null {
-  return codes.length === 0 ? null : { operator: op, conditions: codes.map(code => ({ course: code })) };
+export function buildRuleTree(
+  codes: string[],
+  op: 'AND' | 'OR',
+  extra?: { unitsPassed?: number | null; minSemester?: number | null },
+): LogicNode | null {
+  const extras: { unitsPassed?: number; minSemester?: number }[] = [];
+  if (extra?.unitsPassed != null && Number(extra.unitsPassed) > 0) extras.push({ unitsPassed: Number(extra.unitsPassed) });
+  if (extra?.minSemester != null && Number(extra.minSemester) > 0) extras.push({ minSemester: Number(extra.minSemester) });
+
+  // بدون شرط غیردرسی → همان ساختار سادهٔ قبلی (سازگاری کامل با داده و تست‌های موجود)
+  if (extras.length === 0) {
+    return codes.length === 0 ? null : { operator: op, conditions: codes.map(code => ({ course: code })) };
+  }
+  const parts: LogicNode['conditions'] = [];
+  if (codes.length === 1) parts.push({ course: codes[0] });
+  else if (codes.length > 1) parts.push({ operator: op, conditions: codes.map(code => ({ course: code })) });
+  parts.push(...extras);
+  return { operator: 'AND', conditions: parts };
 }
 
 /**
@@ -231,6 +357,9 @@ export function groupBySemester(courses: CourseRow[] | null | undefined): Semest
       unassigned.push(c);
     }
   }
+  // ترتیب داخل هر ترم و استخرِ بی‌ترم: **بر اساس کد درس** (نه نام) — خواستهٔ مدیر گروه
+  for (const arr of bySemester.values()) arr.sort((a, b) => compareCourseCode(a.code, b.code));
+  unassigned.sort((a, b) => compareCourseCode(a.code, b.code));
   return { bySemester, unassigned };
 }
 

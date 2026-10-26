@@ -41,6 +41,10 @@ export interface CurriculumCheckInput {
     autoCorequisiteAllowed: number;
     clusterId: number | null; // خوشهٔ هم‌ارزی (NULL = درس مستقل)
     passGradeStatusCode?: string | null; // کد وضع نمرهٔ قبولی (12 = جبرانی)
+    /** کدهای هم‌ارز بانک (کاما) — برای «خارج از نسخه» نساختنِ کدِ دارای هم‌ارز */
+    equivalentCourseCodes?: string | null;
+    /** نوع درس بانک («تخصصی»، «عمومی»، …) */
+    courseType?: string | null;
   }[];
   /** قواعدِ مقیّد به همین نسخه (course_rules.syllabusId = نسخه) */
   rules: {
@@ -79,6 +83,40 @@ const err = (check: string, message: string, affected: (string | number)[] = [])
 const warn = (check: string, message: string, affected: (string | number)[] = []): CheckResult => ({
   check, severity: 'WARN', message, affected,
 });
+
+/**
+ * حداقل تعداد مقرر از هر نقش.
+ *
+ * چرا تابع شد؟ در مقاطع تحصیلات تکمیلی (ارشد/دکتری) درس «عمومی» وجود ندارد؛
+ * هشدار «نقش عمومی فقط ۰ درس دارد» برای همهٔ ارشدها کاذب بود. پس:
+ *   • کارشناسی/کاردانی → عمومی + پایه + اصلی
+ *   • تحصیلات تکمیلی  → پایه + اصلی (+ پایان‌نامه که در buildCheckInput اضافه می‌شود)
+ */
+export function defaultMinRoles(opts: { isGraduate?: boolean | null } = {}): Record<string, number> {
+  return opts.isGraduate ? { CORE: 1, MAJOR: 1 } : { GENERAL: 1, CORE: 1, MAJOR: 1 };
+}
+
+/** کدهای هم‌ارز یک ردیف درس (کاما/فاصله/لوله) */
+function equivList(c: { equivalentCourseCodes?: string | null }): string[] {
+  return String(c.equivalentCourseCodes ?? '')
+    .split(/[,،|\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+}
+
+/**
+ * آیا این کدِ «خارج از نسخه» درس هم‌ارزی در نسخه دارد؟
+ * اگر بله، «خارج از نسخه» خطا نیست — باید با پیام هم‌ارزی هشدار داده شود.
+ */
+export function equivalentInVersion(
+  code: string,
+  courses: { code: string; equivalentCourseCodes?: string | null }[],
+): string | null {
+  const target = String(code ?? '').trim().toUpperCase();
+  if (!target) return null;
+  for (const c of courses) {
+    if (equivList(c).includes(target)) return c.code;
+  }
+  return null;
+}
 
 /** برگ‌های درخت (course و unitsPassed) — پیمایش عمق‌نخست */
 function leafCourseCodes(node: LogicNode | null | undefined, out: string[] = []): string[] {
@@ -222,12 +260,17 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
   // ── ۵) هم‌نیازها: در همین نسخه تعریف و هم‌ترم یا در ترمی زودتر باشند (یا هم‌نیاز خودکار مجاز) ──
   const codesInVersion = new Set(input.courses.map((c) => c.code));
   const coreqIssues: string[] = [];
+  const coreqEquiv: string[] = [];
   for (const r of input.rules) {
     if (r.ruleType !== 'COREQ') continue;
     const dep = input.courses.find((c) => c.courseId === r.courseId);
     for (const code of leafCourseCodes(r.logicTree)) {
       if (!codesInVersion.has(code)) {
-        coreqIssues.push(`${code} (خارج از نسخه)`);
+        // اگر هم‌ارزش در همین چارت هست، «خارج از نسخه» گفتن گمراه‌کننده است:
+        // دانشجو با گذراندن درس هم‌ارز، شرط را برآورده می‌کند.
+        const eq = equivalentInVersion(code, input.courses);
+        if (eq) coreqEquiv.push(`${code} ⇄ ${eq}`);
+        else coreqIssues.push(`${code} (خارج از نسخه)`);
         continue;
       }
       const coreq = input.courses.find((c) => c.code === code);
@@ -243,6 +286,47 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       'COREQ_PRESENT',
       `هم‌نیازهایی که باید هم‌ترم یا در ترمی زودتر باشند و در نسخه تعریف شوند: ${coreqIssues.join('، ')}`,
       coreqIssues
+    ));
+  }
+  if (coreqEquiv.length > 0) {
+    results.push(warn(
+      'COREQ_EQUIVALENT',
+      `هم‌نیازهایی که کدشان در این چارت نیست، ولی درس هم‌ارزشان ارائه شده است (با گذراندن هم‌ارز، شرط برآورده می‌شود): ${coreqEquiv.join('، ')}`,
+      coreqEquiv
+    ));
+  }
+
+  // ── ۵ب) پیش‌نیازِ بیرون از چارت: با هم‌ارزی بسنج، بعد هشدار بده ──
+  // (پیش از این، پیش‌نیازی که کدش در چارت نبود کاملاً بی‌صدا رد می‌شد؛ حالا یا
+  // «از طریق هم‌ارزی پوشش داده می‌شود» گزارش می‌شود یا «بدون هم‌ارز» — دومی
+  // یعنی دانشجو هرگز نمی‌تواند آن پیش‌نیاز را در این چارت بگذراند.)
+  const prereqEquiv: string[] = [];
+  const prereqOutside: string[] = [];
+  for (const r of input.rules) {
+    if (r.ruleType !== 'PREREQ') continue;
+    const dep = input.courses.find((c) => c.courseId === r.courseId);
+    if (!dep) continue;
+    for (const code of leafCourseCodes(r.logicTree)) {
+      if (codesInVersion.has(code)) continue;
+      const eq = equivalentInVersion(code, input.courses);
+      if (eq) prereqEquiv.push(`${code} ⇄ ${eq} (برای ${dep.code})`);
+      else prereqOutside.push(`${code} → ${dep.code}`);
+    }
+  }
+  const capList = (arr: string[]) =>
+    arr.length <= 12 ? arr.join('، ') : `${arr.slice(0, 12).join('، ')} و ${arr.length - 12} مورد دیگر`;
+  if (prereqEquiv.length > 0) {
+    results.push(warn(
+      'PREREQ_EQUIVALENT',
+      `پیش‌نیازهایی که کدشان در چارت نیست، ولی درس هم‌ارزشان در همین چارت ارائه شده است: ${capList(prereqEquiv)}`,
+      prereqEquiv.slice(0, 40)
+    ));
+  }
+  if (prereqOutside.length > 0) {
+    results.push(warn(
+      'PREREQ_OUTSIDE_VERSION',
+      `پیش‌نیازهایی که نه خودشان و نه هم‌ارزشان در این چارت نیست — دانشجو نمی‌تواند آن‌ها را در این برنامه بگذراند: ${capList(prereqOutside)}`,
+      prereqOutside.slice(0, 40)
     ));
   }
 

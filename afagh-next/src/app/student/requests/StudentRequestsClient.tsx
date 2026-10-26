@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormFieldSchema } from '@/lib/workflow-engine';
 import {
+  issueApprovedTranscriptTokenAction,
   submitSatisfactionRatingAction,
   submitStudentRequestAction,
   uploadRequestAttachmentAction,
 } from './actions';
+import VerifyQrBlock from '@/components/VerifyQrBlock';
 
 type Attachment = { key: string; name: string; size: number; mimeType: string };
 
@@ -188,6 +190,11 @@ export default function StudentRequestsClient({
   const [ratingRequestId, setRatingRequestId] = useState<number | null>(null);
   const [ratingScore, setRatingScore] = useState<number>(5);
   const [ratingFeedback, setRatingFeedback] = useState<string>('');
+
+  // رمز تایید (QR) کارنامهٔ معتبر — پس از تأیید درخواست
+  const [validTranscriptQr, setValidTranscriptQr] = useState<{ requestId: number; url: string; qr: string; expiresAt: string | null } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
 
   const selectedProcess = processes.find(p => p.code === selectedProcessCode) || processes[0];
 
@@ -705,6 +712,27 @@ export default function StudentRequestsClient({
                           <span>مشاهده و چاپ سند</span>
                         </button>
                       )}
+
+                      {isApproved && req.processCode === 'VALID_TRANSCRIPT' && (
+                        <button
+                          onClick={async () => {
+                            setQrLoading(true);
+                            setQrError(null);
+                            const res = await issueApprovedTranscriptTokenAction(req.id);
+                            setQrLoading(false);
+                            if (res.ok && res.url && res.qr) {
+                              setValidTranscriptQr({ requestId: req.id, url: res.url, qr: res.qr, expiresAt: res.expiresAt ?? null });
+                            } else {
+                              setQrError(res.error || 'خطا در صدور رمز تایید.');
+                            }
+                          }}
+                          disabled={qrLoading}
+                          className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow flex items-center gap-1 transition disabled:opacity-50"
+                        >
+                          <span>🔐</span>
+                          <span>{qrLoading ? 'در حال صدور...' : 'دریافت کارنامهٔ معتبر (QR)'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -775,6 +803,26 @@ export default function StudentRequestsClient({
                       ))}
                     </div>
                   </div>
+
+                  {/* بلوک رسمیت: رمز تایید (QR) کارنامهٔ معتبر — فقط برای درخواست‌های تأییدشده */}
+                  {req.processCode === 'VALID_TRANSCRIPT' && (
+                    <div className="pt-2">
+                      {qrError && (
+                        <p className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 mb-2">{qrError}</p>
+                      )}
+                      {validTranscriptQr?.requestId === req.id && (
+                        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3">
+                          <p className="text-xs font-extrabold text-emerald-900 mb-2">کارنامهٔ معتبر با رمز تایید (QR)</p>
+                          <VerifyQrBlock
+                            title="استعلام برخط اصالت کارنامهٔ معتبر"
+                            url={validTranscriptQr.url}
+                            qr={validTranscriptQr.qr}
+                            expiresAt={validTranscriptQr.expiresAt}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* بخش نظرسنجی CSAT در صورت مختومه بودن */}
                   {isApproved && (

@@ -2,10 +2,11 @@
 
 // تب ۲: دروس کاتالوگ (نقش، الزامی، پیش‌نیاز، تأییدیه‌ها)
 import { useCurriculum } from '../curriculum-context';
-import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText, roleLabel } from '../curriculum-core';
+import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText, depWarningBadge, roleLabel } from '../curriculum-core';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
+import { roleFromBankType } from '@/lib/bank-roles';
 
 export default function CoursesTab() {
   const {
@@ -32,17 +33,21 @@ export default function CoursesTab() {
     typeSummary,
   } = useCurriculum();
 
-  // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز — کنار ستون «ترم پیشنهادی»
+  // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز — با **نام** دروس، نه فقط کد
   const depWarnNode = (courseId: number) => {
     const warns = depWarnings.get(courseId);
     if (!warns || warns.length === 0) return null;
-    const impossible = warns.some((w) => w.impossibleTerm);
+    const badge = depWarningBadge(warns);
+    if (!badge) return null;
+    const toneCls = badge.tone === 'red'
+      ? 'bg-rose-600 text-white'
+      : badge.tone === 'blue' ? 'bg-sky-100 text-sky-900' : 'bg-amber-100 text-rose-700';
     return (
       <div
-        className={`mt-1 text-[9px] font-extrabold leading-tight rounded px-1 py-0.5 ${impossible ? 'bg-rose-600 text-white' : 'bg-amber-100 text-rose-700'}`}
+        className={`mt-1 text-[9px] font-extrabold leading-tight rounded px-1 py-0.5 ${toneCls}`}
         title={warns.map(dependencyWarningText).join('\n')}
       >
-        {impossible ? '⛔' : '⚠️'} {warns.some((w) => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز'}
+        {badge.icon} {badge.label}
       </div>
     );
   };
@@ -128,6 +133,7 @@ export default function CoursesTab() {
                         <select
                           value={c.roleType}
                           onChange={e => handleUpdateRole(c.courseId, e.target.value)}
+                          title={c.courseType ? `نوع درس در بانک: ${c.courseType} (نقش پیشنهادی: ${ROLE_LABELS[roleFromBankType(c.courseType)] ?? '—'})` : undefined}
                           className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white"
                         >
                           {Object.entries(ROLE_LABELS).map(([k, v]) => (
@@ -136,6 +142,15 @@ export default function CoursesTab() {
                         </select>
                       ) : (
                         <span className="font-bold">{ROLE_LABELS[c.roleType] ?? c.roleType}</span>
+                      )}
+                      {/* منبعِ پیش‌فرضِ نقش، «نوع درس» بانک است؛ اگر دستی عوض شده، زرد می‌شود */}
+                      {c.courseType && (
+                        <div
+                          className={`mt-0.5 text-[9px] font-bold ${roleFromBankType(c.courseType) === c.roleType ? 'text-slate-400' : 'text-amber-700'}`}
+                          title="نوع درس در بانک — نقش پیش‌فرض از همین گرفته می‌شود"
+                        >
+                          بانک: {c.courseType}
+                        </div>
                       )}
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
@@ -210,17 +225,21 @@ export default function CoursesTab() {
                         </span>
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 text-center">
-                      <div className="text-[10px] font-bold text-slate-600 leading-relaxed max-w-44">
+                    <td className="p-2 border border-slate-200 text-right align-top">
+                      <div className="text-[10px] font-bold text-slate-600 leading-snug">
                         {(() => {
                           const pre = ruleText(c.courseId, 'PREREQ');
                           const co = ruleText(c.courseId, 'COREQ');
                           if (!pre && !co && c.minGrade == null) return <span className="text-slate-300">—</span>;
-                          return (<>
-                            {pre && <div className="truncate" title={pre}>پیش: {pre}</div>}
-                            {co && <div className="truncate" title={co}>هم: {co}</div>}
-                            {c.minGrade != null && <div className="text-indigo-700">کف: {faNum(c.minGrade)}</div>}
-                          </>);
+                          // یک خط با «نام» دروس (نه کد)؛ شرط‌های غیردرسی مثل «۴۷ واحد پاس‌کرده»
+                          // و «حداقل ترم ۷» هم داخل همین متن می‌آیند. عرض ستون آزاد است.
+                          return (
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {pre && <span className="text-rose-800" title={`پیش‌نیاز: ${pre}`}>پیش: {pre}</span>}
+                              {co && <span className="text-indigo-800" title={`هم‌نیاز: ${co}`}>هم: {co}</span>}
+                              {c.minGrade != null && <span className="text-indigo-700">کف نمره: {faNum(c.minGrade)}</span>}
+                            </div>
+                          );
                         })()}
                       </div>
                       {isDraft && (
