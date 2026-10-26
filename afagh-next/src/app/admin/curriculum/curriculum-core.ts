@@ -5,7 +5,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import type { LogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
-import type { BankCourse, CourseRow, MajorItem, CurriculumTab } from './types';
+import type { BankCourse, CourseRow, MajorItem, CurriculumTab, RuleRow } from './types';
 
 // ─────────────────────────── ثابت‌های نمایشی ───────────────────────────
 
@@ -60,6 +60,104 @@ export const leafTotalOf = (t: LogicNode | undefined): number => {
   }
   return n;
 };
+
+// ─────────────── هشدار پوشش پیش‌نیاز/هم‌نیاز در چارت (هنگام چیدمان) ───────────────
+// وقتی مدیرگروه درس را در ترمی قرار می‌دهد (درگ‌اندراپ یا منوی ترم کاتالوگ)،
+// اگر آن درس پیش‌نیاز یا هم‌نیاز دارد که (الف) اصلاً در دروس نسخه نیست یا
+// (ب) در نسخه هست ولی هنوز ترم‌بندی نشده (در استخرِ بی‌ترم)، هشدار بده که
+// ابتدا باید آن را به چارت اضافه/ترم‌بندی کرد. منطق خالص → قابل Unit Test.
+
+export interface DepWarning {
+  courseId: number;
+  code: string;
+  type: 'PREREQ' | 'COREQ';
+  /** کدهای ارجاع‌شده‌ای که اصلاً در دروس نسخه نیستند */
+  missing: string[];
+  /** کدهای ارجاع‌شده‌ای که در نسخه‌اند ولی recommendedSemester ندارند (در استخر بی‌ترم) */
+  unassigned: string[];
+  /** پیش‌نیازهایی که در ترمی دیرتر یا هم‌ترم با درس وابسته‌اند (ترتیب نقض شده) */
+  badOrder: string[];
+  /** درس وابسته در اولین ترمِ ممکن (ترم ۱) ثبت شده در حالی که پیش‌نیاز دارد — غیرممکن (ترم ۰ وجود ندارد) */
+  impossibleTerm: boolean;
+}
+
+export function dependencyWarnings(
+  courses: CourseRow[] | null | undefined,
+  rules: RuleRow[] | null | undefined,
+): DepWarning[] {
+  const byId = new Map((courses ?? []).map((c) => [c.courseId, c]));
+  const byCode = new Map((courses ?? []).map((c) => [c.code, c]));
+  const out: DepWarning[] = [];
+  for (const r of rules ?? []) {
+    if (r.ruleType !== 'PREREQ' && r.ruleType !== 'COREQ') continue;
+    const ruleType: 'PREREQ' | 'COREQ' = r.ruleType === 'PREREQ' ? 'PREREQ' : 'COREQ';
+    const dep = byId.get(r.courseId);
+    if (!dep) continue; // قاعدهٔ درس خارج‌از‌نسخه (توسط چک دیگری رصد می‌شود)
+    const codes = leafCourseCodesOf(r.logicTree);
+    const missing: string[] = [];
+    const unassigned: string[] = [];
+    const badOrder: string[] = [];
+    for (const code of codes) {
+      const target = byCode.get(code);
+      if (!target) { missing.push(code); continue; }
+      if (target.recommendedSemester == null) { unassigned.push(code); continue; }
+      // فقط برای پیش‌نیاز: پیش‌نیاز باید در ترمی زودتر از درس وابسته باشد
+      if (ruleType === 'PREREQ' && dep.recommendedSemester != null && target.recommendedSemester >= dep.recommendedSemester) {
+        badOrder.push(code);
+      }
+    }
+    // درس دارای پیش‌نیاز در اولین ترم (ترم ۱ ≤) → غیرممکن: ترم ۰ وجود ندارد
+    const impossibleTerm =
+      ruleType === 'PREREQ' &&
+      dep.recommendedSemester != null &&
+      dep.recommendedSemester <= 1 &&
+      codes.length > 0;
+    if (missing.length || unassigned.length || badOrder.length || impossibleTerm) {
+      out.push({ courseId: dep.courseId, code: dep.code, type: ruleType, missing, unassigned, badOrder, impossibleTerm });
+    }
+  }
+  return out;
+}
+
+/** نگاشت courseId → هشدارها (برای دسترسی O(1) در کارتِ هر درس) */
+export function dependencyWarningsMap(
+  courses: CourseRow[] | null | undefined,
+  rules: RuleRow[] | null | undefined,
+): Map<number, DepWarning[]> {
+  const m = new Map<number, DepWarning[]>();
+  for (const w of dependencyWarnings(courses, rules)) {
+    const arr = m.get(w.courseId) ?? [];
+    arr.push(w);
+    m.set(w.courseId, arr);
+  }
+  return m;
+}
+
+/** متن فارسی هشدار — برای tooltip / نمایش زیر کارت درس */
+export function dependencyWarningText(w: DepWarning): string {
+  const parts: string[] = [];
+  if (w.impossibleTerm) {
+    parts.push('این درس پیش‌نیاز دارد و نمی‌تواند در ترم ۱ ثبت شود — زیرا امکان گذراندن پیش‌نیاز در ترم ۰ (که وجود ندارد) وجود ندارد؛ پیش‌نیاز باید در ترمی زودتر گذرانده شود.');
+  }
+  if (w.badOrder.length) {
+    parts.push(`پیش‌نیاز «${w.badOrder.join('، ')}» باید در ترمی زودتر از این درس باشد (ترتیب ترمی رعایت نشده).`);
+  }
+  if (w.unassigned.length) {
+    parts.push(
+      w.type === 'PREREQ'
+        ? `پیش‌نیاز «${w.unassigned.join('، ')}» هنوز ترم‌بندی نشده — ابتدا آن را در یک ترم زودتر قرار دهید.`
+        : `هم‌نیاز «${w.unassigned.join('، ')}» هنوز ترم‌بندی نشده — باید هم‌ترم با این درس باشد.`,
+    );
+  }
+  if (w.missing.length) {
+    parts.push(
+      w.type === 'PREREQ'
+        ? `پیش‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست — ابتدا درس پیش‌نیاز را به چارت اضافه کنید.`
+        : `هم‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست — ابتدا درس اصلی را اضافه کنید، سپس درس هم‌نیاز.`,
+    );
+  }
+  return parts.join(' ');
+}
 
 
 // ─────────────────────────── پیوندپذیری تب‌ها ───────────────────────────

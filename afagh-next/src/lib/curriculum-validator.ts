@@ -181,19 +181,41 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     ));
   }
 
-  // ── ۴) ترتیب ترمی پیش‌نیازها: پیش‌نیاز نباید در ترمِ دیرتر از درس باشد ──
+  // ── ۴) ترتیب ترمی پیش‌نیازها: پیش‌نیاز باید در ترمی زودتر از درس باشد (هم‌ترم هم غلط است) ──
   const semOf = new Map(input.courses.map((c) => [c.code, c.recommendedSemester]));
   const semIssues: string[] = [];
   for (const e of edges) {
     const ps = semOf.get(e.prereq);
     const ds = semOf.get(e.dependent);
-    if (ps != null && ds != null && ps > ds) semIssues.push(`${e.prereq}(${ps})→${e.dependent}(${ds})`);
+    // ترم ۱ توسط چک ۱۳ (PREREQ_FIRST_TERM) به‌عنوان خطای مسدودکننده گزارش می‌شود
+    if (ps != null && ds != null && ds > 1 && ps >= ds) semIssues.push(`${e.prereq}(${ps})→${e.dependent}(${ds})`);
   }
   if (semIssues.length > 0) {
     results.push(warn(
       'PREREQ_SEMESTER_ORDER',
-      `پیش‌نیازهایی که در ترمِ دیرتر از درس وابسته چیده شده‌اند: ${semIssues.join('، ')}`,
+      `پیش‌نیازهایی که در ترمی دیرتر یا هم‌ترم با درس وابسته چیده شده‌اند: ${semIssues.join('، ')}`,
       semIssues
+    ));
+  }
+
+  // ── ۱۳) درس دارای پیش‌نیاز نباید در اولین ترم (ترم ۱) باشد: ترم ۰ وجود ندارد ──
+  // پیش‌نیاز باید در ترمی زودتر گذرانده شود؛ بنابرین کم‌ترین ترمِ درسِ وابسته، ۲ است.
+  const firstTermIssues: string[] = [];
+  for (const r of input.rules) {
+    if (r.ruleType !== 'PREREQ') continue;
+    const dep = input.courses.find((c) => c.courseId === r.courseId);
+    if (!dep || dep.recommendedSemester == null) continue;
+    const leaves = leafCourseCodes(r.logicTree);
+    if (leaves.length === 0) continue;
+    if ((dep.recommendedSemester as number) <= 1) {
+      firstTermIssues.push(`${dep.code} (ترم ${dep.recommendedSemester})`);
+    }
+  }
+  if (firstTermIssues.length > 0) {
+    results.push(err(
+      'PREREQ_FIRST_TERM',
+      `دروس دارای پیش‌نیاز نمی‌توانند در اولین ترم (ترم ۱) قرار گیرند، زیرا امکان گذراندن پیش‌نیاز در ترم ۰ (که وجود ندارد) وجود ندارد: ${firstTermIssues.join('، ')} — پیش‌نیاز باید در ترمی زودتر گذرانده شود.`,
+      firstTermIssues
     ));
   }
 

@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CurriculumCtx } from './curriculum-context';
-import { allBankSelected, buildRuleTree, semesterUnitTotal, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
+import { allBankSelected, buildRuleTree, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
 import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
@@ -490,6 +490,8 @@ function useCurriculumWorkspace(
   const isDraft = (detail?.version.status ?? selectedVersion?.status) === 'DRAFT';
   const { bySemester: semesterCourses, unassigned: unassignedCourses } = useMemo(() => groupBySemester(detail?.courses), [detail?.courses]);
   const totalPlannedUnits = semesterUnitTotal(detail?.courses);
+  // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز (نمایش هنگام چیدمان)
+  const depWarnings = useMemo(() => dependencyWarningsMap(detail?.courses, detail?.rules), [detail?.courses, detail?.rules]);
 
   // ── چارت ترمی بر اساس مقطع: تعداد ترم از DB، وگرنه استنتاج ──
   const degreeMajor = majors.find(m => m.id === (selectedVersion?.majorId ?? selectedMajorId));
@@ -561,6 +563,7 @@ function useCurriculumWorkspace(
     deptsLoading,
     detail,
     detailLoading,
+    depWarnings,
     dragCourseId,
     dropTarget,
     editVersionForm,

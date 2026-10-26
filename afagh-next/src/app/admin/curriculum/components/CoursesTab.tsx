@@ -2,7 +2,7 @@
 
 // تب ۲: دروس کاتالوگ (نقش، الزامی، پیش‌نیاز، تأییدیه‌ها)
 import { useCurriculum } from '../curriculum-context';
-import { ROLE_LABELS, faDate, faNum, semLabel } from '../curriculum-core';
+import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText } from '../curriculum-core';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
@@ -12,6 +12,7 @@ export default function CoursesTab() {
     activeTab,
     busy,
     courseCodeOf,
+    depWarnings,
     detail,
     handleAssignSemester,
     handleMarkGradReq,
@@ -30,6 +31,21 @@ export default function CoursesTab() {
     totalPlannedUnits,
     typeSummary,
   } = useCurriculum();
+
+  // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز — کنار ستون «ترم پیشنهادی»
+  const depWarnNode = (courseId: number) => {
+    const warns = depWarnings.get(courseId);
+    if (!warns || warns.length === 0) return null;
+    const impossible = warns.some((w) => w.impossibleTerm);
+    return (
+      <div
+        className={`mt-1 text-[9px] font-extrabold leading-tight rounded px-1 py-0.5 ${impossible ? 'bg-rose-600 text-white' : 'bg-amber-100 text-rose-700'}`}
+        title={warns.map(dependencyWarningText).join('\n')}
+      >
+        {impossible ? '⛔' : '⚠️'} {warns.some((w) => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز'}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -136,6 +152,7 @@ export default function CoursesTab() {
                       ) : (
                         <span className="font-bold">{semLabel(c.recommendedSemester)}</span>
                       )}
+                      {depWarnNode(c.courseId)}
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
                       <input

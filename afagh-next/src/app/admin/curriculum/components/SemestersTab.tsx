@@ -2,7 +2,7 @@
 
 // تب ۳: ترم‌بندی چارت با درگ‌اندراپ + سقف واحد
 import { useCurriculum } from '../curriculum-context';
-import { STATUS_UI, faNum, semesterUnitTotal } from '../curriculum-core';
+import { STATUS_UI, faNum, semesterUnitTotal, dependencyWarningText } from '../curriculum-core';
 import { SUMMER_SEMESTER, isSummerSemester } from '@/lib/term-plan';
 
 export default function SemestersTab() {
@@ -10,6 +10,7 @@ export default function SemestersTab() {
     activeTab,
     chartTermCount,
     degreeMajor,
+    depWarnings,
     detail,
     detailLoading,
     dragCourseId,
@@ -28,6 +29,22 @@ export default function SemestersTab() {
     totalPlannedUnits,
     unassignedCourses,
   } = useCurriculum();
+
+  // کارتِ هشدار پوشش/ترم‌بندی پیش‌نیاز و هم‌نیاز — زیر هر درس
+  const renderDepWarn = (courseId: number) => {
+    const warns = depWarnings.get(courseId);
+    if (!warns || warns.length === 0) return null;
+    const impossible = warns.some((w) => w.impossibleTerm);
+    const typeLabel = warns.some((w) => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز';
+    return (
+      <div
+        className={`mt-0.5 text-[9px] font-extrabold leading-tight rounded px-1.5 py-0.5 ${impossible ? 'bg-rose-600 text-white' : 'bg-amber-100 text-rose-700'}`}
+        title={warns.map(dependencyWarningText).join('\n')}
+      >
+        {impossible ? '⛔' : '⚠️'} {typeLabel} ناقص
+      </div>
+    );
+  };
 
   if (!selectedVersion) return null;
 
@@ -99,27 +116,29 @@ export default function SemestersTab() {
                   {list.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">{isDropHere ? '⬇ رها کنید' : '— بدون درس —'}</div>}
                   <div className="space-y-1.5 min-h-[28px]">
                     {list.map(c => (
-                      <div
-                        key={c.courseId}
-                        draggable={isDraft}
-                        onDragStart={e => onCourseDragStart(e, c.courseId)}
-                        onDragEnd={onCourseDragEnd}
-                        title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
-                        className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
-                      >
-                        {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
-                        <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
-                        <span className="truncate font-bold flex-1">{c.title}</span>
-                        <span className="text-slate-400 text-[10px]">{faNum(c.units)}</span>
-                        {isDraft && (
-                          <button
-                            onClick={() => handleAssignSemester(c.courseId, null)}
-                            title="حذف از این ترم (نامشخص)"
-                            className="text-rose-500 hover:text-rose-700 font-black px-1"
-                          >
-                            ✕
-                          </button>
-                        )}
+                      <div key={c.courseId} className="space-y-1.5">
+                        <div
+                          draggable={isDraft}
+                          onDragStart={e => onCourseDragStart(e, c.courseId)}
+                          onDragEnd={onCourseDragEnd}
+                          title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
+                          className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
+                        >
+                          {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
+                          <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
+                          <span className="truncate font-bold flex-1">{c.title}</span>
+                          <span className="text-slate-400 text-[10px]">{faNum(c.units)}</span>
+                          {isDraft && (
+                            <button
+                              onClick={() => handleAssignSemester(c.courseId, null)}
+                              title="حذف از این ترم (نامشخص)"
+                              className="text-rose-500 hover:text-rose-700 font-black px-1"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        {renderDepWarn(c.courseId)}
                       </div>
                     ))}
                   </div>
@@ -141,31 +160,33 @@ export default function SemestersTab() {
             {unassignedCourses.length === 0 && <div className="text-[10px] text-slate-400 font-bold py-2 text-center">{isDraft && dropTarget === 'pool' ? '⬇ اینجا رها کنید تا از ترم خارج شود' : 'همهٔ دروس ترمبندی شدهاند. ✓'}</div>}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 min-h-[28px]">
               {unassignedCourses.map(c => (
-                <div
-                  key={c.courseId}
-                  draggable={isDraft}
-                  onDragStart={e => onCourseDragStart(e, c.courseId)}
-                  onDragEnd={onCourseDragEnd}
-                  title={isDraft ? 'بکشید و روی ترم موردنظر رها کنید' : c.title}
-                  className={`flex items-center gap-2 bg-white rounded-lg px-2 py-1.5 border border-slate-200 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
-                >
-                  {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
-                  <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
-                  <span className="truncate font-bold flex-1">{c.title}</span>
-                  <span className="text-slate-400 text-[10px]">{faNum(c.units)} واحد</span>
-                  {isDraft ? (
-                    <select
-                      value=""
-                      onChange={e => e.target.value && handleAssignSemester(c.courseId, Number(e.target.value))}
-                      className="border border-slate-300 rounded px-1 py-0.5 font-bold text-[10px] bg-white"
-                    >
-                      <option value="">ترم…</option>
-                      {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
-                      <option value={SUMMER_SEMESTER}>تابستان</option>
-                    </select>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 font-bold">نامشخص</span>
-                  )}
+                <div key={c.courseId} className="space-y-1.5">
+                  <div
+                    draggable={isDraft}
+                    onDragStart={e => onCourseDragStart(e, c.courseId)}
+                    onDragEnd={onCourseDragEnd}
+                    title={isDraft ? 'بکشید و روی ترم موردنظر رها کنید' : c.title}
+                    className={`flex items-center gap-2 bg-white rounded-lg px-2 py-1.5 border border-slate-200 text-[11px] ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
+                  >
+                    {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
+                    <span className="font-mono text-indigo-900 text-[10px]">{c.code}</span>
+                    <span className="truncate font-bold flex-1">{c.title}</span>
+                    <span className="text-slate-400 text-[10px]">{faNum(c.units)} واحد</span>
+                    {isDraft ? (
+                      <select
+                        value=""
+                        onChange={e => e.target.value && handleAssignSemester(c.courseId, Number(e.target.value))}
+                        className="border border-slate-300 rounded px-1 py-0.5 font-bold text-[10px] bg-white"
+                      >
+                        <option value="">ترم…</option>
+                        {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
+                        <option value={SUMMER_SEMESTER}>تابستان</option>
+                      </select>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-bold">نامشخص</span>
+                    )}
+                  </div>
+                  {renderDepWarn(c.courseId)}
                 </div>
               ))}
             </div>

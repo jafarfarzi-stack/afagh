@@ -229,5 +229,27 @@ const allMet = validateCurriculumCore(baseInput({ minRoleUnits: { GENERAL: 3, CO
 eq('همه سهم‌ها تأمین → بدون یافته', hasCheck(allMet, 'ROLE_UNITS_COVERAGE'), false);
 eq('کسری واحد، مانع تأیید نیست (WARN)', hasBlockingErrors(shortGeneral.filter(r => r.check === 'ROLE_UNITS_COVERAGE')), false);
 
+// ۱۳) درس دارای پیش‌نیاز در ترم ۱ → ERROR (ترم ۰ وجود ندارد)
+const prereqTerm1 = validateCurriculumCore(baseInput({
+  courses: baseInput().courses.map(c => c.courseId === 2 ? { ...c, recommendedSemester: 1 } : c),
+  rules: [{ courseId: 2, ruleType: 'PREREQ', logicTree: { operator: 'AND', conditions: [{ course: 'MA101' }] } }],
+}));
+eq('درس دارای پیش‌نیاز در ترم ۱ → ERROR', hasCheck(prereqTerm1, 'PREREQ_FIRST_TERM', 'ERROR'), true);
+eq('… و مانع تأیید است', hasBlockingErrors(prereqTerm1), true);
+
+// پیش‌نیاز هم‌ترم (هر دو ترم ۳) → WARN ترتیب (نه ترم ۱)
+const sameTermPrereq = validateCurriculumCore(baseInput({
+  courses: baseInput().courses.map(c => c.courseId === 1 ? { ...c, recommendedSemester: 3 } : c),
+  rules: [{ courseId: 2, ruleType: 'PREREQ', logicTree: { operator: 'AND', conditions: [{ course: 'MA101' }] } }],
+}));
+eq('پیش‌نیاز هم‌ترم (ترم ۳) → WARN', hasCheck(sameTermPrereq, 'PREREQ_SEMESTER_ORDER', 'WARN'), true);
+eq('پیش‌نیاز هم‌ترم → PREREQ_FIRST_TERM نمی‌دهد', hasCheck(sameTermPrereq, 'PREREQ_FIRST_TERM'), false);
+
+// پیش‌نیاز در ترم زودتر → هیچ‌کدام
+const correctOrder = validateCurriculumCore(baseInput({
+  rules: [{ courseId: 2, ruleType: 'PREREQ', logicTree: { operator: 'AND', conditions: [{ course: 'MA101' }] } }], // MA101 ترم ۱ ← CS201 ترم ۳
+}));
+eq('ترتیب درست (۱ ← ۳) → بدون یافته ترتیبی', hasCheck(correctOrder, 'PREREQ_SEMESTER_ORDER') || hasCheck(correctOrder, 'PREREQ_FIRST_TERM'), false);
+
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
