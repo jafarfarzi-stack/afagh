@@ -595,7 +595,8 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'فرآیندها، SLA و کارتابل (BPM)',
     desc: 'موتور فرآیندها و پایش گلوگاه‌ها',
     group: 'archive',
-    roles: EDU,
+    // کارشناس مالی هم باید درخواست‌های تأیید کارنامهٔ مالی (FINANCE_STATEMENT) را تأیید کند
+    roles: [...EDU, 'FINANCE_EXPERT', 'FINANCE'],
     accent: 'from-purple-950 to-indigo-950 border-purple-700/50',
     iconBg: 'bg-purple-700/80 border-purple-500/50',
     inNav: true,

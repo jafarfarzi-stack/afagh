@@ -77,6 +77,8 @@ interface StudentRequestsClientProps {
   };
   processes: ProcessDef[];
   myRequests: RequestItem[];
+  /** فرآیندِ پیش‌انتخاب‌شده از لینک مستقیم (مثل ?process=FINANCE_STATEMENT) */
+  initialProcessCode?: string | null;
   /** سربرگ گواهی: نام و آرم دانشگاه از تنظیمات (هیچ‌کدام هاردکد نیست) */
   universityTitle?: string | null;
   universityLogo?: string | null;
@@ -171,11 +173,18 @@ export default function StudentRequestsClient({
   student,
   processes,
   myRequests: initialRequests,
+  initialProcessCode,
   universityTitle,
   universityLogo,
 }: StudentRequestsClientProps) {
-  const [activeTab, setActiveTab] = useState<'MY_REQUESTS' | 'NEW_REQUEST'>('MY_REQUESTS');
-  const [selectedProcessCode, setSelectedProcessCode] = useState<string>(processes[0]?.code || 'ENROLLMENT_CERT');
+  const [activeTab, setActiveTab] = useState<'MY_REQUESTS' | 'NEW_REQUEST'>(() =>
+    initialProcessCode && processes.some(p => p.code === initialProcessCode) ? 'NEW_REQUEST' : 'MY_REQUESTS',
+  );
+  const [selectedProcessCode, setSelectedProcessCode] = useState<string>(() =>
+    initialProcessCode && processes.some(p => p.code === initialProcessCode)
+      ? initialProcessCode
+      : (processes[0]?.code || 'ENROLLMENT_CERT'),
+  );
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);

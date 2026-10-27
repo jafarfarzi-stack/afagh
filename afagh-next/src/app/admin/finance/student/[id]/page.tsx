@@ -7,7 +7,9 @@ import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import FinancialTranscript from '@/components/FinancialTranscript';
+import FinancialTranscriptFlat from '@/components/FinancialTranscriptFlat';
 import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
+import { getFinanceStatementApproval } from '@/lib/finance-approval';
 import StatementLinkButton from './StatementLinkButton';
 import FinanceStudentClient from './FinanceStudentClient';
 import { db } from '@/db';
@@ -33,12 +35,16 @@ function jdate(d: string | Date | null | undefined): string {
   return faDigits(`${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`);
 }
 
-export default async function StudentFinancePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StudentFinancePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ format?: string }> }) {
   await requireRole(FINANCE);
 
   const { id } = await params;
   const studentId = Number(id);
   if (!Number.isFinite(studentId)) notFound();
+
+  // قالب سند: «نوع الف» = کارتی (پیش‌فرض) · «نوع ب» = تخت و فشرده
+  const sp = await searchParams;
+  const flatView = sp?.format === 'flat';
 
   const currentUniversity = await getCurrentUniversity();
 const fin = await getStudentFinance(studentId, {
@@ -93,6 +99,9 @@ const fin = await getStudentFinance(studentId, {
 
   const { student, totals, transcript } = fin;
 
+  // وضعیت تأیید کارنامهٔ مالی برای چاپ معتبر (درخواست FINANCE_STATEMENT)
+  const approval = await getFinanceStatementApproval(studentId);
+
   // ریز شهریهٔ متغیر دروس برای همهٔ ترم‌های کارنامه (مسیر یکتای buildTranscriptCourses:
   // وزن از تعرفهٔ رسمی همان سال، جمع قفل‌شده به «شهریهٔ متغیر» دفتر کل)
   const courseMap = await buildTranscriptCourses(studentId, transcript.map((t) => t.termId));
@@ -101,6 +110,9 @@ const fin = await getStudentFinance(studentId, {
     courses: courseMap[t.termId]?.lines ?? [],
     coursesBasis: courseMap[t.termId]?.basis,
   }));
+
+  // نوع الف = کارتی · نوع ب = تخت — هر دو دقیقاً یک قرارداد پراپ دارند
+  const TranscriptDoc = flatView ? FinancialTranscriptFlat : FinancialTranscript;
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -122,15 +134,36 @@ const fin = await getStudentFinance(studentId, {
             </Link>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <PrintTranscriptButton orientation="portrait" />
           <StatementLinkButton studentId={studentId} />
+          {/* نوع سند: الف = کارتی · ب = تخت و فشرده */}
+          <div className="flex overflow-hidden rounded-lg border border-white/30 bg-white/10 text-xs font-bold text-white backdrop-blur">
+            <Link
+              href={`/admin/finance/student/${studentId}`}
+              className={!flatView ? 'bg-white px-3 py-1.5 text-slate-900' : 'px-3 py-1.5 text-white/85 hover:bg-white/10'}
+            >
+              نوع الف
+            </Link>
+            <Link
+              href={`/admin/finance/student/${studentId}?format=flat`}
+              className={flatView ? 'border-r border-white/30 bg-white px-3 py-1.5 text-slate-900' : 'border-r border-white/30 px-3 py-1.5 text-white/85 hover:bg-white/10'}
+            >
+              نوع ب
+            </Link>
+          </div>
+          {/* وضعیت تأیید برای چاپ معتبر */}
+          <span className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${approval ? 'border-emerald-400/50 bg-emerald-400/20 text-emerald-100' : 'border-amber-400/50 bg-amber-400/20 text-amber-100'}`}>
+            {approval
+              ? `✅ تأییدشده برای چاپ معتبر${approval.trackingCode ? ` — ${approval.trackingCode}` : ''}`
+              : '⏳ بدون تأیید کارشناس مالی (QR برای دانشجو غیرفعال)'}
+          </span>
         </div>
       </div>
 
       {/* ═══ بخش چاپ‌شدنی ═══ */}
       <div className="print-area space-y-4">
-        <FinancialTranscript
+        <TranscriptDoc
           student={{ ...student, entryTerm: stuRow?.entryTerm ?? null }}
           terms={transcriptWithCourses}
           totals={totals}

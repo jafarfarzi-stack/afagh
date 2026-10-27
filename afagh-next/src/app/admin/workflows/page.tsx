@@ -19,7 +19,7 @@ import AdminWorkflowsClient from './AdminWorkflowsClient';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminWorkflowsPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE']);
   await ensureDbSchemaPatches();
   await ensureDefaultProcesses();
 

@@ -4,6 +4,8 @@ import { degree_level_configs, notifications, students, universities } from '@/d
 import FinancialTranscript from '@/components/FinancialTranscript';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getStudentFinance } from '@/lib/finance-engine';
+import { getFinanceStatementApproval } from '@/lib/finance-approval';
+import FinancialTranscriptFlat from '@/components/FinancialTranscriptFlat';
 import { computeTermTuition } from '@/lib/tuition-engine';
 import { buildTranscriptCourses } from '@/lib/transcript-courses';
 import { toNum, transcriptTotals } from '@/lib/finance-rules';
@@ -38,7 +40,7 @@ function jdate(d: string | Date | null | undefined): string {
  */
 const STUDENT_EVENTS = ['FINANCE_CHEQUE_DUE'];
 
-export default async function StudentFinancePage({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
+export default async function StudentFinancePage({ searchParams }: { searchParams: Promise<{ record?: string; format?: string }> }) {
   const user = await requireRole(['STUDENT']);
   const picked = await getStudentByUser(user.id);
   if (!picked) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
@@ -61,6 +63,8 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
 
   const sp = await searchParams;
   const wantedRecordId = Number(sp?.record ?? 0) || 0;
+  // قالب سند: «نوع الف» = کارتی (پیش‌فرض) · «نوع ب» = تخت و فشرده
+  const flatView = sp?.format === 'flat';
   let active = picked;
   if (wantedRecordId && wantedRecordId !== picked.id && myRecords.some(r => r.id === wantedRecordId)) {
     const [alt] = await db
@@ -142,22 +146,50 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
   const financeNotifications = notifyRows.filter((n) => !!n.eventCode && STUDENT_EVENTS.includes(n.eventCode));
 
   // توکن امضاشدهٔ کارنامهٔ مالی + QR استعلام برخط (بلوک مهر در بخش چاپی)
+  // نسخهٔ معتبر (QR) فقط پس از تأیید کارشناس مالی — درخواست FINANCE_STATEMENT
+  // در کارتابل درخواست‌ها تأیید می‌شود؛ تا آن زمان سند «غیرقابل استناد» است.
+  const approval = await getFinanceStatementApproval(me.id);
   const publicBaseUrl = await getPublicBaseUrl();
   let stmtVerifyUrl: string | null = null;
   let stmtQr = '';
   let stmtExpiresAt: string | null = null;
-  try {
-    const issued = await issueFinanceStatementToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
-    stmtVerifyUrl = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
-    stmtExpiresAt = issued.expiresAt;
+  if (approval) {
     try {
-      stmtQr = await qrSvg(stmtVerifyUrl, { errorCorrectionLevel: 'M' });
+      const issued = await issueFinanceStatementToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
+      stmtVerifyUrl = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
+      stmtExpiresAt = issued.expiresAt;
+      try {
+        stmtQr = await qrSvg(stmtVerifyUrl, { errorCorrectionLevel: 'M' });
+      } catch (err) {
+        console.error('[student-finance] qr failed', err);
+      }
     } catch (err) {
-      console.error('[student-finance] qr failed', err);
+      console.error('[student-finance] statement token failed', err);
     }
-  } catch (err) {
-    console.error('[student-finance] statement token failed', err);
   }
+
+  // پراپ‌های مشترکِ هر دو قالب (نوع الف/ب) — فقط چیدمان فرق دارد، داده یکی است
+  const transcriptProps = {
+    student: { ...student, entryTerm: me.entryTerm ?? null },
+    terms: transcriptWithCourses,
+    totals,
+    universityTitle: uniTitle,
+    logoUrl: universityLogo,
+    issuedAt: jdate(new Date()),
+    scopeLabel: selectedTerm ? `جمع نیمسال ${selectedTerm.title}` : undefined,
+    official: !!approval,
+    cheques: visibleCheques.map((c) => ({
+      id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
+      amount: toNum(c.amount), dueDate: c.dueDate, status: c.status,
+    })),
+    loans: visibleLoans.map((l) => ({
+      id: l.id, productTitle: l.productTitle, lender: l.lender,
+      amount: toNum(l.amount), installments: l.installments, status: l.status,
+    })),
+    verifyBlock: stmtVerifyUrl ? (
+      <FinanceVerifyBlock url={stmtVerifyUrl} qr={stmtQr} expiresAt={stmtExpiresAt} />
+    ) : undefined,
+  };
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -167,7 +199,7 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           {myRecords.map(r => (
             <a
               key={r.id}
-              href={`/student/finance?record=${r.id}`}
+              href={`/student/finance?record=${r.id}${flatView ? '&format=flat' : ''}`}
               className={`rounded-lg border px-2.5 py-1 font-bold ${r.id === me.id
                 ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
                 : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
@@ -184,8 +216,45 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           <p className="text-xs text-slate-500 mt-1">کارنامهٔ مالی ترم‌به‌ترم، چک‌ها و وام‌ها</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* نوع سند: الف = کارتی · ب = تخت و فشرده */}
+          <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs font-bold">
+            <a
+              href={`/student/finance?${new URLSearchParams({ ...(wantedRecordId ? { record: String(wantedRecordId) } : {}) }).toString()}`}
+              className={!flatView ? 'bg-slate-800 px-3 py-1.5 text-white' : 'bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+            >
+              نوع الف
+            </a>
+            <a
+              href={`/student/finance?${new URLSearchParams({ ...(wantedRecordId ? { record: String(wantedRecordId) } : {}), format: 'flat' }).toString()}`}
+              className={flatView ? 'border-r border-slate-300 bg-slate-800 px-3 py-1.5 text-white' : 'border-r border-slate-300 bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+            >
+              نوع ب
+            </a>
+          </div>
           <PrintTranscriptButton orientation="portrait" />
         </div>
+      </div>
+
+      {/* وضعیت اعتبار سند + مسیر تأیید کارشناس مالی */}
+      <div className={`print:hidden rounded-xl border p-3 text-xs ${approval ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+        {approval ? (
+          <p className="font-bold leading-6">
+            ✅ این کارنامه <b>تأیید کارشناس امور مالی</b> را دارد و نسخهٔ دارای رمز استعلام (QR) در چاپ شما درج می‌شود.
+            {approval.trackingCode ? <span className="font-mono text-[11px]"> (کد رهگیری: {approval.trackingCode})</span> : null}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-bold leading-6">
+              ⚠️ این نسخه <b>غیرقابل استناد</b> است. برای چاپ معتبر با رمز استعلام (QR)، درخواست تأیید کارنامهٔ مالی ثبت کنید تا کارشناس امور مالی آن را تأیید کند.
+            </p>
+            <a
+              href="/student/requests?process=FINANCE_STATEMENT"
+              className="shrink-0 rounded-lg bg-amber-700 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-amber-800"
+            >
+              ثبت درخواست تأیید
+            </a>
+          </div>
+        )}
       </div>
 
       {/* ═══ هشهاد سررسید چک — بیرون از بخش چاپی تا همیشه دیده شود ═══ */}
@@ -230,36 +299,13 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
         </div>
       )}
 
-      {/* ═══ بخش چاپ‌شدنی: کارنامهٔ مالی رسمی ═══ */}
+      {/* ═══ بخش چاپ‌شدنی: کارنامهٔ مالی (نوع الف یا ب) ═══ */}
       <div className="print-area space-y-4">
-        <FinancialTranscript
-          student={{ ...student, entryTerm: me.entryTerm ?? null }}
-          terms={transcriptWithCourses}
-          totals={totals}
-          universityTitle={uniTitle}
-          logoUrl={universityLogo}
-          issuedAt={jdate(new Date())}
-          scopeLabel={selectedTerm ? `جمع نیمسال ${selectedTerm.title}` : undefined}
-          cheques={visibleCheques.map((c) => ({
-            id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
-            amount: toNum(c.amount), dueDate: c.dueDate, status: c.status,
-          }))}
-          loans={visibleLoans.map((l) => ({
-            id: l.id, productTitle: l.productTitle, lender: l.lender,
-            amount: toNum(l.amount), installments: l.installments, status: l.status,
-          }))}
-          verifyBlock={
-            /* بلوک رسمیت مشترک با نمای کارشناس — پیش‌تر اینجا یک نسخهٔ دستیِ
-               ناقص بود: جعبهٔ ۹۶ پیکسلی بدون `overflow-hidden` و بدون
-               `[&>svg]` نگه‌داشتنِ اندازه، در حالی که SVG با عرض ۱۶۰ پیکسل
-               تولید می‌شود؛ در چاپ از جعبه سرریز می‌کرد، روی متن می‌افتاد و
-               بریده می‌شد (اسکن‌نشدنی ⇒ سند غیرقابل استناد). حالا همان
-               کامپوننت نمای کارشناس با اندازهٔ ۲۴ میلی‌متریِ چاپ. */
-            stmtVerifyUrl ? (
-              <FinanceVerifyBlock url={stmtVerifyUrl} qr={stmtQr} expiresAt={stmtExpiresAt} />
-            ) : undefined
-          }
-        />
+        {flatView ? (
+          <FinancialTranscriptFlat {...transcriptProps} />
+        ) : (
+          <FinancialTranscript {...transcriptProps} />
+        )}
       </div>
     </div>
   );

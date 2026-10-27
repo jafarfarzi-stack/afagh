@@ -39,6 +39,15 @@ check('کلمه «دفاع» در توصیف', isThesisProcess({ code: 'X2', des
 check('کلمه «رساله»', isThesisProcess({ title: 'تصویب رساله دکتری' }), true);
 check('فرآیند غیرپایان‌نامه', isThesisProcess({ code: 'ENROLLMENT_CERT', title: 'گواهی اشتغال به تحصیل رسمی', description: 'صدور آنی گواهی' }), false);
 check('فرآیند مرخصی', isThesisProcess({ code: 'LEAVE', title: 'درخواست مرخصی تحصیلی' }), false);
+check(
+  'تأیید کارنامهٔ مالی (FINANCE_STATEMENT) پایان‌نامه نیست و برای همهٔ مقاطع می‌ماند',
+  isThesisProcess({
+    code: 'FINANCE_STATEMENT',
+    title: 'تأیید کارنامهٔ مالی برای چاپ معتبر (QR)',
+    description: 'کارنامهٔ مالی مشاهده‌ای پرتال فاقد اعتبار اداری است. با تأیید کارشناس امور مالی، نسخهٔ دارای رمز استعلام (QR) برای چاپ معتبر فعال می‌شود.',
+  }),
+  false,
+);
 check('Y/K عربی هم می‌گیرد', isThesisProcess({ title: 'درخواست دفاع از پايان‌نامه' }), true);
 
 // ── ترکیب نهایی: گیت مقطع ──

@@ -302,6 +302,8 @@ export interface FinancialTranscriptProps {
   showEvents?: boolean;
   /** نقش بیننده: دانشجو فقط ماسک‌شده می‌بیند؛ کارشناس مالی/ادمین مستندات کامل (شماره حساب/کارت) را می‌بیند */
   viewerRole?: 'STUDENT' | 'FINANCE' | 'ADMIN';
+  /** نسخهٔ رسمی تأییدشده (درخواست FINANCE_STATEMENT تأیید شده) — نوار «غیرقابل استناد» حذف و QR فعال می‌شود */
+  official?: boolean;
   /** جدول چک‌ها / وام‌ها (اگر خالی باشند، بخششان چاپ نمی‌شود) */
   cheques?: TranscriptChequeView[];
   loans?: TranscriptLoanView[];
@@ -321,6 +323,7 @@ export default function FinancialTranscript({
   scopeLabel,
   showEvents = true,
   viewerRole = 'STUDENT',
+  official = false,
   cheques = [],
   loans = [],
   leadBlock,
@@ -387,14 +390,20 @@ export default function FinancialTranscript({
           </div>
         </div>
       </div>
-      {/* نوار «غیرقابل استناد» — فقط در نمای دانشجو (سندِ کارشناس/ادمین سندِ کاری
-          رسمی است و «در انتظار تأیید» رویش معنا ندارد؛ چاپِ معتبرِ دانشجو هم
-          طبق سیاست، منوط به تأیید کارشناس مالی است). متن + کادر ضخیم (نه فقط
-          پس‌زمینه) تا در چاپ سیاه‌وسفید هم خوانده شود. */}
-      {!isFinance && (
+      {/* نوار وضعیت سند — فقط در نمای دانشجو (سندِ کارشناس/ادمین سندِ کاری رسمی است).
+          • تأییدنشده: «غیرقابل استناد / در انتظار تأیید»
+          • تأییدشده (درخواست FINANCE_STATEMENT در وضعیت APPROVED): نوار سبز رسمیت.
+          متن + کادر ضخیم (نه فقط پس‌زمینه) تا در چاپ سیاه‌وسفید هم خوانده شود. */}
+      {!isFinance && !official && (
         <div className="tr-unverified-band mx-4 mb-2 mt-1.5 flex flex-wrap items-center justify-between gap-2 border-2 border-amber-700 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-950">
           <span>⚠️ این کارنامه تا تأیید و مهر کارشناس امور مالی <u>غیرقابل استناد</u> است.</span>
           <span className="shrink-0 font-mono text-[9px] text-amber-900">وضعیت: در انتظار تأیید</span>
+        </div>
+      )}
+      {!isFinance && official && (
+        <div className="tr-official-band mx-4 mb-2 mt-1.5 flex flex-wrap items-center justify-between gap-2 border-2 border-emerald-700 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-950">
+          <span>✅ این کارنامه با تأیید کارشناس امور مالی، دارای <u>رمز استعلام اصالت (QR)</u> است.</span>
+          <span className="shrink-0 font-mono text-[9px] text-emerald-900">وضعیت: تأییدشده</span>
         </div>
       )}
             </td>
@@ -768,10 +777,9 @@ export default function FinancialTranscript({
           </div>
         )}
 
-        {/* بلوک رسمیت: QR استعلام برخط + نشانی — فقط در نمای کارشناس/ادمین.
-            چاپِ معتبرِ دانشجو طبق سیاست منوط به تأیید کارشناس مالی است؛ تا
-            فرآیند تأیید پیاده شود، نسخهٔ دانشجو QR رسمی ندارد. */}
-        {isFinance && verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
+        {/* بلوک رسمیت: QR استعلام برخط + نشانی — برای کارشناس/ادمین همیشه و برای
+            دانشجو فقط در نسخهٔ تأییدشده (official). */}
+        {(isFinance || official) && verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
 
                 </div>
               </td>

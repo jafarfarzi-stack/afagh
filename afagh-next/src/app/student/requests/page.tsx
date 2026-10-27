@@ -20,10 +20,14 @@ import StudentRequestsClient from './StudentRequestsClient';
 
 export const dynamic = 'force-dynamic';
 
-export default async function StudentRequestsPage() {
+export default async function StudentRequestsPage({ searchParams }: { searchParams: Promise<{ process?: string }> }) {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+
+  // لینک‌های مستقیم (مثل «ثبت درخواست تأیید» از صفحهٔ مالی) می‌توانند فرآیند را پیش‌انتخاب کنند
+  const sp = await searchParams;
+  const initialProcessCode = String(sp?.process ?? '').trim() || null;
 
   await ensureDefaultProcesses();
 
@@ -176,6 +180,7 @@ export default async function StudentRequestsPage() {
         universityTitle={uniTitle}
         universityLogo={uniLogo}
         processes={processesList}
+        initialProcessCode={initialProcessCode}
         myRequests={myRequestsFormatted}
       />
     </div>

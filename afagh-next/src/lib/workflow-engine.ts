@@ -547,6 +547,51 @@ export const BUILTIN_PROCESSES: ProcessTemplate[] = [
     ],
   },
   {
+    code: 'FINANCE_STATEMENT',
+    title: 'تأیید کارنامهٔ مالی برای چاپ معتبر (QR)',
+    category: 'گواهی و مدارک',
+    description: 'کارنامهٔ مالی مشاهده‌ای پرتال فاقد اعتبار اداری است. با تأیید کارشناس امور مالی، نسخهٔ دارای رمز استعلام (QR) برای چاپ معتبر فعال می‌شود.',
+    outputTemplate: 'FINANCE_STATEMENT',
+    feeAmount: 0,
+    formSchema: [
+      {
+        key: 'recipientOrg',
+        label: 'نام ارگان / موسسه مقصد (اختیاری)',
+        type: 'text',
+        placeholder: 'مثال: سفارت، دادگاه، کارفرما، بانک',
+        helperText: 'در صورت نیاز به درج نام مقصد در سند، وارد کنید.',
+      },
+      {
+        key: 'purpose',
+        label: 'علت درخواست تأیید',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'OFFICIAL', label: 'ارائه به مراجع رسمی و اداری' },
+          { value: 'EMPLOYMENT', label: 'ارائه به کارفرما / تسهیلات' },
+          { value: 'BANK', label: 'ارائه به بانک / موسسه مالی' },
+          { value: 'OTHER', label: 'سایر' },
+        ],
+      },
+      {
+        key: 'note',
+        label: 'توضیحات (اختیاری)',
+        type: 'textarea',
+        placeholder: 'هر توضیحی که کارشناس مالی لازم بداند...',
+      },
+    ],
+    steps: [
+      {
+        stepOrder: 1,
+        title: 'بررسی وضعیت مالی و تأیید صدور کارنامهٔ معتبر توسط کارشناس امور مالی',
+        stepType: 'USER',
+        roleCode: 'FINANCE_EXPERT',
+        slaHours: 48,
+        timeoutAction: 'NOTIFY',
+      },
+    ],
+  },
+  {
     code: 'COURSE_TRANSFER',
     title: 'تطبیق واحد و معادل‌سازی دروس',
     category: 'آموزش و سرفصل',
