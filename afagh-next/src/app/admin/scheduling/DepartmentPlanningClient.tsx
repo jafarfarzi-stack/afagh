@@ -17,15 +17,15 @@
  * resolveTab به تب ۱ برمی‌گردند) — هم برای کاربر مفید است، هم هر تب را مستقل
  * قابل رندر/تست می‌کند.
  */
-import type { SchedulingWorkspace } from './types';
+import type { SchedulingWorkspace, TimeSlot } from './types';
 import { PlanningProvider } from './PlanningProvider';
 import PlanningShell from './components/PlanningShell';
 
 export default function DepartmentPlanningClient({
-  initial, tab,
-}: { initial: SchedulingWorkspace; tab?: string | null }) {
+  initial, tab, timeSlots,
+}: { initial: SchedulingWorkspace; tab?: string | null; timeSlots?: TimeSlot[] }) {
   return (
-    <PlanningProvider initial={initial} tab={tab}>
+    <PlanningProvider initial={initial} tab={tab} timeSlots={timeSlots}>
       <PlanningShell />
     </PlanningProvider>
   );

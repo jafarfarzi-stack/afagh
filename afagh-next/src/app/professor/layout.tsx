@@ -83,9 +83,9 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
       <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 p-4">
-          {/* ردیف اول: ارم + آواتار + خوش‌آمدگویی و هویت + ابزارهای کاربر */}
-          <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 p-4">
+          {/* تک‌ردیفه مثل پنل مدیر: ارم + هویت + همهٔ ابزارها (نیمسال/نقش/راهنما/خروج) */}
+          <div className="flex flex-wrap items-center gap-2 min-w-0 w-full">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               {/* ارم دانشگاه جای حرف ثابت «آفاق» — اگر ارمی ثبت نشده باشد،
                   همان حرف به‌عنوان fallback نمایش داده می‌شود */}
@@ -116,7 +116,24 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               </div>
             </div>
             {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
-            <div className="hdr-controls flex flex-nowrap items-center gap-2 shrink-0">
+            <div className="hdr-controls flex flex-wrap items-center gap-2 shrink-0">
+              <TermSwitcher
+                terms={termScope.terms}
+                selectedId={termScope.selectedId}
+              />
+              <PanelSwitcher
+                roles={user.roles}
+                current="professor"
+                permissionCount={permissionCount}
+                siblings={siblings}
+                groupTitle={
+                  headed.length === 1
+                    ? headed[0].name
+                    : headed.length > 1
+                      ? `${headed.length.toLocaleString('fa-IR')} گروه`
+                      : undefined
+                }
+              />
               {/* ⚠ این دو لینک باید داخل یک ظرف باشند، نه فرزندِ مستقیمِ
                   `.hdr-controls`: قاعدهٔ `.hdr-controls > a { display:inline-flex }`
                   در globals.css بر `.hidden` غلبه می‌کرد و در موبایل هم دیده
@@ -151,28 +168,6 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               اسکرول کند. همان چهار عدد حالا در داشبورد (/professor) به شکل
               یک نوارِ چهارکاشیِ فشرده نمایش داده می‌شوند — جای طبیعی آمار. */}
 
-          {/* ردیف دوم: سوییچر نیمسال و نقش — کنار هم */}
-          <div className="hdr-controls flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
-            <div className="hdr-controls relative flex flex-wrap items-center gap-2 min-w-0">
-              <TermSwitcher
-                terms={termScope.terms}
-                selectedId={termScope.selectedId}
-              />
-              <PanelSwitcher
-                roles={user.roles}
-                current="professor"
-                permissionCount={permissionCount}
-                siblings={siblings}
-                groupTitle={
-                  headed.length === 1
-                    ? headed[0].name
-                    : headed.length > 1
-                      ? `${headed.length.toLocaleString('fa-IR')} گروه`
-                      : undefined
-                }
-              />
-            </div>
-          </div>
         </div>
 
       </header>

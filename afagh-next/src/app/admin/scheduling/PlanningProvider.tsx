@@ -12,7 +12,7 @@ import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOpt
 import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction } from './actions';
 import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
 
-function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string | null) {
+function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string | null, timeSlotsInit?: TimeSlot[]) {
   // Global Planning Context — همه از دادهٔ واقعی سرور (getSchedulingWorkspaceAction)
   const [selectedTermId, setSelectedTermId] = useState<number>(initial.selectedTermId ?? 0);
   const [selectedProgramId, setSelectedProgramId] = useState<number>(initial.programs[0]?.id ?? 0);
@@ -28,7 +28,8 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
 
   // Time Slots / Bell Schedule State
   const [activeSlotPresetKey, setActiveSlotPresetKey] = useState<'STANDARD_120' | 'STANDARD_90' | 'STANDARD_60'>('STANDARD_120');
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>(TIME_SLOT_PRESETS.STANDARD_120.slots);
+  // زنگ‌ها از تنظیمات دانشگاه می‌آیند (اگر نرسد، الگوی ۲ ساعتهٔ پیش‌فرض)
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>(() => (timeSlotsInit && timeSlotsInit.length ? timeSlotsInit : TIME_SLOT_PRESETS.STANDARD_120.slots));
 
   // Timetable View Mode: ALL (تمام جلسات), EVEN (هفته زوج), ODD (هفته فرد)
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<WeekRecurrence | 'ALL_VIEW'>('ALL_VIEW');
@@ -568,8 +569,8 @@ type PlanningValue = ReturnType<typeof useDepartmentPlanning>;
 
 const PlanningCtx = createContext<PlanningValue | null>(null);
 
-export function PlanningProvider({ initial, tab, children }: { initial: SchedulingWorkspace; tab?: string | null; children: ReactNode }) {
-  const value = useDepartmentPlanning(initial, tab);
+export function PlanningProvider({ initial, tab, timeSlots, children }: { initial: SchedulingWorkspace; tab?: string | null; timeSlots?: TimeSlot[]; children: ReactNode }) {
+  const value = useDepartmentPlanning(initial, tab, timeSlots);
   return <PlanningCtx.Provider value={value}>{children}</PlanningCtx.Provider>;
 }
 

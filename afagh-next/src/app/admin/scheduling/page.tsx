@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { getSchedulingWorkspaceAction } from './actions';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import DepartmentPlanningClient from './DepartmentPlanningClient';
+import { getTimeSlots } from '@/lib/schedule-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,5 +31,7 @@ export default async function DepartmentPlanningPage({
   }
   const sp = await searchParams;
   const tab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
-  return <DepartmentPlanningClient initial={workspace} tab={tab} />;
+  // همان زنگ‌هایی که استاد در «اعلام حضور» می‌بیند — منبع واحد: تنظیمات دانشگاه
+  const timeSlots = await getTimeSlots();
+  return <DepartmentPlanningClient initial={workspace} tab={tab} timeSlots={timeSlots} />;
 }
