@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { lockNowAction, verifyOwnPasswordAction } from '@/lib/step-up-actions';
+import { logoutAction } from '@/app/login/actions';
 
 /**
  * قفل خودکار بیکاری — منبع حقیقت سمت سرور است.
@@ -153,6 +154,16 @@ export default function SessionLock({ name, timeoutMin = 15, initialLocked = fal
             {busy ? 'در حال بررسی…' : '🔓 بازگشایی'}
           </button>
         </div>
+        {/* خروج از حساب — فرم جدا (فرم تودرتو نامعتبر است): نشست می‌بندد و به /login می‌رود.
+            برای کارت‌خوان مشترک/سیستم عمومی که کاربر بعدی رمزِ قبلی را ندارد. */}
+        <form action={logoutAction} className="px-5 pb-5">
+          <button
+            type="submit"
+            className="w-full rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-black text-xs py-2 transition-colors"
+          >
+            🚪 خروج از حساب کاربری
+          </button>
+        </form>
       </form>
     </div>
   );

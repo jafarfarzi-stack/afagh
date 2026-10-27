@@ -15,6 +15,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
 import { getSetting } from '@/lib/settings';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
+import { isGraduateDegreeLevel, isThesisProcess } from '@/lib/request-visibility';
 import StudentRequestsClient from './StudentRequestsClient';
 
 export const dynamic = 'force-dynamic';
@@ -41,8 +42,14 @@ export default async function StudentRequestsPage() {
 
   // درخواست «عدم رعایت پیش‌نیاز/هم‌نیاز» به‌صورت هوشمند از انتخاب واحد ثبت می‌شود؛
   // بنابراین نیازی به ثبت دستی آن در میز خدمات نیست و از فهرست حذف می‌شود.
+  // درخواست‌های پایان‌نامه/پروپوزال/دفاع فقط برای تحصیلات تکمیلی (ارشد/دکتری) معنا
+  // دارند؛ دانشجوی کاردانی/کارشناسی آن‌ها را در فهرست نمی‌بیند.
+  const showThesisRequests = isGraduateDegreeLevel(
+    level ? { code: level.code, title: level.title, isGraduate: level.isGraduate } : null
+  );
   const processesList = rawProcesses
     .filter(p => p.code !== 'PREREQ_WAIVER')
+    .filter(p => showThesisRequests || !isThesisProcess(p))
     .map(p => {
     let schema: any[] = [];
     try {

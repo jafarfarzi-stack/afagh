@@ -100,7 +100,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
           در جدول زمان‌بندی ندارند؛ بنابراین جدول هفتگی خالی است. فهرست دقیق کلاس‌ها در پایین همین کارت آمده است.
         </div>
       ) : (
-        <ProfessorCalendarGrid entries={entries} />
+        <ProfessorCalendarGrid entries={entries} orientation="days-rows" />
       )}
 
       {unscheduled.length > 0 && (

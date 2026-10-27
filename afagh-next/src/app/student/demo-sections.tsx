@@ -5,7 +5,6 @@ import {
   DEMO_DASHBOARD,
   DEMO_DASHBOARD_LIVE_CLASSES,
   DEMO_EXAM,
-  DEMO_EXAM_COURSES,
   DEMO_FINANCE,
   DEMO_STUDENT,
   demoTermFilterNotice,
@@ -230,7 +229,7 @@ export function DemoDashboard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 gap-5">
             <div className="card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -287,51 +286,6 @@ export function DemoDashboard({
                     >
                       ورود به کلاس
                     </Link>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">📝</span>
-                  <div>
-                    <h3 className="font-black text-slate-900 text-sm">
-                      برنامه امتحانات پایان‌ترم و شماره صندلی
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      همراه داشتن کارت آزمون چاپ‌شده و کارت ملی در جلسه آزمون الزامی است
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/student/exam-card"
-                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg"
-                >
-                  کارت آزمون ←
-                </Link>
-              </div>
-
-              <div className="space-y-2.5">
-                {DEMO_EXAM_COURSES.slice(0, 3).map(ex => (
-                  <div
-                    key={ex.enrollmentId}
-                    className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-emerald-50/40 transition flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="font-black text-slate-900">{ex.courseTitle}</div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                        <span>📅 {DEMO_EXAM.examDateFa}</span>
-                        <span>⏰ {DEMO_EXAM.examTime}</span>
-                        <span>🏛️ {DEMO_EXAM.room}</span>
-                      </div>
-                    </div>
-                    <div className="text-left font-mono">
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-950 text-white font-black text-xs">
-                        صندلی {ex.seatNumber}
-                      </span>
-                    </div>
                   </div>
                 ))}
               </div>

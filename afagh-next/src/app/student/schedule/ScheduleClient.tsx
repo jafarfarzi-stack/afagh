@@ -299,7 +299,7 @@ export default function ScheduleClient({
             با فیلتر «{weekFilterLabel}» کلاسی برای نمایش وجود ندارد.
           </div>
         ) : (
-          <ProfessorCalendarGrid entries={visibleEntries} />
+          <ProfessorCalendarGrid entries={visibleEntries} orientation="days-rows" />
         )}
 
         {unscheduled.length > 0 && (

@@ -6,6 +6,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import {
   courses,
   course_offerings,
+  degree_level_configs,
   enrollments,
   grade_objections,
   process_definitions,
@@ -17,6 +18,7 @@ import {
   submitRequestSatisfaction,
   submitStudentRequest,
 } from '@/lib/workflow-engine';
+import { isGraduateDegreeLevel, isThesisProcess } from '@/lib/request-visibility';
 import { issueTranscriptToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { getPublicBaseUrl, getSetting } from '@/lib/settings';
@@ -56,6 +58,38 @@ export async function submitStudentRequestAction(processCode: string, formData: 
 
   const clean = sanitizeRequestFormData(formData, me.id);
   if (!clean.ok) return { ok: false, error: clean.error };
+
+  // گارد مقطع (نه فقط مخفی‌سازی UI): درخواست‌های پایان‌نامه/پروپوزال/دفاع فقط
+  // برای تحصیلات تکمیلی مجاز است؛ کاردانی/کارشناسی حتی با فراخوانی مستقیم اکشن
+  // نمی‌توانند ثبت کنند.
+  const [proc] = await db
+    .select({
+      code: process_definitions.code,
+      title: process_definitions.title,
+      description: process_definitions.description,
+    })
+    .from(process_definitions)
+    .where(eq(process_definitions.code, processCode))
+    .limit(1);
+  if (proc && isThesisProcess(proc)) {
+    const [lvl] = me.degreeLevelId
+      ? await db
+        .select({
+          code: degree_level_configs.code,
+          title: degree_level_configs.title,
+          isGraduate: degree_level_configs.isGraduate,
+        })
+        .from(degree_level_configs)
+        .where(eq(degree_level_configs.id, me.degreeLevelId))
+        .limit(1)
+      : [null];
+    if (!isGraduateDegreeLevel(lvl ?? null)) {
+      return {
+        ok: false,
+        error: 'درخواست‌های پایان‌نامه فقط برای مقاطع تحصیلات تکمیلی (کارشناسی ارشد و دکتری) فعال است.',
+      };
+    }
+  }
 
   try {
     const created = await submitStudentRequest({

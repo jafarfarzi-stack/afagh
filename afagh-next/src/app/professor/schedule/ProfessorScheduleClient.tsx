@@ -285,7 +285,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
         )}
 
         {scheduledRows.length > 0 && (
-          <ProfessorCalendarGrid entries={calendarEntries} />
+          <ProfessorCalendarGrid entries={calendarEntries} orientation="days-rows" />
         )}
 
         {unscheduled.length > 0 && (

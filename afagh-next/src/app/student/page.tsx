@@ -1,10 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import {
-  classrooms,
   course_offerings,
   courses,
   enrollments,
-  schedules,
   staff,
   users,
   virtual_classrooms,
@@ -13,15 +11,12 @@ import { db } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { getTermScope } from '@/lib/term-scope';
 import {
-  buildDashboardScheduleMap,
   buildProfNameMap,
   distinctIds,
   resolveDashboardTerm,
-  toShamsi,
 } from '@/lib/student-dashboard-helpers';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
-import { getExamCardData } from '@/lib/verification';
 import Link from 'next/link';
 import { DemoDashboard } from './demo-sections';
 
@@ -42,13 +37,9 @@ export default async function StudentDashboardPage() {
     return <DemoDashboard name={user.name} filteredTermTitle={filteredTerm?.title ?? null} />;
   }
 
-  const examTerm = term ? { id: term.id, title: term.title } : null;
-
   const [
-    examCard,
     currentEnrollments,
   ] = await Promise.all([
-    getExamCardData(user.id, examTerm),
     term
       ? db
         .select({
@@ -76,10 +67,9 @@ export default async function StudentDashboardPage() {
       : Promise.resolve([]),
   ]);
 
-  const offeringIds = distinctIds(currentEnrollments.map(c => c.offeringId));
   const professorIds = distinctIds(currentEnrollments.map(c => c.professorId));
 
-  const [profUsers, rawSchedules, liveVirtualClasses] = await Promise.all([
+  const [profUsers, liveVirtualClasses] = await Promise.all([
     professorIds.length > 0
       ? db
         .select({
@@ -90,28 +80,6 @@ export default async function StudentDashboardPage() {
         .from(staff)
         .innerJoin(users, eq(users.id, staff.userId))
         .where(inArray(staff.id, professorIds))
-      : Promise.resolve([]),
-    term && offeringIds.length > 0
-      ? db
-        .select({
-          offeringId: schedules.offeringId,
-          scheduleType: schedules.scheduleType,
-          dayOfWeek: schedules.dayOfWeek,
-          examDate: schedules.examDate,
-          startTime: schedules.startTime,
-          endTime: schedules.endTime,
-          roomName: classrooms.name,
-          buildingName: classrooms.buildingName,
-        })
-        .from(schedules)
-        .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
-        .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
-        .where(
-          and(
-            eq(course_offerings.termId, term.id),
-            inArray(schedules.offeringId, offeringIds)
-          )
-        )
       : Promise.resolve([]),
     term && currentEnrollments.length > 0
       ? db
@@ -136,27 +104,6 @@ export default async function StudentDashboardPage() {
   ]);
 
   const profMap = buildProfNameMap(profUsers);
-
-  const schedMap = buildDashboardScheduleMap(rawSchedules);
-
-  // لیست آزمون‌های پیش‌رو با شماره صندلی
-  const upcomingExams = currentEnrollments
-    .map(c => {
-      const s = schedMap.get(c.offeringId);
-      return {
-        code: c.code,
-        title: c.title,
-        group: c.group,
-        units: c.units,
-        professor: c.professorId ? profMap.get(c.professorId) || 'نامشخص' : 'نامشخص',
-        examDate: s?.exam?.examDate ?? null,
-        examTime: s?.exam ? `${s.exam.startTime}` : null,
-        room: s?.exam?.room ?? null,
-        seatNumber: examCard?.courses.find(ec => ec.enrollmentId === c.enrollmentId)?.seatNumber ?? null,
-      };
-    })
-    .filter(ex => ex.examDate != null)
-    .slice(0, 3);
 
   return (
     <div className="space-y-6 animate-in fade-in">
@@ -364,9 +311,10 @@ export default async function StudentDashboardPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. TODAY'S LIVE VIRTUAL CLASSES & UPCOMING EXAMS SPLIT SECTION */}
+      {/* 4. TODAY'S LIVE VIRTUAL CLASSES — کارت آزمون حذف شد: صفحهٔ اختصاصی */}
+      {/* /student/exam-card از «دسترسی سریع» در دسترس است و تکرارش اینجا شلوغی بود. */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 gap-5">
         {/* Virtual Classes Widget */}
         <div className="card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -427,64 +375,6 @@ export default async function StudentDashboardPage() {
                   >
                     ورود به کلاس
                   </Link>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Upcoming Exams Widget */}
-        <div className="card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">📝</span>
-              <div>
-                <h3 className="font-black text-slate-900 text-sm">
-                  برنامه امتحانات پایان‌ترم و شماره صندلی
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  همراه داشتن کارت آزمون چاپ‌شده و کارت ملی در جلسه آزمون الزامی است
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/student/exam-card"
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg"
-            >
-              کارت آزمون ←
-            </Link>
-          </div>
-
-          <div className="space-y-2.5">
-            {upcomingExams.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-3">
-                برای {filteredTerm ? 'نیمسال انتخابی' : 'ترم جاری'} شما زمان‌بندی امتحانی ثبت نشده است.
-              </p>
-            ) : (
-              upcomingExams.map((ex, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-emerald-50/40 transition flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <div className="font-black text-slate-900">{ex.title}</div>
-                    <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                      <span>📅 {toShamsi(ex.examDate)}</span>
-                      {ex.examTime && <span>⏰ {ex.examTime}</span>}
-                      {ex.room && <span>🏛️ {ex.room}</span>}
-                    </div>
-                  </div>
-                  <div className="text-left font-mono">
-                    <span
-                      className={`px-2.5 py-1 rounded-lg font-black text-xs ${
-                        ex.seatNumber != null
-                          ? 'bg-indigo-950 text-white'
-                          : 'bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {ex.seatNumber != null ? `صندلی ${ex.seatNumber}` : 'بدون صندلی'}
-                    </span>
-                  </div>
                 </div>
               ))
             )}
