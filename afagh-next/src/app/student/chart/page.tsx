@@ -16,6 +16,7 @@ import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
+import { parseRequisiteText } from '@/lib/prereq-text';
 import PrintButton from '@/components/PrintButton';
 import { faNum } from '@/lib/report-format';
 import Link from 'next/link';
@@ -162,6 +163,9 @@ export default async function StudentCurriculumChartPage() {
           chartUnits: curriculum_courses.units,
           roleType: curriculum_courses.roleType,
           recommendedSemester: curriculum_courses.recommendedSemester,
+          // منبع سراسری قواعد از «جدول دروس» — fallback وقتی قاعدهٔ نسخه نباشد
+          prereqText: courses.prereqText,
+          coRequisites: courses.coRequisites,
         })
         .from(curriculum_courses)
         .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
@@ -169,6 +173,7 @@ export default async function StudentCurriculumChartPage() {
         .orderBy(asc(curriculum_courses.recommendedSemester), asc(courses.code))
     : [];
 
+  // قواعد همین نسخه (بدون syllabusId، قاعدهٔ نسخهٔ دیگر روی این چارت می‌نشست)
   const prereqRows = version && chartRows.length > 0
     ? await db
         .select({ courseId: course_rules.courseId, logicTree: course_rules.logicTree })
@@ -176,6 +181,7 @@ export default async function StudentCurriculumChartPage() {
         .where(
           and(
             eq(course_rules.ruleType, 'PREREQ'),
+            eq(course_rules.syllabusId, version.id),
             inArray(course_rules.courseId, chartRows.map(r => r.courseId))
           )
         )
@@ -183,6 +189,14 @@ export default async function StudentCurriculumChartPage() {
 
   const prereqMap = new Map<number, string[]>();
   for (const p of prereqRows) prereqMap.set(p.courseId, prereqCodes(p.logicTree));
+  // fallback: اگر برای این درس قاعده‌ای در نسخه ثبت نشده، متن «جدول دروس» خوانده می‌شود
+  for (const r of chartRows) {
+    if (prereqMap.has(r.courseId)) continue;
+    const tree = parseRequisiteText(r.prereqText);
+    if (!tree) continue;
+    const codes = tree.conditions.map(c => ('course' in c ? c.course : '')).filter(Boolean);
+    if (codes.length) prereqMap.set(r.courseId, codes);
+  }
 
   const semesterGroups = new Map<number, typeof chartRows>();
   let chartUnitsTotal = 0;
