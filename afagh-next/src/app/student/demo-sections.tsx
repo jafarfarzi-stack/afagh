@@ -345,14 +345,25 @@ export function DemoDashboard({
 
 export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | null }) {
   return (
-    <div className="space-y-4">
+    <div className="student-chart-print space-y-4">
       {filteredTermTitle ? (
         <>
           <TermNotice title={filteredTermTitle} />
         </>
       ) : (
         <>
-          <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md">
+          {/* هدر چاپی: دانشگاه + مشخصات دانشجو — فقط روی کاغذ */}
+          <div className="chart-print-header hidden print:!block border-b-2 border-slate-800 pb-2 text-center">
+            <div className="t">دانشگاه آفاق</div>
+            <div>
+              چارت تحصیلی — نام و نام خانوادگی: {DEMO_STUDENT.fullName} · شمارهٔ دانشجویی: {DEMO_STUDENT.studentCode}
+            </div>
+            <div>
+              رشته: {DEMO_STUDENT.majorName} · مقطع: {DEMO_STUDENT.degreeTitle} · سال ورود: {DEMO_STUDENT.entryYearFa}
+            </div>
+            <div>☑ = درس گذرانده‌شده · ☐ = پاس‌نشده</div>
+          </div>
+          <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-base font-extrabold">🗺️ چارت تحصیلی و کاتالوگ سرفصل دروس مصوب</h1>
@@ -386,7 +397,7 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
                     {sem.semester === 2 && (
                       <Link
                         href="/student/enroll"
-                        className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors"
+                        className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors print:hidden"
                       >
                         ⚡ انتخاب هوشمند این ترم
                       </Link>
@@ -397,6 +408,7 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
                     <table className="w-full text-right text-xs rt">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                          <th className="p-2 text-center w-8" title="تیک گذرانده‌ها">✓</th>
                           <th className="p-2">کد درس</th>
                           <th className="p-2">عنوان درس</th>
                           <th className="p-2 text-center">واحد</th>
@@ -408,6 +420,14 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
                       <tbody>
                         {sem.courses.map(c => (
                           <tr key={c.code} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="p-2 text-center">
+                              {/* تیک: ترم ۱ دمو گذرانده شده؛ بقیه خالی */}
+                              {sem.semester === 1 ? (
+                                <span className="text-emerald-700 font-black text-base leading-none" title="گذرانده‌شده">☑</span>
+                              ) : (
+                                <span className="text-slate-400 text-base leading-none" title="پاس‌نشده">☐</span>
+                              )}
+                            </td>
                             <td className="p-2 font-mono text-slate-600" dir="ltr">
                               {c.code}
                             </td>

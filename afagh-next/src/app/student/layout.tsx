@@ -110,7 +110,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const lockOn = await evaluateIdleLock(user.id, lockMin).catch(() => false);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-slate-100 print:!bg-white flex flex-col" dir="rtl">
       {/* هدر اصلی — یک بلوک سبز ادغام‌شده: خوش‌آمدگویی + هویت تحصیلی +
           چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
       {/* هدر دانشجو — «یک‌ردیفه»: هویت + چیپ‌های وضعیت + سوییچر ترم/نقش + دکمه‌ها
@@ -217,7 +217,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
         <StudentSidebar user={{ name: user.name, studentCode: sidebarStudentCode }} />
 
         {/* محتوای اصلی صفحه */}
-        <main className="flex-1 min-w-0 overflow-x-hidden p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
+        <main className="flex-1 min-w-0 overflow-x-hidden print:!overflow-visible print:!px-0 print:!pb-2 p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
           {children}
         </main>
       </div>

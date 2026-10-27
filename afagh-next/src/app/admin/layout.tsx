@@ -123,7 +123,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     </>
   );
   return (
-    <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
+    <div className="min-h-screen bg-sky-50/70 print:!bg-white" data-uni={curUni.code}>
       <header className={`${th.header} text-white shadow-md transition-colors sticky top-0 z-40 print:hidden`}>
         {/*
           هدرِ دو‌ردیفیِ صریح (همان الگوی کارتابل استاد):

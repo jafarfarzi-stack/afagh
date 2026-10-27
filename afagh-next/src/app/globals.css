@@ -667,6 +667,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
      گذرانده ☑ و بقیه ☐ چاپ می‌شوند. سربرگ وب (بنر سبز/لینک‌ها) با
      print:hidden حذف و فقط جداول + جمع‌بندی چاپ می‌شود. */
   .student-chart-print { background: #ffffff !important; }
+  /* جداول درون overflow-x-auto در چاپ بریده نشوند */
+  .student-chart-print .overflow-x-auto { overflow: visible !important; }
+  .student-chart-print table { font-size: 8pt !important; table-layout: auto !important; width: 100% !important; }
+  /* خط جدول در کاغذ واضح باشد (border-slate-100 روی کاغذ دیده نمی‌شود) */
+  .student-chart-print table th, .student-chart-print table td { border: 0.4pt solid #94a3b8 !important; }
+  .student-chart-print thead th { background: #f1f5f9 !important; color: #0f172a !important; font-weight: 800 !important; }
   .student-chart-print .chart-print-header { font-size: 9.5pt !important; line-height: 1.5 !important; font-weight: 700 !important; color: #0f172a !important; }
   .student-chart-print .chart-print-header .t { font-size: 12.5pt !important; font-weight: 900 !important; }
   .student-chart-print table { font-size: 8pt !important; }
