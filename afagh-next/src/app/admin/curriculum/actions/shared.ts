@@ -13,8 +13,9 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { course_rules, courses, curriculum_courses, curriculum_versions, degree_level_configs, majors, staff } from '@/db/schema';
 import { type SessionUser } from '@/lib/auth';
-import { CheckResult, CurriculumVersionStatus, LogicNode, assertTransition, canEditStatus, normalizeLogicNode } from '@/lib/curriculum-types';
+import { CheckResult, CurriculumVersionStatus, assertTransition, canEditStatus } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets, validateCurriculumCore } from '@/lib/curriculum-validator';
+import { buildRulesWithCatalogFallback } from '@/lib/curriculum-rules';
 
 export type Act<T extends object = { message: string }> =
   | ({ ok: true } & T)
@@ -107,6 +108,9 @@ export async function loadVersionData(versionId: number) {
       autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
       passGradeStatusCode: curriculum_courses.passGradeStatusCode,
       failGradeStatusCode: curriculum_courses.failGradeStatusCode,
+      // منبعِ سراسری قواعد از «جدول دروس» — برای fallback پایین
+      prereqText: courses.prereqText,
+      coRequisites: courses.coRequisites,
     })
     .from(curriculum_courses)
     .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
@@ -136,15 +140,11 @@ export async function loadVersionData(versionId: number) {
       passGradeStatusCode: r.passGradeStatusCode,
       failGradeStatusCode: r.failGradeStatusCode,
     })),
-    rules: rulesRows.map((r) => {
-      let tree: LogicNode;
-      try { tree = normalizeLogicNode(JSON.parse(r.logicTree)); }
-      catch { tree = { operator: 'AND', conditions: [] }; }
-      return { courseId: r.courseId, ruleType: r.ruleType, logicTree: tree };
-    }),
+    rules: buildRulesWithCatalogFallback(rows, rulesRows),
     existingCodes: new Set(bankCodes.map((c) => c.code)),
   };
 }
+
 
 /** حداقل مقرر از هر نقش در یک برنامهٔ درسی (قابل گسترش بعدی از تنظیمات) */
 
