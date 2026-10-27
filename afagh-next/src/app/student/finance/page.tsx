@@ -14,6 +14,7 @@ import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
+import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
 import { DemoFinance } from '../demo-sections';
 
 export const dynamic = 'force-dynamic';
@@ -248,24 +249,15 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
             amount: toNum(l.amount), installments: l.installments, status: l.status,
           }))}
           verifyBlock={
+            /* بلوک رسمیت مشترک با نمای کارشناس — پیش‌تر اینجا یک نسخهٔ دستیِ
+               ناقص بود: جعبهٔ ۹۶ پیکسلی بدون `overflow-hidden` و بدون
+               `[&>svg]` نگه‌داشتنِ اندازه، در حالی که SVG با عرض ۱۶۰ پیکسل
+               تولید می‌شود؛ در چاپ از جعبه سرریز می‌کرد، روی متن می‌افتاد و
+               بریده می‌شد (اسکن‌نشدنی ⇒ سند غیرقابل استناد). حالا همان
+               کامپوننت نمای کارشناس با اندازهٔ ۲۴ میلی‌متریِ چاپ. */
             stmtVerifyUrl ? (
-              <div className="rounded-lg border border-slate-700 bg-slate-50 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    {stmtQr ? (
-                      <div className="h-24 w-24 shrink-0 border border-slate-300 bg-white p-1" dangerouslySetInnerHTML={{ __html: stmtQr }} />
-                    ) : null}
-                    <div className="text-[11px] leading-6 text-slate-600">
-                      <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
-                      <p className="break-all font-mono text-[10px] text-slate-500" dir="ltr">{stmtVerifyUrl}</p>
-                      {stmtExpiresAt && (
-                        <p>اعتبار استعلام تا {jdate(new Date(stmtExpiresAt))}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null
+              <FinanceVerifyBlock url={stmtVerifyUrl} qr={stmtQr} expiresAt={stmtExpiresAt} />
+            ) : undefined
           }
         />
       </div>

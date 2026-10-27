@@ -35,7 +35,13 @@ export interface StudentFinanceDetail {
     courseType: string | null;
     admissionMethod: string | null;
     entryDate: string | null;
+    entryTerm: number | null;
     settlementDate: Date | null;
+    // ── شناسنامه‌ای برای سربرگ کارنامهٔ مالی (کارنامهٔ رسمی عکس و شناسنامه دارد) ──
+    birthCertNo: string | null;
+    birthDate: Date | null;
+    /** مسیر عکس — فقط اگر photoKey داشته باشد (‎/api/photo/{userId}‎؛ RBAC داخلِ خودِ route) */
+    photoUrl: string | null;
   };
   terms: { id: number; termCode: string; termTitle: string; isCurrent: number | null }[];
   discounts: (typeof student_discounts.$inferSelect & { typeTitle: string | null; typeCode: string | null })[];
@@ -71,7 +77,11 @@ export async function getStudentFinance(
     courseType: students.tuitionType,
     admissionMethod: students.admissionMethod,
     entryDate: students.entryDate,
+    entryTerm: students.entryTerm,
     facultyTitle: faculties.name,
+    birthCertNo: users.birthCertNo,
+    birthDate: users.birthDate,
+    photoKey: users.photoKey,
   }).from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
@@ -271,7 +281,11 @@ export async function getStudentFinance(
       courseType: studentRow.courseType,
       admissionMethod: studentRow.admissionMethod,
       entryDate: studentRow.entryDate,
+      entryTerm: studentRow.entryTerm,
       settlementDate: settlement?.clearedAt ?? null,
+      birthCertNo: studentRow.birthCertNo,
+      birthDate: studentRow.birthDate,
+      photoUrl: studentRow.photoKey ? `/api/photo/${studentRow.userId}` : null,
     },
     terms,
     discounts: discounts.map((d) => ({ ...d.row, typeTitle: d.typeTitle, typeCode: d.typeCode })),

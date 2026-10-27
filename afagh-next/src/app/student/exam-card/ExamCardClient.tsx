@@ -335,6 +335,18 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
                   <span className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 font-black text-xs border border-slate-300">
                     ارزشیابی در حساب دمو ثبت نمی‌شود
                   </span>
+                ) : !(evaluationWindow?.open ?? false) ? (
+                  /* پنجرهٔ ارزشیابی تعیین نشده/بسته است → دکمهٔ همان درس قفل می‌شود.
+                     پیش‌تر فقط یک نوار وضعیت بالای صفحه بود و دکمه فعال می‌ماند؛
+                     دانشجو فرم را پر می‌کرد و آخر کار خطای سرور می‌گرفت. */
+                  <button
+                    type="button"
+                    disabled
+                    title={evaluationWindow?.message ?? 'زمان ارزشیابی برای این ترم تعیین نشده است — تا تعیین مهلت، دکمهٔ ارزشیابی قفل است.'}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-500 font-black text-xs border border-slate-300 cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    <span>🔒 ارزشیابی قفل است</span>
+                  </button>
                 ) : (
                   <button
                     onClick={() => {

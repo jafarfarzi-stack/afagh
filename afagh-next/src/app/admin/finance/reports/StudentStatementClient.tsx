@@ -48,6 +48,13 @@ interface StatementRow {
     units: number;
     perUnit: number;
     amount: number;
+    /** نوع درس مالی سما — جای ستون «نرخ واحد» در ریز کارنامه */
+    maliType?: number | null;
+    offeringType?: string | null;
+    grade?: number | null;
+    courseNature?: string | null;
+    theoreticalUnits?: number;
+    practicalUnits?: number;
   }[];
 }
 

@@ -68,7 +68,7 @@ export default function SemestersTab() {
 
   // کارتِ هشدار پوشش/ترم‌بندی پیش‌نیاز و هم‌نیاز — با نام دروس، نه فقط کد
   const renderDepWarn = (courseId: number) => {
-    const warns = depWarnings.get(courseId);
+    const warns = depWarnings?.get(courseId);
     if (!warns || warns.length === 0) return null;
     const badge = depWarningBadge(warns);
     if (!badge) return null;

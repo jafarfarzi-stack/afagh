@@ -34,6 +34,14 @@ export interface TranscriptCourseLine {
   grade?: number | null;
   /** ماهیت درس (نظری/عملی/نظری-عملی/پروژه/رساله/کارآموزی…) — courses.courseNature */
   courseNature?: string | null;
+  /**
+   * «نوع درس مالی» سما (`courses.legacyMaliType`) — همان کدی که **نرخ هر واحد**
+   * به آن گره خورده است. در کارنامه جای ستون «نرخ واحد» می‌نشیند: خواننده
+   * به‌جای یک عددِ مشتق، دلیلِ نرخ را می‌بیند و مبلغِ هر درس هم سر جای خودش است.
+   */
+  maliType?: number | null;
+  /** سطلِ نوع درس در موتور یکپارچه (نظری/عملی/عمومی) — پشتیبانِ وقتی maliType نیست */
+  offeringType?: string | null;
   /** واحد نظری */
   theoreticalUnits?: number;
   /** واحد عملی */
@@ -77,6 +85,7 @@ export async function buildTranscriptCourses(
       courseCode: courses.code,
       gradeValue: enrollments.gradeValue,
       courseNature: courses.courseNature,
+      legacyMaliType: courses.legacyMaliType,
       theoreticalUnits: courses.theoreticalUnits,
       practicalUnits: courses.practicalUnits,
     }).from(enrollments)
@@ -103,6 +112,14 @@ export async function buildTranscriptCourses(
       basis: tariffLines ? 'TARIFF' : 'LEDGER',
       lines: lines.map((l, i) => {
         const edu = eduMap.get(`${termId}|${String(l.courseCode ?? '').trim()}`);
+        // «نوع درس مالی»: خطِ تعرفه خودش maliType دارد (همان کدی که نرخ را ساخته)
+        // و دقیق‌ترین منبع است؛ در مسیر موتور یکپارچه از کاتالوگ درس خوانده
+        // می‌شود. `offeringType` سطلِ موتور (نظری/عملی/عمومی) است و فقط پشتیبان.
+        const tariffMali = (l as { maliType?: number | null }).maliType;
+        const engineType = (l as { offeringType?: string | null }).offeringType;
+        const maliType = tariffMali != null
+          ? Number(tariffMali)
+          : (edu?.legacyMaliType != null ? Number(edu.legacyMaliType) : null);
         return {
           courseCode: l.courseCode,
           courseTitle: l.courseTitle,
@@ -111,6 +128,8 @@ export async function buildTranscriptCourses(
           amount: shares[i],
           grade: edu && edu.gradeValue != null ? toNum(edu.gradeValue) : null,
           courseNature: edu?.courseNature ?? null,
+          maliType: maliType != null && Number.isFinite(maliType) ? maliType : null,
+          offeringType: engineType ?? null,
           theoreticalUnits: edu ? toNum(edu.theoreticalUnits) : undefined,
           practicalUnits: edu ? toNum(edu.practicalUnits) : undefined,
         };

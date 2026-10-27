@@ -12,7 +12,6 @@ import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import { COURSE_TYPE_FA } from '@/lib/student-labels';
 import { sortTermsForTranscript, groupTermsByAcademicYear, EQUIVALENCE_GROUP_YEAR } from '@/lib/scheduling-core';
-import { getTermScope } from '@/lib/term-scope';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import GradeObjectionPanel from './GradeObjectionPanel';
 
@@ -30,7 +29,11 @@ const statusFa: Record<string, string> = {
   GRADUATED: 'فارغ‌التحصیل',
 };
 
-export default async function StudentTranscriptPage({ searchParams }: { searchParams: Promise<{ record?: string }> }) {
+export default async function StudentTranscriptPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ record?: string; view?: string; term?: string }>;
+}) {
   const user = await requireRole(['STUDENT']);
   const picked = await getStudentByUser(user.id);
   if (!picked) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
@@ -73,11 +76,6 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
   const [identity] = await db.select({ nationalCode: users.nationalCode }).from(users).where(eq(users.id, user.id)).limit(1);
 
   const demo = await isDemoStudentUser(user.id);
-
-  const termScope = await getTermScope(me.universityId);
-  const filteredTerm = termScope.selectedId
-    ? termScope.terms.find(t => t.id === termScope.selectedId) ?? null
-    : null;
 
   const regRows = me.degreeLevelId
     ? await db.select().from(educational_regulations).where(eq(educational_regulations.degreeLevelId, me.degreeLevelId))
@@ -138,18 +136,39 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
       .orderBy(asc(academic_terms.termCode), desc(enrollments.id))
   );
 
-  // دسته‌بندی دروس بر اساس ترم‌ها
-  const scopedRows = filteredTerm ? allRows.filter(r => r.termId === filteredTerm.id) : allRows;
-  const termsMap = new Map<number, { title: string; code: string; isCurrent: boolean; rows: typeof allRows }>();
-  for (const row of scopedRows) {
-    if (!termsMap.has(row.termId)) {
-      termsMap.set(row.termId, {
-        title: row.termTitle,
-        code: row.termCode,
-        isCurrent: !!row.isCurrent,
-        rows: [],
+  // ── دو نمای سند: «کارنامهٔ کل دوره» و «کارنامهٔ نیمسال» ──
+  // پیش‌تر فقط فیلترِ سراسریِ ترم (کوکیِ هدر) بود؛ دانشجو نمی‌فهمید سندش کل
+  // دوره است یا یک نیمسال و دکمهٔ چاپ هم یکی بود. حالا دو سندِ مستقل با آدرس،
+  // عنوان و دکمهٔ چاپ جدا:
+  //     /student/transcript                    → کارنامهٔ کل تحصیلی
+  //     /student/transcript?view=term&term=ID  → کارنامهٔ همان نیمسال
+  const view: 'all' | 'term' = sp?.view === 'term' ? 'term' : 'all';
+  const wantedTermId = Number(sp?.term ?? 0) || 0;
+
+  type TermBucket = { termId: number; title: string; termCode: string; isCurrent: boolean; rows: typeof allRows };
+  const bucketMap = new Map<number, TermBucket>();
+  for (const row of allRows) {
+    if (!bucketMap.has(row.termId)) {
+      bucketMap.set(row.termId, {
+        termId: row.termId, title: row.termTitle, termCode: row.termCode,
+        isCurrent: !!row.isCurrent, rows: [],
       });
     }
+    bucketMap.get(row.termId)!.rows.push(row);
+  }
+  const allTermsAsc = sortTermsForTranscript([...bucketMap.values()]);
+  const currentBucket = allTermsAsc.find(t => t.isCurrent) ?? allTermsAsc[allTermsAsc.length - 1] ?? null;
+  const activeBucket = view === 'term'
+    ? (allTermsAsc.find(t => t.termId === wantedTermId) ?? currentBucket)
+    : null;
+  const scopedRows = activeBucket ? allRows.filter(r => r.termId === activeBucket.termId) : allRows;
+
+  // دسته‌بندی دروس بر اساس ترم‌ها
+  const termsMap = new Map<number, TermBucket>();
+  for (const row of scopedRows) {
+    const base = bucketMap.get(row.termId);
+    if (!base) continue;
+    if (!termsMap.has(row.termId)) termsMap.set(row.termId, { ...base, rows: [] });
     termsMap.get(row.termId)!.rows.push(row);
   }
 
@@ -159,7 +178,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
   // ۱. معادل‌سازی‌ها اول می‌آیند
   // ۲. بعد ترم‌های تحصیلی بر اساس سال و نیمسال
   const sortedTerms = sortTermsForTranscript(
-    termsList.map(t => ({ termCode: t.code, title: t.title, isCurrent: t.isCurrent, rows: t.rows }))
+    termsList.map(t => ({ termId: t.termId, termCode: t.termCode, title: t.title, isCurrent: t.isCurrent, rows: t.rows }))
   );
 
   const groupedYears = groupTermsByAcademicYear(
@@ -200,6 +219,38 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
   }
 
   const totalCumulativeGpa = officialGpaData.totalUnits > 0 ? officialGpaData.gpa.toFixed(2) : '—';
+
+  // ── خلاصهٔ همان نیمسال (نمای «کارنامهٔ نیمسال») ──
+  // معدل نیمسال فقط از دروسِ عددیِ همان ترم ساخته می‌شود؛ آوردن معدل کل روی
+  // سندِ یک نیمسال، سند را گمراه‌کننده می‌کرد. نام‌ها با پیشوند `scope` تا با
+  // متغیرهای محلیِ حلقهٔ ترم (termGpa/termGradedUnits) قاطی نشوند.
+  let scopeEnrolledUnits = 0;
+  let scopePassedUnits = 0;
+  let scopeGradedUnits = 0;
+  let scopeWeightedScore = 0;
+  let scopeFailedUnits = 0;
+  for (const r of scopedRows) {
+    const u = Number(r.units || 0);
+    const isDescriptive = r.gradingType === 'DESCRIPTIVE' || Number(r.grade) === 1 || r.affectsGpa === 0;
+    if (r.status === 'REGISTERED' || r.status === 'PENDING_COUNCIL') scopeEnrolledUnits += u;
+    if (isDescriptive) {
+      if (r.grade != null && Number(r.grade) === 1) scopePassedUnits += u;
+      if (r.grade != null && Number(r.grade) === 0) scopeFailedUnits += u;
+    } else {
+      if (r.grade != null && Number(r.grade) >= 10) scopePassedUnits += u;
+      if (r.grade != null && Number(r.grade) < 10) scopeFailedUnits += u;
+      if (r.grade != null && Number(r.grade) >= 0 && Number(r.grade) <= 20) {
+        scopeGradedUnits += u;
+        scopeWeightedScore += Number(r.grade) * u;
+      }
+    }
+  }
+  const scopeGpa = scopeGradedUnits > 0 ? (scopeWeightedScore / scopeGradedUnits).toFixed(2) : '—';
+  const isTermView = view === 'term' && !!activeBucket;
+  const docTitle = isTermView ? 'کارنامهٔ نیمسال' : 'کارنامهٔ کل تحصیلی دانشجو';
+  const docSubtitle = isTermView
+    ? `ریزنمرات نیمسال ${activeBucket!.title}`
+    : 'ریزنمرات قطعی دوره‌های آموزشی';
   const todayFa = new Date().toLocaleDateString('fa-IR');
 
   // ── درخواست‌های «کارنامه معتبر» دانشجو + بلوک رسمیت (فقط پس از تأیید) ──
@@ -287,16 +338,62 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
           <span className="text-[10px] text-slate-400">هر مقطع کارنامهٔ جداگانه و QR جدا دارد.</span>
         </div>
       )}
-      {/* دکمه چاپ و عملیات بالای سند */}
-      <div className="flex items-center justify-between bg-white p-3 px-4 rounded-xl shadow-sm border border-slate-200 print:hidden">
+      {/* نوار ابزار: انتخاب نمای سند (کل / نیمسال) + چاپ همان نما */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 px-4 shadow-sm print:hidden">
         <div className="flex items-center gap-2">
           <span className="text-xl">📜</span>
           <div>
-            <h2 className="text-sm font-bold text-slate-800">کارنامه مشاهده‌ای دانشجو</h2>
-            <p className="text-xs text-slate-500">ریزنمرات شخصی — این نسخه <b>فاقد اعتبار اداری (غیرقابل استناد)</b> است</p>
+            <h2 className="text-sm font-bold text-slate-800">
+              کارنامه {isTermView ? 'نیمسال' : 'کل'} — نسخهٔ مشاهده‌ای
+            </h2>
+            <p className="text-xs text-slate-500">
+              {docSubtitle} — این نسخه <b>فاقد اعتبار اداری (غیرقابل استناد)</b> است
+            </p>
           </div>
         </div>
-        <PrintTranscriptButton orientation="landscape" />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* دو سند جدا با دکمهٔ جدا */}
+          <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs font-bold">
+            <a
+              href={`/student/transcript${wantedRecordId ? `?record=${wantedRecordId}` : ''}`}
+              className={view === 'all'
+                ? 'bg-slate-800 px-3 py-1.5 text-white'
+                : 'bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+            >
+              کارنامهٔ کل
+            </a>
+            <a
+              href={`/student/transcript?view=term&term=${activeBucket?.termId ?? ''}${wantedRecordId ? `&record=${wantedRecordId}` : ''}`}
+              className={view === 'term'
+                ? 'border-r border-slate-300 bg-slate-800 px-3 py-1.5 text-white'
+                : 'border-r border-slate-300 bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+            >
+              کارنامهٔ نیمسال
+            </a>
+          </div>
+          {isTermView && allTermsAsc.length > 0 && (
+            <form method="get" className="flex items-center gap-1">
+              <input type="hidden" name="view" value="term" />
+              {wantedRecordId ? <input type="hidden" name="record" value={wantedRecordId} /> : null}
+              <select
+                name="term"
+                defaultValue={String(activeBucket?.termId ?? '')}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-700"
+              >
+                {[...allTermsAsc].reverse().map(t => (
+                  <option key={t.termId} value={t.termId}>{t.title}</option>
+                ))}
+              </select>
+              <button type="submit" className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                نمایش
+              </button>
+            </form>
+          )}
+          <PrintTranscriptButton
+            orientation="landscape"
+            label={isTermView ? 'چاپ کارنامهٔ نیمسال' : 'چاپ کارنامهٔ کل'}
+          />
+        </div>
       </div>
 
       {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
@@ -319,9 +416,9 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
               <img src={universityLogo} alt={"آرم دانشگاه"} className={"mb-1 h-12 w-12 shrink-0 object-contain"} />
             ) : null}
               <h1 className="text-base font-black tracking-wide text-slate-950 border-b border-slate-800 pb-0.5 px-4">
-                کارنامه کل تحصیلی دانشجو
+                {docTitle}
               </h1>
-              <p className="text-[10px] text-slate-600 mt-0.5">ریزنمرات قطعی دوره‌های آموزشی</p>
+              <p className="text-[10px] text-slate-600 mt-0.5">{docSubtitle}</p>
             </div>
 
             {/* ستون چپ (اطلاعات سند) */}
@@ -332,6 +429,15 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
               <p><span className="font-sans text-slate-500">وضعیت: </span><b className="text-emerald-800 font-sans">{statusFa[me.status] ?? me.status}</b></p>
             </div>
           </div>
+        </div>
+
+        {/* ۱.۵ نوار «غیرقابل استناد» — باید در **چاپ** هم دیده شود، نه فقط روی صفحه.
+            عمداً «متن + کادر ضخیم» است نه فقط پس‌زمینهٔ رنگی (بسیاری از چاپگرها
+            پس‌زمینه را حذف می‌کنند). متنِ نوار همان سیاست سند است: نسخهٔ مشاهده‌ای
+            تا تأیید کارشناس، سند استنادی نیست و نسخهٔ معتبر از مسیر درخواست صادر می‌شود. */}
+        <div className="tr-unverified-band mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-amber-700 bg-amber-50 px-3 py-1.5 text-[10px] font-black text-amber-950">
+          <span>⚠️ این کارنامه تا تأیید کارشناس امور آموزشی <u>غیرقابل استناد</u> است.</span>
+          <span className="shrink-0 font-mono text-[9px] text-amber-900">نسخهٔ مشاهده‌ای — بدون رمز تایید</span>
         </div>
 
         {/* ۲. جدول مشخصات هویتی، آموزشی و آیین‌نامه اجرایی */}
@@ -373,8 +479,8 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
         {/* ۳. ریزنمرات به تفکیک سال‌های تحصیلی و نیمسال‌ها */}
         {academicYears.length === 0 && (
           <div className="col-span-full p-8 text-center text-slate-400 border border-dashed border-slate-300">
-            {filteredTerm
-              ? `برای نیمسال «${filteredTerm.title}» درسی در کارنامه ثبت نشده است.`
+            {isTermView
+              ? `برای نیمسال «${activeBucket!.title}» درسی در کارنامه ثبت نشده است.`
               : 'هنوز درسی در پرونده کارنامه ثبت نشده است.'}
           </div>
         )}
@@ -543,25 +649,29 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
 
         <div className="border-2 border-slate-800 mt-6 overflow-hidden">
           <div className="bg-slate-800 text-white px-3 py-1 font-bold text-center text-xs">
-            خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه
+            {isTermView
+              ? `خلاصه وضعیت نیمسال ${activeBucket!.title}`
+              : 'خلاصه وضعیت تحصیلی کل دوره تا تاریخ صدور کارنامه'}
           </div>
           <table className="w-full text-center text-[11px] border-collapse font-bold rt">
             <tbody>
               <tr className="bg-slate-100 border-b border-slate-400 text-slate-700">
-                <td className="p-2 border-l border-slate-300">کل واحدهای اخذشده</td>
-                <td className="p-2 border-l border-slate-300">کل واحدهای گذرانده</td>
-                <td className="p-2 border-l border-slate-300">کل واحدهای مردودی</td>
+                <td className="p-2 border-l border-slate-300">{isTermView ? 'واحدهای اخذشده' : 'کل واحدهای اخذشده'}</td>
+                <td className="p-2 border-l border-slate-300">{isTermView ? 'واحدهای گذرانده' : 'کل واحدهای گذرانده'}</td>
+                <td className="p-2 border-l border-slate-300">{isTermView ? 'واحدهای مردودی' : 'کل واحدهای مردودی'}</td>
                 <td className="p-2 border-l border-slate-300">واحدهای مؤثر در معدل</td>
-                <td className="p-2 border-l border-slate-300 bg-slate-200 text-slate-950">معدل کل دوره (GPA)</td>
-                <td className="p-2">وضعیت نهایی دانشجو</td>
+                <td className="p-2 border-l border-slate-300 bg-slate-200 text-slate-950">
+                  {isTermView ? 'معدل نیمسال' : 'معدل کل دوره (GPA)'}
+                </td>
+                <td className="p-2">{isTermView ? 'وضعیت دانشجو' : 'وضعیت نهایی دانشجو'}</td>
               </tr>
               <tr className="text-slate-950 text-xs font-mono">
-                <td className="p-2 border-l border-slate-300">{totalEnrolledUnits} واحد</td>
-                <td className="p-2 border-l border-slate-300 text-emerald-800">{totalPassedUnits} واحد</td>
-                <td className="p-2 border-l border-slate-300 text-red-700">{failedUnits} واحد</td>
-                <td className="p-2 border-l border-slate-300">{totalGradedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300">{isTermView ? scopeEnrolledUnits : totalEnrolledUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300 text-emerald-800">{isTermView ? scopePassedUnits : totalPassedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300 text-red-700">{isTermView ? scopeFailedUnits : failedUnits} واحد</td>
+                <td className="p-2 border-l border-slate-300">{isTermView ? scopeGradedUnits : totalGradedUnits} واحد</td>
                 <td className="p-2 border-l border-slate-300 bg-emerald-50 text-emerald-950 font-black text-sm">
-                  {totalCumulativeGpa}
+                  {isTermView ? scopeGpa : totalCumulativeGpa}
                 </td>
                 <td className="p-2 font-sans font-bold text-emerald-800">
                   {statusFa[me.status] ?? me.status}
@@ -569,7 +679,7 @@ export default async function StudentTranscriptPage({ searchParams }: { searchPa
               </tr>
             </tbody>
           </table>
-          {officialGpaData.excludedCount > 0 && (
+          {!isTermView && officialGpaData.excludedCount > 0 && (
             <div className="bg-emerald-50 px-3 py-1.5 border-t border-emerald-200 text-[10px] text-emerald-900 font-medium flex items-center justify-between">
               <span>✨ تعداد <b>{officialGpaData.excludedCount} نمره مردودی</b> پس از قبولی مجدد در درس، طبق مصوبه آیین‌نامه (EXCLUDE_IF_PASSED) از مخرج و صورت معدل کل کسر گردید.</span>
               <span className="font-bold text-emerald-950">آیین‌نامه ملاک عمل</span>

@@ -2,6 +2,7 @@
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import { normalizeTermCode } from '@/lib/scheduling-core';
 import { PAY_TYPE_LABELS } from '@/lib/finance-rules/statement';
+import { courseTypeLabelOf } from '@/lib/mali-types';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -17,6 +18,14 @@ import { PAY_TYPE_LABELS } from '@/lib/finance-rules/statement';
  */
 
 const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-IR');
+
+/**
+ * برچسبِ «نوع درس» برای ستون کارنامه (جایگزینِ «نرخ واحد» — درخواست کاربر):
+ * نرخ هر واحد در سما از «نوع درس مالی» می‌آید، نه از واحد؛ پس همان چیزی که
+ * واقعاً مبلغ را می‌سازد نمایش داده می‌شود. منطقش در `mali-types` است تا
+ * جداگانه تست شود.
+ */
+const courseTypeLabel = (c: TranscriptCourseView) => courseTypeLabelOf(c);
 
 /** تاریخ شمسی خوانا؛ تهی → خط تیره */
 function jdate(d: string | Date | null | undefined): string {
@@ -62,6 +71,10 @@ export interface TranscriptCourseView {
   grade?: number | null;
   /** ماهیت درس (نظری/عملی/…) */
   courseNature?: string | null;
+  /** نوع درس مالی سما (LT7.Mali_type) — همان کدی که نرخ هر واحد را تعیین می‌کند */
+  maliType?: number | null;
+  /** سطلِ نوع درس در موتور یکپارچه (نظری/عملی/عمومی) — پشتیبانِ maliType */
+  offeringType?: string | null;
   theoreticalUnits?: number;
   practicalUnits?: number;
 }
@@ -139,6 +152,17 @@ export interface TranscriptStudentView {
   admissionMethod?: string | null;
   entryDate?: string | Date | null;
   settlementDate?: string | Date | null;
+  // ── سربرگِ رسمی (عکس و شناسنامه‌ای) ──
+  /** مسیر عکس دانشجو (‎/api/photo/{userId}‎) — خالی = کادر «عکس» */
+  photoUrl?: string | null;
+  /** شمارهٔ شناسنامه (users.birthCertNo) */
+  birthCertNo?: string | null;
+  /** تاریخ تولد (users.birthDate) */
+  birthDate?: string | Date | null;
+  /** شمارهٔ سند/نامهٔ صدور — در ستون چپ سربرگ */
+  documentNo?: string | null;
+  /** نام دانشگاه مبدأ (دانشجوی انتقالی) */
+  originUniversityTitle?: string | null;
 }
 
 export interface TranscriptChequeView {
@@ -332,16 +356,19 @@ export default function FinancialTranscript({
           </div>
           {/* ستون وسط (نشان و عنوان سند) */}
           <div className="flex flex-col items-center justify-center">
-            {/* آرم از تنظیمات سراسری/دانشگاه؛ اگر تعریف نشده باشد چیزی چاپ نمی‌شود
-                (نه یک نشان ساختگی با نام هاردکد) */}
+            {/* آرم از تنظیمات سراسری/دانشگاه می‌آید؛ اگر تعریف نشده باشد کادرِ
+                جای‌نگهدار چاپ می‌شود (مثل کارنامهٔ تحصیلی) تا جای ارم خالی نماند */}
             {logoUrl ? (
               <img src={logoUrl} alt="آرم دانشگاه" className="mb-1 h-12 w-12 shrink-0 object-contain" />
-            ) : null}
+            ) : (
+              <span className="mb-1 rounded border border-dashed border-slate-300 px-1.5 py-1 text-[9px] text-slate-400">ارم دانشگاه</span>
+            )}
             <h2 className="border-b border-slate-800 pb-0.5 px-4 text-base font-black tracking-wide text-slate-950">کارنامهٔ مالی دانشجو</h2>
             <p className="mt-0.5 text-[10px] text-slate-600">صورت وضعیت بدهی، تخفیف، پوشش، پرداخت، چک و وام — ترم‌به‌ترم</p>
           </div>
           {/* ستون چپ (اطلاعات سند) */}
           <div className="space-y-1 text-left font-mono text-[11px]">
+            {student.documentNo ? <p><span className="font-sans text-slate-500">شماره سند: </span><b>{student.documentNo}</b></p> : null}
             <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{faDigits(student.studentCode || '—')}</b></p>
             {issuedAt ? <p><span className="font-sans text-slate-500">تاریخ صدور: </span><b>{issuedAt}</b></p> : null}
             {/* شمارهٔ صفحهٔ واقعی را پاصفحهٔ چاپ (@page) می‌زند؛ این خط ثابت در چاپ حذف می‌شود */}
@@ -350,6 +377,13 @@ export default function FinancialTranscript({
           </div>
         </div>
       </div>
+      {/* نوار «غیرقابل استناد» — عمداً داخل thead است تا در **هر صفحهٔ چاپ** تکرار شود؛
+          سند مالی تا مهر کارشناس سند استنادی نیست. متن + کادر ضخیم (نه فقط پس‌زمینه)
+          تا در چاپ سیاه‌وسفید هم خوانده شود. */}
+      <div className="tr-unverified-band mx-4 mb-2 mt-1.5 flex flex-wrap items-center justify-between gap-2 border-2 border-amber-700 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-950">
+        <span>⚠️ این کارنامه تا تأیید و مهر کارشناس امور مالی <u>غیرقابل استناد</u> است.</span>
+        <span className="shrink-0 font-mono text-[9px] text-amber-900">وضعیت: در انتظار تأیید</span>
+      </div>
             </td>
           </tr>
         </thead>
@@ -357,57 +391,73 @@ export default function FinancialTranscript({
           <tr className="tr-doc-row">
             <td className="tr-doc-cell">
       <div className="space-y-3 p-4">
-        {/* ── جدول مشخصات ── */}
-        <table className="tr-fin-info w-full border-collapse border border-slate-700 text-[11px] rt">
+        {/* ── مشخصات فشرده (۳ جفت در هر سطر) + عکس در سمت چپ (درخواست کاربر) ── */}
+        <div className="flex items-stretch gap-1.5">
+          <table className="tr-fin-info w-full border-collapse border border-slate-700 text-[10px] rt">
           <tbody>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نام و نام خانوادگی</td>
-              <td className="border border-slate-300 px-2 py-1.5 font-medium">{student.fullName || '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">کد ملی</td>
-              <td className="border border-slate-300 px-2 py-1.5">{faDigits(student.nationalCode || '—')}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نام و نام خانوادگی</td>
+              <td className="border border-slate-300 px-1.5 py-1 font-medium">{student.fullName || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">کد ملی</td>
+              <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.nationalCode || '—')}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">شمارهٔ دانشجویی</td>
+              <td className="border border-slate-300 px-1.5 py-1 font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">شمارهٔ دانشجویی</td>
-              <td className="border border-slate-300 px-2 py-1.5 text-right font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">مقطع</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.degreeTitle || '—'}</td>
-            </tr>
-            <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">رشته</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.majorTitle || '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نیمسال ورود</td>
-              <td className="border border-slate-300 px-2 py-1.5">
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">مقطع</td>
+              <td className="border border-slate-300 px-1.5 py-1">{student.degreeTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">رشته</td>
+              <td className="border border-slate-300 px-1.5 py-1">{student.majorTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نیمسال ورود</td>
+              <td className="border border-slate-300 px-1.5 py-1">
                 {student.entryTerm
                   ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
                   : (student.entryYear ? fa(student.entryYear) : '—')}
               </td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">دانشکده</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.facultyTitle || '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">سهمیه</td>
-              <td className="border border-slate-300 px-2 py-1.5">{quotaLabel(student.quotaType)}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">دانشکده</td>
+              <td className="border border-slate-300 px-1.5 py-1">{student.facultyTitle || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">سهمیه</td>
+              <td className="border border-slate-300 px-1.5 py-1">{quotaLabel(student.quotaType)}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نوع دوره</td>
+              <td className="border border-slate-300 px-1.5 py-1">{student.courseType || '—'}</td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">نوع دوره</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.courseType || '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">تاریخ ورود</td>
-              <td className="border border-slate-300 px-2 py-1.5">{jdate(student.entryDate)}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ ورود</td>
+              <td className="border border-slate-300 px-1.5 py-1">{jdate(student.entryDate)}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">روش پذیرش</td>
+              <td className="border border-slate-300 px-1.5 py-1">{student.admissionMethod || '—'}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ تسویه</td>
+              <td className="border border-slate-300 px-1.5 py-1">{jdate(student.settlementDate)}</td>
             </tr>
             <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">روش پذیرش</td>
-              <td className="border border-slate-300 px-2 py-1.5">{student.admissionMethod || '—'}</td>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">تاریخ تسویه</td>
-              <td className="border border-slate-300 px-2 py-1.5">{jdate(student.settlementDate)}</td>
-            </tr>
-            <tr>
-              <td className="border border-slate-300 bg-slate-100 px-2 py-1.5 font-bold text-slate-700">وضعیت مالی کل</td>
-              <td colSpan={3} className="border border-slate-300 px-2 py-1.5">
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${grand.cls}`}>{grand.text}</span>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ تولد</td>
+              <td className="border border-slate-300 px-1.5 py-1">{jdate(student.birthDate)}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">شمارهٔ شناسنامه</td>
+              <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.birthCertNo || '—')}</td>
+              <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">وضعیت مالی</td>
+              <td className="border border-slate-300 px-1.5 py-1">
+                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${grand.cls}`}>{grand.text}</span>
               </td>
             </tr>
+            {student.originUniversityTitle ? (
+              <tr>
+                <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">دانشگاه مبدأ</td>
+                <td colSpan={5} className="border border-slate-300 px-1.5 py-1">{student.originUniversityTitle}</td>
+              </tr>
+            ) : null}
           </tbody>
-        </table>
+          </table>
+          {/* عکس — چسبیده به سمت چپ جدول مشخصات */}
+          <div className="flex w-[17mm] shrink-0 items-start justify-center border border-slate-400">
+            {student.photoUrl ? (
+              <img src={student.photoUrl} alt="عکس دانشجو" className="h-[22mm] w-[17mm] object-cover" />
+            ) : (
+              <div className="flex h-[22mm] w-[17mm] items-center justify-center text-[9px] text-slate-400">عکس</div>
+            )}
+          </div>
+        </div>
 
         {leadBlock}
 
@@ -513,22 +563,16 @@ export default function FinancialTranscript({
                         </div>
                         {t.courses && t.courses.length > 0 && (
                           <div className="border-t border-slate-200">
-                            <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">
-                              ریز شهریه متغیر دروس{' '}
-                              <span className="tr-print-hide font-medium text-slate-500">
-                                {t.coursesBasis === 'TARIFF'
-                                  ? '(بر پایهٔ تعرفهٔ رسمی همان سال — نظری×نرخ + عملی×نرخِ نوع درس؛ تخصیص‌یافته به جمع دفتر کل)'
-                                  : '(محاسباتی — مبنای سند، جمع دفتر کل است)'}
-                              </span>
-                            </p>
+                            <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">ریز شهریه متغیر دروس</p>
                             <table className="tr-term-table tr-fin-courses w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
                               <colgroup>
                                 <col style={{ width: '6%' }} />
                                 <col style={{ width: '14%' }} />
-                                <col style={{ width: '30%' }} />
-                                <col style={{ width: '7%' }} />
+                                <col style={{ width: '27%' }} />
+                                <col style={{ width: '6%' }} />
+                                <col style={{ width: '9%' }} />
+                                <col style={{ width: '16%' }} />
                                 <col style={{ width: '22%' }} />
-                                <col style={{ width: '21%' }} />
                               </colgroup>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-600">
@@ -536,7 +580,8 @@ export default function FinancialTranscript({
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">کد درس</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 font-bold">نام درس</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">واحد</th>
-                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نرخ واحد</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نمره</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نوع درس</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">مبلغ متغیر</th>
                                 </tr>
                               </thead>
@@ -545,23 +590,18 @@ export default function FinancialTranscript({
                                   <tr key={i} className="border-t border-slate-100">
                                     <td className="px-1 py-0.5 text-center text-slate-500">{fa(i + 1)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode || '—'}</td>
-                                    <td className="tr-course-title px-1 py-0.5 font-medium">
-                                      {c.courseTitle || '—'}
-                                      {(c.grade != null || c.courseNature || c.theoreticalUnits || c.practicalUnits) ? (
-                                        <span className="mt-0.5 block text-[8px] font-normal text-slate-500">
-                                          {c.grade != null ? <>نمره: <b className="text-slate-700">{fa(c.grade)}</b></> : null}
-                                          {c.courseNature ? <>{c.grade != null ? ' · ' : ''}ماهیت: {c.courseNature}</> : null}
-                                          {(c.theoreticalUnits || c.practicalUnits) ? <>{c.grade != null || c.courseNature ? ' · ' : ''}نظری/عملی: {fa(c.theoreticalUnits ?? 0)}/{fa(c.practicalUnits ?? 0)}</> : null}
-                                        </span>
-                                      ) : null}
-                                    </td>
+                                    <td className="tr-course-title px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.units)}</td>
-                                    <td className="px-1 py-0.5 text-center font-mono">{fa(c.perUnit)}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono">{c.grade != null ? fa(c.grade) : '—'}</td>
+                                    <td className="px-1 py-0.5 text-center">
+                                      {courseTypeLabel(c)}
+                                      {c.maliType != null ? <span className="tr-print-hide font-mono text-[7px] text-slate-400"> {fa(c.maliType)}</span> : null}
+                                    </td>
                                     <td className="px-1 py-0.5 text-left font-bold">{fa(c.amount)}</td>
                                   </tr>
                                 ))}
                                 <tr className="border-t border-slate-200 bg-slate-50/60">
-                                  <td colSpan={5} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
+                                  <td colSpan={6} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
                                   <td className="px-1 py-0.5 text-left font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.amount) || 0), 0))}</td>
                                 </tr>
                               </tbody>

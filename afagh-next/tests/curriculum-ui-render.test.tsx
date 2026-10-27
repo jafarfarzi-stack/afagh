@@ -10,7 +10,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CurriculumCtx } from '../src/app/admin/curriculum/curriculum-context.ts';
-import { leafCourseCodesOf, leafTotalOf } from '../src/app/admin/curriculum/curriculum-core.ts';
+import { leafCourseCodesOf, leafTotalOf, dependencyWarningsMap } from '../src/app/admin/curriculum/curriculum-core.ts';
 import AddCourseModal from '../src/app/admin/curriculum/components/AddCourseModal.tsx';
 import CatalogTab from '../src/app/admin/curriculum/components/CatalogTab.tsx';
 import CourseRulesModal from '../src/app/admin/curriculum/components/CourseRulesModal.tsx';
@@ -31,8 +31,8 @@ import VersionDetailPanel from '../src/app/admin/curriculum/components/VersionDe
 
 const noop = () => {};
 const courses = [
-  { courseId: 21, code: 'CM101', title: 'مبانی برنامه‌سازی', units: 3, roleType: 'CORE', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1, minGrade: null },
-  { courseId: 22, code: 'CM102', title: 'ساختار داده', units: 3, roleType: 'GENERAL', isRequired: 0, isElective: 1, isGraduationRequired: 0, recommendedSemester: null, minGrade: 10 },
+  { courseId: 21, code: 'CM101', title: 'مبانی برنامه‌سازی', units: 3, roleType: 'CORE', isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1, minGrade: null, passGradeStatusCode: null, failGradeStatusCode: null },
+  { courseId: 22, code: 'CM102', title: 'ساختار داده', units: 3, roleType: 'GENERAL', isRequired: 0, isElective: 1, isGraduationRequired: 0, recommendedSemester: null, minGrade: 10, passGradeStatusCode: null, failGradeStatusCode: null },
 ];
 const detail = {
   version: { id: 10, majorId: 1, degreeLevelId: 2, trackId: 1, versionCode: '1402-1', title: 'برنامهٔ کارشناسی ۱۴۰۲', status: 'DRAFT', entryYearFrom: 1402, entryYearTo: null, totalRequiredUnits: '140', courseCount: 2, maxUnitsPerTerm: 24, minRoleUnits: { CORE: 60, GENERAL: 20 } },
@@ -90,6 +90,9 @@ function ctx(extra: Record<string, unknown> = {}) {
     roleTargetsKey: '10:core', ruleText: (id: number, t: string) => (t === 'PREREQ' ? 'مبانی برنامه‌سازی' : null),
     openRules: noop, semLabel: (s: number | null) => (s == null ? 'نامشخص' : `ترم ${s}`),
     leafCourseCodesOf, leafTotalOf, semesterUnitTotal: (l: { units: number }[]) => l.reduce((s, c) => s + c.units, 0),
+    // هشدارهای پیش‌نیاز/هم‌نیاز — با همان تابعِ واقعی ساخته می‌شود تا mock
+    // هرگز از کدِ در حالِ اجرا عقب نماند (CoursesTab و SemestersTab آن را می‌خوانند).
+    depWarnings: dependencyWarningsMap(courses, detail.rules as Parameters<typeof dependencyWarningsMap>[1]),
     ...extra,
   } as never;
 }
