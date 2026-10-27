@@ -19,6 +19,7 @@ import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curri
 import { parseRequisiteText } from '@/lib/prereq-text';
 import PrintButton from '@/components/PrintButton';
 import { faNum } from '@/lib/report-format';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import Link from 'next/link';
 import { DemoChart } from '../demo-sections';
 
@@ -68,6 +69,7 @@ export default async function StudentCurriculumChartPage() {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <p className="card p-6 text-center text-slate-500">پروندهٔ دانشجویی یافت نشد.</p>;
+  const university = await getCurrentUniversity();
 
   const demo = await isDemoStudentUser(user.id);
   const termScope = await getTermScope(me.universityId);
@@ -233,10 +235,22 @@ export default async function StudentCurriculumChartPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="student-chart-print space-y-4">
       <TermAutoScroll targetId={highlightAnchor} />
+      {/* هدر چاپی: دانشگاه + مشخصات دانشجو (نام/نام خانوادگی، رشته، مقطع، شماره دانشجویی) — فقط روی کاغذ */}
+      <div className="chart-print-header hidden print:!block border-b-2 border-slate-800 pb-2 text-center">
+        <div className="t">{university?.title || 'دانشگاه'}</div>
+        <div>
+          چارت تحصیلی — نام و نام خانوادگی: {user.name || '—'} · شمارهٔ دانشجویی: {me.studentCode}
+        </div>
+        <div>
+          رشته: {major?.name || '—'} · مقطع: {level?.title || '—'} · سال ورود: {faNum(me.entryYear)}
+          {versionFull ? ` · نسخهٔ چارت: ${versionFull.versionCode} (${faNum(chartUnitsTotal)} واحد)` : ''}
+        </div>
+        <div>☑ = درس گذرانده‌شده · ☐ = پاس‌نشده</div>
+      </div>
       {/* هدر راهنمای چارت */}
-      <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md">
+      <div className="card !p-4 bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-0 shadow-md print:hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-base font-extrabold">🗺️ چارت تحصیلی و کاتالوگ سرفصل دروس مصوب</h1>
@@ -311,7 +325,7 @@ export default async function StudentCurriculumChartPage() {
                     {isCurrentSemester && (
                       <Link
                         href="/student/enroll"
-                        className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors"
+                        className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors print:hidden"
                       >
                         ⚡ انتخاب هوشمند این ترم
                       </Link>
@@ -390,7 +404,7 @@ export default async function StudentCurriculumChartPage() {
 
           {/* جمع‌بندی نوع درس + چک‌لیست پیشرفت دانشجو */}
           {chartRows.length > 0 && (
-            <div className="card !p-4 bg-white shadow-sm space-y-3 curriculum-print-area">
+            <div className="card !p-4 bg-white shadow-sm space-y-3">
               <h4 className="font-extrabold text-slate-900 text-sm">📋 جمع‌بندی نوع درس و پیشرفت شما</h4>
               <table className="w-full border-collapse text-xs rt">
                 <thead>

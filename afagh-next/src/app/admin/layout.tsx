@@ -124,7 +124,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   );
   return (
     <div className="min-h-screen bg-sky-50/70" data-uni={curUni.code}>
-      <header className={`${th.header} text-white shadow-md transition-colors`}>
+      <header className={`${th.header} text-white shadow-md transition-colors sticky top-0 z-40 print:hidden`}>
         {/*
           هدرِ دو‌ردیفیِ صریح (همان الگوی کارتابل استاد):
             ردیف ۱ — [جای دکمهٔ شناور «منو»] + هویت + ابزارها

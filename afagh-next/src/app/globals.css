@@ -662,6 +662,21 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .curriculum-print-area .chart-print-footer td { border: 0.5pt solid #334155 !important; padding: 1pt 2pt !important; text-align: center !important; }
   .curriculum-print-area .chart-print-footer th { font-weight: 800 !important; background: #f1f5f9 !important; }
 
+  /* ══ چاپ چارت تحصیلی دانشجو: هدر مشخصات + تیک گذرانده‌ها، جدول فشرده ══
+     چک‌باکس هر درس defaultChecked={isPassed} است؛ روی کاغذ درس‌های
+     گذرانده ☑ و بقیه ☐ چاپ می‌شوند. سربرگ وب (بنر سبز/لینک‌ها) با
+     print:hidden حذف و فقط جداول + جمع‌بندی چاپ می‌شود. */
+  .student-chart-print { background: #ffffff !important; }
+  .student-chart-print .chart-print-header { font-size: 9.5pt !important; line-height: 1.5 !important; font-weight: 700 !important; color: #0f172a !important; }
+  .student-chart-print .chart-print-header .t { font-size: 12.5pt !important; font-weight: 900 !important; }
+  .student-chart-print table { font-size: 8pt !important; }
+  .student-chart-print thead { display: table-header-group !important; }
+  .student-chart-print tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .student-chart-print th, .student-chart-print td { padding: 1.5pt 3pt !important; }
+  .student-chart-print input[type='checkbox'] { width: 3.2mm !important; height: 3.2mm !important; accent-color: #047857 !important; }
+  .student-chart-print .card { box-shadow: none !important; }
+  .student-chart-print, .student-chart-print * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+
   /* ─────────────────────────────────────────────────────────────
      سردر کلاسی (پوستر درب اتاق) — یک برگ A4 افقی: ۷ ستون شنبه→جمعه،
      محور ۰۷:۰۰→۲۰:۰۰، اولویتبندی فونت با container query

@@ -115,7 +115,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
           چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
       {/* هدر دانشجو — «یک‌ردیفه»: هویت + چیپ‌های وضعیت + سوییچر ترم/نقش + دکمه‌ها
           در یک خط (در عرض کم با wrap به خط بعد می‌روند تا چیزی بریده نشود). */}
-      <header className="bg-emerald-800 text-white shadow-md print:hidden">
+      <header className="bg-emerald-800 text-white shadow-md print:hidden sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
 
           {/* هویت و خوش‌آمدگویی — عنوان و زیرنویس در همان یک خط */}

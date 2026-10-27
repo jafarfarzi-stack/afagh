@@ -82,7 +82,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
-      <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800">
+      <header className="print:hidden bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 p-4">
           {/* تک‌ردیفه مثل پنل مدیر: ارم + هویت + همهٔ ابزارها (نیمسال/نقش/راهنما/خروج) */}
           <div className="flex flex-wrap items-center gap-2 min-w-0 w-full">
