@@ -284,17 +284,40 @@ function useCurriculumWorkspace(
     if (!src) return;
     const targetMajor = majors.find(m => m.id === (transferMajorId || selectedMajorId));
     if (!targetMajor) return;
-    const ok = await run(() => createCurriculumVersionAction({
-      majorId: targetMajor.id,
-      versionCode: `${src.entryYearFrom}-T1`,
-      title: `${targetMajor.name} — کپی از نسخهٔ ${src.versionCode} (${src.title})`,
-      entryYearFrom: src.entryYearFrom,
-      entryTermId: transferEntryTermId || null,
-      totalRequiredUnits: Number(src.totalRequiredUnits) || 140,
-      maxUnitsPerTerm: detail?.version.maxUnitsPerTerm ?? 20,
-      cloneFromId: src.id,
-    }));
-    if (ok) { reloadOverview(); setActiveTab('CATALOG'); }
+    // گارد انتخاب اشتباه مقصد: نام رشتهٔ مبدأ/مقصد + تعداد دروس قبل از کپی عمیق پرسیده شود
+    const courseCount = detail?.courses.length ?? 0;
+    if (!window.confirm(
+      `کپی عمیق چارت «${src.versionCode}» (${courseCount} درس) به رشتهٔ مقصد «${targetMajor.name}» انجام شود؟\n`
+      + `یک نسخهٔ DRAFT جدید در رشتهٔ مقصد ساخته می‌شود و دروس + پیش‌نیازها + ترم‌بندی کامل کپی می‌شوند.`
+    )) return;
+    // کد یکتا برای رشتهٔ مقصد: اگر «{سال}-T1» از قبل هست، به T2، T3، … برس
+    // (وگرنه انتقال دوم به همان رشته با خطای «کد تکراری» شکست می‌خورد)
+    const base = `${src.entryYearFrom}-T`;
+    let n = 1;
+    while (versions.some(v => v.majorId === targetMajor.id && v.versionCode === `${base}${n}`)) n += 1;
+    const newCode = `${base}${n}`;
+    setBusy(true);
+    try {
+      const r = await createCurriculumVersionAction({
+        majorId: targetMajor.id,
+        versionCode: newCode,
+        title: `${targetMajor.name} — کپی از نسخهٔ ${src.versionCode} (${src.title})`,
+        entryYearFrom: src.entryYearFrom,
+        entryTermId: transferEntryTermId || null,
+        totalRequiredUnits: Number(src.totalRequiredUnits) || 140,
+        maxUnitsPerTerm: detail?.version.maxUnitsPerTerm ?? 20,
+        cloneFromId: src.id,
+      });
+      if (!r.ok) { showToast(r.error, 'error'); return; }
+      await reloadOverview();
+      // پرش به رشته و نسخهٔ مقصد (تب دروس) تا کاربر فوراً دروس کپی‌شده را ببیند
+      setSelectedMajorId(targetMajor.id);
+      setSelectedVersionId(r.data.id);
+      setActiveTab('COURSES');
+      showToast(`کپی عمیق انجام شد: ${courseCount} درس به رشتهٔ «${targetMajor.name}» منتقل شد (نسخهٔ ${newCode}).`, 'success');
+    } finally {
+      setBusy(false);
+    }
   };
 
   // ── ویرایش دروس (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──

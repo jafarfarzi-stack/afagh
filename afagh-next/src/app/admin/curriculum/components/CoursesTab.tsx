@@ -1,12 +1,15 @@
 'use client';
 
-// تب ۲: دروس کاتالوگ (نقش، الزامی، پیش‌نیاز، تأییدیه‌ها)
+// تب ۲: دروس کاتالوگ (نقش، الزامی، پیش‌نیاز، تأییدیه‌ها) + سورت/فیلتر ستون‌ها
+import { useMemo, useState } from 'react';
 import { useCurriculum } from '../curriculum-context';
-import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText, depWarningBadge, roleLabel } from '../curriculum-core';
+import { ROLE_LABELS, compareCourseCode, faDate, faNum, semLabel, dependencyWarningText, depWarningBadge, roleLabel } from '../curriculum-core';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 import { roleFromBankType } from '@/lib/bank-roles';
+
+type CourseSortKey = 'CODE' | 'TITLE' | 'UNITS' | 'ROLE' | 'SEM';
 
 export default function CoursesTab() {
   const {
@@ -32,6 +35,52 @@ export default function CoursesTab() {
     totalPlannedUnits,
     typeSummary,
   } = useCurriculum();
+
+  // ── سورت و فیلتر ستون‌های جدول دروس ──
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [semFilter, setSemFilter] = useState(''); // '' همه · 'NONE' نامشخص · کد ترم/تابستان
+  const [sortBy, setSortBy] = useState<CourseSortKey>('CODE');
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
+
+  const toggleSort = (k: CourseSortKey) => {
+    if (sortBy === k) setSortDir(d => (d === 1 ? -1 : 1));
+    else { setSortBy(k); setSortDir(1); }
+  };
+
+  const filtersActive = query.trim() !== '' || roleFilter !== '' || semFilter !== '';
+
+  const visibleCourses = useMemo(() => {
+    const courses = detail?.courses ?? [];
+    const needle = query.trim().toLowerCase();
+    const list = courses.filter(c => {
+      if (roleFilter && c.roleType !== roleFilter) return false;
+      if (semFilter === 'NONE') { if (c.recommendedSemester != null) return false; }
+      else if (semFilter !== '' && String(c.recommendedSemester) !== semFilter) return false;
+      if (!needle) return true;
+      return c.code.toLowerCase().includes(needle) || c.title.toLowerCase().includes(needle);
+    });
+    const cmp: Record<CourseSortKey, (a: typeof list[number], b: typeof list[number]) => number> = {
+      CODE: (a, b) => compareCourseCode(a.code, b.code),
+      TITLE: (a, b) => a.title.localeCompare(b.title, 'fa'),
+      UNITS: (a, b) => (Number(a.units) || 0) - (Number(b.units) || 0),
+      ROLE: (a, b) => a.roleType.localeCompare(b.roleType),
+      SEM: (a, b) => (a.recommendedSemester ?? 999) - (b.recommendedSemester ?? 999),
+    };
+    return [...list].sort((a, b) => cmp[sortBy](a, b) * sortDir);
+  }, [detail?.courses, query, roleFilter, semFilter, sortBy, sortDir]);
+
+  /** سرستون مرتب‌شونده — کلیک: صعودی/نزولی */
+  const sortTh = (k: CourseSortKey, label: React.ReactNode, title?: string) => (
+    <th
+      onClick={() => toggleSort(k)}
+      title={title ?? 'برای مرتب‌سازی کلیک کنید'}
+      className="p-2.5 border border-slate-800 cursor-pointer select-none hover:bg-slate-700"
+    >
+      {label}
+      <span className="text-amber-300">{sortBy === k ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅'}</span>
+    </th>
+  );
 
   // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز — با **نام** دروس، نه فقط کد
   const depWarnNode = (courseId: number) => {
@@ -103,16 +152,58 @@ export default function CoursesTab() {
               هنوز درسی به این نسخه افزوده نشده است.
             </div>
           )}
+          {/* نوار سورت/فیلتر ستون‌ها */}
+          {detail.courses.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="🔍 جست‌وجوی کد یا نام درس…"
+                className="flex-1 min-w-[180px] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold outline-none focus:border-indigo-500"
+              />
+              <select
+                value={roleFilter}
+                onChange={e => setRoleFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold"
+                title="فیلتر نقش درس"
+              >
+                <option value="">همهٔ نقش‌ها</option>
+                {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <select
+                value={semFilter}
+                onChange={e => setSemFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold"
+                title="فیلتر ترم پیشنهادی"
+              >
+                <option value="">همهٔ ترم‌ها</option>
+                <option value="NONE">بدون ترم (نامشخص)</option>
+                {planTerms.map(s => <option key={s} value={String(s)}>ترم {faNum(s)}</option>)}
+                <option value={String(SUMMER_SEMESTER)}>تابستان</option>
+              </select>
+              {filtersActive && (
+                <button
+                  onClick={() => { setQuery(''); setRoleFilter(''); setSemFilter(''); }}
+                  className="rounded-lg bg-slate-200 hover:bg-slate-300 px-2.5 py-1.5 text-[11px] font-extrabold text-slate-700"
+                >
+                  ✕ پاک‌کردن فیلتر
+                </button>
+              )}
+              <span className={`text-[10px] font-black ${visibleCourses.length === detail.courses.length ? 'text-slate-500' : 'text-indigo-800'}`}>
+                {faNum(visibleCourses.length)} از {faNum(detail.courses.length)} درس
+              </span>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
                   <th className="p-2.5 border border-slate-800 w-10">ردیف</th>
-                  <th className="p-2.5 border border-slate-800">کد</th>
-                  <th className="p-2.5 border border-slate-800">عنوان درس</th>
-                  <th className="p-2.5 border border-slate-800">واحد</th>
-                  <th className="p-2.5 border border-slate-800">نقش</th>
-                  <th className="p-2.5 border border-slate-800">ترم پیشنهادی</th>
+                  {sortTh('CODE', 'کد')}
+                  {sortTh('TITLE', 'عنوان درس')}
+                  {sortTh('UNITS', 'واحد')}
+                  {sortTh('ROLE', 'نقش')}
+                  {sortTh('SEM', 'ترم پیشنهادی')}
                   <th className="p-2.5 border border-slate-800">الزامی در ترم</th>
                   <th className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
                   <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
@@ -122,7 +213,7 @@ export default function CoursesTab() {
                 </tr>
               </thead>
               <tbody>
-                {detail.courses.map((c, idx) => (
+                {visibleCourses.map((c, idx) => (
                   <tr key={c.courseId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                     <td className="p-2 border border-slate-200 text-center text-slate-500 font-bold">{faNum(idx + 1)}</td>
                     <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-900">{c.code}</td>
