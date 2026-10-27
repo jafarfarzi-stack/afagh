@@ -4,6 +4,7 @@
 import { useCurriculum } from '../curriculum-context';
 import { faNum } from '../curriculum-core';
 import { termCountForDegree } from '@/lib/term-plan';
+import PrintChartButton from './PrintChartButton';
 
 export default function CurriculumHeader() {
   const {
@@ -36,12 +37,15 @@ export default function CurriculumHeader() {
             </div>
             <h1 className="text-2xl font-extrabold tracking-tight">📚 مدیریت نسخه‌های برنامهٔ درسی (چرخهٔ حیات مصوب)</h1>
           </div>
-          <button
-            onClick={() => setModal('NEW_VERSION')}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-extrabold text-xs shadow-md transition"
-          >
-            ➕ نسخهٔ جدید
-          </button>
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <button
+              onClick={() => setModal('NEW_VERSION')}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 font-extrabold text-xs shadow-md transition"
+            >
+              ➕ نسخهٔ جدید
+            </button>
+            <PrintChartButton />
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">

@@ -308,6 +308,7 @@ export default async function StudentCurriculumChartPage() {
                     <table className="w-full text-right text-xs rt">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                          <th className="p-2 text-center w-8" title="تیک زدن دستی برای نسخهٔ چاپی">✓</th>
                           <th className="p-2">کد درس</th>
                           <th className="p-2">عنوان درس</th>
                           <th className="p-2 text-center">واحد</th>
@@ -325,6 +326,15 @@ export default async function StudentCurriculumChartPage() {
 
                           return (
                             <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                              {/* تیک دستی: در نسخهٔ چاپی دانشجو هر درسِ گذرانده را تیک می‌زند */}
+                              <td className="p-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  defaultChecked={isPassed}
+                                  title="این درس را گذرانده‌ام"
+                                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                />
+                              </td>
                               <td className="p-2 font-mono text-slate-600" dir="ltr">{c.code}</td>
                               <td className="p-2 font-semibold text-slate-900">{c.title}</td>
                               <td className="p-2 text-center font-mono font-bold">{Number(c.chartUnits ?? c.units ?? 0)}</td>

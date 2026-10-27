@@ -14,7 +14,9 @@ export default function AddCourseModal() {
     bankLoading,
     bankQuery,
     bankSelected,
+    bankShowAll,
     bankVisible,
+    showMoreBank,
     busy,
     closeAddCourse,
     codePrefix,
@@ -118,8 +120,20 @@ export default function AddCourseModal() {
                       </div>
                     ))}
                     {bankFiltered.length > bankVisible.length && (
-                      <div className="px-2.5 py-1.5 text-[10px] text-slate-400 font-bold text-center">
-                        … و {faNum(bankFiltered.length - bankVisible.length)} مورد دیگر — فیلتر را دقیق‌تر کنید
+                      <div className="px-2.5 py-1.5 text-[10px] text-slate-400 font-bold text-center space-y-1">
+                        <div>… و {faNum(bankFiltered.length - bankVisible.length)} مورد دیگر</div>
+                        <button
+                          type="button"
+                          onClick={showMoreBank}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-900 font-extrabold text-[10px] hover:bg-indigo-200"
+                        >
+                          نمایش همهٔ {faNum(bankFiltered.length)} مورد
+                        </button>
+                      </div>
+                    )}
+                    {bankShowAll && bankFiltered.length > 0 && (
+                      <div className="px-2.5 py-1.5 text-[10px] text-emerald-700 font-bold text-center">
+                        همهٔ {faNum(bankFiltered.length)} مورد نمایش داده شد.
                       </div>
                     )}
                   </div>

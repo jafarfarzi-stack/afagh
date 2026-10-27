@@ -40,6 +40,8 @@ function useCurriculumWorkspace(
   const [bankQuery, setBankQuery] = useState('');
   const [codePrefix, setCodePrefix] = useState('');
   const [bankSelected, setBankSelected] = useState<Set<number>>(new Set());
+  /** نمایش همهٔ نتایج بانک (نه فقط ۶۰ مورد اول) */
+  const [bankShowAll, setBankShowAll] = useState(false);
   const [bankRoles, setBankRoles] = useState<Record<number, string>>({});
   const [bulkRoleType, setBulkRoleType] = useState('CORE');
 
@@ -49,7 +51,7 @@ function useCurriculumWorkspace(
 
   // فرم‌ها
   const [newVersionForm, setNewVersionForm] = useState({
-    versionCode: '', title: '', entryYearFrom: 1405, totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '',
+    versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '',
   });
   // فرم ویرایش مشخصات نسخه (فقط DRAFT — اکشن خودش گیت می‌زند)
   const [editVersionId, setEditVersionId] = useState<number | null>(null);
@@ -208,11 +210,13 @@ function useCurriculumWorkspace(
       versionCode: f.versionCode.trim(),
       title: f.title.trim() || `برنامهٔ ${majors.find(m => m.id === selectedMajorId)?.name ?? ''} ${f.versionCode.trim()}`,
       entryYearFrom: f.entryYearFrom,
+      // خالی = «به بعد» (کاتالوگی که سال‌ها بدون تغییر می‌ماند)
+      entryYearTo: f.entryYearTo ? Number(f.entryYearTo) : null,
       totalRequiredUnits: f.totalRequiredUnits,
       maxUnitsPerTerm: f.maxUnitsPerTerm || null,
       cloneFromId: f.cloneFromId ? Number(f.cloneFromId) : undefined,
     }));
-    if (ok) { setModal(null); setNewVersionForm({ versionCode: '', title: '', entryYearFrom: 1405, totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '' }); reloadOverview(); }
+    if (ok) { setModal(null); setNewVersionForm({ versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '' }); reloadOverview(); }
   };
 
   // ── ویرایش مشخصات نسخه (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
@@ -506,8 +510,14 @@ function useCurriculumWorkspace(
   const isOverflowTerm = (sem: number) => isOverflowSemester(sem, planTerms);
 
   // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
-  const bankFiltered = useMemo(() => filterBankCourses(bank, bankQuery, codePrefix), [bank, bankQuery, codePrefix]);
-  const bankVisible = visibleBank(bankFiltered);
+  // دروسی که همین حالا در چارتِ این نسخه هستند از فهرست بانک حذف می‌شوند؛
+  // این‌طور بعد از افزودن ۶۰ درسِ اول، ۶۰ درسِ بعدی خودشان دیده می‌شوند.
+  const inChartIds = useMemo(() => new Set((detail?.courses ?? []).map(c => c.courseId)), [detail?.courses]);
+  const bankFiltered = useMemo(
+    () => filterBankCourses(bank, bankQuery, codePrefix).filter(b => !inChartIds.has(b.id)),
+    [bank, bankQuery, codePrefix, inChartIds],
+  );
+  const bankVisible = bankShowAll ? bankFiltered : visibleBank(bankFiltered);
   const allFilteredSelected = allBankSelected(bankVisible, bankSelected);
   const roleForBank = (b: { id: number; courseType: string }) => bankRoles[b.id] ?? roleFromBankType(b.courseType);
   const toggleSelectAllBank = () => {
@@ -550,6 +560,8 @@ function useCurriculumWorkspace(
     bankRoles,
     bankSelected,
     bankVisible,
+    bankShowAll,
+    showMoreBank: () => setBankShowAll(true),
     bulkRoleType,
     busy,
     chartTermCount,
