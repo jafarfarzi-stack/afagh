@@ -3,7 +3,7 @@
 // تب ۴: سربرگ چرخهٔ حیات + سهم واحد نقش‌ها + یافته‌های اعتبارسنجی
 import { useCurriculum } from '../curriculum-context';
 import { STATUS_UI, faNum } from '../curriculum-core';
-import RoleTargetsEditor from './RoleTargetsEditor';
+import RoleTargetsCard from './RoleTargetsCard';
 
 export default function VerifyTab() {
   const {
@@ -15,16 +15,12 @@ export default function VerifyTab() {
     handleArchive,
     handleCreateRevision,
     handlePublish,
-    handleSaveRoleTargets,
     handleSubmit,
     handleUpdateMaxUnits,
     handleValidate,
     isDraft,
-    roleTargets,
-    roleTargetsKey,
     selectedVersion,
     setModal,
-    unitsByRole,
   } = useCurriculum();
 
   if (!selectedVersion) return null;
@@ -104,24 +100,8 @@ export default function VerifyTab() {
       </div>
       )}
 
-      {/* Role unit targets — تب: بررسی و خاتمه */}
-      {activeTab === 'VERIFY' && detail && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
-          <h4 className="font-extrabold text-slate-900 text-sm">🎯 سهم واحد هر نقش (مقرر این نسخه)</h4>
-          <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-            برای هر نوع درس، حداقل واحد لازم را بنویسید (مثلاً عمومی ۲۲، پایه ۲۵)؛ جمع سهم‌ها معمولاً باید با «واحد الزامی» نسخه ({faNum(detail.version.totalRequiredUnits)} واحد) بخواند.
-            ولیدیتور در چک ROLE_UNITS_COVERAGE هر سهم را با واحد موجود می‌سنجد.
-          </p>
-          <RoleTargetsEditor
-            key={roleTargetsKey}
-            initial={roleTargets}
-            unitsByRole={unitsByRole}
-            totalRequired={Number(detail.version.totalRequiredUnits ?? 0)}
-            disabled={!isDraft || busy}
-            onSave={handleSaveRoleTargets}
-          />
-        </div>
-      )}
+      {/* Role unit targets — تب: بررسی و خاتمه (همان کارت مشترک با تب کاتالوگ) */}
+      {activeTab === 'VERIFY' && detail && <RoleTargetsCard showHint={false} />}
 
       {/* Checks — تب: بررسی و خاتمه */}
       {activeTab === 'VERIFY' && detail && (

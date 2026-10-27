@@ -3,7 +3,7 @@
 // گام ۱: چارت دروس و انتساب اساتید
 import { usePlanning } from '../PlanningProvider';
 import { ProfessorSelect } from './ProfessorSelect';
-import { faNum, DEMAND_PAGE, NO_PROFESSOR } from '../planning-core';
+import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE } from '../planning-core';
 
 export default function CurriculumAssignTab() {
   const {
@@ -91,15 +91,39 @@ export default function CurriculumAssignTab() {
                         </td>
 
                         <td className="p-2 border border-slate-200 text-center">
-                          <select
-                            value={demand.groupsCount}
-                            onChange={e => handleUpdateCourseGroupsCount(demand.id, Number(e.target.value))}
-                            className="border border-slate-300 rounded px-2 py-1 font-bold bg-white text-indigo-900"
-                          >
-                            <option value={1}>۱ گروه</option>
-                            <option value={2}>۲ گروه موازی</option>
-                            <option value={3}>۳ گروه</option>
-                          </select>
+                          {/* تعداد گروه آزاد است (نه فقط ۱..۳) — با پله‌های − / + */}
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="کاهش گروه"
+                              onClick={() => handleUpdateCourseGroupsCount(demand.id, demand.groupsCount - 1)}
+                              className="w-6 h-6 rounded-md border border-slate-300 bg-white text-slate-700 font-black leading-none hover:bg-slate-100"
+                            >
+                              −
+                            </button>
+                            <input
+                              key={`groups-${demand.groupsCount}`}
+                              type="number"
+                              min={1}
+                              max={MAX_GROUPS_PER_COURSE}
+                              defaultValue={demand.groupsCount}
+                              onBlur={e => handleUpdateCourseGroupsCount(demand.id, Number(e.target.value))}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              title={`تعداد گروه‌های موازی (۱ تا ${MAX_GROUPS_PER_COURSE})`}
+                              className="w-14 border border-slate-300 rounded px-1 py-1 text-center font-black bg-white text-indigo-900"
+                            />
+                            <button
+                              type="button"
+                              title="افزایش گروه"
+                              onClick={() => handleUpdateCourseGroupsCount(demand.id, demand.groupsCount + 1)}
+                              className="w-6 h-6 rounded-md border border-slate-300 bg-white text-slate-700 font-black leading-none hover:bg-slate-100"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="text-[9px] font-bold text-slate-500 mt-0.5">
+                            {faNum(demand.groupsCount)} گروه
+                          </div>
                         </td>
 
                         <td className="p-2 border border-slate-200 min-w-[280px]">

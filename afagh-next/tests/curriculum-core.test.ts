@@ -12,9 +12,9 @@
  */
 import {
   allBankSelected, BANK_VISIBLE_LIMIT, buildRuleTree, CURRICULUM_TABS, departmentNames, dependencyWarningText,
-  dependencyWarnings, dependencyWarningsMap, faDate,
+  dependencyWarnings, dependencyWarningsMap, EXTRA_ROLE_LABELS, faDate,
   faNum, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester,
-  leafCourseCodesOf, leafTotalOf, overflowSemesters, resolveTab, ROLE_LABELS, semLabel,
+  leafCourseCodesOf, leafTotalOf, overflowSemesters, resolveTab, roleLabel, ROLE_LABELS, ROLE_TARGET_KEYS, semLabel,
   semesterUnitTotal, STATUS_UI, TABS, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade,
   visibleBank,
 } from '../src/app/admin/curriculum/curriculum-core.ts';
@@ -205,6 +205,29 @@ eq('متن هشدار هم‌نیاز بعدتر شامل «هم‌نیاز»', 
 const wm = dependencyWarningsMap([dc(1, 'A', 1), dc(2, 'B', 2)], [dRule(1, 'PREREQ', ['B'])]);
 eq('نگاشت بر اساس courseId', wm.get(1)?.length, 1);
 eq('متن هشدار شامل «ترم ۱»', dependencyWarningText(w3[0]).includes('ترم ۱'), true);
+
+console.log('\n۱۱) انواع درسِ «سهم واحد» — جبرانی و انواعِ خارج از enum');
+eq('برچسب نقش شناخته‌شده', roleLabel('GENERAL'), 'عمومی');
+eq('جبرانی برچسب فارسی دارد', roleLabel('COMPENSATORY'), 'جبرانی');
+eq('کلید ناشناخته بدون تغییر برمی‌گردد', roleLabel('CUSTOM_TYPE'), 'CUSTOM_TYPE');
+eq('جبرانی در فهرست انواعِ سهم واحد هست', ROLE_TARGET_KEYS.includes('COMPENSATORY'), true);
+eq('فهرست انواع = ۷ نقش چارت + جبرانی', ROLE_TARGET_KEYS.length, Object.keys(ROLE_LABELS).length + 1);
+// ⚠️ جبرانی نباید به ROLE_LABELS اضافه شود؛ آن ثابت گزینه‌های selectِ
+// curriculum_courses.roleType است که CHECK دیتابیس فقط ۷ مقدار را می‌پذیرد.
+eq('جبرانی در نقش‌های چارت نیست (سازگاری با CHECK دیتابیس)', 'COMPENSATORY' in ROLE_LABELS, false);
+eq('EXTRA_ROLE_LABELS فقط جبرانی دارد', Object.keys(EXTRA_ROLE_LABELS).join(','), 'COMPENSATORY');
+
+const dcRole = (id: number, code: string, role: string, units = 3) => ({
+  courseId: id, code, title: code, units, roleType: role,
+  isRequired: 1, isElective: 0, isGraduationRequired: 0, recommendedSemester: 1,
+  minGrade: null, passGradeStatusCode: null, failGradeStatusCode: null,
+});
+const sumC = typeSummaryRows([dcRole(1, 'G1', 'GENERAL'), dcRole(2, 'C1', 'COMPENSATORY', 2)]);
+eq('نوع جبرانی در جمع‌بندی می‌آید', sumC.some(r => r.role === 'COMPENSATORY' && r.units === 2), true);
+eq('جبرانی بعد از نقش‌های چارت مرتب می‌شود', sumC[sumC.length - 1].role, 'COMPENSATORY');
+// رشتهٔ بدون درس عمومی: هیچ ردیف GENERAL ساخته نمی‌شود (نه صفرِ ساختگی)
+const sumNoGen = typeSummaryRows([dcRole(1, 'M1', 'MAJOR')]);
+eq('رشتهٔ بدون عمومی → ردیف عمومی ندارد', sumNoGen.some(r => r.role === 'GENERAL'), false);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

@@ -2,7 +2,7 @@
 
 // تب ۲: دروس کاتالوگ (نقش، الزامی، پیش‌نیاز، تأییدیه‌ها)
 import { useCurriculum } from '../curriculum-context';
-import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText } from '../curriculum-core';
+import { ROLE_LABELS, faDate, faNum, semLabel, dependencyWarningText, roleLabel } from '../curriculum-core';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
@@ -268,7 +268,7 @@ export default function CoursesTab() {
                       const short = target != null && r.units < target;
                       return (
                         <tr key={r.role} className={`text-center ${short ? 'bg-amber-50' : ''}`}>
-                          <td className="p-2 border border-slate-200 font-extrabold">{ROLE_LABELS[r.role] ?? r.role}</td>
+                          <td className="p-2 border border-slate-200 font-extrabold">{roleLabel(r.role)}</td>
                           <td className="p-2 border border-slate-200 font-black">{faNum(r.count)}</td>
                           <td className={`p-2 border border-slate-200 font-black ${short ? 'text-amber-700' : ''}`}>
                             {faNum(r.units)}{short && ` (کسری ${faNum(target - r.units)})`}

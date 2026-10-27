@@ -287,6 +287,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     const roleFa: Record<string, string> = {
       CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
+      COMPENSATORY: 'جبرانی',
     };
     for (const [role, min] of Object.entries(input.minRoleCounts)) {
       const count = countByRole.get(role) ?? 0;
@@ -309,6 +310,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     const roleFa: Record<string, string> = {
       CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
+      COMPENSATORY: 'جبرانی',
     };
     for (const [role, min] of Object.entries(input.minRoleUnits)) {
       const have = unitsByRole.get(role) ?? 0;

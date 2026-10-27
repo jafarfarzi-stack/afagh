@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab } from './planning-core';
+import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab } from './planning-core';
 import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOption, ClassroomOption, ProfessorOption, CourseDemand, DepartmentOffering, AutoScheduleScenario, SchedulingWorkspace } from './types';
 import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction } from './actions';
 import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
@@ -341,8 +341,9 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
 
   // Change groups count for a course
   const handleUpdateCourseGroupsCount = (demandId: number, groups: number) => {
-    setCourseDemands(prev => prev.map(d => d.id === demandId ? { ...d, groupsCount: groups } : d));
-    showToast(`تعداد گروه‌های ارائه‌شونده به ${faNum(groups)} گروه تغییر یافت.`, 'info');
+    const g = clampGroupsCount(groups);
+    setCourseDemands(prev => prev.map(d => d.id === demandId ? { ...d, groupsCount: g } : d));
+    showToast(`تعداد گروه‌های ارائه‌شونده به ${faNum(g)} گروه تغییر یافت.`, 'info');
   };
 
   // Toggle Exam Scheduling Mode (Auto vs Manual) for a course

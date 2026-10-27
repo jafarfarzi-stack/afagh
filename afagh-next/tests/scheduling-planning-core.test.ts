@@ -12,9 +12,9 @@
  *   inspectorSummary / nextGroupNumber / coTeachingWeights / buildRealScenario
  */
 import {
-  buildRealScenario, coTeachingWeights, computeProfUnits, DAY_NAMES, faNum, faToEnDigits,
+  buildRealScenario, clampGroupsCount, coTeachingWeights, computeProfUnits, DAY_NAMES, faNum, faToEnDigits,
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
-  mapOfferings, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
+  mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
   slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab,
 } from '../src/app/admin/scheduling/planning-core.ts';
 import type { CourseDemand, DepartmentOffering, SchedulingWorkspace } from '../src/app/admin/scheduling/types.ts';
@@ -187,6 +187,18 @@ eq('undefined → تب اول', resolveTab(undefined), 'CURRICULUM_ASSIGN');
 eq('null → تب اول', resolveTab(null), 'CURRICULUM_ASSIGN');
 eq('رشتهٔ بی‌ربط → تب اول', resolveTab('../../etc/passwd'), 'CURRICULUM_ASSIGN');
 eq('همهٔ تب‌های مشروع برگردانده می‌شوند', PLANNING_TABS.map(resolveTab), [...PLANNING_TABS]);
+
+console.log('\n۹) تعداد گروه‌های موازی — آزاد و نرمال‌شده (clampGroupsCount)');
+eq('۴ گروه پذیرفته می‌شود (قبلاً UI فقط ۱..۳ می‌داد)', clampGroupsCount(4), 4);
+eq('۶ گروه پذیرفته می‌شود', clampGroupsCount(6), 6);
+eq('صفر → حداقل ۱', clampGroupsCount(0), 1);
+eq('منفی → ۱', clampGroupsCount(-5), 1);
+eq('اعشار گِرد می‌شود', clampGroupsCount(3.6), 4);
+eq('متن عددی پذیرفته می‌شود', clampGroupsCount('5'), 5);
+eq('خالی/نامعتبر → ۱', clampGroupsCount(''), 1);
+eq('undefined → ۱', clampGroupsCount(undefined), 1);
+eq('سقف رعایت می‌شود', clampGroupsCount(999), MAX_GROUPS_PER_COURSE);
+eq('سقف معقول است (۱..۲۰)', MAX_GROUPS_PER_COURSE >= 10 && MAX_GROUPS_PER_COURSE <= 30, true);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

@@ -3,6 +3,7 @@
 // تب ۱: کاتالوگ نسخه‌های رشته (انتخاب/ایجاد/میان‌بری)
 import { useCurriculum } from '../curriculum-context';
 import { STATUS_UI, faNum } from '../curriculum-core';
+import RoleTargetsCard from './RoleTargetsCard';
 
 export default function CatalogTab() {
   const {
@@ -81,6 +82,8 @@ export default function CatalogTab() {
         </div>
       </div>
       )}
+      {/* سهم واحد هر نوع درس — همان‌جا که نسخه تعریف می‌شود (تب ۱) */}
+      {activeTab === 'CATALOG' && <RoleTargetsCard />}
     </>
   );
 }

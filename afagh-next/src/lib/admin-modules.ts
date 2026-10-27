@@ -278,6 +278,20 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    // همان صفحهٔ /admin/curriculum — کارت دوم تا از «برنامه‌ریزی درسی» هم دیده شود
+    // (پیش‌تر فقط در دستهٔ «آموزش» بود و مدیران پیدا نمی‌کردند).
+    href: '/admin/curriculum',
+    icon: '📚',
+    title: 'تعریف کاتالوگ رشته',
+    desc: 'کاتالوگ، دروس، ترم‌بندی، پیش‌نیاز و سهم واحد هر نوع درس',
+    group: 'plan',
+    roles: EDU,
+    accent: 'from-emerald-950 to-teal-950 border-emerald-700/50',
+    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
+    inNav: false,
+    inGrid: true,
+  },
+  {
     href: '/admin/exams',
     icon: '📝',
     title: 'مدیریت و برنامه‌ریزی امتحانات',

@@ -102,7 +102,7 @@ const CASES: [string, React.ComponentType, string[], Record<string, unknown>?][]
   ['CurriculumTabsBar', CurriculumTabsBar, ['تعریف کاتالوگ رشته', 'نسخهٔ فعال: 1402-1', 'پیش‌نویس'], undefined],
   ['CatalogTab', CatalogTab, ['🗂️ نسخه‌های این رشته', 'کد نسخه', '1402-1'], { activeTab: 'CATALOG' }],
   ['DetailHeaderBar', DetailHeaderBar, ['برنامهٔ کارشناسی ۱۴۰۲', 'ایجاد نسخهٔ جدید'], { activeTab: 'COURSES' }],
-  ['VerifyTab', VerifyTab, ['🎯 سهم واحد هر نقش', 'جمع واحدها از سقف واحد ترم کمتر است', 'واحد (Enter/Blur برای ذخیره)', '!در حال بارگذاری جزئیات از سرور'], { activeTab: 'VERIFY' }],
+  ['VerifyTab', VerifyTab, ['🎯 سهم واحد هر نوع درس', 'جمع واحدها از سقف واحد ترم کمتر است', 'واحد (Enter/Blur برای ذخیره)', '!در حال بارگذاری جزئیات از سرور'], { activeTab: 'VERIFY' }],
   ['CoursesTab', CoursesTab, ['مبانی برنامه‌سازی', 'پیش‌نیاز / هم‌نیاز', 'افزودن درس از بانک'], { activeTab: 'COURSES' }],
   ['SemestersTab', SemestersTab, ['تابستان', 'نامشخص', 'ساختار داده'], { activeTab: 'SEMESTERS' }],
   ['TransferTab', TransferTab, ['نسخهٔ جدید (R+1) از همین نسخه', 'مهندسی کامپیوتر'], { activeTab: 'TRANSFER' }],

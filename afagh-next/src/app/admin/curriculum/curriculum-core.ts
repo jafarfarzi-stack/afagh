@@ -24,6 +24,23 @@ export const ROLE_LABELS: Record<string, string> = {
   THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
 };
 
+/**
+ * انواعِ «سهم واحد» که در ستون minRoleUnits مجازند اما نقشِ درس در
+ * curriculum_courses نیستند (CHECK دیتابیس فقط ۷ نقش بالا را می‌پذیرد).
+ * «جبرانی» واحد مشخصی در چارت ندارد ولی مدیر گروه باید بتواند سهم آن را تعیین کند.
+ */
+export const EXTRA_ROLE_LABELS: Record<string, string> = {
+  COMPENSATORY: 'جبرانی',
+};
+
+/** همهٔ انواعِ قابل انتخاب در ویرایشگر سهم واحد (ترتیب نمایش) */
+export const ROLE_TARGET_KEYS: string[] = [...Object.keys(ROLE_LABELS), ...Object.keys(EXTRA_ROLE_LABELS)];
+
+/** برچسب فارسی هر نوع — شامل انواع خارج از enum (جبرانی) و کلیدهای ناشناخته */
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? EXTRA_ROLE_LABELS[role] ?? role;
+}
+
 export const TABS: { key: CurriculumTab; icon: string; label: string }[] = [
   { key: 'CATALOG', icon: '🗂️', label: 'تعریف کاتالوگ رشته' },
   { key: 'COURSES', icon: '📖', label: 'دروس کاتالوگ' },
@@ -254,7 +271,7 @@ export function typeSummaryRows(courses: CourseRow[] | null | undefined): TypeSu
     e.count += 1; e.units += Number(c.units || 0);
     m.set(c.roleType, e);
   }
-  const order = Object.keys(ROLE_LABELS);
+  const order = ROLE_TARGET_KEYS;
   return [...m.entries()]
     .map(([role, v]) => ({ role, ...v }))
     .sort((a, b) => (order.indexOf(a.role) === -1 ? 99 : order.indexOf(a.role)) - (order.indexOf(b.role) === -1 ? 99 : order.indexOf(b.role)));

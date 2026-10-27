@@ -20,6 +20,20 @@ export const NO_PROFESSOR: ProfessorOption = {
 
 export const faNum = (n: number | string | null | undefined) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
 
+/**
+ * سقف تعداد گروه‌های موازی یک درس در یک ترم.
+ * قبلاً UI فقط ۱ تا ۳ را می‌داد، ولی در عمل دروسِ پرجمعیت (عمومی/پایه) تا
+ * ۵–۶ گروه هم ارائه می‌شوند؛ حالا ورودی آزاد است و این سقف جلوی عدد نامعقول
+ * (و انفجار محاسبهٔ بار استاد) را می‌گیرد.
+ */
+export const MAX_GROUPS_PER_COURSE = 20;
+/** نرمال‌سازی تعداد گروه‌ها: عدد صحیح، حداقل ۱، حداکثر MAX_GROUPS_PER_COURSE */
+export const clampGroupsCount = (n: unknown): number => {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v) || v < 1) return 1;
+  return Math.min(MAX_GROUPS_PER_COURSE, v);
+};
+
 export const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
 export const faToEnDigits = (s: string) =>
   String(s)
