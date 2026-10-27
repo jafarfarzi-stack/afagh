@@ -36,9 +36,16 @@ import { courseTypeLabelOf } from '@/lib/mali-types';
 
 const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-IR');
 
-/** تاریخ شمسی خوانا؛ تهی → خط تیره */
+/**
+ * تاریخ شمسی خوانا؛ تهی → خط تیره.
+ * ورودیِ رشته‌ایِ از قبل شمسی (مثل `students.entryDate` = «1400-07-01») نباید
+ * دوباره میلادی تفسیر شود؛ وگرنه سال سه‌رقمی (۷۷۹) چاپ می‌شود.
+ */
 function jdate(d: string | Date | null | undefined): string {
   if (!d) return '—';
+  if (typeof d === 'string' && /^1[34]\d{2}[\/-]/.test(d.trim())) {
+    return faDigits(d.trim().replace(/-/g, '/'));
+  }
   const date = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(date.getTime())) return '—';
   const { jy, jm, jd } = toJalaliFromDate(date);
@@ -543,13 +550,15 @@ export default function FinancialTranscriptFlat({
                 </div>
               </div>
 
-              {/* نوارِ «غیرقابل استناد» — عمداً داخل thead است تا در **هر صفحهٔ چاپ**
-                  تکرار شود؛ سند مالی تا مهر کارشناس سند استنادی نیست. متن + کادر ضخیم
-                  (نه فقط پس‌زمینه) تا در چاپ سیاه‌وسفید هم خوانده شود. */}
-              <div className="tr-unverified-band mx-4 mb-2 mt-1.5 flex flex-wrap items-center justify-between gap-2 border-2 border-amber-700 bg-amber-50 px-2 py-1 text-[9px] font-black text-amber-950">
-                <span>⚠️ این کارنامه تا تأیید و مهر کارشناس امور مالی <u>غیرقابل استناد</u> است.</span>
-                <span className="shrink-0 font-mono text-[8px] text-amber-900">وضعیت: در انتظار تأیید</span>
-              </div>
+              {/* نوارِ «غیرقابل استناد» — فقط در نمای دانشجو (سندِ کارشناس سندِ
+                  کاری رسمی است؛ چاپِ معتبرِ دانشجو منوط به تأیید کارشناس مالی).
+                  متن + کادر ضخیم (نه فقط پس‌زمینه) تا در چاپ سیاه‌وسفید خوانده شود. */}
+              {!isFinance && (
+                <div className="tr-unverified-band mx-4 mb-2 mt-1.5 flex flex-wrap items-center justify-between gap-2 border-2 border-amber-700 bg-amber-50 px-2 py-1 text-[9px] font-black text-amber-950">
+                  <span>⚠️ این کارنامه تا تأیید و مهر کارشناس امور مالی <u>غیرقابل استناد</u> است.</span>
+                  <span className="shrink-0 font-mono text-[8px] text-amber-900">وضعیت: در انتظار تأیید</span>
+                </div>
+              )}
             </td>
           </tr>
         </thead>
@@ -957,8 +966,9 @@ export default function FinancialTranscriptFlat({
                     </div>
                   )}
 
-                  {/* بلوک رسمیت: QR استعلام برخط + نشانی (در چاپ هم دیده می‌شود) */}
-                  {verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
+                  {/* بلوک رسمیت: QR استعلام برخط — فقط در نمای کارشناس/ادمین؛
+                      چاپِ معتبرِ دانشجو طبق سیاست منوط به تأیید کارشناس مالی است. */}
+                  {isFinance && verifyBlock ? <div className="tr-fin-verify">{verifyBlock}</div> : null}
 
                 </div>
               </td>

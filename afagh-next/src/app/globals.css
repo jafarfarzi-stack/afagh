@@ -495,11 +495,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root table.tr-doc > thead { display: table-header-group !important; }
   .tr-fin-root table.tr-doc > tfoot { display: table-footer-group !important; }
 
-  /* بدنهٔ سند اکنون چند ردیف مستقل است (هر ردیف = یک جفت ترم + یک ردیف
-     پایانی برای چک/وام/رسمیت)؛ پس شکستن صفحه بینِ ردیف‌ها انجام می‌شود.
-     قبلاً کل سند یک ردیفِ بسیار بلند بود و Chrome آن را نمی‌شکست: محتوا
-     بریده می‌شد یا از کادر بیرون می‌زد. */
-  .tr-fin-root table.tr-doc > tbody > tr.tr-doc-row { break-inside: avoid !important; page-break-inside: avoid !important; }
+  /* ⚠ مدلِ کارتیِ قدیمی (tr-fin-root) کلِ بدنه را در **یک** ردیف می‌ریزد؛
+     `break-inside: avoid` روی همان تک‌ردیف باعث می‌شد Chrome کل سند را به
+     صفحهٔ بعد هل بدهد و صفحهٔ اول فقط سربرگ بماند (چاپ «صفحهٔ خالی/بریده»).
+     اینجا عمداً auto است تا محتوا بلافاصله بعد از سربرگ جریان بگیرد.
+     مدل تخت (tr-flat-root) ردیف‌های کوچک دارد و قاعدهٔ avoid خودش را جدا دارد. */
+  .tr-fin-root table.tr-doc > tbody > tr.tr-doc-row { break-inside: auto !important; page-break-inside: auto !important; }
+  /* سرستون ریز دروس در ادامهٔ صفحه تکرار شود تا جدولِ بریده بی‌سرستون نماند */
+  .tr-fin-root .tr-fin-courses thead { display: table-header-group !important; }
   /* ⚠ عمداً hidden (نه visible): با visible، جدولِ ریز دروسِ با چیدمانِ ثابت
      از کادرِ کارت بیرون می‌زد و روی کارتِ کنارش می‌افتاد — همان «به‌هم‌ریختگیِ
      چاپ». داخلِ کارت هم `min-width: 0` لازم است تا ستون‌های گرید بتوانند
@@ -525,8 +528,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root .tr-fin-totals h3 { font-size: 8pt !important; padding: 0.5mm 2mm !important; }
   .tr-fin-root .tr-breakdown > h3 { font-size: 8pt !important; padding: 0.5mm 2mm !important; }
 
-  /* گرید ترم‌ها: در عرض A4 عمودی دقیقاً ۲ کارت در هر ردیف */
-  .tr-fin-root .tr-fin-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 1.5mm !important; }
+  /* گرید ترم‌ها در چاپ **تک‌ستونه**: با ۲ ستون، ردیفِ بلندتر از یک صفحه بین دو
+     ستون جدا می‌شد و ریزِ ترم‌ها روی کاغذ درهم می‌ریخت (بریدگیِ ستون‌ها). تک‌ستونه،
+     ترم‌ها به ترتیب و پشتِ سر هم چاپ می‌شوند و صفحه‌بندی قابل پیش‌بینی است. */
+  .tr-fin-root .tr-fin-row { grid-template-columns: minmax(0, 1fr) !important; gap: 1.5mm !important; }
+  /* عنوان «ریز ترم‌به‌ترم» از کارت اولش جدا نشود */
+  .tr-fin-root .tr-courses-title { break-after: avoid !important; page-break-after: avoid !important; }
   .tr-fin-root .term-block { border-width: 0.6pt !important; border-radius: 1.2mm !important; }
   /* سربرگ کارت ترم: عنوان کامل باید خوانا بماند (۷.۸pt) و بریده نشود */
   .tr-fin-root .term-block > div:first-child { padding: 0.7mm 1.2mm !important; }
@@ -582,7 +589,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-flat-root .tr-print-hide { display: none !important; }
   .tr-flat-root table.tr-doc > thead { display: table-header-group !important; }
   .tr-flat-root table.tr-doc > tfoot { display: table-footer-group !important; }
-  .tr-flat-root table.tr-doc > tbody > tr.tr-doc-row { break-inside: avoid !important; page-break-inside: avoid !important; }
+  /* ردیف‌های مدل تخت: ردیفِ اول همهٔ ترم‌ها را دارد و بلندتر از یک صفحه است؛
+     avoid روی آن، کلِ ردیف را به صفحهٔ بعد می‌برد و صفحهٔ اول/دوم را خالی می‌کند.
+     پس ردیف آزاد می‌شکند و شکستنِ داخل بلوک‌ها (کارت ترم/جدول) جدا کنترل می‌شود. */
+  .tr-flat-root table.tr-doc > tbody > tr.tr-doc-row { break-inside: auto !important; page-break-inside: auto !important; }
+  .tr-flat-root .tr-fin-table thead { display: table-header-group !important; }
   .tr-flat-root table.tr-doc > tbody > tr.tr-doc-row > td { vertical-align: top; }
   .tr-flat-root thead .tr-doc-cell { padding: 0 !important; }
   .tr-flat-root thead .tr-fin-titlebar { padding: 1.5mm 3mm 0.8mm !important; }
