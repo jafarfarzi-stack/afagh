@@ -60,6 +60,7 @@ function ctx(extra: Record<string, unknown> = {}) {
     roleForBank: (b: { id: number; courseType: string }) => (b.id === 21 ? 'CORE' : 'GENERAL'),
     toggleSelectAllBank: noop, closeAddCourse: noop, handleAddCourse: noop, handleBulkAddCourses: noop,
     modal: null as string | null, setModal: noop, busy: false, toast: { text: 'نسخه ذخیره شد', type: 'success' as const }, showToast: noop,
+    handleSyncRequisites: noop,
     newVersionForm: { versionCode: '1404-1', title: 'برنامهٔ ۱۴۰۴', entryYearFrom: 1404, totalRequiredUnits: 140, maxUnitsPerTerm: 24, cloneFromId: '' },
     setNewVersionForm: noop,
     addCourseForm: { courseId: '21', roleType: 'CORE', recommendedSemester: '2' }, setAddCourseForm: noop,

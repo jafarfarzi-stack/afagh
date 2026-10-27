@@ -583,6 +583,14 @@ export const courses = pgTable('courses', {
   courseIsActive: integer('courseIsActive').default(1),                // فعال/غیرفعال
   emergencyWithdrawal: integer('emergencyWithdrawal').default(0),       // حذف اضطراری مجاز
   coRequisites: varchar('coRequisites', { length: 200 }),              // همنیاز (کدها جداشده با کاما)
+  /**
+   * متن خام ستون «پیش‌نیاز» از جدول دروس سیستم قدیمی.
+   * چرا لازم است: قواعد پیش‌نیاز در `course_rules` **مقیّد به نسخهٔ برنامه**
+   * هستند، ولی منبعِ اصلی داده «جدول دروس» است (سراسری). متن خام این‌جا
+   * نگه داشته می‌شود و با «همگام‌سازی» به course_rules هر نسخه ترجمه می‌شود
+   * (`src/lib/requisite-sync.ts`) — بدون این ستون، مهاجرت دوباره لازم بود.
+   */
+  prereqText: text('prereqText'),
   facesHours: numeric('facesHours', { precision: 3, scale: 1 }),       // ساعات چهره‌به‌چهره
   /** کدهای دروس هم‌ارز (جداشده با کاما) — مثال: '101,102,103' */
   equivalentCourseCodes: text('equivalentCourseCodes'),

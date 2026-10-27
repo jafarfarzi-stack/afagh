@@ -10,6 +10,8 @@ import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { computeGradeStatus } from '@/lib/grade-utils';
 import { COURSE_ALIASES, parseCourseRow } from './course-row';
+import { parseEquivalentCodes, parseRequisiteText } from '@/lib/prereq-text';
+import { syncRequisiteRulesFromCourses } from '@/lib/requisite-sync';
 import {
   DEPARTMENT_ALIASES, FACULTY_ALIASES, MAJOR_ALIASES, PROFESSOR_ALIASES,
   parseDepartmentRow, parseFacultyRow, parseMajorRow, parseProfessorRow,
@@ -820,6 +822,7 @@ export async function commit(
   if (entity === 'course') {
     const rw = await rewriter('COURSE');
     let enriched = 0;   // درس‌های موجود که فیلدهای خالی‌شان از این فایل کامل شد
+    let prereqImported = 0, coreqImported = 0, equivImported = 0;   // قواعد خوانده‌شده از جدول دروس
     const warnedOnce = new Set<string>();   // هر مقطع/گروهِ تطبیق‌نخورده فقط یک بار هشدار بگیرد
     // ── حل «مقطع» و «گروه آموزشی» با همان سازوکار میز تطبیق کدها ──
     const degreeMap = await resolverFor(sourceCode, 'DEGREE');
@@ -883,14 +886,36 @@ export async function commit(
       const rawType = r.courseType ? String(r.courseType) : null;
       const courseType = rawType ? (typeMap.get(norm(rawType))?.code ?? rawType) : null;
 
+      // ── قواعد درس از «جدول دروس» ──
+      // متن خام «پیش‌نیاز» نگه داشته می‌شود (ترجمه به course_rules در گام
+      // همگام‌سازی انجام می‌شود، چون قواعد مقیّد به نسخهٔ برنامه‌اند) و
+      // «هم‌نیاز / هم‌ارز» به فهرست کد نرمال‌شده تبدیل می‌شوند.
+      const prereqText = r.prereqText ? String(r.prereqText).trim() : null;
+      const prereqTree = parseRequisiteText(prereqText);
+      const coreqTree = parseRequisiteText(r.coreqText as string | null);
+      const equivCodes = parseEquivalentCodes(r.equivText as string | null, String(r.code));
+      const coRequisites = coreqTree
+        ? coreqTree.conditions.map(c => ('course' in c ? String(c.course) : '')).filter(Boolean).join(',').slice(0, 200)
+        : null;
+      const equivalentCourseCodes = equivCodes.length ? equivCodes.join(',').slice(0, 2000) : null;
+
       const values = {
         code: rw.apply(String(r.code)),   // 🔁 کد جدیدِ تأییدشده (اگر تعریف شده باشد)
         title: String(r.title), units: String(r.units),
         theoreticalUnits: String(r.theory), practicalUnits: String(r.practical),
         courseType, departmentId, degreeLevelId,
+        ...(prereqText ? { prereqText } : {}),
+        ...(coRequisites ? { coRequisites } : {}),
+        ...(equivalentCourseCodes ? { equivalentCourseCodes } : {}),
       };
       const r0 = await db.insert(courses).values(values).onConflictDoNothing().returning({ id: courses.id });
-      if (r0.length) { inserted++; continue; }
+      if (r0.length) {
+        inserted++;
+        if (prereqTree) prereqImported++;
+        if (coreqTree) coreqImported++;
+        if (equivalentCourseCodes) equivImported++;
+        continue;
+      }
 
       // درس از قبل هست: فقط جاهای خالی را پر می‌کنیم (دادهٔ دستیِ کاربر بازنویسی نمی‌شود).
       // بدون این گام، فایلِ کاملِ دوم هیچ اثری نداشت و «مقطع/گروه/واحد عملی» تا ابد خالی می‌ماند.
@@ -899,6 +924,7 @@ export async function commit(
         .select({
           id: courses.id, theoreticalUnits: courses.theoreticalUnits, practicalUnits: courses.practicalUnits,
           courseType: courses.courseType, departmentId: courses.departmentId, degreeLevelId: courses.degreeLevelId,
+          prereqText: courses.prereqText, coRequisites: courses.coRequisites, equivalentCourseCodes: courses.equivalentCourseCodes,
         })
         .from(courses).where(eq(courses.code, values.code)).limit(1);
       if (!cur) continue;
@@ -909,6 +935,10 @@ export async function commit(
       if (!cur.courseType && values.courseType) patch.courseType = values.courseType;
       if (cur.departmentId == null && departmentId != null) patch.departmentId = departmentId;
       if (cur.degreeLevelId == null && degreeLevelId != null) patch.degreeLevelId = degreeLevelId;
+      // سه ستون قواعد — فقط اگر در سامانه خالی باشند (دادهٔ دستی حفظ می‌شود)
+      if (!cur.prereqText && prereqText) { patch.prereqText = prereqText; if (prereqTree) prereqImported++; }
+      if (!cur.coRequisites && coRequisites) { patch.coRequisites = coRequisites; if (coreqTree) coreqImported++; }
+      if (!cur.equivalentCourseCodes && equivalentCourseCodes) { patch.equivalentCourseCodes = equivalentCourseCodes; if (equivalentCourseCodes) equivImported++; }
 
       if (Object.keys(patch).length) {
         await db.update(courses).set(patch).where(eq(courses.id, cur.id));
@@ -917,6 +947,31 @@ export async function commit(
     }
     if (enriched) {
       report.warnings.push({ row: 0, msg: `${enriched} درسِ موجود با اطلاعات این فایل کامل شد (مقطع/گروه/تفکیک واحد) — مقادیر پرشدهٔ قبلی دست نخورد.` });
+    }
+    // ── قواعد پیش‌نیاز/هم‌نیاز: از جدول دروس به course_rules نسخه‌ها ──
+    if (prereqImported || coreqImported || equivImported) {
+      report.warnings.push({
+        row: 0,
+        msg: `از جدول دروس خوانده شد: ${prereqImported} درس با پیش‌نیاز، ${coreqImported} با هم‌نیاز و ${equivImported} با دروس هم‌ارز.`,
+      });
+    }
+    if (prereqImported || coreqImported) {
+      try {
+        const sync = await syncRequisiteRulesFromCourses();
+        if (sync.prereqRules || sync.coreqRules) {
+          report.warnings.push({
+            row: 0,
+            msg: `${sync.prereqRules} قاعدهٔ پیش‌نیاز و ${sync.coreqRules} قاعدهٔ هم‌نیاز از جدول دروس به چارت ${sync.versions} نسخه اضافه شد.`,
+          });
+        } else if (sync.versions === 0) {
+          report.warnings.push({ row: 0, msg: 'پیش‌نیازها خوانده شد ولی هنوز هیچ چارتی درس ندارد؛ پس از تعریف چارت، دکمهٔ «همگام‌سازی پیش‌نیاز از جدول دروس» را بزنید.' });
+        }
+        if (sync.unresolvedCodes.length) {
+          report.warnings.push({ row: 0, msg: `${sync.unresolvedCodes.length} کد پیش‌نیاز/هم‌نیاز در بانک دروس نبود (نمونه: ${sync.unresolvedCodes.slice(0, 6).join('، ')}).` });
+        }
+      } catch (e: any) {
+        report.warnings.push({ row: 0, msg: `همگام‌سازی قواعد انجام نشد: ${e?.message ?? e}` });
+      }
     }
     reportRewrites(rw, 'درس');
   }

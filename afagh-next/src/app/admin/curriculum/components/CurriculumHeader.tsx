@@ -5,6 +5,7 @@ import { useCurriculum } from '../curriculum-context';
 import { faNum } from '../curriculum-core';
 import { termCountForDegree } from '@/lib/term-plan';
 import PrintChartButton from './PrintChartButton';
+import SyncRequisitesButton from './SyncRequisitesButton';
 
 export default function CurriculumHeader() {
   const {
@@ -45,6 +46,7 @@ export default function CurriculumHeader() {
               ➕ نسخهٔ جدید
             </button>
             <PrintChartButton />
+            <SyncRequisitesButton />
           </div>
         </div>
 

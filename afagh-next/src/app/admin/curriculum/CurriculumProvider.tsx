@@ -13,7 +13,7 @@ import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, Version
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
 import { addCourseToCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, markGraduationRequiredBulkAction, removeCourseFromCurriculumAction, syncRolesFromBankAction, updateCourseInCurriculumAction } from './actions/courses';
-import { setCourseCorequisiteAction, setCourseGradeStatusCodesAction, setCoursePassingGradeAction, setCoursePrerequisiteAction } from './actions/rules';
+import { setCourseCorequisiteAction, setCourseGradeStatusCodesAction, setCoursePassingGradeAction, setCoursePrerequisiteAction, syncRequisiteRulesAction } from './actions/rules';
 import { approveCurriculumAction, archiveCurriculumAction, publishCurriculumAction, rejectCurriculumAction, submitCurriculumForApprovalAction, validateCurriculumAction } from './actions/lifecycle';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
@@ -315,6 +315,16 @@ function useCurriculumWorkspace(
     if (ok) reloadDetail(selectedVersionId);
   };
 
+  /**
+   * «پیش‌نیاز / هم‌نیاز» را از **جدول دروس** می‌خواند و در قواعد همین نسخه
+   * ثبت می‌کند. قواعد دستیِ موجود دست نمی‌خورند (overwrite=false).
+   */
+  const handleSyncRequisites = async () => {
+    if (selectedVersionId == null) { showToast('اول یک نسخه را انتخاب کنید.', 'error'); return; }
+    const ok = await run(() => syncRequisiteRulesAction(selectedVersionId));
+    if (ok) await reloadDetail(selectedVersionId);
+  };
+
   const handleMarkGradReq = async () => {
     if (selectedVersionId == null) return;
     const ok = await run(() => markGraduationRequiredBulkAction(selectedVersionId));
@@ -600,6 +610,7 @@ function useCurriculumWorkspace(
     handleSaveRoleTargets,
     handleSaveRules,
     handleSubmit,
+    handleSyncRequisites,
     handleSyncRoles,
     handleTransferToMajor,
     handleUpdateGradReq,

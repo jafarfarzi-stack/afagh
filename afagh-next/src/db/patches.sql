@@ -337,3 +337,8 @@ UPDATE "departments" AS d SET "universityId" = 1 WHERE d."universityId" IS NULL
 UPDATE "curriculum_versions" AS v SET "universityId" = COALESCE(m."universityId", 1)
   FROM "majors" m WHERE m.id = v."majorId" AND v."universityId" IS NULL;
 
+
+-- ── قواعد پیش‌نیاز از «جدول دروس» (مهاجرت از سیستم قدیمی) ──
+-- متن خام ستون «پیش‌نیاز» روی خودِ درس نگه داشته می‌شود؛ چون course_rules
+-- مقیّد به نسخهٔ برنامه است و یک درس می‌تواند در چند نسخه باشد.
+ALTER TABLE IF EXISTS "courses" ADD COLUMN IF NOT EXISTS "prereqText" text;
