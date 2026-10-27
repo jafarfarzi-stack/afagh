@@ -25,6 +25,7 @@ function useCurriculumWorkspace(
   initialTab?: string | null,
   initialVersionId?: number | null,
   initialDetail?: VersionDetail | null,
+  universityTitle?: string,
 ) {
   const [majors, setMajors] = useState<MajorItem[]>(initial.majors);
   const [versions, setVersions] = useState<VersionRow[]>(initial.versions);
@@ -587,6 +588,7 @@ function useCurriculumWorkspace(
   return {
     activeTab,
     addCourseForm,
+    universityTitle: universityTitle ?? '',
     allFilteredSelected,
     bank,
     bankFiltered,
@@ -724,9 +726,9 @@ function useCurriculumWorkspace(
 
 export type CurriculumValue = ReturnType<typeof useCurriculumWorkspace>;
 
-export function CurriculumProvider({ initial, tab, version, detail, children }: {
-  initial: CurriculumWorkspace; tab?: string | null; version?: number | null; detail?: VersionDetail | null; children: ReactNode;
+export function CurriculumProvider({ initial, tab, version, detail, universityTitle, children }: {
+  initial: CurriculumWorkspace; tab?: string | null; version?: number | null; detail?: VersionDetail | null; universityTitle?: string; children: ReactNode;
 }) {
-  const value = useCurriculumWorkspace(initial, tab, version, detail);
+  const value = useCurriculumWorkspace(initial, tab, version, detail, universityTitle);
   return <CurriculumCtx.Provider value={value}>{children}</CurriculumCtx.Provider>;
 }

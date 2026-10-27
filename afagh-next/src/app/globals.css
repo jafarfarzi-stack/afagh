@@ -653,6 +653,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   }
   .curriculum-print-area,
   .curriculum-print-area * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+  /* هدر/فوتر چاپی چارت — فونت درشت‌تر از قاعدهٔ کلی 7pt (specificity بالاتر برنده است) */
+  .curriculum-print-area .chart-print-header { font-size: 9.5pt !important; line-height: 1.45 !important; font-weight: 700 !important; color: #0f172a !important; }
+  .curriculum-print-area .chart-print-header .t { font-size: 12.5pt !important; font-weight: 900 !important; }
+  .curriculum-print-area .chart-print-footer { font-size: 8pt !important; line-height: 1.3 !important; color: #0f172a !important; }
+  .curriculum-print-area .chart-print-footer table { font-size: 8pt !important; border-collapse: collapse !important; width: 100% !important; }
+  .curriculum-print-area .chart-print-footer th,
+  .curriculum-print-area .chart-print-footer td { border: 0.5pt solid #334155 !important; padding: 1pt 2pt !important; text-align: center !important; }
+  .curriculum-print-area .chart-print-footer th { font-weight: 800 !important; background: #f1f5f9 !important; }
 
   /* ─────────────────────────────────────────────────────────────
      سردر کلاسی (پوستر درب اتاق) — یک برگ A4 افقی: ۷ ستون شنبه→جمعه،

@@ -31,7 +31,9 @@ export default function SemestersTab() {
     semesterCourses,
     setDropTarget,
     totalPlannedUnits,
+    typeSummary,
     unassignedCourses,
+    universityTitle,
   } = useCurriculum();
 
   // ── فیلتر/مرتب‌سازی زندهٔ چارت (کد، عنوان، نقش) ──
@@ -101,6 +103,19 @@ export default function SemestersTab() {
       {/* ترمبندی چارت — تب: ترمبندی چارت */}
       {activeTab === 'SEMESTERS' && detail && (
         <div className="curriculum-print-area bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+          {/* هدر چاپی: دانشگاه / رشته / مقطع / پنجرهٔ ورودی — فقط روی کاغذ */}
+          <div className="chart-print-header hidden print:!block border-b-2 border-slate-800 pb-2 text-center">
+            <div className="t">{universityTitle || 'دانشگاه'}</div>
+            <div>
+              برنامهٔ درسی — {degreeMajor?.name ?? '—'} ({degreeMajor?.code ?? '—'})
+              {' '}· مقطع: {degreeMajor?.degreeTitle ?? '—'}{degreeMajor?.degreeIsGraduate === 1 ? ' (تکمیلی)' : ''}
+            </div>
+            <div>
+              ورودی‌های {faNum(selectedVersion?.entryYearFrom ?? 0)}
+              {selectedVersion?.entryYearTo != null ? ` تا ${faNum(selectedVersion.entryYearTo)}` : ' به بعد'}
+              {' '}· نسخه: {selectedVersion?.title ?? '—'}
+            </div>
+          </div>
           <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm">🗺️ ترمبندی چارت — {selectedVersion.title}</h4>
@@ -270,6 +285,38 @@ export default function SemestersTab() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* خلاصهٔ نوع درس در پایین چاپ: از هر نوع چند درس / چند واحد */}
+          <div className="chart-print-footer hidden print:!block border-t-2 border-slate-800 pt-2">
+            <div className="font-extrabold mb-1">خلاصهٔ دروس بر اساس نوع (تعداد دروس / واحد):</div>
+            {typeSummary.length > 0 ? (
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-400 px-1 py-0.5 text-center">نوع درس</th>
+                    {typeSummary.map(r => (
+                      <th key={r.role} className="border border-slate-400 px-1 py-0.5 text-center">{ROLE_LABELS[r.role] ?? r.role}</th>
+                    ))}
+                    <th className="border border-slate-400 px-1 py-0.5 text-center">جمع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-slate-400 px-1 py-0.5 text-center font-bold">تعداد دروس</td>
+                    {typeSummary.map(r => <td key={r.role} className="border border-slate-400 px-1 py-0.5 text-center">{faNum(r.count)}</td>)}
+                    <td className="border border-slate-400 px-1 py-0.5 text-center font-extrabold">{faNum(typeSummary.reduce((s, r) => s + r.count, 0))}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-400 px-1 py-0.5 text-center font-bold">واحد</td>
+                    {typeSummary.map(r => <td key={r.role} className="border border-slate-400 px-1 py-0.5 text-center">{faNum(r.units)}</td>)}
+                    <td className="border border-slate-400 px-1 py-0.5 text-center font-extrabold">{faNum(typeSummary.reduce((s, r) => s + r.units, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <div>در این نسخه درسی تعریف نشده است.</div>
+            )}
           </div>
         </div>
       )}

@@ -81,6 +81,7 @@ export default async function AdminCurriculumPage({
       tab={tabParam}
       version={versionId}
       detail={detailRes?.ok ? (detailRes.data as unknown as VersionDetail) : null}
+      universityTitle={currentUniversity?.title ?? 'دانشگاه'}
       initial={{
         majors: majorItems,
         versions: ov.versions.map((v) => ({
