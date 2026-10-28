@@ -114,6 +114,10 @@ export default async function FinanceWorklistPage(props: {
     ? Math.min(100, Math.round((collected / netDebtBase) * 100))
     : collected > 0 ? 100 : 0;
 
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const rangeFrom = (page - 1) * pageSize + 1;
+  const rangeTo = Math.min(page * pageSize, count);
+
   const inputCls =
     'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500';
   const dockCls =
@@ -260,8 +264,7 @@ export default async function FinanceWorklistPage(props: {
         {count > pageSize && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 print:hidden">
             <span className="text-[11px] text-slate-500">
-              صفحهٔ {fa(page)} از {fa(Math.max(1, Math.ceil(count / pageSize))} —
-              نمایش {fa((page - 1) * pageSize + 1)} تا {fa(Math.min(page * pageSize, count))}
+              صفحهٔ {fa(page)} از {fa(pageCount)} - نمایش {fa(rangeFrom)} تا {fa(rangeTo)}
             </span>
             <div className="flex items-center gap-2">
               <Link
@@ -277,9 +280,9 @@ export default async function FinanceWorklistPage(props: {
               </Link>
               <Link
                 href={buildFinanceHref(sp, page + 1)}
-                aria-disabled={page >= Math.ceil(count / pageSize)}
+                aria-disabled={page >= pageCount}
                 className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
-                  page >= Math.ceil(count / pageSize)
+                  page >= pageCount
                     ? 'pointer-events-none bg-slate-100 text-slate-400'
                     : 'bg-emerald-700 text-white hover:bg-emerald-800'
                 }`}
