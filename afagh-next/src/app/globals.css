@@ -63,8 +63,10 @@ body { @apply bg-slate-100 text-slate-800 font-sans; }
    اگر عنصری پهن‌تر از عرضِ صفحه باشد، در RTL کل صفحه به‌سمت چپ جابه‌جا و
    «نیمه‌خالی/بُرش‌خورده» دیده می‌شد (مثلاً جدولِ هفتگیِ ۹۶۰px یا نوارِ کنترلِ هدر).
    این قاعده فقط در موبایل فعال است (سایدبارِ چسبانِ دسکتاپ دست‌نخورده می‌ماند) و
-   از overflow-x:hidden استفاده می‌کند تا هیچ اسکرولِ افقیِ سراسری نماند. */
-@media (max-width: 768px) {
+   از overflow-x:hidden استفاده می‌کند تا هیچ اسکرولِ افقیِ سراسری نماند.
+   ⚠️ عمداً `screen` دارد: در چاپ، `overflow-x:hidden` روی body محتوای پهن را
+   می‌بُرد و ستون‌های جدول‌های چاپی از کاغذ بیرون می‌زدند. */
+@media screen and (max-width: 768px) {
   html, body { overflow-x: hidden; max-width: 100%; }
   /* گاردِ همه‌شمولِ فرم‌ها: هیچ ورودی‌ای در موبایل نباید از ظرفش پهن‌تر شود.
      صفحه‌های فرم (پذیرش، پروندهٔ دانشجو، تنظیمات و…) هرکدام مارک‌آپ دستی
@@ -450,6 +452,29 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .transcript-print-area table.tr-doc > tfoot > tr { break-inside: avoid; page-break-inside: avoid; }
   .transcript-print-area .tr-signatures { border-top: 2px solid #334155; }
   .transcript-print-area table.tr-doc td.tr-doc-cell { padding: 0; border: 0; vertical-align: top; min-width: 0; }
+  /* ── دفاعِ سوم: چاپ همیشه چیدمانِ جدولیِ دسکتاپ را می‌گیرد ──
+     حتی اگر قاعدهٔ موبایل (mobile-tables.css) سهواً در چاپ اجرا شود، اینجا
+     ساختارِ جدول را به حالتِ استاندارد برمی‌گردانیم تا ستون‌ها روی هم
+     نریزند. `table.rt` کلاسِ «پاسخ‌دهی موبایل» است و در عرض‌های کم جدول را
+     به کارتِ عمودی تبدیل می‌کند — در چاپ نباید اثری داشته باشد. */
+  .transcript-print-area table.rt,
+  .transcript-print-area table.rt > thead,
+  .transcript-print-area table.rt > tbody,
+  .transcript-print-area table.rt > tfoot,
+  .transcript-print-area table.rt > tr,
+  .transcript-print-area table.rt > colgroup,
+  .transcript-print-area table.rt tr,
+  .transcript-print-area table.rt th,
+  .transcript-print-area table.rt td { display: revert !important; }
+  .transcript-print-area table.rt > thead { display: table-header-group !important; }
+  .transcript-print-area table.rt > tbody { display: table-row-group !important; }
+  .transcript-print-area table.rt > tfoot { display: table-footer-group !important; }
+  .transcript-print-area table.rt tr { display: table-row !important; }
+  .transcript-print-area table.rt th,
+  .transcript-print-area table.rt td { display: table-cell !important; }
+  /* برچسب‌های تزریقیِ موبایل (data-label) در چاپ حذف می‌شوند */
+  .transcript-print-area table.rt td::before { content: none !important; }
+  .transcript-print-area table.rt td > * { flex: initial !important; min-width: 0 !important; }
   .transcript-print-area .tr-info-grid > div { min-width: 0; overflow-wrap: anywhere; }
   .transcript-print-area .tr-term-table td { overflow-wrap: anywhere; }
   .transcript-print-area .tr-signatures span { min-width: 0; }
@@ -841,7 +866,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
    در صفحه‌های باریک: جدول‌ها خوانا می‌مانند و ظرف‌های اسکرول،
    لمسِ روان می‌گیرند تا هیچ داشبوردی از عرض بیرون نزند.
    ───────────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
+@media screen and (max-width: 640px) {
   table { font-size: 0.72rem; }
   th, td { padding-left: 0.4rem; padding-right: 0.4rem; }
   .overflow-x-auto, .overflow-auto { -webkit-overflow-scrolling: touch; }

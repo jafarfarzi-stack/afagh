@@ -5,10 +5,18 @@
    (--bg-secondary و …) تا دارک‌مود و برندینگِ هر دانشگاه دست‌نخورده بمانند.
    تزریقِ برچسبِ هر ستون (data-label) توسط مؤلفهٔ MobileTableEnhancer انجام
    می‌شود، پس هیچ بازنویسی در صفحه‌ها لازم نیست.
+
+   ⚠️ همهٔ بلوک‌های این فایل با `@media screen and (…)` محدود شده‌اند و نه
+   `@media (max-width: …)`. دلیل: عرضِ کاغذِ A4 عمودی پس از کسر حاشیه‌ها
+   ۱۹۶mm ≈ ۷۴۱px است؛ با شرطِ بدونِ `screen`، این قاعده هنگامِ **چاپ** هم
+   فعال می‌شد و هر جدولِ `rt` (از جمله جدولِ سندِ کارنامهٔ مالی) را به
+   «کارتِ عمودی» تبدیل می‌کرد — یعنی ستون‌ها روی کاغذ زیرِ هم می‌ریختند و
+   سند چند برابر بلندتر و بریده‌بریده چاپ می‌شد. با `screen`، چاپ همیشه
+   چیدمانِ جدولیِ دسکتاپ را می‌گیرد.
    ───────────────────────────────────────────────────────────────────────── */
 
 /* مدل ۱ (پیش‌فرض `rt`): کارت به ازای هر سطر — فقط روی موبایل */
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   table.rt:not(.rt--scroll) {
     display: block;
   }
@@ -63,7 +71,7 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   table.rt--scroll {
     min-width: 640px;
   }
@@ -83,7 +91,7 @@
 .mc-list {
   display: none;
 }
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   .mc-list {
     display: grid;
     grid-template-columns: 1fr;
@@ -177,7 +185,7 @@
 
 /* سایدبارِ ادمین روی موبایل به کشوی کشویی (drawer) تبدیل می‌شود.
    والدِ ناوبری باید `.app-shell` و خودِ سایدبار `.app-nav` باشد. */
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   .app-nav {
     position: fixed;
     inset-block: 0;
@@ -221,7 +229,7 @@
 .tabstrip::-webkit-scrollbar {
   display: none;
 }
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   .tabstrip {
     flex-wrap: nowrap;
     padding-bottom: 2px;
@@ -236,7 +244,7 @@
 .action-bar {
   display: none;
 }
-@media (max-width: 768px) {
+@media screen and (max-width: 768px) {
   .action-bar {
     display: flex;
     position: fixed;
