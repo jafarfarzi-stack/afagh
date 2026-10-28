@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import PrintButton from '@/components/PrintButton';
 import { requireRole } from '@/lib/auth';
-import { listFinanceStudents, listFinanceFilterOptions } from '@/lib/finance-engine';
+import { listFinanceStudents, listFinanceFilterOptions, summarizeFinanceStudents, countFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getTermScope } from '@/lib/term-scope';
 import FinanceTable from './FinanceTable';
@@ -11,6 +11,22 @@ export const dynamic = 'force-dynamic';
 const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
+
+/** ساخت URL صفحه‌بندی با حفظ فیلترهای فعلی (رشته/مقطع/ورودی/جستجو/بدهکار). */
+function buildFinanceHref(
+  sp: { majorId?: string; degreeLevelId?: string; entryYear?: string; q?: string; debtors?: string },
+  p: number,
+): string {
+  const params = new URLSearchParams();
+  if (sp.majorId) params.set('majorId', sp.majorId);
+  if (sp.degreeLevelId) params.set('degreeLevelId', sp.degreeLevelId);
+  if (sp.entryYear) params.set('entryYear', sp.entryYear);
+  if (sp.q) params.set('q', sp.q);
+  if (sp.debtors) params.set('debtors', sp.debtors);
+  if (p > 1) params.set('page', String(p));
+  const qs = params.toString();
+  return qs ? `/admin/finance?${qs}` : '/admin/finance';
+}
 
 type KpiTone = 'slate' | 'rose' | 'violet' | 'indigo' | 'emerald' | 'amber' | 'sky';
 
@@ -45,6 +61,7 @@ export default async function FinanceWorklistPage(props: {
     entryYear?: string;
     q?: string;
     debtors?: string;
+    page?: string;
   }>;
 }) {
   await requireRole(FINANCE);
@@ -65,33 +82,34 @@ export default async function FinanceWorklistPage(props: {
   const entryYear = Number(sp.entryYear) || null;
   const search = (sp.q || '').trim();
   const onlyDebtors = sp.debtors === '1';
+  const page = Math.max(1, Number(sp.page) || 1);
+  const pageSize = 100;
 
-  const [options, students] = await Promise.all([
+  // کارتابل حالا صفحه‌بندی شده است:
+  //   • students → فقط صفحهٔ جاری (۱۰۰ ردیف) — بار شبکه/پارس ~۱۰برابر کمتر
+  //   • summary  → جمع کل روی همهٔ دانشجویانِ فیلتر‌شده (نوار KPI همچنان درست)
+  //   • count    → تعداد کل برای نوار صفحه‌بندی
+  const [options, students, summary, count] = await Promise.all([
     listFinanceFilterOptions({ universityId: currentUniversityId }),
     listFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors, limit: 1000,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      limit: pageSize, offset: (page - 1) * pageSize,
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
+    summarizeFinanceStudents({
+      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      universityId: currentUniversityId,
+      termId: scopeTermId,
+    }),
+    countFinanceStudents({
+      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      universityId: currentUniversityId,
+    }),
   ]);
 
-  const totals = students.reduce(
-    (acc, s) => ({
-      charges: acc.charges + s.charges,
-      discounts: acc.discounts + s.discounts,
-      sponsorships: acc.sponsorships + s.sponsorships,
-      payments: acc.payments + s.payments,
-      chequesCleared: acc.chequesCleared + s.chequesCleared,
-      loans: acc.loans + s.loans,
-      balance: acc.balance + s.balance,
-      pendingCheques: acc.pendingCheques + s.pendingCheques,
-    }),
-    { charges: 0, discounts: 0, sponsorships: 0, payments: 0,
-      chequesCleared: 0, loans: 0, balance: 0, pendingCheques: 0 }
-  );
-  const debtorCount = students.filter((s) => s.balance > 0).length;
-  const collected = totals.payments + totals.chequesCleared + totals.loans;
-  const netDebtBase = totals.charges - totals.discounts - totals.sponsorships;
+  const collected = summary.payments + summary.chequesCleared + summary.loans;
+  const netDebtBase = summary.charges - summary.discounts - summary.sponsorships;
   const collectionRate = netDebtBase > 0
     ? Math.min(100, Math.round((collected / netDebtBase) * 100))
     : collected > 0 ? 100 : 0;
@@ -134,19 +152,19 @@ export default async function FinanceWorklistPage(props: {
 
       {/* ── نوار KPI ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
-        <Kpi icon="👥" label="دانشجوی فهرست‌شده" value={fa(students.length)} tone="slate" sub={`${fa(debtorCount)} بدهکار`} />
-        <Kpi icon="💸" label="جمع شهریه (ریال)" value={fa(totals.charges)} tone="rose" />
-        <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(totals.discounts)} tone="violet" />
-        <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(totals.sponsorships)} tone="indigo" />
-        <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(totals.payments)} tone="emerald" sub={`وام: ${fa(totals.loans)}`} />
-        <Kpi icon="🧾" label="چک وصول‌شده (ریال)" value={fa(totals.chequesCleared)} tone="emerald" sub={`در انتظار: ${fa(totals.pendingCheques)}`} />
-        <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(totals.pendingCheques)} tone="amber" />
+        <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
+        <Kpi icon="💸" label="جمع شهریه (ریال)" value={fa(summary.charges)} tone="rose" />
+        <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(summary.discounts)} tone="violet" />
+        <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(summary.sponsorships)} tone="indigo" />
+        <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(summary.payments)} tone="emerald" sub={`وام: ${fa(summary.loans)}`} />
+        <Kpi icon="🧾" label="چک وصول‌شده (ریال)" value={fa(summary.chequesCleared)} tone="emerald" sub={`در انتظار: ${fa(summary.pendingCheques)}`} />
+        <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(summary.pendingCheques)} tone="amber" />
         <Kpi
-          icon={totals.balance > 0 ? '🔴' : '🟢'}
+          icon={summary.balance > 0 ? '🔴' : '🟢'}
           label="ماندهٔ خالص (ریال)"
-          value={fa(Math.abs(totals.balance))}
-          tone={totals.balance > 0 ? 'rose' : 'emerald'}
-          sub={totals.balance > 0 ? 'بدهکار' : totals.balance < 0 ? 'بستانکار' : 'تسویه'}
+          value={fa(Math.abs(summary.balance))}
+          tone={summary.balance > 0 ? 'rose' : 'emerald'}
+          sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
         />
         {/* نرخ وصول — کارت تمام‌عرض */}
         <div className="col-span-2 rounded-xl border border-indigo-200 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-sm md:col-span-4">
@@ -226,7 +244,9 @@ export default async function FinanceWorklistPage(props: {
       {/* فهرست دانشجویان */}
       <div className="card">
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-          <h2 className="font-bold text-slate-800">فهرست دانشجویان ({fa(students.length)})</h2>
+          <h2 className="font-bold text-slate-800">
+            فهرست دانشجویان ({fa(students.length)} از {fa(count)})
+          </h2>
           <p className="text-[11px] text-slate-500 print:hidden">برای کارنامهٔ مالی روی نام دانشجو کلیک کنید</p>
         </div>
 
@@ -234,6 +254,40 @@ export default async function FinanceWorklistPage(props: {
           <p className="py-8 text-center text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</p>
         ) : (
           <FinanceTable students={students} />
+        )}
+
+        {/* نوار صفحه‌بندی */}
+        {count > pageSize && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 print:hidden">
+            <span className="text-[11px] text-slate-500">
+              صفحهٔ {fa(page)} از {fa(Math.max(1, Math.ceil(count / pageSize))} —
+              نمایش {fa((page - 1) * pageSize + 1)} تا {fa(Math.min(page * pageSize, count))}
+            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                href={buildFinanceHref(sp, page - 1)}
+                aria-disabled={page <= 1}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                  page <= 1
+                    ? 'pointer-events-none bg-slate-100 text-slate-400'
+                    : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                }`}
+              >
+                › قبلی
+              </Link>
+              <Link
+                href={buildFinanceHref(sp, page + 1)}
+                aria-disabled={page >= Math.ceil(count / pageSize)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                  page >= Math.ceil(count / pageSize)
+                    ? 'pointer-events-none bg-slate-100 text-slate-400'
+                    : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                }`}
+              >
+                بعدی ‹
+              </Link>
+            </div>
+          </div>
         )}
       </div>
     </div>

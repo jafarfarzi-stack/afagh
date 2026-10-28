@@ -14,6 +14,7 @@ import { requireStudentUniversity } from '@/lib/security';
 import { resolveCityMinistry } from '@/lib/shared-coding';
 import { toGregorian } from '@/lib/calendar';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
+import type { StaffItem } from './types';
 import { execRowCount, execRows } from '@/lib/db-result';
 
 /**
@@ -1146,4 +1147,36 @@ export async function updateStaffProfileAction(
   }
   revalidatePath('/admin/students');
   return { ok: true };
+}
+
+/**
+ * ── فهرست استادان/پرسنل، **تنبل** ──
+ * قبلاً همین داده در رندر اولیهٔ صفحه برای همهٔ استادان (~۱۴۰۰ ردیف × ۳۵ فیلد)
+ * خوانده و به کلاینت فرستاده می‌شد؛ نتیجه HTML ۱.۶۶MB و رندر ۶۷۳ms بود.
+ * حالا فقط وقتی ادمین تب «استادان» را باز می‌کند یک‌بار واکشی می‌شود.
+ *
+ * 🔒 همان گاردِ خود صفحه: نقش‌ها/مجوزها + دامنهٔ دانشگاه فعال.
+ */
+export async function loadStaffListAction(): Promise<{
+  ok: boolean;
+  staffList?: StaffItem[];
+  userRoleIds?: Record<number, number[]>;
+  error?: string;
+}> {
+  try {
+    const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
+    const user = await requireRoleOrPermission(
+      ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS'],
+      ['students:view_dossier'],
+    );
+    const uni = await getCurrentUniversity();
+    const { loadStaffBundle } = await import('./staff-data');
+    const { staffList, userRoleIds } = await loadStaffBundle({
+      universityId: uni?.id ?? null,
+      roles: user.roles,
+    });
+    return { ok: true, staffList, userRoleIds };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'فهرست استادان بارگذاری نشد.' };
+  }
 }

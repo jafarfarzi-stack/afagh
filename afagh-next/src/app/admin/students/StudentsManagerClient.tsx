@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, loadStaffListAction, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
 import { requestStepUpAction } from '@/lib/step-up-actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
@@ -62,7 +62,12 @@ export default function StudentsManagerClient(props: {
   codeLabels?: CodeLabels | null;
   regulations?: RegulationPick[];
   students: StudentItem[];
-  staffList: StaffItem[];
+  /**
+   * فهرست استادان دیگر در رندر اولیه ارسال نمی‌شود (۱.۶۶MB → ~۱۲۰KB).
+   * با باز شدن تب «استادان» از اکشن `loadStaffListAction` واکشی می‌شود.
+   * این پراپ فقط برای سازگاری/تست باقی مانده است.
+   */
+  staffList?: StaffItem[];
   pagination?: Pagination;
   degrees?: { id: number; title: string }[];
   /** گزینه‌های محل تولد/صدور از geo (سراسری) — کد وزارت در سرور resolve می‌شود */
@@ -87,6 +92,18 @@ export default function StudentsManagerClient(props: {
   // ناوبری و انتخاب
   const [selectedStuIdx, setSelectedStuIdx] = useState<number>(0);
   const [selectedProfIdx, setSelectedProfIdx] = useState<number>(0);
+
+  /**
+   * فهرست استادان — **واکشی تنبل**.
+   * چرا؟ قبلاً ~۱۴۰۰ ردیف × ۳۵ فیلد در رندر اولیه به مرورگر می‌آمد
+   * (HTML ۱.۶۶MB / ۱۷۰KB gzip و رندر ۶۷۳ms). حالا فقط با باز کردن تب
+   * «استادان» یک‌بار واکشی و در همین state کش می‌شود.
+   */
+  const [staffList, setStaffList] = useState<StaffItem[]>(props.staffList ?? []);
+  const [staffRoleIds, setStaffRoleIds] = useState<Record<number, number[]>>(props.userRoleIds ?? {});
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffLoadError, setStaffLoadError] = useState<string>('');
+  const staffRequestedRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState<string>(props.pagination?.q ?? '');
   const [toastMsg, setToastMsg] = useState<string>('');
   const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
@@ -152,7 +169,7 @@ export default function StudentsManagerClient(props: {
   const openRoleModalFor = (st: StaffItem) => {
     if (!st.userId) { showToast('شناسه کاربری این پرونده یافت نشد.'); return; }
     setRoleMsg('');
-    setRoleSel(new Set(props.userRoleIds?.[st.userId] ?? []));
+    setRoleSel(new Set(staffRoleIds?.[st.userId] ?? []));
     setRoleModalFor({ userId: st.userId, name: `${st.firstName} ${st.lastName}` });
   };
   const handleToggleActive = async (userId: number | null | undefined, next: boolean, name: string) => {
@@ -380,8 +397,41 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
     }
   };
 
+  /**
+   * واکشی تنبل فهرست استادان: فقط یک‌بار، آن هم وقتی تب «استادان» باز شود.
+   * اگر پراپ اولیه وجود داشته باشد (تست/مسیر قدیمی) هیچ درخواستی نمی‌فرستد.
+   */
+  useEffect(() => {
+    if (mainView !== 'professors') return;
+    if (staffRequestedRef.current) return;
+    if ((props.staffList?.length ?? 0) > 0) return;
+    staffRequestedRef.current = true;
+    let alive = true;
+    setStaffLoading(true);
+    setStaffLoadError('');
+    loadStaffListAction()
+      .then(res => {
+        if (!alive) return;
+        if (res.ok && res.staffList) {
+          setStaffList(res.staffList);
+          setStaffRoleIds(res.userRoleIds ?? {});
+        } else {
+          setStaffLoadError(res.error || 'فهرست استادان بارگذاری نشد.');
+          staffRequestedRef.current = false; // اجازهٔ تلاش دوباره
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setStaffLoadError('ارتباط برقرار نشد. دوباره تلاش کنید.');
+        staffRequestedRef.current = false;
+      })
+      .finally(() => { if (alive) setStaffLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainView]);
+
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
-  const currentStaff = props.staffList[selectedProfIdx] || props.staffList[0];
+  const currentStaff = staffList[selectedProfIdx] || staffList[0];
 
   /** دانشگاه مبدا دانشجو برای درج در کارنامه (برجسته اگر منحله باشد) */
   const originUniversity: OriginUniversity | null = (() => {
@@ -617,7 +667,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
     else router.push(target);
   };
 
-  const staffQueryFiltered = props.staffList.filter(s =>
+  const staffQueryFiltered = staffList.filter(s =>
     (!staffQuery ||
     faIncludes(s.staffCode ?? '', staffQuery) ||
     faIncludes(s.nationalCode ?? '', staffQuery) ||
@@ -1752,10 +1802,10 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 <button
                   onClick={() => openRoleModalFor(currentStaff)}
                   className="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold whitespace-nowrap"
-                  title={(`نقش‌های «${currentStaff.firstName} ${currentStaff.lastName}»: ${((props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
+                  title={(`نقش‌های «${currentStaff.firstName} ${currentStaff.lastName}»: ${((staffRoleIds?.[currentStaff.userId ?? 0] ?? []).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
                 >
-                  {((props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).length > 0)
-                    ? `⚙ ${(props.userRoleIds?.[currentStaff.userId ?? 0] ?? []).length} نقش`
+                  {((staffRoleIds?.[currentStaff.userId ?? 0] ?? []).length > 0)
+                    ? `⚙ ${(staffRoleIds?.[currentStaff.userId ?? 0] ?? []).length} نقش`
                     : '⚙ نقش‌ها'}
                 </button>
               ) : null}
@@ -1770,6 +1820,11 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
           </div>
 
           {/* ── بخش ۱ استاد: اطلاعات آموزشی (ادغام‌شده) ── */}
+          {profTab === 'info_combined' && !currentStaff && (
+            <div className="rounded-b-md border border-slate-400 bg-white p-6 text-center text-xs font-bold text-slate-600">
+              {staffLoading ? 'در حال بارگذاری دوسیهٔ استاد…' : 'استادی برای نمایش انتخاب نشده است.'}
+            </div>
+          )}
           {profTab === 'info_combined' && currentStaff && (
             <div ref={staffFormRef}>
             <div key={`prof-a-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
@@ -1951,13 +2006,13 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                             const uid = currentStaff.userId;
                             if (!uid) { showToast('شناسه کاربری یافت نشد.'); return; }
                             setRoleMsg('');
-                            setRoleSel(new Set(props.userRoleIds?.[uid] ?? []));
+                            setRoleSel(new Set(staffRoleIds?.[uid] ?? []));
                             setRoleModalFor({ userId: uid, name: `${currentStaff.firstName} ${currentStaff.lastName}` });
                           }}
                           className="px-2 py-1 rounded text-[11px] font-bold bg-indigo-700 text-white hover:bg-indigo-800"
-                          title={(`نقش‌های فعلی: ${(((props.userRoleIds?.[currentStaff.userId] ?? [])).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
+                          title={(`نقش‌های فعلی: ${(((staffRoleIds?.[currentStaff.userId] ?? [])).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
                         >
-                          {(props.userRoleIds?.[currentStaff.userId] ?? []).length > 0 ? `⚙ ${(props.userRoleIds?.[currentStaff.userId] ?? []).length} نقش` : '⚙ نقش‌ها'}
+                          {(staffRoleIds?.[currentStaff.userId] ?? []).length > 0 ? `⚙ ${(staffRoleIds?.[currentStaff.userId] ?? []).length} نقش` : '⚙ نقش‌ها'}
                         </button>
                       ) : null}
                     </div>
@@ -1971,6 +2026,24 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
           {/* ── تب ۴ استاد: لیست اساتید ── */}
           {profTab === 'list' && (
             <div className="bg-white p-4 border border-slate-400 rounded-b-md space-y-3">
+              {/* فهرست استادان تنبل واکشی می‌شود — حالت بارگذاری/خطا */}
+              {staffLoading && (
+                <div className="flex items-center gap-2 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-900">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+                  در حال بارگذاری فهرست استادان و کارکنان…
+                </div>
+              )}
+              {staffLoadError && !staffLoading && (
+                <div className="flex items-center justify-between gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
+                  <span>⚠ {staffLoadError}</span>
+                  <button
+                    onClick={() => { staffRequestedRef.current = false; setMainView('students'); setTimeout(() => setMainView('professors'), 0); }}
+                    className="shrink-0 rounded border border-amber-700 bg-white px-2 py-0.5 font-bold"
+                  >
+                    تلاش دوباره
+                  </button>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <input
                   type="text"
@@ -2030,7 +2103,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                         <td className="p-2 text-right whitespace-nowrap">
                           <button
                             onClick={() => {
-                              const realIdx = props.staffList.findIndex(x => x.id === st.id);
+                              const realIdx = staffList.findIndex(x => x.id === st.id);
                               setSelectedProfIdx(realIdx >= 0 ? realIdx : 0);
                               setProfTab('info_combined');
                             }}
