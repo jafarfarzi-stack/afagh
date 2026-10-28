@@ -100,5 +100,45 @@ ok(
   'print-transcript.ts: کلاسِ «printing-portrait» برای تفکیکِ چیدمانِ عمودی اعمال می‌شود'
 );
 
+// ── ۵) چیدمانِ ۲کارتهٔ کارنامهٔ مالی (مدل کارتی) در چاپ قفل بماند ──
+// هر <tr> از قبل جفتِ ترم را در گرید ۲ستونه می‌ریزد؛ قاعدهٔ چاپ باید ۲ ستونه
+// بماند و خودِ کارت (term-block) avoid باشد تا هیچ کارتی نصف نشود.
+ok(
+  /\.tr-fin-root \.tr-fin-row \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\) !important;/.test(globalsCss),
+  'globals.css: گریدِ ترم‌های کارنامهٔ مالی در چاپ ۲ ستونه است (۲ کارت در هر ردیف)'
+);
+ok(
+  /\.tr-fin-root \.term-block \{ break-inside: avoid !important; page-break-inside: avoid !important; \}/.test(globalsCss),
+  'globals.css: کارتِ ترم (term-block) در چاپ avoid است تا نصف نشود'
+);
+ok(
+  /\.tr-fin-root \.term-block \{ break-inside: avoid !important/.test(globalsCss)
+    && /\.tr-fin-root table\.tr-doc > tbody > tr\.tr-doc-row \{ break-inside: auto !important/.test(globalsCss),
+  'globals.css: ردیفِ بیرونی auto است تا کارت‌ها در صفحه جریان بگیرند'
+);
+ok(
+  !/\.tr-fin-root \.tr-fin-row \{ grid-template-columns: minmax\(0, 1fr\) !important/.test(globalsCssNoComments),
+  'globals.css: قاعدهٔ تک‌ستونهٔ قدیمیِ گریدِ ترم‌ها حذف شده است'
+);
+
+// ── ۶) آرمِ دانشگاه در مدل تخت (FinancialTranscriptFlat) باید در سربرگ باشد ──
+const flatTsx = readFileSync(path.join(ROOT, 'src', 'components', 'FinancialTranscriptFlat.tsx'), 'utf8');
+// آرم داخل نوارِ عنوان (قبل از «جمهوری اسلامی ایران»)
+ok(
+  /tr-fin-titlebar[\s\S]{0,600}?<img src=\{logoUrl\} alt="آرم دانشگاه"/.test(flatTsx),
+  'FinancialTranscriptFlat: آرم داخل نوارِ عنوان (سربرگ) است'
+);
+ok(
+  /tr-fin-titlebar[\s\S]{0,1200}?جمهوری اسلامی ایران/.test(flatTsx)
+    && flatTsx.indexOf('alt="آرم دانشگاه"') < flatTsx.indexOf('جمهوری اسلامی ایران', flatTsx.indexOf('tr-fin-titlebar')),
+  'FinancialTranscriptFlat: آرم بالای متنِ «جمهوری اسلامی ایران» می‌نشیند'
+);
+// و دیگر در ناحیهٔ ۴ (کنار عکس دانشجو) نباشد
+const area4 = flatTsx.slice(flatTsx.indexOf('ناحیهٔ ۴'));
+ok(
+  !area4.includes('آرم دانشگاه'),
+  'FinancialTranscriptFlat: آرم از ناحیهٔ ۴ (کنار عکس دانشجو) حذف شده است'
+);
+
 console.log(`\nprint-media-guard: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

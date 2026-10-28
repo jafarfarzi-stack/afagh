@@ -403,13 +403,24 @@ export default function FinancialTranscriptFlat({
           <tr>
             <td className="tr-doc-cell">
 
-              {/* ═══ ① نوارِ عنوانِ بالای سند ═══ */}
-              <div className="tr-fin-titlebar border-b-2 border-slate-900 px-4 pt-3 pb-1.5 text-center">
-                <p className="text-[10.5pt] font-black tracking-wide">جمهوری اسلامی ایران</p>
-                <p className="text-[8.5pt] font-bold">وزارت علوم، تحقیقات و فناوری</p>
-                {universityTitle ? <p className="text-[11pt] font-black">{universityTitle}</p> : null}
-                <p className="text-[7.5pt] text-slate-600">معاونت اداری و مالی — ادارهٔ امور مالی و امور دانشجویی</p>
-                <h2 className="mt-1 inline-block border border-slate-900 px-3 py-0.5 text-[9.5pt] font-black">کارنامهٔ مالی دانشجو</h2>
+              {/* ═══ ① نوارِ عنوانِ بالای سند ═══
+                  آرمِ دانشگاه در بالای سربرگ می‌نشیند (مثلِ کارنامهٔ رسمیِ دانشگاهی)
+                  تا سند از همان نگاهِ اول، رسمی و رسمیت‌دار به‌نظر برسد. */}
+              <div className="tr-fin-titlebar border-b-2 border-slate-900 px-4 pt-2 pb-1.5">
+                <div className="flex flex-col items-center text-center">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="آرم دانشگاه" className="mb-1 h-[10mm] w-[10mm] shrink-0 object-contain" />
+                  ) : (
+                    <span className="mb-1 flex h-[10mm] w-[10mm] shrink-0 items-center justify-center rounded border border-dashed border-slate-300 text-[6.5pt] text-slate-400">
+                      ارم
+                    </span>
+                  )}
+                  <p className="text-[10.5pt] font-black tracking-wide">جمهوری اسلامی ایران</p>
+                  <p className="text-[8.5pt] font-bold">وزارت علوم، تحقیقات و فناوری</p>
+                  {universityTitle ? <p className="text-[11pt] font-black">{universityTitle}</p> : null}
+                  <p className="text-[7.5pt] text-slate-600">معاونت اداری و مالی — ادارهٔ امور مالی و امور دانشجویی</p>
+                  <h2 className="mt-1 inline-block border border-slate-900 px-3 py-0.5 text-[9.5pt] font-black">کارنامهٔ مالی دانشجو</h2>
+                </div>
               </div>
 
               {/* ═══ ② سربرگِ چهارناحیه‌ای (الگوی کارنامهٔ رسمی) ═══
@@ -532,7 +543,8 @@ export default function FinancialTranscriptFlat({
                   </dl>
                 </div>
 
-                {/* ناحیهٔ ۴ (چپ‌ترین): عکس دانشجو — درست مثل کارنامهٔ رسمی دانشگاهی */}
+                {/* ناحیهٔ ۴ (چپ‌ترین): عکس دانشجو — درست مثل کارنامهٔ رسمی دانشگاهی.
+                    آرمِ دانشگاه از اینجا برداشته شد و به بالای سربرگ (نوارِ عنوان) منتقل شد. */}
                 <div className="tr-fin-head-col flex flex-col items-center justify-start px-2 py-1.5">
                   {student.photoUrl ? (
                     <img
@@ -544,11 +556,6 @@ export default function FinancialTranscriptFlat({
                     <div className="flex h-[22mm] w-[17mm] shrink-0 items-center justify-center border border-dashed border-slate-400 text-[7pt] text-slate-400">
                       عکس
                     </div>
-                  )}
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="آرم دانشگاه" className="mt-1 h-[9mm] w-[9mm] shrink-0 object-contain" />
-                  ) : (
-                    <span className="mt-1 rounded border border-dashed border-slate-300 px-1 py-0.5 text-[7pt] text-slate-400">ارم دانشگاه</span>
                   )}
                 </div>
               </div>
