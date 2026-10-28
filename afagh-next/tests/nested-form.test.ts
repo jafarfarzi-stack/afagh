@@ -99,12 +99,12 @@ console.log('\n— SessionLock: دو فرمِ خواهر (رگرسیون دکم�
   ok(opens === 2, `دقیقاً دو فرم دارد (یافت‌شده: ${opens})`);
   ok(closes === 2, `تعداد بستن‌ها هم دو است (یافت‌شده: ${closes})`);
   ok(findNestedForms(readFileSync(p, 'utf8')).length === 0, 'فرم‌ها تودرتو نیستند');
-  ok(/<form action=\{logoutAction\}/.test(src), 'فرم خروج به logoutAction وصل است');
+  ok(/<form action="\/api\/session\/logout" method="post"/.test(src), 'فرم خروج به مسیر HTTP خروج وصل است (بدون نیاز به JS)');
   // فرم خروج نباید داخل فرم بازگشایی باشد: بین شروع فرم بازگشایی و بسته‌شدنش
   // نباید هیچ <form action= دیگری باشد.
   const unlockStart = src.indexOf('<form onSubmit={unlock}');
   const unlockEnd = unlockStart >= 0 ? src.indexOf('</form>', unlockStart) : -1;
-  const logoutAt = src.indexOf('<form action={logoutAction}');
+  const logoutAt = src.indexOf('<form action="/api/session/logout"');
   ok(unlockStart >= 0 && unlockEnd > unlockStart, 'فرم بازگشایی پیدا و بسته شد');
   ok(logoutAt > unlockEnd, 'فرم خروج بعد از بسته‌شدن فرم بازگشایی شروع می‌شود');
 }
