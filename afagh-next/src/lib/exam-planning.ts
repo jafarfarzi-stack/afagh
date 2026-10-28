@@ -28,16 +28,14 @@ import {
   schedules, seat_allocations,
 } from '@/db/schema';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
+import { advisoryLock } from '@/lib/advisory-lock';
+import { execFirstRow } from '@/lib/db-result';
 import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
 import {
   allowedExamRange, examKindOf, examLevelOf, normJalali, planSeatAllocation,
   scoreExamSlot, slotAllowedInZone, validateAndSplitExam, validateZoning,
   type ExamZoning, type SplitVerdict,
 } from '@/lib/exam-scheduler';
-
-async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ns}:${a}:${b}`}, 0))`);
-}
 
 /** دانشگاه مالک یک ترم (ترم‌ها per-uni هستند: uq_terms_uni_code) */
 export async function termUniversityId(termId: number): Promise<number | null> {
@@ -236,7 +234,7 @@ export async function examCourseProfile(offeringId: number): Promise<ExamCourseP
       left join degree_level_configs d on d.id = ma."degreeLevelId"
      where o.id = ${offeringId}
   `);
-  const degTitle = ((deg as unknown as { rows: { degreeTitle: string | null }[] }).rows?.[0]?.degreeTitle) ?? null;
+  const degTitle = execFirstRow<{ degreeTitle: string | null }>(deg)?.degreeTitle ?? null;
   return {
     offeringId: r.offeringId,
     courseCode: r.courseCode,

@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import type { ExamCardData } from '@/lib/verification';
+import QrSvg from '@/components/QrSvg';
 import { submitCourseEvaluationAction } from './actions';
 
 // ==========================================
@@ -483,7 +484,10 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
             <div className="p-2 bg-white rounded-xl text-slate-950 text-center shadow flex flex-col items-center justify-center">
               {examTicket ? (
                 ticketQr ? (
-                  <span className="[&>svg]:rounded-lg [&>svg]:bg-white [&>svg]:w-28 [&>svg]:h-28 print:[&>svg]:w-32 print:[&>svg]:h-32" dangerouslySetInnerHTML={{ __html: ticketQr }} />
+                  <QrSvg
+                    svg={ticketQr}
+                    className="[&>svg]:rounded-lg [&>svg]:bg-white [&>svg]:w-28 [&>svg]:h-28 print:[&>svg]:w-32 print:[&>svg]:h-32"
+                  />
                 ) : (
                   <span className="text-[10px] text-slate-400">QR در دسترس نیست</span>
                 )

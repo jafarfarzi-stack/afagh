@@ -120,6 +120,7 @@ export async function getEduExpertAssignInit(termId?: number): Promise<EduExpert
 export async function listDepartmentsForRoomOwner(uniIdArg?: number | null): Promise<
   { id: number; name: string; facultyName: string | null; headName: string | null }[]
 > {
+  await requireRoleOrPermission(EDU, EDU_PERM);
   // دانشگاهِ انتخاب‌شده از صفحه پاس می‌آید تا با سوییچرِ بالای پنل هم‌خوان باشد.
   const uniId = uniIdArg ?? (await getCurrentUniversity().catch(() => null))?.id ?? null;
   const ds = await db

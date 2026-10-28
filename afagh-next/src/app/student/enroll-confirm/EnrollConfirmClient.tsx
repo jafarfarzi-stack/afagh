@@ -1,5 +1,7 @@
 'use client';
 
+import QrSvg from '@/components/QrSvg';
+
 // (تایپ محلی — عمداً از @/lib/verification ایمپورت نمی‌شود چون آن ماژول server-only است)
 interface EnrollConfirmData {
   studentId: number;
@@ -76,7 +78,7 @@ export default function EnrollConfirmClient(props: {
             <p className="mt-0.5 text-[11px] text-slate-500">دانشگاه آفاق — سامانهٔ جامع آموزشی · نیمسال {termTitle}</p>
           </div>
           {qrSvg ? (
-            <div className="h-24 w-24 shrink-0" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+            <QrSvg svg={qrSvg} className="h-24 w-24 shrink-0" />
           ) : null}
         </div>
 

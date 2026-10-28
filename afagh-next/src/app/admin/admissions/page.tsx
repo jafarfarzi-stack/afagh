@@ -18,24 +18,26 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminAdmissionsPage() {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
-  await ensureDefaultSanjeshMappings();
-  await ensureDefaultIntegrations();
+  // دو تضمینِ پیش‌فرض روی جدول‌های متفاوت‌اند و به هم وابسته نیستند — موازی می‌روند.
+  await Promise.all([ensureDefaultSanjeshMappings(), ensureDefaultIntegrations()]);
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
   const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
 
-  const allMajors = await db.select().from(majors).where(scopeOf(majors.universityId)).orderBy(majors.id);
-  const allLevels = await db.select().from(degree_level_configs).where(scopeOf(degree_level_configs.universityId)).orderBy(degree_level_configs.id);
-  const allMappings = await db.select().from(sanjesh_mappings).where(scopeOf(sanjesh_mappings.universityId));
-  const allFormulas = await db.select().from(student_id_formulas).where(scopeOf(student_id_formulas.universityId));
-
-  const rawStaging = await db
-    .select()
-    .from(admissions_staging)
-    .where(scopeOf(admissions_staging.universityId))
-    .orderBy(desc(admissions_staging.id))
-    .limit(50);
+  // پنج خواندنِ مستقل (بدون وابستگی بین‌شان) — یک رفت‌وبرگشتِ موازی به‌جای پنج تای پشتِ‌سرهم.
+  const [allMajors, allLevels, allMappings, allFormulas, rawStaging] = await Promise.all([
+    db.select().from(majors).where(scopeOf(majors.universityId)).orderBy(majors.id),
+    db.select().from(degree_level_configs).where(scopeOf(degree_level_configs.universityId)).orderBy(degree_level_configs.id),
+    db.select().from(sanjesh_mappings).where(scopeOf(sanjesh_mappings.universityId)),
+    db.select().from(student_id_formulas).where(scopeOf(student_id_formulas.universityId)),
+    db
+      .select()
+      .from(admissions_staging)
+      .where(scopeOf(admissions_staging.universityId))
+      .orderBy(desc(admissions_staging.id))
+      .limit(50),
+  ]);
 
   let rawApiLogs: any[] = [];
   try {

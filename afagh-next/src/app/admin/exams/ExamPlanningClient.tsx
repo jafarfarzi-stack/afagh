@@ -246,8 +246,8 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
     try {
       const r = await scheduleExamSlotAction({ termId: selectedTermId, offeringId, examDate: isoToJalali(d.date), startTime: d.start, endTime: end, universityId });
       showToast(r.ok ? r.message : r.error, r.ok ? 'success' : 'error');
-      if (!r.ok && (r as any).status === 'OVERFLOW' && (r as any).splitOptions?.length) {
-        showToast(`💡 ${(r as any).splitOptions.map((o: any) => o.label).join(' یا ')}`, 'error');
+      if (!r.ok && r.status === 'OVERFLOW' && r.splitOptions?.length) {
+        showToast(`💡 ${r.splitOptions.map(o => o.label).join(' یا ')}`, 'error');
       }
       if (r.ok) { reload(selectedTermId); reloadPlanning(selectedTermId); }
     } finally { setBusyPlanning(false); }
@@ -284,7 +284,8 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
   const handleChainOverview = async (sessionId: number) => {
     const r = await examChainOverviewAction({ sessionId });
     if (!r.ok) { showToast(r.error ?? 'خطا', 'error'); return; }
-    showToast('زنجیرهٔ تحویل: ' + JSON.stringify((r as any).data ?? (r as any).overview ?? r), 'success');
+    // نتیجهٔ کامل زنجیره (حضور/صورت‌جلسه/بسته‌ها/تحویل/اعتراض) — بدون کلید اضافی
+    showToast('زنجیرهٔ تحویل: ' + JSON.stringify(r), 'success');
   };
 
   const tabs: { id: ExamTab; label: string; badge: string }[] = [
@@ -598,7 +599,7 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
                   {label}:
                   <input
                     type="date"
-                    value={(zoneForm as any)[k]}
+                    value={zoneForm[k]}
                     onChange={e => setZoneForm({ ...zoneForm, [k]: e.target.value })}
                     className="mt-1 w-full border border-slate-300 rounded-lg p-2 font-bold text-left"
                     dir="ltr"

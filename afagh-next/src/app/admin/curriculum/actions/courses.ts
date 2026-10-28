@@ -196,13 +196,23 @@ export async function syncRolesFromBankAction(versionId: number): Promise<Act<{ 
       .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
       .where(eq(curriculum_courses.curriculumVersionId, versionId));
     let updated = 0;
+    // Batch update: group courseIds by their mapped role type, then update in bulk per group
+    const roleGroups: Record<string, number[]> = {};
     for (const r of rows) {
       const mapped = roleFromBankType(r.courseType);
       if (mapped !== r.roleType) {
-        await db.update(curriculum_courses).set({ roleType: mapped })
-          .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
-        updated++;
+        if (!roleGroups[mapped]) roleGroups[mapped] = [];
+        roleGroups[mapped].push(r.courseId);
       }
+    }
+    for (const [targetRole, courseIds] of Object.entries(roleGroups)) {
+      await db.update(curriculum_courses)
+        .set({ roleType: targetRole })
+        .where(and(
+          eq(curriculum_courses.curriculumVersionId, versionId),
+          inArray(curriculum_courses.courseId, courseIds)
+        ));
+      updated += courseIds.length;
     }
     await db.transaction(async (tx) => {
       await appendAudit(tx, {
@@ -224,13 +234,6 @@ export async function syncRolesFromBankAction(versionId: number): Promise<Act<{ 
  * نقش‌های CORE/MAJOR که هنوز علامت نخورده‌اند → isGraduationRequired=1.
  * فقط ۰→۱ می‌رود؛ چیزی که قبلاً علامت خورده دست‌نخورده می‌ماند.
  */
-
-
-/**
- * علامت‌زدن گروهی «شرط فارغ‌التحصیلی»: همهٔ دروس الزامی (isRequired=1) یا
- * نقش‌های CORE/MAJOR که هنوز علامت نخورده‌اند → isGraduationRequired=1.
- * فقط ۰→۱ می‌رود؛ چیزی که قبلاً علامت خورده دست‌نخورده می‌ماند.
- */
 export async function markGraduationRequiredBulkAction(versionId: number): Promise<Act<{ message: string; data: { updated: number; total: number } }>> {
   await requireRole(EDITORS);
   try {
@@ -242,13 +245,16 @@ export async function markGraduationRequiredBulkAction(versionId: number): Promi
         eq(curriculum_courses.curriculumVersionId, versionId),
         or(eq(curriculum_courses.isRequired, 1), inArray(curriculum_courses.roleType, ['CORE', 'MAJOR'])),
       ));
-    let updated = 0;
-    for (const r of rows) {
-      if (r.isGraduationRequired === 1) continue;
-      await db.update(curriculum_courses).set({ isGraduationRequired: 1 })
-        .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, r.courseId)));
-      updated++;
+    const toUpdate = rows.filter(r => r.isGraduationRequired !== 1).map(r => r.courseId);
+    if (toUpdate.length) {
+      await db.update(curriculum_courses)
+        .set({ isGraduationRequired: 1 })
+        .where(and(
+          eq(curriculum_courses.curriculumVersionId, versionId),
+          inArray(curriculum_courses.courseId, toUpdate)
+        ));
     }
+    const updated = toUpdate.length;
     await db.transaction(async (tx) => {
       await appendAudit(tx, {
         actorUserId: (await requireRole(EDITORS)).id,

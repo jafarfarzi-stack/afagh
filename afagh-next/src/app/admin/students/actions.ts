@@ -14,6 +14,7 @@ import { requireStudentUniversity } from '@/lib/security';
 import { resolveCityMinistry } from '@/lib/shared-coding';
 import { toGregorian } from '@/lib/calendar';
 import { legacyRowOfSource, legacySourceCodeFor } from './transcript-utils';
+import { execRowCount, execRows } from '@/lib/db-result';
 
 /**
  * 🔐 رمز یکبارمصرف تصادفی با آنتروپی کافی (۹۶ بیت).
@@ -542,29 +543,41 @@ export async function bulkResetToNationalCodeAction(
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
   const uniWhere = sql`(users."universityId" = ${uni.id} OR users."universityId" IS NULL)`;
   try {
-    const usersToReset = await db.execute(sql<{ id: number; nationalCode: string }>`
+    type ResetRow = { id: number; nationalCode: string | null };
+    const res = await db.execute(sql`
       SELECT id, "nationalCode" FROM users
       WHERE "isActive" = 1 AND "nationalCode" IS NOT NULL AND LENGTH("nationalCode") = 10 AND ${sql.raw(scopeWhere)} AND ${uniWhere}
     `);
-    const rows = (usersToReset as any).rows ?? usersToReset;
+    const rows = execRows<ResetRow>(res);
     let count = 0;
     const affectedIds: number[] = [];
     // ⚠️ رمزهای تولیدشده فقط یک‌بار به مدیر بازگردانده می‌شوند؛ در دیتابیس فقط هش ذخیره می‌شود.
     const generatedPasswords: { nationalCode: string; password: string }[] = [];
     // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
     await db.transaction(async (tx) => {
+      // ① تولید هش (bcrypt عمداً کند است — ترتیبی می‌ماند)
+      const hashes: { id: number; hash: string }[] = [];
       for (const row of rows) {
         if (!row.nationalCode) continue;
         // 🔐 رمز یکبارمصرف تصادفی — دیگر از کد ملی مشتق نمی‌شود (کد ملی قابل‌حدس است)
         const oneTimePassword = randomOneTimePassword();
         const hash = await hashPassword(oneTimePassword);
-        await tx.execute(sql`
-          UPDATE users SET "passwordHash" = ${hash}, "mustChangePassword" = 1
-          WHERE id = ${row.id}
-        `);
+        hashes.push({ id: Number(row.id), hash });
         affectedIds.push(Number(row.id));
         generatedPasswords.push({ nationalCode: String(row.nationalCode), password: oneTimePassword });
         count++;
+      }
+      // ② نوشتن هش‌ها دسته‌ای — پیش‌تر یک UPDATE به‌ازای هر کاربر می‌رفت
+      //    (مثلاً ۲٬۰۰۰ کاربر = ۲٬۰۰۰ رفت‌وبرگشت داخل یک تراکنش طولانی).
+      const BATCH = 200;
+      for (let i = 0; i < hashes.length; i += BATCH) {
+        const chunk = hashes.slice(i, i + BATCH);
+        const valuesSql = sql.join(chunk.map(h => sql`(${h.id}::int, ${h.hash}::text)`), sql`, `);
+        await tx.execute(sql`
+          UPDATE users AS u SET "passwordHash" = v.hash, "mustChangePassword" = 1
+          FROM (VALUES ${valuesSql}) AS v(id, hash)
+          WHERE u.id = v.id
+        `);
       }
       if (affectedIds.length) {
         await tx.delete(sessions).where(inArray(sessions.userId, affectedIds));
@@ -617,7 +630,7 @@ export async function bulkResetPasswordsAction(
       SELECT id FROM users
       WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere2}
     `);
-    const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
+    const idsRows = execRows<{ id: number }>(idsRes);
     const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
     // 🔒 ریست رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
     const upd = await db.transaction(async (tx) => {
@@ -630,7 +643,7 @@ export async function bulkResetPasswordsAction(
       }
       return u;
     });
-    const count = Number((upd as any)?.rowCount ?? 0);
+    const count = execRowCount(upd);
     // ساخت نقش برای حساب‌های گروهی که ردیف user_roles ندارند
     await db.execute(sql`
       INSERT INTO user_roles ("userId", "roleId")
@@ -669,7 +682,7 @@ export async function bulkForcePasswordChangeAction(
       SELECT id FROM users
       WHERE "isActive" = 1 AND ${sql.raw(scopeWhere)} AND ${uniWhere}
     `);
-    const idsRows = ((idsRes as any).rows ?? idsRes) as { id: number }[];
+    const idsRows = execRows<{ id: number }>(idsRes);
     const affectedIds = idsRows.map((r) => Number(r.id)).filter(Number.isInteger);
     // 🔒 اجبار تغییر رمز = ابطال نشست‌ها در همان تراکنش (الگوی setUserActiveAction)
     const upd = await db.transaction(async (tx) => {
@@ -682,7 +695,7 @@ export async function bulkForcePasswordChangeAction(
       }
       return u;
     });
-    const count = Number((upd as any)?.rowCount ?? 0);
+    const count = execRowCount(upd);
     return { ok: true, count };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'انجام نشد.' };
@@ -709,7 +722,7 @@ export async function backfillRolesAction(): Promise<{ ok: boolean; error?: stri
           AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur."userId" = u.id AND ur."roleId" = r.id)
         ON CONFLICT ("userId", "roleId") DO NOTHING
       `);
-      inserted += Number((ins as any)?.rowCount ?? 0);
+      inserted += execRowCount(ins);
     }
     return { ok: true, inserted };
   } catch (e: unknown) {

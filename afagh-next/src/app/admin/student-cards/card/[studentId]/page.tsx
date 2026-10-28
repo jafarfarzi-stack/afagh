@@ -8,6 +8,7 @@ import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { qrSvg } from '@/lib/qr';
 import PersonPhoto from '@/app/admin/students/components/PersonPhoto';
 import PrintButton from '@/components/PrintButton';
+import QrSvg from '@/components/QrSvg';
 import { toShamsi } from '@/lib/shamsi';
 
 export const dynamic = 'force-dynamic';
@@ -135,9 +136,9 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
           {/* QR گیت حراست */}
           <div className="shrink-0 text-center">
             {qr ? (
-              <div
+              <QrSvg
+                svg={qr}
                 className="h-32 w-32 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
-                dangerouslySetInnerHTML={{ __html: qr }}
               />
             ) : (
               <div className="flex h-32 w-32 items-center justify-center rounded border border-dashed border-slate-300 text-[10px] text-slate-400">

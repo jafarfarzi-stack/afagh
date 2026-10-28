@@ -594,6 +594,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
      پس ردیف آزاد می‌شکند و شکستنِ داخل بلوک‌ها (کارت ترم/جدول) جدا کنترل می‌شود. */
   .tr-flat-root table.tr-doc > tbody > tr.tr-doc-row { break-inside: auto !important; page-break-inside: auto !important; }
   .tr-flat-root .tr-fin-table thead { display: table-header-group !important; }
+  /* سطرهای جدول هرگز نصفه به صفحهٔ بعد نروند — در خروجی چاپ، ردیف نصفه
+     (مثلاً شماره/کد درس در یک صفحه و مبلغش در صفحهٔ بعد) سند را بی‌اعتبار می‌کند.
+     شکستن فقط بینِ سطرها مجاز است. */
+  .tr-flat-root .tr-fin-table tr,
+  .tr-flat-root .tr-fin-totals tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  /* در مدل کارتی هم سطرهای ریز دروس نصفه نشوند */
+  .tr-fin-root .tr-fin-courses tr { break-inside: avoid !important; page-break-inside: avoid !important; }
   .tr-flat-root table.tr-doc > tbody > tr.tr-doc-row > td { vertical-align: top; }
   .tr-flat-root thead .tr-doc-cell { padding: 0 !important; }
   .tr-flat-root thead .tr-fin-titlebar { padding: 1.5mm 3mm 0.8mm !important; }

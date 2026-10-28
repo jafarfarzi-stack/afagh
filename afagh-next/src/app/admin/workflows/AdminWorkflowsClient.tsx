@@ -38,6 +38,8 @@ interface RequestInboxItem {
   trackingCode: string;
   studentName: string;
   studentCode: string;
+  /** شناسهٔ دانشجو — برای میان‌بر پروندهٔ مالی در درخواست‌های FINANCE_STATEMENT */
+  studentId?: number | null;
   processTitle: string;
   processCode: string;
   status: string;
@@ -378,6 +380,18 @@ export default function AdminWorkflowsClient({
                       <td className="p-3">
                         <p className="font-bold text-slate-900">{req.studentName}</p>
                         <p className="text-[11px] font-mono text-slate-400" dir="ltr">{req.studentCode}</p>
+                        {/* درخواست تأیید کارنامهٔ مالی: کارشناس بدون ترک کارتابل،
+                            پروندهٔ مالی همان دانشجو را می‌بیند و بعد تأیید/رد می‌کند. */}
+                        {req.processCode === 'FINANCE_STATEMENT' && req.studentId ? (
+                          <a
+                            href={`/admin/finance/student/${req.studentId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800 transition hover:bg-sky-100"
+                          >
+                            📄 مشاهدهٔ کارنامهٔ مالی
+                          </a>
+                        ) : null}
                       </td>
                       <td className="p-3 font-semibold text-slate-800">
                         {req.processTitle}

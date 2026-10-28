@@ -1,6 +1,7 @@
 import { generateSvgQrCode } from '@/lib/certificate-engine';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { verifyDegree } from '@/lib/graduation-engine';
+import QrSvg from '@/components/QrSvg';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +67,7 @@ export default async function VerifyDegreePage({ params }: { params: Promise<{ c
             </dl>
 
             <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
-              <div className="w-24 h-24 shrink-0" dangerouslySetInnerHTML={{ __html: qr }} />
+              <QrSvg svg={qr} className="w-24 h-24 shrink-0" />
               <div className="text-[10px] text-slate-500 leading-5 break-all">
                 <div className="font-black text-slate-700 mb-1">اثر انگشت دیجیتال (SHA-256):</div>
                 <code>{r.documentHash}</code>

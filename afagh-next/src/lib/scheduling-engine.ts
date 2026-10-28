@@ -22,16 +22,13 @@ import {
   scheduling_allocations, scheduling_room_grants, staff, term_scheduling_states,
 } from '@/db/schema';
 import { auditChain, type AuditTx } from '@/lib/audit-chain';
+import { advisoryLock } from '@/lib/advisory-lock';
 import {
   allocateQuotaShifts, canAllocateInPhase, canEditInPhase, canTransition,
   calculateSlotScore, distributeGroupsByFaculty, overlaps, suggestedGroupCount,
   toMinutes, validateGroupDrafts,
   type GroupDraftInput, type Shift, type RoomGrantInput,
 } from '@/lib/scheduling-core';
-
-async function advisoryLock(tx: AuditTx, ns: string, a: number, b = 0) {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ns}:${a}:${b}`}, 0))`);
-}
 
 const hm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '');
 const hhmmss = (t: string) => (t.length === 5 ? `${t}:00` : t);
