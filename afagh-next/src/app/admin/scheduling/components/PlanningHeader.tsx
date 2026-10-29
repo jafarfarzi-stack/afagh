@@ -8,8 +8,10 @@ import type { ProgramShiftType } from '../types';
 
 export default function PlanningHeader() {
   const {
+    cohortOrdinal,
     cohorts,
     currentPhase,
+    effectiveSemester,
     currentTerm,
     isLoadingWorkspace,
     isDeptScope,
@@ -107,17 +109,27 @@ export default function PlanningHeader() {
             </div>
 
             <div>
-              <label className="text-indigo-200 font-bold block mb-1">۳. ورودی تحصیلی:</label>
+              <label className="text-indigo-200 font-bold block mb-1">۳. نیمسال ورود (دانشجویان در حال تحصیل):</label>
               <select
                 value={selectedCohortId}
                 onChange={e => setSelectedCohortId(e.target.value)}
                 className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold focus:ring-2 focus:ring-amber-400"
               >
-                <option value="ALL">کلیه ورودی‌های رشته</option>
+                <option value="ALL">کلیه نیمسال‌های ورود</option>
                 {cohorts.map(c => (
-                  <option key={c.id} value={c.id}>{c.title} ({faNum(c.expectedStudents)} نفر)</option>
+                  <option key={c.id} value={c.id}>{c.title} — {faNum(c.expectedStudents)} دانشجوی در حال تحصیل</option>
                 ))}
               </select>
+              {cohortOrdinal != null && (
+                <p className="mt-1 text-[10px] font-black text-amber-300">
+                  این ورودی الان در ترم {faNum(cohortOrdinal)} است — چارت به همان ترم محدود شد
+                </p>
+              )}
+              {cohortOrdinal == null && selectedCohortId !== 'ALL' && effectiveSemester !== 'ALL' && (
+                <p className="mt-1 text-[10px] font-bold text-indigo-200">
+                  نمایش ترم {faNum(effectiveSemester === 'NONE' ? 0 : Number(effectiveSemester))} چارت
+                </p>
+              )}
             </div>
 
             <div>

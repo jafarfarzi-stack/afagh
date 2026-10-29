@@ -15,7 +15,7 @@ import {
   buildRealScenario, clampGroupsCount, coTeachingWeights, computeProfUnits, courseTypeRank, DAY_NAMES, faNum, faToEnDigits,
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
   mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
-  slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab,
+  slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab, cohortSemesterNo,
 } from '../src/app/admin/scheduling/planning-core.ts';
 import type { CourseDemand, DepartmentOffering, SchedulingWorkspace } from '../src/app/admin/scheduling/types.ts';
 
@@ -65,9 +65,11 @@ eq('رتبهٔ عمومی قبل از تخصصی', [courseTypeRank('عمومي')
 eq('استاد null → صفر (نه undefined)', mapDemands([{ ...rawDemand, professorId: null, isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].preferredProfId, 0);
 eq('پیش‌فرض‌های ایمن نشست', [d.requiredRoomType, d.groupsCount, d.weekRecurrence, d.examDate], ['THEORY', 1, 'ALL', '']);
 eq('کارت تهی هیچ‌وقت undefined نمی‌شود', NO_PROFESSOR.id, 0);
-const [co] = mapCohorts([{ entryYear: 1403, expectedStudents: 120 }]);
-eq('عنوان ورودی با رقم فارسی', co.title, 'ورودی ۱۴۰۳');
-eq('کلید ورودی رشتهٔ عددی', co.id, '1403');
+const [co] = mapCohorts([{ entryYear: 1403, entryTerm: 1, expectedStudents: 120 }]);
+// «نیمسال ورود» (مهر/بهمن) به‌جای «سال ورود»
+eq('عنوان نیمسال ورود با رقم فارسی', co.title, 'نیمسال ورود مهر ۱۴۰۳');
+eq('کلید نیمسال ورود = سال-نیمسال', co.id, '1403-1');
+eq('بهمن = نیمسال دوم', mapCohorts([{ entryYear: 1403, entryTerm: 2, expectedStudents: 10 }])[0].title, 'نیمسال ورود بهمن ۱۴۰۳');
 
 const rawApproved = {
   offeringId: 9, code: '202', title: 'فیزیک', units: '2', courseType: 'پایه', groupNumber: 1,
@@ -140,9 +142,21 @@ eq('ورودی ۱۴۰۳ → عمومی + آن ورودی', filterScenarioOfferin
 eq('ورودی ۱۴۰۳ روی رشتهٔ ۷', filterScenarioOfferings(list, { programId: 7, cohortId: '1403', weekFilter: 'ALL_VIEW' }).map(o => o.id), [1, 2, 3]);
 eq('نمای زوج → ALL و EVEN', filterScenarioOfferings(list, { programId: 0, cohortId: 'ALL', weekFilter: 'EVEN' }).map(o => o.id), [1, 2, 3, 4]);
 eq('نمای فرد → فقط ALL', filterScenarioOfferings(list, { programId: 0, cohortId: 'ALL', weekFilter: 'ODD' }).map(o => o.id), [1, 2, 3]);
-const dl = [{ ...base, id: 1, programId: 0, cohortId: 'ALL' }, { ...base, id: 2, programId: 7, cohortId: '1403' }, { ...base, id: 3, programId: 8, cohortId: '1404' }];
-eq('تقاضا: رشتهٔ ۷ + عمومی', filterContextDemands(dl, { programId: 7, cohortId: 'ALL' }).map(x => x.id), [1, 2]);
-eq('تقاضا: ورودی ۱۴۰۴', filterContextDemands(dl, { programId: 0, cohortId: '1404' }).map(x => x.id), [1, 3]);
+// تفکیک رشته‌به‌رشته با programIds: بدون تعلق = مشترک (همه‌جا)، با تعلق = فقط رشتهٔ خودش
+const dl = [
+  { ...base, id: 1, programId: 0, programIds: [], cohortId: 'ALL' },
+  { ...base, id: 2, programId: 7, programIds: [7], cohortId: '1403-1' },
+  { ...base, id: 3, programId: 8, programIds: [8], cohortId: '1404-1' },
+  { ...base, id: 4, programId: 0, programIds: [7, 8], cohortId: 'ALL' },
+];
+eq('تقاضا: رشتهٔ ۷ (مشترک + خودش)', filterContextDemands(dl, { programId: 7, cohortId: 'ALL' }).map(x => x.id).sort(), [1, 2, 4]);
+eq('تقاضا: رشتهٔ ۸ چیزی از رشتهٔ ۷ نمی‌بیند', filterContextDemands(dl, { programId: 8, cohortId: 'ALL' }).map(x => x.id).sort(), [1, 3, 4]);
+eq('ترم چارت فیلتر می‌شود', filterContextDemands([{ ...base, id: 5, programIds: [7], semesterNo: 5 }, { ...base, id: 6, programIds: [7], semesterNo: 1 }], { programId: 7, cohortId: 'ALL', semester: 5 }).map(x => x.id), [5]);
+// ورودی ۱۴۰۳۱ در نیمسال ۱۴۰۵۱ = ترم ۵
+eq('ورودی ۱۴۰۳۱ در ۱۴۰۵۱ → ترم ۵', cohortSemesterNo(1403, 1, '14051'), 5);
+eq('ورودی ۱۴۰۳۲ در ۱۴۰۵۱ → ترم ۴', cohortSemesterNo(1403, 2, '14051'), 4);
+eq('ورودی آینده → null', cohortSemesterNo(1406, 1, '14051'), null);
+eq('تقاضا: نیمسال ورود ۱۴۰۴', filterContextDemands(dl, { programId: 0, cohortId: '1404-1' }).map(x => x.id).sort(), [1, 3, 4]);
 
 console.log('\n۶) آمار بازرس، گروه بعدی و سهم‌بندی');
 const io = [
@@ -190,9 +204,10 @@ console.log('\n۸) تب آغازین از query string (resolveTab)');
 eq('مقدار معتبر همان تب است', resolveTab('SCENARIOS'), 'SCENARIOS');
 eq('حروف کوچک هم پذیرفته می‌شود', resolveTab('approved'), 'APPROVED');
 eq('فاصله اضافه پاک می‌شود', resolveTab('  DEPT_ROOMS  '), 'DEPT_ROOMS');
-eq('undefined → تب اول', resolveTab(undefined), 'CURRICULUM_ASSIGN');
-eq('null → تب اول', resolveTab(null), 'CURRICULUM_ASSIGN');
-eq('رشتهٔ بی‌ربط → تب اول', resolveTab('../../etc/passwd'), 'CURRICULUM_ASSIGN');
+// فاز ۰ (انتخاب رشته و ترم) حالا تب اول است
+ eq('undefined → فاز ۰', resolveTab(undefined), 'PROGRAM_SCOPE');
+eq('null → فاز ۰', resolveTab(null), 'PROGRAM_SCOPE');
+eq('رشتهٔ بی‌ربط → فاز ۰', resolveTab('../../etc/passwd'), 'PROGRAM_SCOPE');
 eq('همهٔ تب‌های مشروع برگردانده می‌شوند', PLANNING_TABS.map(resolveTab), [...PLANNING_TABS]);
 
 console.log('\n۹) تعداد گروه‌های موازی — آزاد و نرمال‌شده (clampGroupsCount)');

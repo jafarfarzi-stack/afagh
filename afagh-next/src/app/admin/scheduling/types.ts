@@ -80,6 +80,10 @@ export interface CourseDemand {
   courseDeptId: number | null;
   programId: number;
   programTitle: string;
+  /** رشته‌هایی که این درس به آن‌ها تعلق دارد؛ خالی = درس مشترک بین رشته‌ها */
+  programIds?: number[];
+  /** شمارهٔ ترم پیشنهادی چارت؛ null = تعیین‌نشده */
+  semesterNo?: number | null;
   cohortId: string;
   cohortTitle: string;
   code: string;
@@ -171,7 +175,7 @@ export interface SchedulingWorkspace {
   terms: { id: number; code: string; title: string; isCurrent: boolean }[];
   selectedTermId: number | null;
   programs: { id: number; code: string; title: string; facultyName: string; degreeLevel: string; facultyId: number | null }[];
-  cohorts: { entryYear: number; expectedStudents: number }[];
+  cohorts: { entryYear: number; entryTerm: number; expectedStudents: number }[];
   classrooms: { id: number; name: string; buildingName: string; capacity: number; roomType: string }[];
   allocatedRoomIds: number[];
   professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null }[];
@@ -181,6 +185,10 @@ export interface SchedulingWorkspace {
     capacity: number; groupNumber: number; professorId: number | null; isCoTaught: boolean;
     coProfId: number | null;
     enrolledCount: number; programId: number; programTitle: string;
+    /** رشته‌هایی که این درس به آن‌ها تعلق دارد (چارت درسی). خالی = مشترک/نامشخص */
+    programIds: number[];
+    /** شمارهٔ ترم پیشنهادی چارت (فاز ۰: رشته × ترم) — null = در چارت تعیین نشده */
+    semesterNo: number | null;
     cohortId: string; cohortTitle: string;
     /** تاریخ امتحان واقعی از schedules(scheduleType='EXAM') — خالی یعنی هنوز تعیین نشده */
     examDate: string;
@@ -215,6 +223,7 @@ export interface SchedulingWorkspace {
 
 /** تب‌های اصلی کارتابل (کلید رندر در Shell) */
 export type PlanningTab =
+  | 'PROGRAM_SCOPE'
   | 'CURRICULUM_ASSIGN' | 'PROF_QUOTAS' | 'DEPT_ROOMS' | 'SCENARIOS'
   | 'PROFESSOR_SCHEDULE' | 'APPROVED' | 'TERM_CALENDAR';
 

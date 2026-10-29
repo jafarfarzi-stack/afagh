@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab } from './planning-core';
+import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab, programSemesterMatrix, cohortSemesterNo } from './planning-core';
 import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOption, ClassroomOption, ProfessorOption, CourseDemand, DepartmentOffering, AutoScheduleScenario, SchedulingWorkspace } from './types';
 import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction } from './actions';
 import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
@@ -25,6 +25,8 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   const [selectedTermId, setSelectedTermId] = useState<number>(initial.selectedTermId ?? 0);
   const [selectedProgramId, setSelectedProgramId] = useState<number>(initial.programs[0]?.id ?? 0);
   const [selectedCohortId, setSelectedCohortId] = useState<string>('ALL');
+  // فاز ۰: ترمِ چارتِ رشته. 'ALL' = همهٔ ترم‌ها، 'NONE' = دروس بدون ترمِ تعیین‌شده
+  const [selectedSemester, setSelectedSemester] = useState<number | 'ALL' | 'NONE'>('ALL');
   const [targetShiftPreference, setTargetShiftPreference] = useState<ProgramShiftType>('AFTERNOON_WORKING');
 
   // فعال‌های واقعی
@@ -428,10 +430,34 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   // استفاده از دروس چارت درسی در صورت وجود، وگرنه تمام تقاضاها
   const demandsSource = useMemo(() => curriculumDemands.length > 0 ? curriculumDemands : courseDemands, [curriculumDemands, courseDemands]);
 
+  // «نیمسال ورود» → شمارهٔ ترمِ همان ورودی در نیمسال جاری. با انتخاب ورودی،
+  // چارت به همان یک ترم محدود می‌شود (نه ترم ۱ و ۲ یک‌جا).
+  const cohortOrdinal = useMemo(() => {
+    if (selectedCohortId === 'ALL') return null;
+    const [y, t] = selectedCohortId.split('-');
+    const selectedTerm = terms.find(x => x.id === selectedTermId) ?? terms[0];
+    return cohortSemesterNo(Number(y), Number(t), selectedTerm?.code ?? null);
+  }, [selectedCohortId, terms, selectedTermId]);
+
+  const effectiveSemester = cohortOrdinal ?? selectedSemester;
+
   const filteredDemands = useMemo(
-    () => filterContextDemands(demandsSource, { programId: selectedProgramId, cohortId: selectedCohortId }),
-    [demandsSource, selectedProgramId, selectedCohortId],
+    () => filterContextDemands(demandsSource, { programId: selectedProgramId, cohortId: selectedCohortId, semester: effectiveSemester }),
+    [demandsSource, selectedProgramId, selectedCohortId, effectiveSemester],
   );
+
+  // فاز ۰: ماتریس رشته × ترم با وضعیت کامل/ناقص — «برنامه این رشته کامله»
+  const programMatrix = useMemo(
+    () => programSemesterMatrix(courseDemands, approvedOfferings, programs),
+    [courseDemands, approvedOfferings, programs],
+  );
+
+  /** انتخاب دامنه در فاز ۰ و رفتن به گام ۱ */
+  const applyScope = (programId: number, semester: number | 'ALL' | 'NONE') => {
+    setSelectedProgramId(programId);
+    setSelectedSemester(semester);
+    setActiveMainTab('CURRICULUM_ASSIGN');
+  };
 
   // یک ترم واقعی چند هزار ارائهٔ درس دارد و هر ردیف این جدول سنگین است؛
   // همه را یک‌جا رندر نمی‌کنیم تا مرورگر (و رندر سمت سرور) از پا نیفتد.
@@ -518,6 +544,10 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     ownedDeptId,
     phaseBusy,
     profAssignedUnitsMap,
+    programMatrix,
+    applyScope,
+    cohortOrdinal,
+    effectiveSemester,
     professors,
     programs,
     realAvailRows,
@@ -525,6 +555,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     reloadWorkspace,
     selectedCohortId,
     selectedProgramId,
+    selectedSemester,
     selectedTermId,
     selectedWeekFilter,
     sessionsByOffering,
@@ -555,6 +586,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     setRealAvailRows,
     setSelectedCohortId,
     setSelectedProgramId,
+    setSelectedSemester,
     setSelectedTermId,
     setSelectedWeekFilter,
     setSessionsByOffering,

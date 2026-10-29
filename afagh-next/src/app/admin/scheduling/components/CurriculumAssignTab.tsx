@@ -56,7 +56,7 @@ export default function CurriculumAssignTab() {
                     <th className="p-3 border border-slate-800 w-12">ردیف</th>
                     <th className="p-3 border border-slate-800">کد درس</th>
                     <th className="p-3 border border-slate-800">عنوان درس چارت</th>
-                    <th className="p-3 border border-slate-800">ورودی/ترم</th>
+                    <th className="p-3 border border-slate-800">نیمسال ورود</th>
                     <th className="p-3 border border-slate-800">واحد</th>
                     <th className="p-3 border border-slate-800">نوع درس</th>
                     <th className="p-3 border border-slate-800">تعداد گروه‌ها</th>

@@ -11,11 +11,24 @@ export default function PlanningTabsBar() {
     classrooms,
     displayedDemands,
     generatedTermSessionsCount,
+    programMatrix,
     setActiveMainTab,
   } = usePlanning();
 
   return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveMainTab('PROGRAM_SCOPE')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition ${
+              activeMainTab === 'PROGRAM_SCOPE' ? 'bg-indigo-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span>🎯 فاز ۰: انتخاب رشته و ترم</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-800 font-bold">
+              {faNum(programMatrix.length)} رشته
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveMainTab('CURRICULUM_ASSIGN')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition ${

@@ -12,7 +12,7 @@
 // هیچ UI جدیدی ساخته نشده؛ فقط دادهٔ واقعی جایگزین Mock می‌شود.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
@@ -96,20 +96,39 @@ async function listRealPrograms(universityId?: number) {
     .where(majorWhere);
 }
 
-/** ورودی‌های واقعی دانشجویان (cohort) = (ورودی، تعداد) — فیلتر شده بر اساس universityId */
-async function listRealCohorts(universityId?: number) {
-  const where = universityEq(students.universityId, universityId);
+/**
+ * ورودی‌های واقعی دانشجویان (cohort) = (ورودی، تعداد).
+ *
+ * ⚠️ پیش‌تر: همهٔ دانشجویانِ دانشگاه از هر وضعیتی و هر سالی (تا ۱۳۹۰) شمرده
+ * می‌شد؛ نتیجه فهرستی با ورودی‌های بی‌ربط و اعداد بادکرده بود. حالا فقط
+ * دانشجویانِ ACTIVE و فقط سال‌های قابل برنامه‌ریزی (۸ سال اخیر) و — اگر
+ * مدیرگروه باشد — فقط رشته‌های گروه خودش.
+ */
+async function listRealCohorts(universityId?: number, majorIds?: number[]) {
+  const currentJy = Number(jalaliDateOf(new Date()).slice(0, 4)) || 1405;
+  const conds = [
+    universityEq(students.universityId, universityId),
+    eq(students.status, 'ACTIVE'),
+    gte(students.entryYear, currentJy - 8),
+    lte(students.entryYear, currentJy + 1),
+  ];
+  if (majorIds && majorIds.length) conds.push(inArray(students.majorId, majorIds));
   const rows = await db
     .select({
       entryYear: students.entryYear,
+      entryTerm: students.entryTerm,
       expectedStudents: sql<number>`count(*)::int`,
     })
     .from(students)
     .innerJoin(majors, eq(majors.id, students.majorId))
-    .where(where)
-    .groupBy(students.entryYear)
-    .orderBy(desc(students.entryYear));
-  return rows.map(r => ({ entryYear: r.entryYear, expectedStudents: Number(r.expectedStudents) }));
+    .where(and(...conds))
+    .groupBy(students.entryYear, students.entryTerm)
+    .orderBy(desc(students.entryYear), desc(students.entryTerm));
+  return rows.map(r => ({
+    entryYear: r.entryYear,
+    entryTerm: r.entryTerm ?? 1,
+    expectedStudents: Number(r.expectedStudents),
+  }));
 }
 
 /** سالن‌های واقعی — فیلتر شده بر اساس universityId */
@@ -190,17 +209,17 @@ async function listRealDemands(termId: number, universityId?: number) {
   // course_offerings.entryYearStart/End در عمل خالی است، پس تکیه بر آن همه را
   // «کلیهٔ ورودی‌ها» نشان می‌داد.
   const cohortRows = await db
-    .select({ offeringId: enrollments.offeringId, entryYear: students.entryYear })
+    .select({ offeringId: enrollments.offeringId, entryYear: students.entryYear, entryTerm: students.entryTerm })
     .from(enrollments)
     .innerJoin(students, eq(students.id, enrollments.studentId))
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .where(and(eq(course_offerings.termId, termId), uniFilter))
-    .groupBy(enrollments.offeringId, students.entryYear);
-  const cohortsByOffering = new Map<number, number[]>();
+    .groupBy(enrollments.offeringId, students.entryYear, students.entryTerm);
+  const cohortsByOffering = new Map<number, { year: number; term: number }[]>();
   for (const c of cohortRows) {
     if (c.entryYear == null) continue;
     const list = cohortsByOffering.get(c.offeringId) ?? [];
-    list.push(Number(c.entryYear));
+    list.push({ year: Number(c.entryYear), term: Number(c.entryTerm ?? 1) });
     cohortsByOffering.set(c.offeringId, list);
   }
 
@@ -215,30 +234,72 @@ async function listRealDemands(termId: number, universityId?: number) {
     if (e.examDate) examByOffering.set(e.offeringId, String(e.examDate));
   }
 
+  // ══ تفکیک «رشته به رشته» ══
+  // یک گروه می‌تواند چند رشته داشته باشد و تابلو نمی‌تواند همهٔ دروس را
+  // یک‌جا نشان دهد. targetMajorId روی اکثر ارائه‌ها خالی است، پس تعلق هر درس
+  // به رشته از چارت درسی (curriculum_courses → curriculum_versions.majorId)
+  // استخراج می‌شود. درسی که در هیچ چارتی نیست «مشترک» می‌ماند.
+  const courseIds = Array.from(new Set(rows.map(r => r.courseId)));
+  const majorsByCourse = new Map<number, number[]>();
+  /** شمارهٔ ترم پیشنهادی چارت برای هر (درس، رشته) — برای «فاز ۰: رشته × ترم» */
+  const semesterByCourseMajor = new Map<string, number>();
+  if (courseIds.length) {
+    const chartRows = await db
+      .selectDistinct({
+        courseId: curriculum_courses.courseId,
+        majorId: curriculum_versions.majorId,
+        semester: curriculum_courses.recommendedSemester,
+      })
+      .from(curriculum_courses)
+      .innerJoin(curriculum_versions, eq(curriculum_versions.id, curriculum_courses.curriculumVersionId))
+      .where(inArray(curriculum_courses.courseId, courseIds));
+    for (const c of chartRows) {
+      if (c.majorId == null) continue;
+      const list = majorsByCourse.get(c.courseId) ?? [];
+      if (!list.includes(c.majorId)) list.push(c.majorId);
+      majorsByCourse.set(c.courseId, list);
+      if (c.semester != null) {
+        semesterByCourseMajor.set(`${c.courseId}:${c.majorId}`, Number(c.semester));
+      }
+    }
+  }
+
   return rows.map(r => {
     const profs = profsByOffering.get(r.offeringId) ?? [];
     const isCoTaught = profs.length >= 2;
     // استادِ دومِ واقعی (اگر استاد اصلی در offering_professors نباشد، اولین نفر)
     const coProfId = isCoTaught ? (profs.find(id => id !== r.professorId) ?? profs[1]) : null;
 
-    const years = Array.from(new Set(cohortsByOffering.get(r.offeringId) ?? [])).sort((a, b) => b - a);
+    // «نیمسال ورود» (مهر/بهمن) به‌جای «ورودی سال» — منبع: students.entryYear/entryTerm
+    const uniq = new Map<string, { year: number; term: number }>();
+    for (const c of cohortsByOffering.get(r.offeringId) ?? []) {
+      uniq.set(`${c.year}-${c.term}`, c);
+    }
+    const cohorts = [...uniq.values()].sort((a, b) => (b.year - a.year) || (b.term - a.term));
     let cohortId = 'ALL';
-    let cohortTitle = 'کلیهٔ ورودی‌ها';
-    if (years.length === 1) {
-      cohortId = String(years[0]);
-      cohortTitle = `ورودی ${years[0]}`;
-    } else if (years.length === 2) {
-      cohortTitle = `ورودی ${years[0]}، ${years[1]}`;
-    } else if (years.length > 2) {
-      cohortTitle = `ورودی ${years[years.length - 1]}–${years[0]}`;
+    let cohortTitle = 'کلیهٔ نیمسال‌های ورود';
+    if (cohorts.length === 1) {
+      cohortId = `${cohorts[0].year}-${cohorts[0].term}`;
+      cohortTitle = entryCohortTitle(cohorts[0].year, cohorts[0].term);
+    } else if (cohorts.length === 2) {
+      cohortTitle = `${entryCohortTitle(cohorts[0].year, cohorts[0].term)}، ${entryCohortTitle(cohorts[1].year, cohorts[1].term)}`;
+    } else if (cohorts.length > 2) {
+      cohortTitle = `نیمسال‌های ورود ${cohorts[cohorts.length - 1].year}–${cohorts[0].year}`;
     } else if (r.entryYearStart != null) {
       const from = r.entryYearStart;
       const to = r.entryYearEnd ?? r.entryYearStart;
-      if (from === to) { cohortId = String(from); cohortTitle = `ورودی ${from}`; }
-      else cohortTitle = `ورودی ${from}–${to}`;
+      if (from === to) { cohortId = String(from); cohortTitle = entryCohortTitle(from, null); }
+      else cohortTitle = `نیمسال‌های ورود ${from}–${to}`;
     }
 
     const examRaw = examByOffering.get(r.offeringId);
+    const progIds = r.targetMajorId != null ? [r.targetMajorId] : (majorsByCourse.get(r.courseId) ?? []);
+    // ترمِ چارت: اول برای رشتهٔ هدف، بعد اولین رشته‌ای که ترم تعریف‌شده دارد
+    let semesterNo: number | null = null;
+    for (const pid of progIds) {
+      const s = semesterByCourseMajor.get(`${r.courseId}:${pid}`);
+      if (s != null) { semesterNo = s; break; }
+    }
     return {
       offeringId: r.offeringId,
       courseId: r.courseId,
@@ -256,6 +317,8 @@ async function listRealDemands(termId: number, universityId?: number) {
       enrolledCount: r.enrolledCount,
       programId: r.targetMajorId ?? 0,
       programTitle: r.targetMajorTitle ?? 'همهٔ رشته‌ها',
+      programIds: progIds,
+      semesterNo,
       cohortId,
       cohortTitle,
       examDate: examRaw ? jalaliDateOf(new Date(`${examRaw}T00:00:00`)) : '',
@@ -400,6 +463,13 @@ async function listCurriculumDemands(termId: number, programId: number, universi
 }
 
 const hm = (t: unknown) => (t == null ? '' : String(t).slice(0, 5));
+
+/** برچسب «نیمسال ورود» — ۱=مهر، ۲=بهمن، ۳=تابستان (students.entryTerm) */
+const ENTRY_TERM_NAMES: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+const entryCohortTitle = (year: number, term: number | null | undefined) =>
+  term && ENTRY_TERM_NAMES[term]
+    ? `نیمسال ورود ${ENTRY_TERM_NAMES[term]} ${year}`
+    : `نیمسال ورود ${year}`;
 
 /** برنامهٔ مصوب واقعی: سطرهای schedules با scheduleType='CLASS' + جزئیات درس/استاد/سالن — فیلتر شده بر اساس universityId */
 async function listApprovedOfferings(termId: number, universityId?: number) {
@@ -550,6 +620,12 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
     const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
     const { isDeptHead, deptIds } = await deptHeadScope(actor);
     const uid = await serverUniId();
+    // رشته‌های گروه‌های تحت مدیریت — برای محدود کردن فهرست ورودی‌ها
+    let deptMajorIds: number[] | undefined;
+    if (isDeptHead && deptIds.length) {
+      const ownMajors = await db.select({ id: majors.id }).from(majors).where(inArray(majors.departmentId, deptIds));
+      deptMajorIds = ownMajors.map(m => m.id);
+    }
     const [terms, programRows, classrooms, professors, deptRows] = await Promise.all([
       listRealTerms(uid),
       listRealPrograms(uid),
@@ -577,7 +653,7 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
         listRealDemands(resolvedTermId, uid),
         db.select({ termId: term_scheduling_states.termId, phase: term_scheduling_states.phase }).from(term_scheduling_states)
           .where(uniOrGlobal(term_scheduling_states.universityId, uid)),
-        listRealCohorts(uid),
+        listRealCohorts(uid, deptMajorIds),
         db.select({
           staffId: professor_availabilities.staffId,
           dayOfWeek: professor_availabilities.dayOfWeek,

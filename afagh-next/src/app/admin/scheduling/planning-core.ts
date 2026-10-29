@@ -107,6 +107,8 @@ export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDeman
     courseDeptId: d.courseDeptId,
     programId: d.programId,
     programTitle: d.programTitle,
+    programIds: d.programIds ?? [],
+    semesterNo: d.semesterNo ?? null,
     cohortId: d.cohortId,
     cohortTitle: d.cohortTitle,
     code: d.code,
@@ -160,12 +162,24 @@ export function mapProfessors(profs: SchedulingWorkspace['professors'], avail: S
   }));
 }
 
+export const ENTRY_TERM_NAMES: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+
+/**
+ * «نیمسال ورود» — نه «سال ورود». دانشجو در مهر یا بهمن وارد می‌شود و برنامهٔ
+ * ترم اول/دوم او با همین نیمسال ورود تعیین می‌شود (منبع: students.entryYear +
+ * students.entryTerm).
+ */
+export const entryCohortTitle = (year: number | string, term?: number | null): string => {
+  const y = faNum(year);
+  return term && ENTRY_TERM_NAMES[term] ? `نیمسال ورود ${ENTRY_TERM_NAMES[term]} ${y}` : `نیمسال ورود ${y}`;
+};
+
 export function mapCohorts(cohorts: SchedulingWorkspace['cohorts']): CohortOption[] {
   return cohorts.map(c => ({
-    id: String(c.entryYear),
+    id: `${c.entryYear}-${c.entryTerm ?? 1}`,
     entryYear: faNum(c.entryYear),
-    semesterNo: 0,
-    title: `ورودی ${faNum(c.entryYear)}`,
+    semesterNo: c.entryTerm ?? 1,
+    title: entryCohortTitle(c.entryYear, c.entryTerm),
     expectedStudents: c.expectedStudents,
   }));
 }
@@ -294,6 +308,8 @@ export const DEMAND_PAGE = 100;
 
 /** تب‌های مشروع کارتابل — تنها ورودی قابل قبول برای ?tab= */
 export const PLANNING_TABS = [
+  // فاز ۰: انتخاب رشته × ترم — تا این قلم تعیین نشود، فازهای بعدی معنا ندارند
+  'PROGRAM_SCOPE',
   'CURRICULUM_ASSIGN', 'PROF_QUOTAS', 'DEPT_ROOMS', 'SCENARIOS',
   'PROFESSOR_SCHEDULE', 'APPROVED', 'TERM_CALENDAR',
 ] as const satisfies readonly PlanningTab[];
@@ -304,7 +320,7 @@ export const PLANNING_TABS = [
  */
 export function resolveTab(v: string | null | undefined): PlanningTab {
   const s = (v ?? '').trim().toUpperCase();
-  return (PLANNING_TABS as readonly string[]).includes(s) ? (s as PlanningTab) : 'CURRICULUM_ASSIGN';
+  return (PLANNING_TABS as readonly string[]).includes(s) ? (s as PlanningTab) : 'PROGRAM_SCOPE';
 }
 
 /**
@@ -377,18 +393,124 @@ export function filterScenarioOfferings(
 
 export function filterContextDemands(
   demands: CourseDemand[],
-  ctx: { programId: number; cohortId: string },
+  ctx: { programId: number; cohortId: string; semester?: number | 'ALL' | 'NONE' },
 ): CourseDemand[] {
   let list = demands;
-  if (ctx.programId > 0) list = list.filter(d => d.programId === 0 || d.programId === ctx.programId);
+  // تفکیک رشته‌به‌رشته: درسی که به هیچ چارتی تعلق ندارد «مشترک» است و در
+  // همهٔ رشته‌ها می‌آید؛ درسی که تعلق دارد فقط در رشتهٔ خودش.
+  if (ctx.programId > 0) {
+    list = list.filter(d => {
+      const ids = d.programIds ?? [];
+      return ids.length === 0 || ids.includes(ctx.programId);
+    });
+  }
   if (ctx.cohortId !== 'ALL') list = list.filter(d => d.cohortId === 'ALL' || d.cohortId === ctx.cohortId);
+  // فاز ۰: ترمِ چارت. 'ALL' = همه، 'NONE' = فقط دروس بدون ترمِ تعیین‌شده
+  const sem = ctx.semester;
+  if (sem != null && sem !== 'ALL') {
+    list = sem === 'NONE'
+      ? list.filter(d => d.semesterNo == null)
+      : list.filter(d => d.semesterNo === sem);
+  }
   // ترتیب: دروس عمومی/مشترک اول، بعد پایه، بعد تخصصی — مرتب‌سازی پایدار
   // (بر اساس ترتیب اصلی) تا ردیف‌ها هنگام فیلتر جابه‌جا نشوند.
   return [...list].sort((a, b) => (a.courseTypeRank ?? 6) - (b.courseTypeRank ?? 6));
 }
 
-/** آمار پنل بازرس استاد: مجموع واحد، گروه‌ها، روزهای در‌گیر و درصد سهمیه */
-export function inspectorSummary(offeringList: DepartmentOffering[], maxWeeklyUnits: number) {
+/**
+ * وضعیت «کامل بودن برنامه» به تفکیک رشته.
+ *
+ * یک گروه می‌تواند چند رشته داشته باشد و برنامه‌ریزی هر رشته جدا تمام
+ * می‌شود؛ مدیر گروه باید ببیند کدام رشته تمام شده و کدام هنوز درسِ بی‌استاد
+ * یا بدون جایگاه در هفته دارد. منبع: تقاضاهای همان رشته + برنامهٔ مصوب.
+ */
+export function programCompletion(
+  demands: CourseDemand[],
+  approved: DepartmentOffering[],
+  programs: { id: number; title: string }[],
+): { id: number; title: string; total: number; missingProf: number; unscheduled: number; complete: boolean }[] {
+  const scheduled = new Set(approved.map(o => o.id));
+  return programs.map(p => {
+    const list = demands.filter(d => (d.programIds ?? []).includes(p.id));
+    const missingProf = list.filter(d => !d.preferredProfId).length;
+    const unscheduled = list.filter(d => !scheduled.has(d.id)).length;
+    return {
+      id: p.id,
+      title: p.title,
+      total: list.length,
+      missingProf,
+      unscheduled,
+      complete: list.length > 0 && missingProf === 0 && unscheduled === 0,
+    };
+  });
+}
+
+/**
+ * شمارهٔ ترمِ یک «نیمسال ورود» در نیمسال جاری.
+ *
+ * چرا لازم است: با انتخاب «نیمسال ورود مهر ۱۴۰۳» نباید کل چارت (ترم ۱ تا ۸)
+ * یک‌جا نمایش داده شود؛ دانشجوی آن ورودی الان در ترم ۵ است و فقط دروس همان
+ * ترم باید بیاید. محاسبه از روی کدهای ترم انجام می‌شود (هر سال = ۲ نیمسال) و
+ * به تعداد ترم‌های ثبت‌شده در دیتابیس وابسته نیست.
+ */
+export function cohortSemesterNo(
+  entryYear: number | null | undefined,
+  entryTerm: number | null | undefined,
+  termCode: string | number | null | undefined,
+): number | null {
+  if (entryYear == null || termCode == null || termCode === '') return null;
+  const code = Number(faToEnDigits(String(termCode)).replace(/\D/g, ''));
+  const entryCode = Number(`${entryYear}${entryTerm ?? 1}`);
+  if (!Number.isFinite(code) || !Number.isFinite(entryCode) || code <= 0) return null;
+  const semOf = (c: number) => Math.floor(c / 10) * 2 + (c % 10);
+  const ord = semOf(code) - semOf(entryCode) + 1;
+  return ord >= 1 ? ord : null;
+}
+
+/**
+ * ماتریس «رشته × ترم» برای فاز ۰.
+ *
+ * یک گروه ممکن است سه رشته داشته باشد؛ برنامه‌ریزی هر رشته ترم‌به‌ترم تمام
+ * می‌شود. این تابع برای هر رشته، هر ترمِ چارت را با وضعیتش برمی‌گرداند تا
+ * مدیرگروه ببیند «ترم ۱ این رشته کامل شد، برو ترم ۲».
+ */
+export function programSemesterMatrix(
+  demands: CourseDemand[],
+  approved: DepartmentOffering[],
+  programs: { id: number; title: string }[],
+): {
+  id: number; title: string;
+  semesters: { semester: number | null; total: number; missingProf: number; unscheduled: number; complete: boolean }[];
+}[] {
+  const scheduled = new Set(approved.map(o => o.id));
+  return programs.map(p => {
+    const list = demands.filter(d => (d.programIds ?? []).includes(p.id));
+    const buckets = new Map<number | null, CourseDemand[]>();
+    for (const d of list) {
+      const key = d.semesterNo ?? null;
+      const arr = buckets.get(key) ?? [];
+      arr.push(d);
+      buckets.set(key, arr);
+    }
+    const semesters = [...buckets.entries()]
+      .map(([semester, rows]) => {
+        const missingProf = rows.filter(d => !d.preferredProfId).length;
+        const unscheduled = rows.filter(d => !scheduled.has(d.id)).length;
+        return {
+          semester,
+          total: rows.length,
+          missingProf,
+          unscheduled,
+          complete: rows.length > 0 && missingProf === 0 && unscheduled === 0,
+        };
+      })
+      // ترم‌های شماره‌دار اول (صعودی)، «نامشخص» آخر
+      .sort((a, b) => (a.semester ?? 999) - (b.semester ?? 999));
+    return { id: p.id, title: p.title, semesters };
+  });
+}
+
+/** آمار پنل بازرس استاد: مجموع واحد، گروه‌ها، روزهای در‌گیر و درصد سهمیه */export function inspectorSummary(offeringList: DepartmentOffering[], maxWeeklyUnits: number) {
   const totalUnits = offeringList.reduce((sum, o) => sum + o.units, 0);
   const distinctDays = new Set(offeringList.flatMap(o => o.classSchedules.map(cs => cs.dayOfWeek))).size;
   const distinctPrograms = Array.from(new Set(offeringList.map(o => o.programTitle)));
