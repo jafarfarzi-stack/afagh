@@ -15,9 +15,12 @@ const RELATION_LABEL: Record<string, string> = {
 export default async function CompensatoryStudentsPage({
   searchParams,
 }: {
-  searchParams?: { year?: string };
+  // ⚠ در Next.js 15/16 `searchParams` یک Promise است — بدون await، پارامتر
+  // «ورودی» نادیده گرفته می‌شد و صفحه همیشه روی پیش‌فرض می‌ماند.
+  searchParams: Promise<{ year?: string }>;
 }) {
   const { depts } = await requireDepHead();
+  const sp = (await searchParams) ?? {};
   const deptIds = depts.map(d => d.id);
   const majorsInScope = deptIds.length
     ? await db.select({ id: majors.id, name: majors.name, departmentId: majors.departmentId })
@@ -31,7 +34,9 @@ export default async function CompensatoryStudentsPage({
         .orderBy(sql`${students.entryYear} desc`)
     : [];
   const yearList = years.map(r => r.y).filter((y): y is number => y != null);
-  const selectedYear = searchParams?.year ? Number(searchParams.year) : (yearList[0] ?? new Date().getFullYear());
+  // پیش‌فرض = جدیدترین ورودیِ واقعی. `new Date().getFullYear()` غلط بود چون
+  // `entryYear` شمسی است (۱۴۰۵)، نه میلادی.
+  const selectedYear = sp.year ? Number(sp.year) : (yearList[0] ?? 0);
 
   const rows = (majorIds.length && selectedYear)
     ? await db.select({

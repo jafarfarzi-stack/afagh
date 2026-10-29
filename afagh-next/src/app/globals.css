@@ -415,8 +415,28 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
 .btn { @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
 .btn-primary { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
 .btn-ghost { @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200; }
-.input { @apply w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500; }
 .badge { @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-medium; }
+
+/* ─────────────────────────────────────────────────────────────
+   ⚠️ `.input` باید داخل `@layer components` بماند — این یک باگ واقعی بود.
+
+   `@tailwind utilities` در بالای همین فایل (خط ۵۳) قرار دارد، پس هر کلاسِ
+   ساده‌ای که بعد از آن تعریف شود در آبشار **بعد از** utilities می‌آید. با
+   وزن یکسانِ انتخابگر (۰٫۱٫۰) همین «بعدتر بودن» کافی است که برنده شود.
+   نتیجه: `w-full` داخل `.input` بر `w-16` / `w-20` / `w-24` در JSX غالب
+   می‌شد و هر ورودیِ کوتاهِ عمدی تمام‌عرض می‌شد — چیدمان فشرده ناممکن بود
+   و فرم‌ها (مثل کارتابل «ارائه» مدیر گروه) هر فیلد را در یک سطر می‌ریختند.
+   کدبیس قبلاً با `!py-1 !px-2` دورش زده بود، ولی برای عرض چنین راهی نداشت.
+
+   با انتقال به `@layer components`، محتوا در جای `@tailwind components`
+   (قبل از utilities) تزریق می‌شود و utilities همیشه برنده‌اند — همان
+   معنایی که همه انتظار دارند. ضمناً `border-rose-300` و `text-xs` هم دیگر
+   بی‌صدا نادیده گرفته نمی‌شوند (استایل اعتبارسنجی که قبلاً کار نمی‌کرد).
+   گارد: tests/input-width-precedence.test.ts
+   ───────────────────────────────────────────────────────────── */
+@layer components {
+  .input { @apply w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500; }
+}
 
 /* ─────────────────────────────────────────────────────────────
    چاپ «فقط فرم» — همان رفتار کارت ورود به جلسه، برای همهٔ فرم‌ها
