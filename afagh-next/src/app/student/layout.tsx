@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { users, universities, majors as majorsTable, degree_level_configs } from '@/db/schema';
+import { users, universities, degree_level_configs } from '@/db/schema';
 import { getStudentByUser, requireRole, endCurrentSession } from '@/lib/auth';
 import { getSetting } from '@/lib/settings';
 import { studentDebtRials } from '@/lib/verification';
@@ -38,19 +38,16 @@ export default async function StudentLayout({ children }: { children: React.Reac
   // پیش از این، خوش‌آمدگویی/رشته/وضعیت مالی/ترم در یک کارت سبز جداگانه زیر هدر
   // («هیرو») نمایش داده می‌شد و با خود هدر تکرار می‌شد. حالا همه در یک بلوک
   // سبز بالای صفحه جمع شده‌اند و کارت جداگانه‌ای وجود ندارد.
-  const [uniRow, majorRow, levelRow] = await Promise.all([
+  const [uniRow, levelRow] = await Promise.all([
     me?.universityId
       ? db.select({ title: universities.title, logoUrl: universities.logoUrl }).from(universities).where(eq(universities.id, me.universityId)).limit(1)
-      : Promise.resolve([]),
-    me?.majorId
-      ? db.select({ name: majorsTable.name }).from(majorsTable).where(eq(majorsTable.id, me.majorId)).limit(1)
       : Promise.resolve([]),
     me?.degreeLevelId
       ? db.select({ title: degree_level_configs.title }).from(degree_level_configs).where(eq(degree_level_configs.id, me.degreeLevelId)).limit(1)
       : Promise.resolve([]),
   ]);
   const universityLogoUrl = uniRow?.[0]?.logoUrl || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
-  const majorTitle = majorRow?.[0]?.name ?? null;
+  // رشته (major) عمداً خوانده/نمایش داده نمی‌شود؛ در هدر موبایل فقط نام و مقطع کافی است.
   const levelTitle = levelRow?.[0]?.title ?? null;
 
   // وضعیت مالی — یک کوئری سبک روی دفتر تراکنش (همان محاسبهٔ بدهی کارت آزمون)
@@ -114,15 +111,15 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   return (
     <div className="min-h-screen bg-slate-100 print:!bg-white flex flex-col" dir="rtl">
-      {/* هدر اصلی — یک بلوک سبز ادغام‌شده: خوش‌آمدگویی + هویت تحصیلی +
-          چیپ‌های وضعیت + سوییچر ترم/نقش. کارت هیروی جداگانه حذف شده است. */}
-      {/* هدر دانشجو — «یک‌ردیفه»: هویت + چیپ‌های وضعیت + سوییچر ترم/نقش + دکمه‌ها
-          در یک خط (در عرض کم با wrap به خط بعد می‌روند تا چیزی بریده نشود). */}
+      {/* هدر دانشجو — طراحی دو‌ردیفه و پایدار در موبایل:
+          ردیف ۱: نشان دانشگاه + آواتار + خوش‌آمدگویی (فقط نام) + دکمه‌های راهنما/تم/خروج
+          ردیف ۲: چیپ‌های وضعیت (مالی/سخا/ترم) + سوییچر ترم/کارتابل
+          رشته (major) عمداً حذف شد تا خط هویت در موبایل سرریز/بریده نشود. */}
       <header className="bg-emerald-800 text-white shadow-md print:hidden sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-col gap-2 px-3 sm:px-4 py-2.5">
 
-          {/* هویت و خوش‌آمدگویی — عنوان و زیرنویس در همان یک خط */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 basis-72">
+          {/* ردیف ۱ — هویت و دکمه‌ها */}
+          <div className="flex items-center gap-2 min-w-0">
             {universityLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -136,19 +133,48 @@ export default async function StudentLayout({ children }: { children: React.Reac
               </div>
             )}
             <UserAvatar userId={user.id} hasPhoto={!!userRow?.photoKey} name={user.name} className="w-8 h-8 shrink-0" fallbackClass="bg-emerald-700" />
-            <p
-              className="min-w-0 truncate text-xs sm:text-sm font-extrabold tracking-wide"
-              title={`${majorTitle || '—'} · ${levelTitle || '—'} · ورودی سال ${me?.entryYear ?? '—'}`}
-            >
-              خوش‌آمدی {firstName} عزیز 👋
-              <span className="mr-2 text-[10px] sm:text-[11px] font-bold text-emerald-200">
-                · {majorTitle || '—'} · {levelTitle || '—'} · ورودی {me?.entryYear ?? '—'}
-              </span>
-            </p>
+
+            {/* خوش‌آمدگویی — رشته حذف شد؛ مقطع/ورودی فقط در دسکتاپ به‌صورت زیرنویس */}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs sm:text-sm font-extrabold leading-tight">
+                خوش‌آمدی {firstName} عزیز 👋
+              </p>
+              {(levelTitle || me?.entryYear) && (
+                <p className="hidden sm:block truncate text-[10px] font-bold text-emerald-200 leading-tight">
+                  {levelTitle || '—'} · ورودی {me?.entryYear ?? '—'}
+                </p>
+              )}
+            </div>
+
+            {/* دکمه‌های راهنما/تم/خروج */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a
+                href="/help/student"
+                className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
+              >
+                <span>📖</span>
+                <span>راهنمای سیستم</span>
+              </a>
+              <a
+                href="/help/pdfs/student.pdf"
+                download
+                className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
+              >
+                <span>📕</span>
+                <span>PDF راهنما</span>
+              </a>
+              <ThemeToggle />
+              <form action={logoutAction}>
+                <button className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition whitespace-nowrap">
+                  <span className="sm:hidden">خروج</span>
+                  <span className="hidden sm:inline">خروج از حساب</span>
+                </button>
+              </form>
+            </div>
           </div>
 
-          {/* چیپ‌های وضعیت — فشرده، هم‌ردیف با بقیه */}
-          <div className="flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px] shrink-0">
+          {/* ردیف ۲ — چیپ‌های وضعیت + سوییچرها */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px]">
             <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 font-bold text-emerald-100">
               <span>💳 مالی:</span>
               <b className="font-black text-white">{financialLabel}</b>
@@ -166,50 +192,22 @@ export default async function StudentLayout({ children }: { children: React.Reac
                 {(studentTermOrdinal ?? me?.currentTermNo ?? 0).toLocaleString('fa-IR')}
               </b>
             </span>
-          </div>
 
-          {/* سوییچر ترم و سوییچر کارتابل */}
-          {/* `relative` لازم است: در موبایل پنل سوییچرها تمام‌عرض و چسبیده به
-              همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند */}
-          <div className="relative flex items-center gap-1.5 shrink-0">
-            <TermSwitcher
-              terms={termScope.terms}
-              selectedId={termScope.selectedId}
-            />
-            {/* سوییچ به کارتابل استاد/مدیر گروه/ستادی و سایر حساب‌های هم‌کدملی
-                از همین سوییچر واحد انجام می‌شود. */}
-            <PanelSwitcher
-              roles={user.roles}
-              current="student"
-              permissionCount={permissionCount}
-              siblings={siblings}
-            />
-          </div>
-
-          {/* دکمه‌های راهنما/تم/خروج */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <a
-              href="/help/student"
-              className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
-            >
-              <span>📖</span>
-              <span>راهنمای سیستم</span>
-            </a>
-            <a
-              href="/help/pdfs/student.pdf"
-              download
-              className="hidden md:inline-flex text-[11px] bg-emerald-700/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600 px-2.5 py-1.5 rounded-lg transition-colors font-medium items-center gap-1"
-            >
-              <span>📕</span>
-              <span>PDF راهنما</span>
-            </a>
-            <ThemeToggle />
-            <form action={logoutAction}>
-              <button className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold transition whitespace-nowrap">
-                <span className="md:hidden">خروج</span>
-                <span className="hidden md:inline">خروج از حساب</span>
-              </button>
-            </form>
+            {/* سوییچر ترم و کارتابل — `relative` برای باز شدن پنل کشویی موبایل در همین ردیف */}
+            <div className="relative flex items-center gap-1.5 ms-auto shrink-0">
+              <TermSwitcher
+                terms={termScope.terms}
+                selectedId={termScope.selectedId}
+              />
+              {/* سوییچ به کارتابل استاد/مدیر گروه/ستادی و سایر حساب‌های هم‌کدملی
+                  از همین سوییچر واحد انجام می‌شود. */}
+              <PanelSwitcher
+                roles={user.roles}
+                current="student"
+                permissionCount={permissionCount}
+                siblings={siblings}
+              />
+            </div>
           </div>
         </div>
       </header>
