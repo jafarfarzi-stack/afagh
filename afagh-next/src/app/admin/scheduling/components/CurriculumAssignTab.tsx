@@ -67,9 +67,26 @@ export default function CurriculumAssignTab() {
                 </thead>
                 <tbody>
                   {displayedDemands.map((demand, idx) => {
-                    const assignedProf = professors.find(p => p.id === demand.preferredProfId) || professors[0] || NO_PROFESSOR;
+                    // کشویی استاد فقط استادانِ «گروه صاحب درس» را نشان می‌دهد.
+                    // اگر آن گروه هنوز استادی ندارد، به فهرست کامل برمی‌گردیم تا
+                    // کشویی خالی و بی‌استفاده نشود.
+                    const deptProfs = professors.filter(p => p.departmentId != null && p.departmentId === demand.courseDeptId);
+                    const pool = deptProfs.length ? deptProfs : professors;
+                    const assignedProf = pool.find(p => p.id === demand.preferredProfId)
+                      || professors.find(p => p.id === demand.preferredProfId)
+                      || pool[0] || NO_PROFESSOR;
+                    const coProf = demand.coProfId
+                      ? (professors.find(p => p.id === demand.coProfId) ?? null)
+                      : null;
                     const profLoad = profAssignedUnitsMap[assignedProf.id]?.units || 0;
+                    const coLoad = coProf ? (profAssignedUnitsMap[coProf.id]?.units || 0) : 0;
                     const isOverQuota = profLoad > assignedProf.maxWeeklyUnits;
+                    const typeRank = demand.courseTypeRank ?? 6;
+                    const typeTone = typeRank <= 1
+                      ? 'bg-sky-100 text-sky-900 border border-sky-300'
+                      : typeRank <= 3
+                        ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300';
 
                     return (
                       <tr key={demand.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
@@ -83,9 +100,7 @@ export default function CurriculumAssignTab() {
                         </td>
                         <td className="p-2 border border-slate-200 text-center font-extrabold text-slate-900">{faNum(demand.units)}</td>
                         <td className="p-2 border border-slate-200 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            demand.courseType === 'عملی' ? 'bg-amber-100 text-amber-900' : 'bg-slate-200 text-slate-800'
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${typeTone}`}>
                             {demand.courseType}
                           </span>
                         </td>
@@ -132,7 +147,7 @@ export default function CurriculumAssignTab() {
                               <div className="space-y-1.5">
                                 <div className="flex items-center gap-1.5">
                                   <ProfessorSelect
-                                    professors={professors}
+                                    professors={pool}
                                     value={demand.preferredProfId}
                                     onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                     label={p => `${p.name} (${p.academicRank} — ${p.contractType})`}
@@ -169,7 +184,7 @@ export default function CurriculumAssignTab() {
                                         گروه {faNum(gNo)}:
                                       </span>
                                       <ProfessorSelect
-                                        professors={professors}
+                                        professors={pool}
                                         value={curProfId}
                                         onChange={id => handleAssignProfessorToGroup(demand.id, gNo, id)}
                                         className="w-full border border-indigo-300 rounded px-1.5 py-0.5 font-bold bg-white text-indigo-950 text-xs"
@@ -199,7 +214,7 @@ export default function CurriculumAssignTab() {
                                   <span className="text-indigo-900">سهم: {faNum((demand.theoryWeightRatio || 0.7) * 100)}٪ ({faNum((demand.theoryWeightRatio || 0.7) * 20)} نمره)</span>
                                 </div>
                                 <ProfessorSelect
-                                  professors={professors}
+                                  professors={pool}
                                   value={demand.preferredProfId}
                                   onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                   className="w-full border border-indigo-300 rounded px-2 py-1 font-extrabold bg-white text-indigo-950 text-xs"
@@ -213,8 +228,8 @@ export default function CurriculumAssignTab() {
                                   <span className="text-purple-900">سهم: {faNum((demand.labWeightRatio || 0.3) * 100)}٪ ({faNum((demand.labWeightRatio || 0.3) * 20)} نمره)</span>
                                 </div>
                                 <ProfessorSelect
-                                  professors={professors}
-                                  value={demand.coProfId || professors[2]?.id || professors[0]?.id || 0}
+                                  professors={pool}
+                                  value={demand.coProfId ?? pool[0]?.id ?? 0}
                                   onChange={id => handleAssignCoProfessor(demand.id, id)}
                                   className="w-full border border-purple-300 rounded px-2 py-1 font-extrabold bg-white text-purple-950 text-xs"
                                 />
@@ -251,13 +266,13 @@ export default function CurriculumAssignTab() {
                           ) : (
                             <div className="space-y-1 text-[10px] font-bold">
                               <div className={`p-1 rounded ${profLoad > assignedProf.maxWeeklyUnits ? 'bg-rose-100 text-rose-900' : 'bg-indigo-100 text-indigo-900'}`}>
-                                <span>تئوری: {faNum(profLoad)}/{faNum(assignedProf.maxWeeklyUnits)} و</span>
+                                <span>تئوری ({assignedProf.name}): {faNum(profLoad)}/{faNum(assignedProf.maxWeeklyUnits)} واحد</span>
                               </div>
-                              {demand.coProfId && (
-                                <div className={`p-1 rounded ${profAssignedUnitsMap[demand.coProfId]?.units > (professors.find(p => p.id === demand.coProfId)?.maxWeeklyUnits || 10) ? 'bg-rose-100 text-rose-900' : 'bg-purple-100 text-purple-900'}`}>
-                                  <span>عملی: {faNum(profAssignedUnitsMap[demand.coProfId]?.units)}/{(professors.find(p => p.id === demand.coProfId)?.maxWeeklyUnits || 10)} و</span>
-                                </div>
-                              )}
+                              <div className={`p-1 rounded ${coProf && coLoad > coProf.maxWeeklyUnits ? 'bg-rose-100 text-rose-900' : 'bg-purple-100 text-purple-900'}`}>
+                                {coProf
+                                  ? <span>عملی ({coProf.name}): {faNum(coLoad)}/{faNum(coProf.maxWeeklyUnits)} واحد</span>
+                                  : <span>عملی: استاد بخش عملی تعیین نشده</span>}
+                              </div>
                             </div>
                           )}
                         </td>

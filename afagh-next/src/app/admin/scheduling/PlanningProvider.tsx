@@ -45,14 +45,15 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   // Main Tabs — تب آغازین از ?tab= می‌آید (پیوندپذیری + تست مستقل هر تب)
   const [activeMainTab, setActiveMainTab] = useState<PlanningTab>(resolveTab(initialTab));
 
-  // Academic Term Calendar Configuration — از ردیف واقعی academic_terms
+  // Academic Term Calendar Configuration — کاملاً از ردیف واقعی academic_terms
+  // (weeksCount + تاریخ‌های کلاس و امتحان). قبلاً هفته‌ها همیشه ۱۶ و تاریخ‌ها خالی بود.
   const [calendarConfig, setCalendarConfig] = useState({
-    classStartDate: initial.termCalendar?.startJalali ?? '',
-    classEndDate: initial.termCalendar?.endJalali ?? '',
-    examStartDate: '',
-    examEndDate: '',
+    classStartDate: initial.termCalendar?.classStartJalali ?? '',
+    classEndDate: initial.termCalendar?.classEndJalali ?? '',
+    examStartDate: initial.termCalendar?.examStartJalali ?? '',
+    examEndDate: initial.termCalendar?.examEndJalali ?? '',
     holidays: '',
-    sessionsCount: 16,
+    sessionsCount: initial.termCalendar?.weeksCount ?? 16,
   });
 
   const [generatedTermSessionsCount, setGeneratedTermSessionsCount] = useState<number>(initial.sessionsTotal);
@@ -122,8 +123,11 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     setHealth(null);
     setCalendarConfig(cfg => ({
       ...cfg,
-      classStartDate: w.termCalendar?.startJalali ?? '',
-      classEndDate: w.termCalendar?.endJalali ?? '',
+      classStartDate: w.termCalendar?.classStartJalali ?? '',
+      classEndDate: w.termCalendar?.classEndJalali ?? '',
+      examStartDate: w.termCalendar?.examStartJalali ?? '',
+      examEndDate: w.termCalendar?.examEndJalali ?? '',
+      sessionsCount: w.termCalendar?.weeksCount ?? cfg.sessionsCount,
     }));
   };
 

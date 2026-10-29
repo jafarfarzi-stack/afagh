@@ -12,7 +12,7 @@
  *   inspectorSummary / nextGroupNumber / coTeachingWeights / buildRealScenario
  */
 import {
-  buildRealScenario, clampGroupsCount, coTeachingWeights, computeProfUnits, DAY_NAMES, faNum, faToEnDigits,
+  buildRealScenario, clampGroupsCount, coTeachingWeights, computeProfUnits, courseTypeRank, DAY_NAMES, faNum, faToEnDigits,
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
   mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
   slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab,
@@ -54,7 +54,14 @@ const rawDemand = {
 const [d] = mapDemands([rawDemand]);
 eq('واحد رشته‌ای → عدد', d.units, 3);
 eq('واحد نامعتبر → صفر', mapDemands([{ ...rawDemand, units: '—', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].units, 0);
-eq('نوع درس ناشناخته → عمومی', mapDemands([{ ...rawDemand, courseType: 'آزاد', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].courseType, 'عمومی');
+// ⚠️ قرارداد عوض شد: نوع درس دیگر به فهرست بستهٔ ۵ مقدارهای «فارسی» محدود
+// نمی‌شود (دادهٔ واقعی با «ی/ک عربی» ذخیره شده و دامنه‌اش باز است). مقدار
+// واقعی حفظ و فقط یکسان‌سازی می‌شود — پیش‌تر هر چیزی که در فهرست نبود
+// «عمومی» می‌شد و همهٔ درس‌ها عمومی دیده می‌شدند.
+eq('نوع درس ناشناخته حفظ می‌شود (نه عمومی)', mapDemands([{ ...rawDemand, courseType: 'آزاد', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].courseType, 'آزاد');
+eq('ی/ک عربی → فارسی', mapDemands([{ ...rawDemand, courseType: 'تخصصي', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].courseType, 'تخصصی');
+eq('نوع خالی → نامشخص', mapDemands([{ ...rawDemand, courseType: '', isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].courseType, 'نامشخص');
+eq('رتبهٔ عمومی قبل از تخصصی', [courseTypeRank('عمومي'), courseTypeRank('تخصصي')].sort((a, b) => a - b), [0, 3]);
 eq('استاد null → صفر (نه undefined)', mapDemands([{ ...rawDemand, professorId: null, isSharedService: false, offeringScope: 'DEPARTMENTAL' }])[0].preferredProfId, 0);
 eq('پیش‌فرض‌های ایمن نشست', [d.requiredRoomType, d.groupsCount, d.weekRecurrence, d.examDate], ['THEORY', 1, 'ALL', '']);
 eq('کارت تهی هیچ‌وقت undefined نمی‌شود', NO_PROFESSOR.id, 0);

@@ -5,7 +5,11 @@ import { usePlanning } from '../PlanningProvider';
 import { faNum } from '../planning-core';
 
 export default function DeptRoomsTab() {
-  const { classrooms, currentProgram } = usePlanning();
+  const { classrooms, currentProgram, isDeptScope } = usePlanning();
+
+  // مدیر گروه تا پایان برنامه‌ریزی فقط سالن‌های سهمیه‌گرفتهٔ گروه خودش را
+  // می‌بیند؛ استخر مشترک دانشکده (سالن‌های تخصیص‌نیافته) نمایش داده نمی‌شود.
+  const visibleRooms = isDeptScope ? classrooms.filter(c => c.isAllocatedToDept) : classrooms;
 
   return (
           <div className="space-y-4">
@@ -23,12 +27,23 @@ export default function DeptRoomsTab() {
               </div>
 
               <span className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 font-extrabold text-xs">
-                {faNum(classrooms.filter(c => c.isAllocatedToDept).length)} سالن سهمیه‌دار از {faNum(classrooms.length)} سالن دانشگاه
+                {isDeptScope
+                  ? `${faNum(visibleRooms.length)} سالن سهمیه‌دار این گروه`
+                  : `${faNum(classrooms.filter(c => c.isAllocatedToDept).length)} سالن سهمیه‌دار از ${faNum(classrooms.length)} سالن دانشگاه`}
               </span>
             </div>
 
+            {isDeptScope && visibleRooms.length === 0 && (
+              <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-6 text-center">
+                <p className="font-extrabold text-amber-900">هنوز هیچ کلاسی به این گروه تخصیص نیافته است</p>
+                <p className="mt-1 text-xs font-bold text-amber-800">
+                  تا پایان مرحلهٔ برنامه‌ریزی، سالن‌های مشترک دانشکده به این کارتابل اضافه نمی‌شوند. سهمیهٔ سالن را از موتور تخصیص سالن پیگیری کنید.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classrooms.map(room => (
+              {visibleRooms.map(room => (
                 <div
                   key={room.id}
                   className={`p-4 rounded-2xl border-2 transition flex flex-col justify-between shadow-sm ${

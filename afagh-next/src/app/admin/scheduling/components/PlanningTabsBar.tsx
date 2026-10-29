@@ -2,7 +2,7 @@
 
 // نوار ۷ گام عملیاتی
 import { usePlanning } from '../PlanningProvider';
-import { faNum } from '../planning-core';
+import { faNum, SHIFT_MODELS } from '../planning-core';
 
 export default function PlanningTabsBar() {
   const {
@@ -58,9 +58,9 @@ export default function PlanningTabsBar() {
               activeMainTab === 'SCENARIOS' ? 'bg-indigo-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <span>🤖 گام ۴: موتور هوشمند چیدمان متمرکز (۴ مدل)</span>
+            <span>🤖 گام ۴: موتور هوشمند چیدمان متمرکز ({faNum(SHIFT_MODELS.length)} مدل)</span>
             <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-400 text-slate-950 font-bold">
-              {faNum(4)} سناریو
+              {faNum(SHIFT_MODELS.length)} سناریو
             </span>
           </button>
 

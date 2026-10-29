@@ -56,6 +56,8 @@ export interface ProfessorOption {
   staffCode: string;
   academicRank: string;
   contractType: 'تمام‌وقت' | 'نیمه‌وقت' | 'مدعو';
+  /** گروه آموزشی استاد — کشویی هر درس فقط استادان همین گروه را نشان می‌دهد */
+  departmentId: number | null;
   departmentName: string;
   maxWeeklyUnits: number;
   maxDailyHours: number;
@@ -84,7 +86,10 @@ export interface CourseDemand {
   title: string;
   units: number;
   groupNumber: number;
-  courseType: 'پایه' | 'اصلی' | 'تخصصی' | 'عمومی' | 'عملی';
+  /** نوع درس واقعی از courses.courseType — دامنهٔ مقادیر باز است (پایه/اصلی/تخصصی/عمومی/اختیاری/نظری-عملی/کارورزی/پروژه/…)، پس رشته است نه اتحادیهٔ بسته. */
+  courseType: string;
+  /** رتبهٔ نوع درس برای مرتب‌سازی: عمومی و مشترک اول، سپس پایه، سپس تخصصی/اختصاصی */
+  courseTypeRank?: number;
   preferredProfId: number;
   groupProfessors?: { [groupNo: number]: number };
   isCoTaught?: boolean;
@@ -169,20 +174,30 @@ export interface SchedulingWorkspace {
   cohorts: { entryYear: number; expectedStudents: number }[];
   classrooms: { id: number; name: string; buildingName: string; capacity: number; roomType: string }[];
   allocatedRoomIds: number[];
-  professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentName: string | null }[];
+  professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null }[];
   demands: {
     offeringId: number; courseId: number; courseDeptId: number | null;
     code: string; title: string; units: string; courseType: string;
     capacity: number; groupNumber: number; professorId: number | null; isCoTaught: boolean;
+    coProfId: number | null;
     enrolledCount: number; programId: number; programTitle: string;
     cohortId: string; cohortTitle: string;
+    /** تاریخ امتحان واقعی از schedules(scheduleType='EXAM') — خالی یعنی هنوز تعیین نشده */
+    examDate: string;
     isSharedService: boolean;
     offeringScope: string;
   }[];
   departments: { id: number; name: string }[];
   availabilities: { staffId: number; dayOfWeek: number | null; startTime: string | null; endTime: string | null; status: string | null }[];
   phases: Record<number, string>;
-  termCalendar: { startJalali: string | null; endJalali: string | null; startDate: string | null } | null;
+  termCalendar: {
+    id: number;
+    startJalali: string | null; endJalali: string | null; startDate: string | null;
+    /** تعریف ترم = منبع حقیقت تقویم برنامه‌ریزی (نه اعداد پیش‌فرض UI) */
+    weeksCount: number | null;
+    classStartJalali: string | null; classEndJalali: string | null;
+    examStartJalali: string | null; examEndJalali: string | null;
+  } | null;
   sessionsTotal: number;
   sessionsByOffering: Record<number, { total: number; makeup: number; firstDate: string | null }>;
   hardConflictCount: number;

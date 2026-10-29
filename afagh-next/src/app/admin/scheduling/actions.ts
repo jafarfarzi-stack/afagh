@@ -17,7 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import {
   academic_terms, class_sessions, classrooms, course_offerings, courses, curriculum_courses, curriculum_versions, departments,
-  degree_level_configs, faculties, majors, offering_professors, schedules,
+  degree_level_configs, enrollments, faculties, majors, offering_professors, schedules,
   professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
 import { requireRole, getStaffByUser } from '@/lib/auth';
@@ -131,6 +131,7 @@ async function listRealProfessors(universityId?: number) {
       lastName: users.lastName,
       staffCode: staff.staffCode,
       academicRank: staff.academicRank,
+      departmentId: staff.departmentId,
       departmentName: departments.name,
     })
     .from(staff)
@@ -174,11 +175,70 @@ async function listRealDemands(termId: number, universityId?: number) {
     .from(offering_professors)
     .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
     .where(and(eq(course_offerings.termId, termId), uniFilter));
-  const coTaught = new Set<number>();
-  for (const p of profRows) coTaught.add(p.offeringId);
+
+  // ⚠️ «دو استاد» فقط وقتی است که واقعاً دو (یا بیشتر) استاد روی ارائه باشد.
+  // نسخهٔ قبلی هر ارائه‌ای را که *یک* ردیف در offering_professors داشت هم
+  // دوـاستاد علامت می‌زد (`for (...) coTaught.add(...)`) — یعنی تقریباً همه.
+  const profsByOffering = new Map<number, number[]>();
+  for (const p of profRows) {
+    const list = profsByOffering.get(p.offeringId) ?? [];
+    if (!list.includes(p.staffId)) list.push(p.staffId);
+    profsByOffering.set(p.offeringId, list);
+  }
+
+  // ورودی (cohort) واقعی: از دانشجویانِ ثبت‌نام‌شدهٔ همان ارائه خوانده می‌شود.
+  // course_offerings.entryYearStart/End در عمل خالی است، پس تکیه بر آن همه را
+  // «کلیهٔ ورودی‌ها» نشان می‌داد.
+  const cohortRows = await db
+    .select({ offeringId: enrollments.offeringId, entryYear: students.entryYear })
+    .from(enrollments)
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+    .where(and(eq(course_offerings.termId, termId), uniFilter))
+    .groupBy(enrollments.offeringId, students.entryYear);
+  const cohortsByOffering = new Map<number, number[]>();
+  for (const c of cohortRows) {
+    if (c.entryYear == null) continue;
+    const list = cohortsByOffering.get(c.offeringId) ?? [];
+    list.push(Number(c.entryYear));
+    cohortsByOffering.set(c.offeringId, list);
+  }
+
+  // تاریخ امتحان واقعی از schedules (scheduleType='EXAM')
+  const examRows = await db
+    .select({ offeringId: schedules.offeringId, examDate: schedules.examDate })
+    .from(schedules)
+    .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
+    .where(and(eq(course_offerings.termId, termId), eq(schedules.scheduleType, 'EXAM'), uniFilter));
+  const examByOffering = new Map<number, string>();
+  for (const e of examRows) {
+    if (e.examDate) examByOffering.set(e.offeringId, String(e.examDate));
+  }
 
   return rows.map(r => {
-    const hasSingleEntryYear = r.entryYearStart != null && r.entryYearStart === r.entryYearEnd;
+    const profs = profsByOffering.get(r.offeringId) ?? [];
+    const isCoTaught = profs.length >= 2;
+    // استادِ دومِ واقعی (اگر استاد اصلی در offering_professors نباشد، اولین نفر)
+    const coProfId = isCoTaught ? (profs.find(id => id !== r.professorId) ?? profs[1]) : null;
+
+    const years = Array.from(new Set(cohortsByOffering.get(r.offeringId) ?? [])).sort((a, b) => b - a);
+    let cohortId = 'ALL';
+    let cohortTitle = 'کلیهٔ ورودی‌ها';
+    if (years.length === 1) {
+      cohortId = String(years[0]);
+      cohortTitle = `ورودی ${years[0]}`;
+    } else if (years.length === 2) {
+      cohortTitle = `ورودی ${years[0]}، ${years[1]}`;
+    } else if (years.length > 2) {
+      cohortTitle = `ورودی ${years[years.length - 1]}–${years[0]}`;
+    } else if (r.entryYearStart != null) {
+      const from = r.entryYearStart;
+      const to = r.entryYearEnd ?? r.entryYearStart;
+      if (from === to) { cohortId = String(from); cohortTitle = `ورودی ${from}`; }
+      else cohortTitle = `ورودی ${from}–${to}`;
+    }
+
+    const examRaw = examByOffering.get(r.offeringId);
     return {
       offeringId: r.offeringId,
       courseId: r.courseId,
@@ -186,16 +246,19 @@ async function listRealDemands(termId: number, universityId?: number) {
       code: r.courseCode,
       title: r.courseTitle,
       units: String(r.units),
-      courseType: r.courseType ?? 'عمومی',
+      // مقدار واقعی — دامنه باز است (تخصصي/پايه/اصلي/اختياري/…)
+      courseType: r.courseType ?? '',
       capacity: r.capacity,
       groupNumber: r.groupNumber,
       professorId: r.professorId,
-      isCoTaught: coTaught.has(r.offeringId),
+      isCoTaught,
+      coProfId,
       enrolledCount: r.enrolledCount,
       programId: r.targetMajorId ?? 0,
       programTitle: r.targetMajorTitle ?? 'همهٔ رشته‌ها',
-      cohortId: hasSingleEntryYear ? String(r.entryYearStart) : 'ALL',
-      cohortTitle: hasSingleEntryYear ? `ورودی ${r.entryYearStart}` : 'کلیهٔ ورودی‌ها',
+      cohortId,
+      cohortTitle,
+      examDate: examRaw ? jalaliDateOf(new Date(`${examRaw}T00:00:00`)) : '',
       isSharedService: r.isSharedService === 1,
       offeringScope: r.offeringScope ?? 'DEPARTMENTAL',
     };
@@ -298,11 +361,18 @@ async function listCurriculumDemands(termId: number, programId: number, universi
     .from(offering_professors)
     .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
     .where(and(eq(course_offerings.termId, termId), inArray(course_offerings.id, offerRows.map(r => r.offeringId))));
-  const coTaught = new Set<number>();
-  for (const p of profRows) coTaught.add(p.offeringId);
+  // «دو استاد» = حداقل دو استاد روی ارائه (نه هر ارائه‌ای که یک استاد دارد)
+  const profsByOffering = new Map<number, number[]>();
+  for (const p of profRows) {
+    const list = profsByOffering.get(p.offeringId) ?? [];
+    if (!list.includes(p.staffId)) list.push(p.staffId);
+    profsByOffering.set(p.offeringId, list);
+  }
 
   return offerRows.map(r => {
     const hasSingleEntryYear = r.entryYearStart != null && r.entryYearStart === r.entryYearEnd;
+    const profs = profsByOffering.get(r.offeringId) ?? [];
+    const isCoTaught = profs.length >= 2;
     return {
       offeringId: r.offeringId,
       courseId: r.courseId,
@@ -310,16 +380,19 @@ async function listCurriculumDemands(termId: number, programId: number, universi
       code: r.courseCode,
       title: r.courseTitle,
       units: String(r.units),
-      courseType: r.courseType ?? 'عمومی',
+      // مقدار واقعی (دامنه باز) — پیش‌تر هر چیزی که در فهرست بسته نبود «عمومی» می‌شد
+      courseType: r.courseType ?? '',
       capacity: r.capacity,
       groupNumber: r.groupNumber,
       professorId: r.professorId,
-      isCoTaught: coTaught.has(r.offeringId),
+      isCoTaught,
+      coProfId: isCoTaught ? (profs.find(id => id !== r.professorId) ?? profs[1]) : null,
       enrolledCount: r.enrolledCount,
       programId: r.targetMajorId ?? 0,
       programTitle: r.targetMajorTitle ?? 'همهٔ رشته‌ها',
       cohortId: hasSingleEntryYear ? String(r.entryYearStart) : 'ALL',
       cohortTitle: hasSingleEntryYear ? `ورودی ${r.entryYearStart}` : 'کلیهٔ ورودی‌ها',
+      examDate: '',
       isSharedService: r.isSharedService === 1,
       offeringScope: r.offeringScope ?? 'DEPARTMENTAL',
     };
@@ -365,7 +438,7 @@ async function listApprovedOfferings(termId: number, universityId?: number) {
     code: r.code,
     title: r.title,
     units: String(r.units),
-    courseType: r.courseType ?? 'عمومی',
+    courseType: r.courseType ?? '',
     groupNumber: r.groupNumber,
     professorId: r.professorId,
     professorName: r.profFirstName ? `${r.profFirstName} ${r.profLastName ?? ''}`.trim() : 'تخصیص‌نیافته',
@@ -530,12 +603,19 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
         listAllocatedRoomIds(resolvedTermId, uid),
       ]);
       if (term) {
-        termCalendar = {
-          id: term.id,
-          startJalali: term.startDate ? jalaliDateOf(term.startDate) : null,
-          endJalali: term.endDate ? jalaliDateOf(term.endDate) : null,
-          startDate: term.startDate ? term.startDate.toISOString() : null,
-        };
+      // تقویم برنامه‌ریزی از «تعریف ترم» خوانده می‌شود، نه از اعداد پیش‌فرض UI
+      // (قبلاً هفته‌ها همیشه ۱۶ و تاریخ‌ها خالی بود).
+      termCalendar = {
+        id: term.id,
+        startJalali: term.startDate ? jalaliDateOf(term.startDate) : null,
+        endJalali: term.endDate ? jalaliDateOf(term.endDate) : null,
+        startDate: term.startDate ? term.startDate.toISOString() : null,
+        weeksCount: term.weeksCount ?? null,
+        classStartJalali: term.classStartDate ? jalaliDateOf(term.classStartDate) : (term.startDate ? jalaliDateOf(term.startDate) : null),
+        classEndJalali: term.classEndDate ? jalaliDateOf(term.classEndDate) : (term.endDate ? jalaliDateOf(term.endDate) : null),
+        examStartJalali: term.examStartDate ? jalaliDateOf(term.examStartDate) : null,
+        examEndJalali: term.examEndDate ? jalaliDateOf(term.examEndDate) : null,
+      };
       }
       const summary = await getTermSessionsSummary(resolvedTermId);
       for (const s of summary) {

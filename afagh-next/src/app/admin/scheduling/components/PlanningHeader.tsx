@@ -3,7 +3,7 @@
 // بنر سراسری + نوار زمینه: نیمسال/رشته/ورودی/شیفت/نمای هفته
 import { usePlanning } from '../PlanningProvider';
 import Link from 'next/link';
-import { faNum, PHASE_LABELS } from '../planning-core';
+import { faNum, PHASE_LABELS, SHIFT_MODELS } from '../planning-core';
 import type { ProgramShiftType } from '../types';
 
 export default function PlanningHeader() {
@@ -135,6 +135,9 @@ export default function PlanningHeader() {
                 <option value="MORNING" className="bg-slate-900 text-white">☀️ شیفت صبح (دانشجویان تمام‌وقت)</option>
                 <option value="FLEXIBLE" className="bg-slate-900 text-white">⚡ شناور و متوازن</option>
               </select>
+              <p className="mt-1 text-[10px] font-bold text-amber-200/80">
+                {faNum(SHIFT_MODELS.length)} مدل چیدمان — همین تعداد در گام ۴
+              </p>
             </div>
 
             <div>

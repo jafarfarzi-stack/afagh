@@ -4,8 +4,20 @@
 // ═══════════════════════════════════════════════════════════════════════
 import type {
   AutoScheduleScenario, ClassroomOption, CohortOption, CourseDemand,
-  DepartmentOffering, PlanningTab, ProfessorOption, SchedulingWorkspace, TimeSlot, WeekView,
+  DepartmentOffering, PlanningTab, ProfessorOption, ProgramShiftType,
+  SchedulingWorkspace, TimeSlot, WeekView,
 } from './types';
+
+/**
+ * مدل‌های چیدمان هوشمند (ترجیح شیفت). تنها منبع حقیقت برای هر دو جای UI:
+ * نوار تب‌ها («… مدل») و کشویی هدر. پیش‌تر نوار تب‌ها «۴ مدل» می‌نوشت در حالی
+ * که فقط ۳ گزینه وجود داشت.
+ */
+export const SHIFT_MODELS: { value: ProgramShiftType; label: string }[] = [
+  { value: 'AFTERNOON_WORKING', label: '🌆 شیفت عصر/شب (دانشجویان شاغل)' },
+  { value: 'MORNING', label: '☀️ شیفت صبح (دانشجویان تمام‌وقت)' },
+  { value: 'FLEXIBLE', label: '⚡ شناور و متوازن' },
+];
 
 /**
  * استادِ «تهی» برای وقتی هنوز هیچ استادی در سامانه ثبت نشده (دانشگاهِ تازه‌راه‌افتاده).
@@ -14,7 +26,7 @@ import type {
  */
 export const NO_PROFESSOR: ProfessorOption = {
   id: 0, name: '— استادی ثبت نشده —', staffCode: '', academicRank: '—',
-  contractType: 'تمام‌وقت', departmentName: '—', maxWeeklyUnits: 1,
+  contractType: 'تمام‌وقت', departmentId: null, departmentName: '—', maxWeeklyUnits: 1,
   maxDailyHours: 0, hasSubmittedAvailability: false,
 };
 
@@ -51,6 +63,43 @@ export const parseJalaliDates = (s: string): string[] => {
   return (norm.match(/\d{4}\s*[/٫]\s*\d{1,2}\s*[/٫]\s*\d{1,2}/g) || [])
     .map(p => p.replace(/\s+/g, '').replace(/٫/g, '/'));
 };
+/**
+ * نرمال‌سازی حروف فارسی/عربی.
+ *
+ * ⚠️ چرا لازم شد: دادهٔ `courses.courseType` با «ی عربی» (ي) و «ک عربی» (ك)
+ * ذخیره شده است (`تخصصي`, `پايه`, `اصلي`, `عمومي`) — در کل جدول دوره‌ها
+ * ۵٩۴۹ ردیف عربی و صفر ردیف فارسی. هر مقایسه‌ای که با «ی فارسی» نوشته شده
+ * بود هرگز تطبیق نمی‌خورد و نتیجه‌اش این بود که همهٔ درس‌ها «عمومی» دیده
+ * می‌شدند. اینجا یک‌بار برای همیشه یکسان‌سازی می‌شود.
+ */
+export const normalizeFa = (s: string | null | undefined): string =>
+  String(s ?? '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ۀ/g, 'ه')
+    .replace(/\u200c/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * رتبهٔ نوع درس برای ترتیب ردیف‌ها: ابتدا دروس عمومی و مشترک (که معمولاً
+ * بین‌گروهی‌اند و باید اول جا بیفتند)، سپس پایه، سپس تخصصی/اختصاصی.
+ */
+export function courseTypeRank(courseType: string): number {
+  const t = normalizeFa(courseType);
+  if (/عمومی|عمومي|مشترک|الزامی مشترک/.test(t)) return 0;
+  if (/پایه|پايه/.test(t)) return 1;
+  if (/اصلی|اصلي/.test(t)) return 2;
+  if (/تخصصی|تخصصي|اختصاصی|اختصاصي/.test(t)) return 3;
+  if (/اختیاری|اختياري|انتخابی|انتخابي/.test(t)) return 4;
+  if (/عملی|عملي|آزمایشگاه|آزمايشگاه|کارگاه|کارورزی|کارورزي|پروژه|پایان/.test(t)) return 5;
+  return 6;
+}
+
+/** نمایش نوع درس: مقدار واقعیِ نرمال‌شده؛ فقط وقتی خالی است «نامشخص» */
+export const displayCourseType = (courseType: string | null | undefined): string =>
+  normalizeFa(courseType) || 'نامشخص';
+
 export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDemand[] {
   return demands.map(d => ({
     id: d.offeringId,
@@ -64,15 +113,17 @@ export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDeman
     title: d.title,
     units: Number(d.units) || 0,
     groupNumber: d.groupNumber,
-    courseType: (['پایه', 'اصلی', 'تخصصی', 'عمومی', 'عملی'].includes(d.courseType) ? d.courseType : 'عمومی') as CourseDemand['courseType'],
+    courseType: displayCourseType(d.courseType),
+    courseTypeRank: courseTypeRank(d.courseType ?? ''),
     preferredProfId: d.professorId ?? 0,
     isCoTaught: d.isCoTaught || undefined,
+    coProfId: d.coProfId ?? undefined,
     requiredRoomType: 'THEORY',
     capacity: d.capacity,
     groupsCount: 1,
     weekRecurrence: 'ALL',
     sessionsCountPerWeek: 1,
-    examDate: '',
+    examDate: d.examDate ?? '',
     isSharedService: d.isSharedService,
     offeringScope: d.offeringScope,
   }));
@@ -101,6 +152,7 @@ export function mapProfessors(profs: SchedulingWorkspace['professors'], avail: S
     staffCode: p.staffCode ?? '—',
     academicRank: p.academicRank ?? '—',
     contractType: 'تمام‌وقت',
+    departmentId: p.departmentId ?? null,
     departmentName: p.departmentName ?? '—',
     maxWeeklyUnits: PROF_DEFAULT_MAX_UNITS,
     maxDailyHours: PROF_DEFAULT_MAX_DAILY_HOURS,
@@ -330,7 +382,9 @@ export function filterContextDemands(
   let list = demands;
   if (ctx.programId > 0) list = list.filter(d => d.programId === 0 || d.programId === ctx.programId);
   if (ctx.cohortId !== 'ALL') list = list.filter(d => d.cohortId === 'ALL' || d.cohortId === ctx.cohortId);
-  return list;
+  // ترتیب: دروس عمومی/مشترک اول، بعد پایه، بعد تخصصی — مرتب‌سازی پایدار
+  // (بر اساس ترتیب اصلی) تا ردیف‌ها هنگام فیلتر جابه‌جا نشوند.
+  return [...list].sort((a, b) => (a.courseTypeRank ?? 6) - (b.courseTypeRank ?? 6));
 }
 
 /** آمار پنل بازرس استاد: مجموع واحد، گروه‌ها، روزهای در‌گیر و درصد سهمیه */
