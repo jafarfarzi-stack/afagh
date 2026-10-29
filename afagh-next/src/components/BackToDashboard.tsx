@@ -13,6 +13,10 @@ import { usePathname } from 'next/navigation';
  *
  * روی ریشهٔ همان پنل (`/admin`، `/professor`، `/student`) رندر نمی‌شود، چون
  * دکمهٔ «بازگشت به جایی که همین‌جا هستید» بی‌معناست.
+ *
+ * 📍 جای دکمه: **سمت چپ** صفحه. سامانه RTL است (`<html dir="rtl">`)، پس
+ * `justify-end` در محور افقی یعنی لبهٔ چپ. با کلاس منطقی نوشته شده تا اگر
+ * روزی بخشی LTR شد، جای دکمه هم درست بماند.
  */
 export default function BackToDashboard({
   href,
@@ -33,7 +37,7 @@ export default function BackToDashboard({
   if (pathname === href) return null;
 
   return (
-    <div className={`print:hidden ${wrapClassName}`}>
+    <div className={`flex justify-end print:hidden ${wrapClassName}`}>
       <Link
         href={href}
         className={

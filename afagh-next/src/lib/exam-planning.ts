@@ -63,18 +63,6 @@ export const STANDARD_EXAM_SHIFTS: { startTime: string; endTime: string }[] = [
 
 const hm = (t: unknown) => (t == null ? '' : String(t).slice(0, 5));
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-/** Date محلی → 'YYYY-MM-DD' (بدون جابه‌جایی منطقهٔ زمانی) */
-const toIsoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-/** 'YYYY-MM-DD' → Date محلی (بدون جابه‌جایی منطقهٔ زمانی) */
-const fromIsoDate = (s: string): Date | null => {
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s.trim());
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-};
-
 /**
  * تاریخ یک ردیفِ تقویمی (`schedules.examDate` / `exam_sessions.examDate`) به
  * شکل شمسی استاندارد 'YYYY/MM/DD'.

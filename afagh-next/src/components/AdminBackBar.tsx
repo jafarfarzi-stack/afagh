@@ -33,17 +33,10 @@ export default function AdminBackBar({
   if (!target) return null;
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5 print:hidden">
-      <Link
-        href={target.href}
-        title={`بازگشت به ${target.title}`}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
-      >
-        <span aria-hidden>→</span>
-        بازگشت به {target.title}
-      </Link>
-
-      {/* وقتی هدف، کارتابالِ خودِ کارشناس است، میان‌برِ داشبورد کل هم بماند */}
+    <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 print:hidden">
+      {/* 📍 سمت چپ صفحه — سامانه RTL است، پس justify-end = لبهٔ چپ.
+          میان‌بر داشبورد اول می‌آید تا در چیدمان راست‌به‌چپ، دکمهٔ اصلی
+          («بازگشت به کارتابل») دورترین عنصر در سمت چپ باشد. */}
       {!target.isHome && (
         <Link
           href={homeHref}
@@ -54,6 +47,15 @@ export default function AdminBackBar({
           {homeLabel}
         </Link>
       )}
+
+      <Link
+        href={target.href}
+        title={`بازگشت به ${target.title}`}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
+      >
+        <span aria-hidden>→</span>
+        بازگشت به {target.title}
+      </Link>
     </div>
   );
 }
