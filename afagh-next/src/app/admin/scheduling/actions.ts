@@ -329,7 +329,7 @@ async function listRealDemands(termId: number, universityId?: number) {
 }
 
 /** تقاضای مبتنی بر چارت درسی: درس‌های تعریف‌شده در curriculum_versions برای یک رشته/مقطع/ورودی */
-async function listCurriculumDemands(termId: number, programId: number, universityId?: number) {
+async function listCurriculumDemands(termId: number, programId: number, universityId?: number, entryYear?: number | null) {
   // 1) پیدا کردن ترم و سال تحصیلی
   const [term] = await db.select().from(academic_terms).where(and(eq(academic_terms.id, termId), uniOrGlobal(academic_terms.universityId, universityId))).limit(1);
   if (!term) return [];
@@ -340,20 +340,38 @@ async function listCurriculumDemands(termId: number, programId: number, universi
 
   // 3) پیدا کردن نسخهٔ برنامه درسی منتشرشده/بایگانی‌شده برای این رشته و مقطع و سال ورودی
   // ورودی‌های متنوع وجود دارند؛ باید تمام ورودی‌های فعال را پوشش دهد
+  // ⚠️ چارت بر اساس «سال ورودیِ دانشجو» انتخاب می‌شود، نه سال تحصیلیِ ترم.
+  // چارت یک رشته در طول زمان عوض می‌شود؛ ممکن است برای ورودی ۱۴۰۱ یک نسخه و
+  // برای ورودی ۱۴۰۳ نسخهٔ دیگر معتبر باشد. نسخهٔ قبلی با term.academicYear
+  // مقایسه می‌کرد و عملاً همیشه یک نسخه (یا هیچ) برمی‌گرداند.
   const cvUniFilter = universityEq(curriculum_versions.universityId, universityId);
-  const cvRows = await db
-    .select({ id: curriculum_versions.id })
+  const targetEntryYear = entryYear ?? term.academicYear ?? null;
+  const cvBase = and(
+    eq(curriculum_versions.majorId, programId),
+    eq(curriculum_versions.degreeLevelId, major.degreeLevelId),
+    cvUniFilter,
+    sql`${curriculum_versions.status} in ('PUBLISHED','ARCHIVED')`,
+  );
+  let cvRows = targetEntryYear == null ? [] : await db
+    .select({ id: curriculum_versions.id, from: curriculum_versions.entryYearFrom, to: curriculum_versions.entryYearTo })
     .from(curriculum_versions)
     .where(and(
-      eq(curriculum_versions.majorId, programId),
-      eq(curriculum_versions.degreeLevelId, major.degreeLevelId),
-      cvUniFilter,
-      sql`${curriculum_versions.status} in ('PUBLISHED','ARCHIVED')`,
-      sql`${term.academicYear} between ${curriculum_versions.entryYearFrom} and coalesce(${curriculum_versions.entryYearTo}, 9999)`
+      cvBase,
+      sql`${targetEntryYear} between ${curriculum_versions.entryYearFrom} and coalesce(${curriculum_versions.entryYearTo}, 9999)`
     ))
-    .orderBy(desc(curriculum_versions.id))
+    .orderBy(desc(curriculum_versions.entryYearFrom), desc(curriculum_versions.id))
     .limit(1);
-  
+  // اگر برای آن ورودی چارتی تعریف نشده باشد، آخرین چارت مصوب رشته می‌آید
+  // تا صفحه خالی نماند (و UI صریحاً بگوید «چارت این ورودی تعریف نشده»).
+  if (!cvRows.length) {
+    cvRows = await db
+      .select({ id: curriculum_versions.id, from: curriculum_versions.entryYearFrom, to: curriculum_versions.entryYearTo })
+      .from(curriculum_versions)
+      .where(cvBase)
+      .orderBy(desc(curriculum_versions.entryYearFrom), desc(curriculum_versions.id))
+      .limit(1);
+  }
+
   if (!cvRows.length) return [];
   const curriculumVersionId = cvRows[0].id;
 
@@ -760,10 +778,16 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
 
 /** تقاضای مبتنی بر چارت درسی برای یک رشته خاص — برای فیلتر کردن دروس در CurriculumAssignTab */
 export type CurriculumDemandsResult =
-  | { ok: true; demands: Awaited<ReturnType<typeof listCurriculumDemands>> }
+  | {
+      ok: true;
+      demands: Awaited<ReturnType<typeof listCurriculumDemands>>;
+      /** بازهٔ ورودیِ چارت استفاده‌شده — «چارت معتبر برای ورودی ۱۴۰۱ تا ۱۴۰۴» */
+      chartRange?: { from: number; to: number | null } | null;
+      requestedEntryYear?: number | null;
+    }
   | { ok: false; error: string };
 
-export async function getCurriculumDemandsAction(termId: number, programId: number, _universityId?: number): Promise<CurriculumDemandsResult> {
+export async function getCurriculumDemandsAction(termId: number, programId: number, entryYear?: number | null, _universityId?: number): Promise<CurriculumDemandsResult> {
   try {
     // خواندنِ تقاضای چارت — مدیرگروه هم مجاز است (فقط مشاهده، فقط رشته‌های خودش)
     const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
@@ -776,8 +800,24 @@ export async function getCurriculumDemandsAction(termId: number, programId: numb
         .limit(1);
       if (!owned.length) return { ok: false, error: 'این رشته در دپارتمان‌های تحت مدیریت شما نیست.' };
     }
-    const demands = await listCurriculumDemands(termId, programId, await serverUniId());
-    return { ok: true, demands };
+    const demands = await listCurriculumDemands(termId, programId, await serverUniId(), entryYear ?? null);
+    // بازهٔ ورودیِ چارتی که واقعاً استفاده شد — UI می‌گوید «چارت معتبر برای
+    // ورودی‌های فلان تا فلان» یا «برای این ورودی چارت تعریف نشده».
+    const chart = await db
+      .select({ from: curriculum_versions.entryYearFrom, to: curriculum_versions.entryYearTo })
+      .from(curriculum_versions)
+      .where(and(
+        eq(curriculum_versions.majorId, programId),
+        sql`${curriculum_versions.status} in ('PUBLISHED','ARCHIVED')`,
+      ))
+      .orderBy(desc(curriculum_versions.entryYearFrom))
+      .limit(1);
+    return {
+      ok: true,
+      demands,
+      chartRange: chart.length ? { from: chart[0].from, to: chart[0].to } : null,
+      requestedEntryYear: entryYear ?? null,
+    };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در بارگذاری دروس چارت درسی.' };
   }

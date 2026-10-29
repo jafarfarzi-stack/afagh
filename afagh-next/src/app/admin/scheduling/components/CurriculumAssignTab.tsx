@@ -7,6 +7,7 @@ import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, suggestGroupsC
 
 export default function CurriculumAssignTab() {
   const {
+    chartRange,
     currentProgram,
     displayedDemands,
     filteredDemands,
@@ -36,6 +37,11 @@ export default function CurriculumAssignTab() {
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
                   برای هر درس چارت، نام استاد مدرس و تعداد گروه‌ها را مشخص فرمایید. کنترل سقف واحد مجاز اساتید به صورت زنده انجام می‌شود.
+                </p>
+                <p className={`mt-1 text-[11px] font-black ${chartRange ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {chartRange
+                    ? `📗 چارت معتبر برای ورودی‌های ${faNum(chartRange.from)} تا ${chartRange.to ? faNum(chartRange.to) : 'به بعد'}`
+                    : '📙 برای این رشته چارت مصوبی تعریف نشده است — دروس از فهرست ارائه‌های گروه نمایش داده می‌شود'}
                 </p>
               </div>
 

@@ -91,6 +91,8 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   // Curriculum-based demands (filtered by selected program)
   const [curriculumDemands, setCurriculumDemands] = useState<CourseDemand[]>([]);
   const [isLoadingCurriculumDemands, setIsLoadingCurriculumDemands] = useState(false);
+  // بازهٔ ورودیِ چارتِ واقعاً استفاده‌شده («چارت معتبر برای ورودی ۱۴۰۱ تا ۱۴۰۴»)
+  const [chartRange, setChartRange] = useState<{ from: number; to: number | null } | null>(null);
 
   // Modal: مشاهدهٔ فرم واقعی درٔ دسترس بودن استاد (ثبت‌شده توسط خودِ استاد)
   const [isProfAvailabilityModalOpen, setIsProfAvailabilityModalOpen] = useState<boolean>(false);
@@ -168,8 +170,11 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     if (!selectedTermId || !selectedProgramId) return;
     setIsLoadingCurriculumDemands(true);
     try {
-      const res = await getCurriculumDemandsAction(selectedTermId, selectedProgramId);
+      // سال ورودیِ دانشجو تعیین می‌کند کدام نسخهٔ چارت معتبر است
+      const entryYear = selectedCohortId === 'ALL' ? null : Number(selectedCohortId.split('-')[0]) || null;
+      const res = await getCurriculumDemandsAction(selectedTermId, selectedProgramId, entryYear);
       if (!res.ok) { showToast(res.error, 'warning'); setCurriculumDemands([]); return; }
+      setChartRange(res.chartRange ?? null);
       setCurriculumDemands(mapDemands(res.demands));
     } catch {
       showToast('⚠️ بارگذاری دروس چارت ناموفق بود.', 'warning');
@@ -183,7 +188,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   useEffect(() => {
     loadCurriculumDemands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTermId, selectedProgramId]);
+  }, [selectedTermId, selectedProgramId, selectedCohortId]);
 
   /** پیشنهاد هوشمند موتور برای یک درس (درٔ دسترس بودن واقعی استاد + اشغال سالن‌ها + زونینگ) */
   const handleSuggestForDemand = async (demandId: number) => {
@@ -546,6 +551,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     profAssignedUnitsMap,
     programMatrix,
     applyScope,
+    chartRange,
     cohortOrdinal,
     effectiveSemester,
     professors,
