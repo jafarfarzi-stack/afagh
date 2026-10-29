@@ -180,12 +180,9 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       </header>
 
       <main className="mx-auto w-full max-w-6xl min-w-0 overflow-x-hidden p-4 sm:p-6 pb-24 md:pb-6">
-        {/* دکمهٔ بازگشت به کارتابل استاد — روی همهٔ زیرصفحه‌ها (نه خودِ /professor) */}
-        <BackToDashboard
-          href="/professor"
-          label="بازگشت به کارتابل استاد"
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
-        />
+        {/* دکمهٔ بازگشت به کارتابل استاد — روی همهٔ زیرصفحه‌ها (نه خودِ /professor)
+            رنگ از `lib/back-button.ts` می‌آید تا با بقیهٔ پنل‌ها یکی بماند. */}
+        <BackToDashboard href="/professor" label="بازگشت به کارتابل استاد" />
         {children}
       </main>
       <ProfessorNav />

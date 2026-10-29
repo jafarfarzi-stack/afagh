@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { resolveBackTarget } from '@/lib/admin-back';
+import { BACK_BTN_CLASS, BACK_HOME_CLASS } from '@/lib/back-button';
 
 /**
  * نوارِ «بازگشت به کارتابل» برای شاخهٔ مدیریت — **دو سطحی**.
@@ -41,7 +42,7 @@ export default function AdminBackBar({
         <Link
           href={homeHref}
           title={homeLabel}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          className={BACK_HOME_CLASS}
         >
           <span aria-hidden>🏠</span>
           {homeLabel}
@@ -51,7 +52,7 @@ export default function AdminBackBar({
       <Link
         href={target.href}
         title={`بازگشت به ${target.title}`}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
+        className={BACK_BTN_CLASS}
       >
         <span aria-hidden>→</span>
         بازگشت به {target.title}

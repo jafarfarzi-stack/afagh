@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { BACK_BTN_CLASS } from '@/lib/back-button';
 
 /**
  * دکمهٔ «بازگشت به داشبورد/کارتابل» — در همهٔ زیرصفحه‌های هر پنل.
@@ -40,10 +41,7 @@ export default function BackToDashboard({
     <div className={`flex justify-end print:hidden ${wrapClassName}`}>
       <Link
         href={href}
-        className={
-          className ||
-          'inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700'
-        }
+        className={className || BACK_BTN_CLASS}
       >
         <span aria-hidden>→</span>
         {label}
