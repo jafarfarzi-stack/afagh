@@ -30,6 +30,7 @@ import { run as runEduSchedule } from './r-edu-schedule';
 import { run as runExam } from './r-exam';
 import { run as runFinance } from './r-finance';
 import { run as runStaff } from './r-staff';
+import { run as runProfClass } from './r-prof-class';
 import { run as runStatusOps } from './r-status-ops';
 import { run as runThesis } from './r-thesis';
 import { run as runCollect } from './r-collect-external';
@@ -602,6 +603,7 @@ export async function runReport(kind: string, f: ReportFilters): Promise<ReportR
         (await runExam(kind, f)) ??
         (await runFinance(kind, f)) ??
         (await runStaff(kind, f)) ??
+        (await runProfClass(kind, f)) ??
         (await runStatusOps(kind, f)) ??
         (await runThesis(kind, f)) ??
         (await runCollect(kind, f));

@@ -261,7 +261,7 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
       <div className="prof-week-scroll overflow-x-auto rounded-2xl border border-slate-200">
         {orientation === 'days-rows' ? (
           /* ─── مدل ب: سطرها روز، ستون‌ها ساعت ─── */
-          <div className="prof-cal-b min-w-[900px]" dir="rtl" style={{ '--cal-row': '76px' } as CSSProperties}>
+          <div className="prof-cal-b min-w-[1100px]" dir="rtl" style={{ '--cal-row': '76px' } as CSSProperties}>
             <div className="grid sticky top-0 z-20 bg-slate-900 text-white text-center" style={{ gridTemplateColumns: bTemplate }}>
               <div className="p-2 border border-slate-800 font-extrabold bg-slate-900 text-[11px]">روز / ساعت</div>
               {hourHeader.map(h => (
@@ -276,9 +276,21 @@ export default function ProfessorCalendarGrid({ entries, placeMode = 'room', sho
                 <div className="sticky right-0 z-10 bg-slate-50 border-l border-t border-slate-200 p-2 text-center font-extrabold text-xs text-slate-800 flex items-center justify-center">
                   {day}
                 </div>
+                {/*
+                  ⚠ `gridColumn` اجباری است: این گرید `1 + HOUR_ROWS` ستون دارد
+                  (برچسب روز + یک ستون برای هر ساعت)، ولی این سلول فرزندِ دوم
+                  است و به‌طور پیش‌فرض فقط **یک** ستون (عرضِ یک ساعت ≈۶۲px) را
+                  می‌گرفت. نتیجه: همهٔ کارت‌ها و خطوط ساعت در نواری باریک در
+                  کنارِ ستون روز فشرده می‌شدند و برنامه عملاً خالی دیده می‌شد
+                  (باگ گزارش‌شده در کارتابل استاد/دانشجو و چاپ آن).
+                  با span، سلول تمامِ ستون‌های ساعت را می‌پوشاند.
+                */}
                 <div
-                  className="relative border-l border-t border-slate-200 last:border-l-0 bg-white"
-                  style={{ height: `calc(var(--cal-row) * ${rowUnits})` }}
+                  className="relative border-l border-t border-slate-200 bg-white"
+                  style={{
+                    height: `calc(var(--cal-row) * ${rowUnits})`,
+                    gridColumn: `2 / span ${HOUR_ROWS}`,
+                  }}
                 >
                   {/* خطوط ساعت (عمودی) + نیم‌ساعت خط‌چین */}
                   {Array.from({ length: HOUR_ROWS + 1 }, (_, i) => (

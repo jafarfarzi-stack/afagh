@@ -79,6 +79,11 @@ const CARDS: Card[] = [
   { kind: 'staff-list', cat: 'classes', icon: '👨‍🏫', title: 'اساتید', needsTerm: true },
   { kind: 'staff-courses', cat: 'classes', icon: '📚', title: 'استادان مدرس دروس', needsTerm: true },
   { kind: 'staff-timetable', cat: 'classes', icon: '🗓', title: 'برنامه هفتگی اساتید', needsTerm: true },
+  // تشکیل کلاس استادان — معیار: ثبتِ حضور استاد برای جلسه (professor_class_attendance)
+  { kind: 'prof-formation-summary', cat: 'classes', icon: '📊', title: 'تشکیل کلاس استادان (خلاصه)', needsTerm: true },
+  { kind: 'prof-formation-detail', cat: 'classes', icon: '📚', title: 'تشکیل کلاس استادان (به تفکیک درس)', needsTerm: true },
+  { kind: 'prof-formation-none', cat: 'classes', icon: '🚫', title: 'استادان بدون جلسهٔ تشکیل‌شده', needsTerm: true },
+  { kind: 'prof-sessions-unformed', cat: 'classes', icon: '⏳', title: 'جلسات تشکیل‌نشده', needsTerm: true, customs: [{ key: 'dateFrom', title: 'از تاریخ' }, { key: 'dateTo', title: 'تا تاریخ' }] },
   { kind: 'attendance-list', cat: 'classes', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
   // مالی
   { kind: 'tuition-tariff', cat: 'finance', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
@@ -151,6 +156,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const COURSE_LEVEL_KINDS = new Set([
     'weekly-timetable', 'room-conflicts', 'empty-rooms', 'low-enrollment', 'makeup-courses',
     'staff-list', 'staff-courses', 'staff-timetable', 'payesh',
+    'prof-formation-summary', 'prof-formation-detail', 'prof-formation-none', 'prof-sessions-unformed',
     'tuition-tariff', 'letter-templates', 'payroll-overview', 'bi-teaching-quality',
     'bi-facilities', 'graduation-dossiers', 'grade-audit-log',
   ]);
