@@ -9,7 +9,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab, programSemesterMatrix, cohortSemesterNo } from './planning-core';
 import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOption, ClassroomOption, ProfessorOption, CourseDemand, DepartmentOffering, AutoScheduleScenario, SchedulingWorkspace } from './types';
-import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction } from './actions';
+import { getSchedulingWorkspaceAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction, setOfferingCohortMergeAction } from './actions';
 import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
 
 /**
@@ -257,6 +257,30 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
       reloadWorkspace();
     } finally {
       setPhaseBusy(false);
+    }
+  };
+
+  /**
+   * ادغام/جداکردن نیمسال ورود یک ارائه (مهر + بهمن با هم).
+   * ورودی بهمنِ کم‌جمعیت نباید کلاس جدا داشته باشد.
+   */
+  const handleToggleCohortMerge = async (offeringId: number, merge: boolean) => {
+    try {
+      const res = await setOfferingCohortMergeAction({ offeringId, merge });
+      if (!res.ok) { showToast(res.error, 'warning'); return; }
+      setCourseDemands(prev => prev.map(d => d.id === offeringId
+        ? {
+            ...d,
+            cohortMerged: merge,
+            cohortTitle: merge
+              ? `نیمسال‌های ورود ${res.entryYearStart ?? ''}–${res.entryYearEnd ?? ''} (ادغام‌شده)`
+              : d.cohortTitle,
+          }
+        : d));
+      showToast(merge ? '✅ این ارائه برای هر دو نیمسال ورود (مهر و بهمن) اعلام شد.' : 'ارائه به حالت تک‌نیمسال برگشت.', 'success');
+      reloadWorkspace();
+    } catch {
+      showToast('خطا در ارتباط با سرور.', 'warning');
     }
   };
 
@@ -524,6 +548,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     handleGenerateSessions,
     handleOpenEditProfAvailability,
     handlePhaseTransition,
+    handleToggleCohortMerge,
     handleRunHealth,
     handleSuggestForDemand,
     handleSupplyFromSuggestion,

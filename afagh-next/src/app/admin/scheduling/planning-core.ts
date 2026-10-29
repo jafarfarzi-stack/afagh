@@ -135,6 +135,7 @@ export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDeman
     semesterNo: d.semesterNo ?? null,
     cohortId: d.cohortId,
     cohortTitle: d.cohortTitle,
+    cohortMerged: d.cohortMerged,
     code: d.code,
     title: d.title,
     units: Number(d.units) || 0,

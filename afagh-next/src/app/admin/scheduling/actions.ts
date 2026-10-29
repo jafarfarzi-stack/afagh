@@ -278,18 +278,24 @@ async function listRealDemands(termId: number, universityId?: number) {
     const cohorts = [...uniq.values()].sort((a, b) => (b.year - a.year) || (b.term - a.term));
     let cohortId = 'ALL';
     let cohortTitle = 'کلیهٔ نیمسال‌های ورود';
-    if (cohorts.length === 1) {
+    // تصمیمِ صریحِ ادغام (ستون‌های entryYearStart/End) بر استنتاج از ثبت‌نام اولویت دارد
+    const explicitMerge = r.entryYearStart != null;
+    if (explicitMerge) {
+      const from = r.entryYearStart as number;
+      const to = r.entryYearEnd ?? from;
+      if (from === to) {
+        cohortId = `${from}-ALL`;
+        cohortTitle = `نیمسال ورود ${from} (ادغام مهر و بهمن)`;
+      } else {
+        cohortTitle = `نیمسال‌های ورود ${from}–${to} (ادغام‌شده)`;
+      }
+    } else if (cohorts.length === 1) {
       cohortId = `${cohorts[0].year}-${cohorts[0].term}`;
       cohortTitle = entryCohortTitle(cohorts[0].year, cohorts[0].term);
     } else if (cohorts.length === 2) {
       cohortTitle = `${entryCohortTitle(cohorts[0].year, cohorts[0].term)}، ${entryCohortTitle(cohorts[1].year, cohorts[1].term)}`;
     } else if (cohorts.length > 2) {
       cohortTitle = `نیمسال‌های ورود ${cohorts[cohorts.length - 1].year}–${cohorts[0].year}`;
-    } else if (r.entryYearStart != null) {
-      const from = r.entryYearStart;
-      const to = r.entryYearEnd ?? r.entryYearStart;
-      if (from === to) { cohortId = String(from); cohortTitle = entryCohortTitle(from, null); }
-      else cohortTitle = `نیمسال‌های ورود ${from}–${to}`;
     }
 
     const examRaw = examByOffering.get(r.offeringId);
@@ -321,6 +327,7 @@ async function listRealDemands(termId: number, universityId?: number) {
       semesterNo,
       cohortId,
       cohortTitle,
+      cohortMerged: explicitMerge,
       examDate: examRaw ? jalaliDateOf(new Date(`${examRaw}T00:00:00`)) : '',
       isSharedService: r.isSharedService === 1,
       offeringScope: r.offeringScope ?? 'DEPARTMENTAL',
@@ -1079,6 +1086,66 @@ export async function allocateRoomQuotasAction(termId: number) {
     return res;
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در سهمیه‌بندی سالن‌ها.' };
+  }
+}
+
+/**
+ * ادغام/جداکردن «نیمسال ورود» یک ارائه.
+ *
+ * سناریوی واقعی: گروهی ورودی بهمن با ۶ نفر دارد؛ برای ۶ نفر کلاس جدا گذاشتن
+ * بی‌معنی است، پس همان ارائهٔ ورودی مهر (یا برعکس) برای هر دو نیمسال ورود
+ * اعلام می‌شود. تصمیم روی ستون‌های موجود `course_offerings.entryYearStart/End`
+ * ذخیره می‌شود (بدون جدول جدید) و `listRealDemands` اول همین را می‌خواند و
+ * تنها در نبود آن به دانشجویانِ ثبت‌نام‌شده برمی‌گردد.
+ */
+export async function setOfferingCohortMergeAction(px: {
+  offeringId: number;
+  merge: boolean;
+}): Promise<{ ok: true; entryYearStart: number | null; entryYearEnd: number | null } | { ok: false; error: string }> {
+  try {
+    const user = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead, deptIds } = await deptHeadScope(user);
+
+    const [off] = await db
+      .select({ id: course_offerings.id, courseDeptId: courses.departmentId, termId: course_offerings.termId })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(eq(course_offerings.id, px.offeringId))
+      .limit(1);
+    if (!off) return { ok: false as const, error: 'ارائه یافت نشد.' };
+    if (isDeptHead && (off.courseDeptId == null || !deptIds.includes(off.courseDeptId))) {
+      return { ok: false as const, error: 'این درس در گروه‌های تحت مدیریت شما نیست.' };
+    }
+
+    if (!px.merge) {
+      await db.update(course_offerings)
+        .set({ entryYearStart: null, entryYearEnd: null })
+        .where(eq(course_offerings.id, px.offeringId));
+      revalidatePath('/admin/scheduling');
+      revalidatePath('/group-manager/scheduling');
+      return { ok: true as const, entryYearStart: null, entryYearEnd: null };
+    }
+
+    // بازهٔ ادغام = کوچک‌ترین و بزرگ‌ترین سالِ ورودیِ دانشجویانِ همین ارائه
+    const rows = await db
+      .select({ year: students.entryYear })
+      .from(enrollments)
+      .innerJoin(students, eq(students.id, enrollments.studentId))
+      .where(eq(enrollments.offeringId, px.offeringId));
+    const years = rows.map(r => Number(r.year)).filter(y => Number.isFinite(y) && y > 0);
+    if (!years.length) {
+      return { ok: false as const, error: 'برای این ارائه دانشجوی ثبت‌نام‌شده‌ای نیست؛ بازهٔ ورودی قابل تعیین نیست.' };
+    }
+    const from = Math.min(...years);
+    const to = Math.max(...years);
+    await db.update(course_offerings)
+      .set({ entryYearStart: from, entryYearEnd: to })
+      .where(eq(course_offerings.id, px.offeringId));
+    revalidatePath('/admin/scheduling');
+    revalidatePath('/group-manager/scheduling');
+    return { ok: true as const, entryYearStart: from, entryYearEnd: to };
+  } catch (e: any) {
+    return { ok: false as const, error: e?.message ?? 'ثبت ادغام نیمسال ورود ناموفق بود.' };
   }
 }
 

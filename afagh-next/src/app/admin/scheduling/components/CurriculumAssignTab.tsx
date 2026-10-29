@@ -15,6 +15,7 @@ export default function CurriculumAssignTab() {
     handleAssignProfessorToCourse,
     handleAssignProfessorToGroup,
     handleToggleCoTeaching,
+    handleToggleCohortMerge,
     handleToggleDemandExamMode,
     handleUpdateCoWeights,
     handleUpdateCourseGroupsCount,
@@ -107,6 +108,23 @@ export default function CurriculumAssignTab() {
                           <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px]">
                             {demand.cohortTitle.split('(')[1]?.replace(')', '') || demand.cohortTitle}
                           </span>
+                          {/* ورودی بهمنِ کم‌جمعیت: کلاس جدا لازم نیست — با مهر یکی شود */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCohortMerge(demand.id, !demand.cohortMerged)}
+                            title={
+                              demand.cohortMerged
+                                ? 'این ارائه برای هر دو نیمسال ورود اعلام شده — برای جدا کردن کلیک کنید'
+                                : 'اگر ورودی بهمن این درس کم‌جمعیت است، با ورودی مهر همان ترم یک کلاس بگیرد'
+                            }
+                            className={`mt-1 block w-full px-1.5 py-0.5 rounded text-[9px] font-black transition ${
+                              demand.cohortMerged
+                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200'
+                            }`}
+                          >
+                            {demand.cohortMerged ? '🔗 ادغام مهر+بهمن ✓' : '🔗 ادغام مهر+بهمن'}
+                          </button>
                         </td>
                         <td className="p-2 border border-slate-200 text-center font-extrabold text-slate-900">{faNum(demand.units)}</td>
                         <td className="p-2 border border-slate-200 text-center">

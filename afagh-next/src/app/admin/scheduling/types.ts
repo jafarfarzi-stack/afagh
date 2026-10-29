@@ -86,6 +86,8 @@ export interface CourseDemand {
   semesterNo?: number | null;
   cohortId: string;
   cohortTitle: string;
+  /** ادغام مهر+بهمن برای این ارائه فعال است */
+  cohortMerged?: boolean;
   code: string;
   title: string;
   units: number;
@@ -192,6 +194,8 @@ export interface SchedulingWorkspace {
     /** شمارهٔ ترم پیشنهادی چارت (فاز ۰: رشته × ترم) — null = در چارت تعیین نشده */
     semesterNo: number | null;
     cohortId: string; cohortTitle: string;
+    /** ادغام صریح مهر+بهمن روی همین ارائه ثبت شده است */
+    cohortMerged: boolean;
     /** تاریخ امتحان واقعی از schedules(scheduleType='EXAM') — خالی یعنی هنوز تعیین نشده */
     examDate: string;
     isSharedService: boolean;
