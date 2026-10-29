@@ -125,6 +125,21 @@ export default function SmartAssignTab() {
                   <div>• عرضه در برابر تقاضا (گروه‌های کم‌عرضه): {faNum((health.supplyVsDemand ?? []).filter(x => (x.gap ?? 0) > 0).length)}</div>
                   <div>• کلاس‌های مشترک بدون تخصیص: {faNum(health.unallocatedShared.length)}</div>
                   <div>• سالن‌های با بهره‌وری کمتر از ۵۰٪: {faNum((health.roomShiftUsage ?? []).filter(x => x.utilization < 0.5).length)}</div>
+                  <div className={health.examConflicts?.hard?.length ? 'text-rose-200 font-black' : ''}>
+                    • تداخل قطعی امتحانی: {faNum(health.examConflicts?.hard?.length ?? 0)}
+                    {(health.examConflicts?.soft?.length ?? 0) > 0 && ` · همان‌روز (نرم): ${faNum(health.examConflicts.soft.length)}`}
+                  </div>
+                  <div className={(health.fragmentedProfessorDays?.length ?? 0) > 0 ? 'text-amber-200 font-black' : ''}>
+                    • روزهای استاد با ساعت خالی: {faNum(health.fragmentedProfessorDays?.length ?? 0)}
+                    {(health.fragmentedProfessorDays?.length ?? 0) > 0 && ` (بیشترین ${faNum(health.fragmentedProfessorDays[0].gaps)} ساعت)`}
+                  </div>
+                  {(health.examConflicts?.hard?.length ?? 0) > 0 && (
+                    <div className="mt-1 space-y-0.5 border-t border-rose-300/30 pt-1">
+                      {health.examConflicts.hard.slice(0, 3).map((c, i) => (
+                        <div key={`${c.a}-${c.b}-${i}`} className="text-[10px] text-rose-100">— {c.message}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

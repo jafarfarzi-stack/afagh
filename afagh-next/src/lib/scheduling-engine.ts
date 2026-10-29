@@ -25,7 +25,7 @@ import { auditChain, type AuditTx } from '@/lib/audit-chain';
 import { advisoryLock } from '@/lib/advisory-lock';
 import {
   allocateQuotaShifts, canAllocateInPhase, canEditInPhase, canTransition,
-  calculateSlotScore, distributeGroupsByFaculty, overlaps, suggestedGroupCount,
+  calculateSlotScore, countInternalGaps, distributeGroupsByFaculty, overlaps, suggestedGroupCount,
   toMinutes, validateGroupDrafts,
   type GroupDraftInput, type Shift, type RoomGrantInput,
 } from '@/lib/scheduling-core';
@@ -505,14 +505,29 @@ export async function getSmartSuggestions(px: {
 
   const suggested: { dayOfWeek: number; startTime: string; endTime: string; classroomId: number; classroomName: string; classroomCapacity: number; score: number; reasons: string[] }[] = [];
 
+  // بلوک‌های اشغالِ استاد به تفکیک روز — مبنای «پشت سر هم و بدون ساعت خالی».
+  const busyByDay = new Map<number, { start: number; end: number }[]>();
+  for (const b of busyRows) {
+    const list = busyByDay.get(b.day) ?? [];
+    list.push({ start: b.start, end: b.end });
+    busyByDay.set(b.day, list);
+  }
+
   for (const a of availRows) {
     const day = Number(a.dayOfWeek);
     const wStart = toMinutes(hm(a.startTime));
     const wEnd = toMinutes(hm(a.endTime));
     const preferred = a.termId !== null;
+    const dayBlocks = busyByDay.get(day) ?? [];
+    const dayAlreadyUsed = dayBlocks.length > 0;
+    const gapsBefore = countInternalGaps(dayBlocks);
     for (let start = wStart; start + duration <= wEnd; start += 30) {
       const end = start + duration;
       if (busyRows.some(b => b.day === day && overlaps(start, end, b.start, b.end))) continue;
+      // چسبیده به بلوک موجود؟ و آیا ساعت خالی جدید می‌سازد؟
+      const adjacentToExisting = dayBlocks.some(b => b.end === start || b.start === end);
+      const gapsAfter = countInternalGaps([...dayBlocks, { start, end }]);
+      const gapsCreated = Math.max(0, gapsAfter - gapsBefore);
       for (const room of roomRows) {
         if (occupiedRows.some(o => o.day === day && o.room === Number(room.id) && overlaps(start, end, o.start, o.end))) continue;
         const { score, reasons } = calculateSlotScore({
@@ -522,8 +537,13 @@ export async function getSmartSuggestions(px: {
           inAvailableWindow: true,
           roomCapacity: Number(room.capacity),
           requiredCapacity: px.capacity,
+          adjacentToExisting,
+          dayAlreadyUsed,
+          gapsCreated,
         });
-        if (score < 0) continue;
+        // امتیاز فقط «ترتیب» می‌سازد، نه فیلتر: یک اسلاتِ معتبر نباید فقط
+        // به‌خاطر جریمهٔ ساعت خالی از فهرست حذف شود.
+        if (Number(room.capacity) < px.capacity) continue;
         suggested.push({
           dayOfWeek: day,
           startTime: toHHMM(start), endTime: toHHMM(end),
