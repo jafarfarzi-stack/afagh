@@ -347,10 +347,14 @@ export async function countFinanceStudents(
   const where = buildWhere(filters, universityId);
   const eff = universityId ?? filters.universityId;
   if (eff === 0) return 0;
-  const [row] = await db
+  const hasSearch = !!(filters.search && filters.search.trim());
+  let baseQuery: any = db
     .select({ c: sql<number>`count(*)::bigint` })
-    .from(students)
-    .where(where.length ? and(...where) : undefined);
+    .from(students);
+  if (hasSearch) {
+    baseQuery = baseQuery.innerJoin(users, eq(users.id, students.userId));
+  }
+  const [row] = await baseQuery.where(where.length ? and(...where) : undefined);
   return Number(row?.c ?? 0);
 }
 
