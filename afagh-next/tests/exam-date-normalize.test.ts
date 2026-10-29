@@ -11,7 +11,7 @@
  * ⚠ در تست‌ها هرگز `toISOString()` برای مقایسهٔ روز استفاده نشده — آن تابع
  * تاریخ محلی را به UTC می‌برد و در تهران (UTC+3:30) یک روز عقب می‌افتد.
  */
-import { examDateToGregorian, normalizeExamDate } from '../src/lib/shamsi.ts';
+import { examDateColumnValue, examDateToGregorian, normalizeExamDate } from '../src/lib/shamsi.ts';
 
 let pass = 0;
 let fail = 0;
@@ -48,6 +48,20 @@ for (const j of ['1405/10/28', '1405/11/14', '1405/01/01', '1405/12/29', '1403/1
 }
 t('۱۴۰۵/۱۰/۲۸ = 2027-01-18', ymd(examDateToGregorian('1405/10/28')) === '2027-01-18');
 t('۱۴۰۵/۰۱/۰۱ = 2026-03-21', ymd(examDateToGregorian('1405/01/01')) === '2026-03-21');
+
+console.log("— مقدارِ نوشتن در ستون date: همیشه شمسی 'YYYY-MM-DD' —");
+// قرارداد: `schedules.examDate` برچسبِ شمسی نگه می‌دارد (مثل ۱۲۹۵ ردیف موجود).
+// هر مسیر نوشتن باید از این تابع رد شود تا ستون دوباره دوقالبه نشود.
+t('شمسی اسلش → شمسی خط‌تیره', examDateColumnValue('1405/10/22') === '1405-10-22');
+t('شمسی خط‌تیره دست‌نخورده', examDateColumnValue('1405-10-22') === '1405-10-22');
+t('میلادی → شمسی (نه میلادی)', examDateColumnValue('2027-01-12') === '1405-10-22');
+t('Date میلادی → شمسی', examDateColumnValue(new Date(2027, 0, 12)) === '1405-10-22');
+t('چهاررقمی یک‌رقمی صفر می‌گیرد', examDateColumnValue('1405/1/5') === '1405-01-05');
+t('خالی → null', examDateColumnValue('') === null);
+t('null → null', examDateColumnValue(null) === null);
+t('نامعتبر → null', examDateColumnValue('bad') === null);
+t('هیچ‌گاه سالِ میلادی برنمی‌گرداند',
+  !String(examDateColumnValue('2027-01-12')).startsWith('2027'));
 
 console.log('');
 if (fail > 0) { console.error(`❌ ${fail} ناموفق از ${pass + fail}`); process.exit(1); }

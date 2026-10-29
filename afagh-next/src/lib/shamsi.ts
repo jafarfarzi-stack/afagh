@@ -68,3 +68,16 @@ export function examDateToGregorian(v: string): Date {
   const { gy, gm, gd } = toGregorian(Number(m[1]), Number(m[2]), Number(m[3]));
   return new Date(gy, gm - 1, gd);
 }
+
+/**
+ * مقدارِ آمادهٔ نوشتن در `schedules.examDate` (ستون `date`) — **همیشه شمسی**.
+ *
+ * قرارداد: این ستون برچسبِ شمسی را نگه می‌دارد (`1405-10-22`)، مثل
+ * `class_sessions.sessionDate` و `exam_sessions.examDate`. هر ورودی
+ * (شمسی/میلادی/`Date`) پذیرفته و به 'YYYY-MM-DD' شمسی تبدیل می‌شود تا هیچ
+ * مسیری دوباره میلادی در آن ننویسد. نبودِ تاریخ ⇒ `null`.
+ */
+export function examDateColumnValue(v: unknown): string | null {
+  const j = normalizeExamDate(v);
+  return j ? j.replace(/\//g, '-') : null;
+}

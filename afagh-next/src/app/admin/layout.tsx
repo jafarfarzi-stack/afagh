@@ -16,7 +16,8 @@ import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
 import { uniThemeResolved } from '@/lib/university-theme-db';
 import { getTermScope } from '@/lib/term-scope';
 import UserAvatar from '@/components/UserAvatar';
-import BackToDashboard from '@/components/BackToDashboard';
+import AdminBackBar from '@/components/AdminBackBar';
+import { ADMIN_MODULES, canSeeModule } from '@/lib/admin-modules';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
@@ -200,10 +201,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
       <main className="mx-auto max-w-[1600px] p-3 sm:p-5 pb-16">
-        {/* دکمهٔ بازگشت به کارتابل — روی همهٔ زیرصفحه‌ها (نه خودِ /admin).
-            پیش‌تر کاربر داخل هر ماژول مجبور بود از منوی ☰ یا عنوان سربرگ به
-            داشبورد برگردد و از نو منو را باز کند. */}
-        <BackToDashboard href="/admin" label="بازگشت به کارتابل مدیریت" />
+        {/* نوارِ بازگشت — **دو سطحی**: اگر زیرصفحهٔ یک کارتابل باشیم (مثل
+            `/admin/finance/pos`) به همان کارتابل (`/admin/finance`) برمی‌گردد،
+            نه به داشبورد کل؛ و میان‌بر داشبورد هم کنارش می‌ماند.
+            فهرست مقصدها از رجیستری ماژول‌ها می‌آید و به مجوزهای همین کاربر
+            محدود است تا لینکِ بازگشت هرگز به صفحهٔ «دسترسی ندارید» نرسد. */}
+        <AdminBackBar
+          modules={ADMIN_MODULES
+            .filter(m => canSeeModule(user.roles, m, permissionCodes))
+            .map(m => ({ href: m.href, title: m.title }))}
+        />
         {children}
       </main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />

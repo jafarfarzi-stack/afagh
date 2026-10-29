@@ -1,0 +1,59 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { resolveBackTarget } from '@/lib/admin-back';
+
+/**
+ * نوارِ «بازگشت به کارتابل» برای شاخهٔ مدیریت — **دو سطحی**.
+ *
+ * چرا دو سطحی؟ کارتابل‌های کارشناسی خودشان زیرصفحه دارند
+ * (`/admin/finance/pos`، `/admin/exams/handover`، `/admin/scheduling/…`).
+ * پیش‌تر تنها دکمهٔ بازگشت به `/admin` (داشبورد کل) می‌رفت؛ یعنی کارشناسی که
+ * داخل زیرصفحهٔ کارتابل مالی بود، با یک کلیک کارتابل خودش را هم از دست می‌داد
+ * و باید از منو دوباره «مالی» را باز می‌کرد. کاربر این را «در اکثر کارتابل‌های
+ * کارشناسان اعمال نشده» توصیف کرد.
+ *
+ * فهرست ماژول‌ها از `ADMIN_MODULES` می‌آید (منبع واحد حقیقت) تا با تغییر منو
+ * این نوار هم خودکار به‌روز شود و لازم نباشد در ۶۰+ صفحه دستی لینک بگذاریم.
+ * منطق محاسبهٔ هدف در `lib/admin-back.ts` است تا تست‌پذیر باشد.
+ */
+export default function AdminBackBar({
+  modules,
+  homeHref = '/admin',
+  homeLabel = 'داشبورد مدیریت',
+}: {
+  /** فهرست ماژول‌های مجازِ همین کاربر — `{href, title}` */
+  modules: { href: string; title: string }[];
+  homeHref?: string;
+  homeLabel?: string;
+}) {
+  const target = resolveBackTarget(usePathname(), modules, homeHref, homeLabel);
+  // روی خودِ داشبورد، «بازگشت به داشبورد» معنا ندارد
+  if (!target) return null;
+
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5 print:hidden">
+      <Link
+        href={target.href}
+        title={`بازگشت به ${target.title}`}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
+      >
+        <span aria-hidden>→</span>
+        بازگشت به {target.title}
+      </Link>
+
+      {/* وقتی هدف، کارتابالِ خودِ کارشناس است، میان‌برِ داشبورد کل هم بماند */}
+      {!target.isHome && (
+        <Link
+          href={homeHref}
+          title={homeLabel}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+        >
+          <span aria-hidden>🏠</span>
+          {homeLabel}
+        </Link>
+      )}
+    </div>
+  );
+}
