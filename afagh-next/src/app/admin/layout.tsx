@@ -16,6 +16,7 @@ import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
 import { uniThemeResolved } from '@/lib/university-theme-db';
 import { getTermScope } from '@/lib/term-scope';
 import UserAvatar from '@/components/UserAvatar';
+import BackToDashboard from '@/components/BackToDashboard';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
@@ -198,7 +199,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
       </header>
-      <main className="mx-auto max-w-[1600px] p-3 sm:p-5 pb-16">{children}</main>
+      <main className="mx-auto max-w-[1600px] p-3 sm:p-5 pb-16">
+        {/* دکمهٔ بازگشت به کارتابل — روی همهٔ زیرصفحه‌ها (نه خودِ /admin).
+            پیش‌تر کاربر داخل هر ماژول مجبور بود از منوی ☰ یا عنوان سربرگ به
+            داشبورد برگردد و از نو منو را باز کند. */}
+        <BackToDashboard href="/admin" label="بازگشت به کارتابل مدیریت" />
+        {children}
+      </main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );

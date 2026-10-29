@@ -228,9 +228,6 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
             <Link href="/professor/schedule" className="px-3.5 py-2 rounded-xl bg-indigo-700/80 hover:bg-indigo-600 text-white font-bold text-xs border border-indigo-500/50 transition">
               🗓️ برنامه هفتگی من
             </Link>
-            <Link href="/professor" className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition">
-              بازگشت به داشبورد
-            </Link>
           </div>
         </div>
 

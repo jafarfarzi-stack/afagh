@@ -10,6 +10,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import SessionLock from '@/components/SessionLock';
 import { logoutAction } from '../login/actions';
 import DeptSwitcher from './DeptSwitcher';
+import BackToDashboard from '@/components/BackToDashboard';
 
 export default async function GroupManagerLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['DEP_HEAD']);
@@ -85,7 +86,10 @@ export default async function GroupManagerLayout({ children }: { children: React
           <Link href="/group-manager/compensatory" className="hover:underline">دانشجویان جبرانی</Link>
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl p-4">{children}</main>
+      <main className="mx-auto max-w-6xl p-4">
+        <BackToDashboard href="/group-manager" label="بازگشت به کارتابل مدیر گروه" />
+        {children}
+      </main>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );

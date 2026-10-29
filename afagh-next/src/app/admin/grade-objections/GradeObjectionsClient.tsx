@@ -60,9 +60,6 @@ export default function GradeObjectionsClient(props: {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-black text-slate-900">اعتراض‌های دانشجویان به نمره</h1>
-        <a href="/admin" className="text-sm text-slate-600 underline">
-          بازگشت به داشبورد
-        </a>
       </div>
 
       {msg ? (

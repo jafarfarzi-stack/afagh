@@ -18,6 +18,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import { logoutAction } from '../login/actions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 import UserAvatar from '@/components/UserAvatar';
+import BackToDashboard from '@/components/BackToDashboard';
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['STUDENT']);
@@ -218,6 +219,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
         {/* محتوای اصلی صفحه */}
         <main className="flex-1 min-w-0 overflow-x-hidden print:!overflow-visible print:!px-0 print:!pb-2 p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
+          {/* دکمهٔ بازگشت به کارتابل دانشجو — روی همهٔ زیرصفحه‌ها (نه خودِ /student).
+              در موبایل مفیدتر است: سایدبار پنهان است و تنها راه قبلی نوار پایین بود. */}
+          <BackToDashboard href="/student" label="بازگشت به کارتابل دانشجو" />
           {children}
         </main>
       </div>

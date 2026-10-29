@@ -28,7 +28,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
   if (!g) {
     return (
       <div className="space-y-4">
-        <Link href="/admin" className="text-xs font-bold text-indigo-700 hover:underline">→ بازگشت به داشبورد</Link>
         <div className="card text-center p-8 text-slate-500 text-sm">دسته‌ای یافت نشد یا دسترسی ندارید.</div>
       </div>
     );
@@ -40,7 +39,6 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
         <h1 className="font-extrabold text-slate-800 text-base sm:text-lg">
           {g.group.icon} {g.group.title}
         </h1>
-        <Link href="/admin" className="text-xs font-bold text-indigo-700 hover:underline">→ بازگشت به داشبورد</Link>
       </div>
       <p className="text-[11px] sm:text-xs text-slate-500">{g.group.desc} — {g.modules.length} ماژول</p>
 

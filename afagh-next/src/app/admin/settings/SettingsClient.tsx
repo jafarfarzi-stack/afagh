@@ -8,6 +8,15 @@ import { SECRET_MASK, type SettingView } from '@/lib/settings-shared';
 interface Props {
   settings: SettingView[];
   groups: string[];
+  /**
+   * پنل «داده‌های پایه» (مدیریت کلاس‌ها و…) به‌صورت گرهٔ آماده از سرور.
+   *
+   * ⚠ پیش‌تر این پنل در `page.tsx` زیرِ کل صفحه با `<details open>` رندر
+   * می‌شد؛ نتیجه اینکه با کلیک روی **هر** تبِ پیکربندی، فرم مدیریت کلاس‌ها هم
+   * انتهای صفحه باز بود و کاربر فکر می‌کرد دکمه‌ها درست کار نمی‌کنند. حالا
+   * تبِ مستقل خودش را دارد و فقط با انتخاب همان دکمه دیده می‌شود.
+   */
+  baseData?: React.ReactNode;
 }
 
 function BackupRestorePanel({ flash }: { flash: (ok: boolean, text: string) => void }) {
@@ -209,9 +218,18 @@ function LogoUploader({ current, pending, flash }: { current: string; pending: b
   );
 }
 
-export default function SettingsClient({ settings, groups }: Props) {
+export default function SettingsClient({ settings, groups, baseData }: Props) {
   const [activeGroup, setActiveGroup] = useState<string>(groups[0]);
-  const [showBackup, setShowBackup] = useState(false);
+  /**
+   * تب فعال — سه حالت:
+   *   • 'settings' → تنظیمات گروه انتخاب‌شده (`activeGroup`)
+   *   • 'base'     → داده‌های پایه (مدیریت کلاس‌ها)
+   *   • 'backup'   → پشتیبان‌گیری و بازیابی
+   * پیش‌تر دو بولی جدا (`showBackup`) و یک `<details open>` بیرون از این
+   * کامپوننت بود؛ نتیجه اینکه داده‌های پایه همیشه انتهای صفحه باز می‌ماند و
+   * تفکیک تب‌ها به‌هم می‌ریخت.
+   */
+  const [tab, setTab] = useState<'settings' | 'base' | 'backup'>('settings');
   const [values, setValues] = useState<Record<string, string>>(
     () => Object.fromEntries(settings.map(s => [s.key, s.value])),
   );
@@ -288,9 +306,9 @@ export default function SettingsClient({ settings, groups }: Props) {
           return (
             <button
               key={g}
-              onClick={() => { setActiveGroup(g); setShowBackup(false); }}
+              onClick={() => { setActiveGroup(g); setTab('settings'); }}
               className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
-                activeGroup === g && !showBackup
+                activeGroup === g && tab === 'settings'
                   ? 'bg-indigo-700 text-white border-indigo-700'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
@@ -299,10 +317,22 @@ export default function SettingsClient({ settings, groups }: Props) {
             </button>
           );
         })}
+        {baseData && (
+          <button
+            onClick={() => setTab('base')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
+              tab === 'base'
+                ? 'bg-sky-700 text-white border-sky-700'
+                : 'bg-white text-sky-700 border-sky-200 hover:bg-sky-50'
+            }`}
+          >
+            🏫 داده‌های پایه (کلاس‌ها)
+          </button>
+        )}
         <button
-          onClick={() => setShowBackup(true)}
+          onClick={() => setTab('backup')}
           className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
-            showBackup
+            tab === 'backup'
               ? 'bg-emerald-600 text-white border-emerald-600'
               : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
           }`}
@@ -311,8 +341,10 @@ export default function SettingsClient({ settings, groups }: Props) {
         </button>
       </div>
 
-      {showBackup ? (
+      {tab === 'backup' ? (
         <BackupRestorePanel flash={flash} />
+      ) : tab === 'base' ? (
+        baseData
       ) : (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="divide-y divide-slate-100">

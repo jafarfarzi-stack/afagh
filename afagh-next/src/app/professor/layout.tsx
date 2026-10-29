@@ -12,6 +12,7 @@ import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
 import UserAvatar from '@/components/UserAvatar';
+import BackToDashboard from '@/components/BackToDashboard';
 import ProfessorNav from './ProfessorNav';
 import { logoutAction } from '../login/actions';
 import { professorTermFilter } from '@/lib/professor-term-filter';
@@ -103,11 +104,17 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               )}
               <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9 shrink-0" fallbackClass="bg-indigo-500" />
               <div className="min-w-0">
-                <p className="font-extrabold text-sm sm:text-base truncate">
-                  {/* در موبایل سلامِ کوتاه‌تر تا نام استاد کامل دیده شود */}
-                  <span className="sm:hidden">استاد {user.name}</span>
-                  <span className="hidden sm:inline">خوش آمدید، استاد گرامی {user.name}</span>
-                </p>
+                {/* متن خوش‌آمدگویی = لینک بازگشت به کارتابل استاد.
+                    کاربر گفت «در کارتابل استاد در هدر نوشته‌ای که روش می‌زدیم و
+                    به کارتابل برمی‌گشتیم نیست» — در پنل مدیر این عنوان لینک بود
+                    ولی اینجا متن ساده بود و راهی به /professor نداشت. */}
+                <Link href="/professor" title="بازگشت به کارتابل استاد" className="block hover:opacity-90 transition-opacity">
+                  <p className="font-extrabold text-sm sm:text-base truncate">
+                    {/* در موبایل سلامِ کوتاه‌تر تا نام استاد کامل دیده شود */}
+                    <span className="sm:hidden">استاد {user.name}</span>
+                    <span className="hidden sm:inline">خوش آمدید، استاد گرامی {user.name}</span>
+                  </p>
+                </Link>
                 <p className="text-xs text-slate-400 truncate">
                   کد پرسنلی: {me ? faNum(me.staffCode) : '—'}
                   {me?.academicRank ? ` · مرتبه علمی: ${me.academicRank}` : ''}
@@ -172,7 +179,15 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
       </header>
 
-      <main className="mx-auto w-full max-w-6xl min-w-0 overflow-x-hidden p-4 sm:p-6 pb-24 md:pb-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl min-w-0 overflow-x-hidden p-4 sm:p-6 pb-24 md:pb-6">
+        {/* دکمهٔ بازگشت به کارتابل استاد — روی همهٔ زیرصفحه‌ها (نه خودِ /professor) */}
+        <BackToDashboard
+          href="/professor"
+          label="بازگشت به کارتابل استاد"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 shadow-xs transition hover:border-indigo-300 hover:text-indigo-700"
+        />
+        {children}
+      </main>
       <ProfessorNav />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>

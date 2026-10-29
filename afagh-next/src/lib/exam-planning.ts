@@ -31,6 +31,7 @@ import { auditChain, type AuditTx } from '@/lib/audit-chain';
 import { advisoryLock } from '@/lib/advisory-lock';
 import { execFirstRow } from '@/lib/db-result';
 import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
+import { normalizeExamDate } from '@/lib/shamsi';
 import {
   allowedExamRange, examKindOf, examLevelOf, normJalali, planSeatAllocation,
   scoreExamSlot, slotAllowedInZone, validateAndSplitExam, validateZoning,
@@ -71,35 +72,19 @@ const fromIsoDate = (s: string): Date | null => {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 };
 
-/** تاریخ شمسیِ یک ستون date میلادی */
-const jalaliOfDateCol = (d: unknown): string | null => {
-  if (!d) return null;
-  const dt = typeof d === 'string' ? fromIsoDate(d) : d instanceof Date ? d : fromIsoDate(String(d));
-  if (!dt || isNaN(dt.getTime())) return null;
-  return jalaliDateOf(dt);
-};
-
 /**
- * تاریخ یک «جلسهٔ امتحان» به شکل شمسی استاندارد.
+ * تاریخ یک ردیفِ تقویمی (`schedules.examDate` / `exam_sessions.examDate`) به
+ * شکل شمسی استاندارد 'YYYY/MM/DD'.
  *
- * قرارداد پروژه این است که `exam_sessions.examDate` شمسی باشد، ولی ردیف‌های
- * موجودِ دیتابیس (ایمپورت/سید قدیمی) میلادی‌اند؛ پیش‌تر مقایسهٔ خام باعث می‌شد
- * هیچ ارائه‌ای به جلسه تطبیق نخورد و «تخصیص صندلی» همیشه صفر بماند. این تابع
- * هر دو قالب را می‌پذیرد تا تطبیق خراب نشود.
+ * منطق تحمل‌پذیر (هر دو قالب شمسی/میلادی) در `normalizeExamDate` است؛ اینجا
+ * فقط یک نام محلی برای خواناییِ این فایل نگه داشته شده. پیش‌تر همه را میلادی
+ * فرض می‌کرد و تاریخ‌های شمسیِ ایمپورت‌شده را دوباره تبدیل می‌کرد
+ * (۱۴۰۵-۱۰-۲۸ → ۷۸۴/۰۸/۰۶) — همان باگ «تاریخ‌های نامعتبر» در رادار ظرفیت.
  */
-const sessionDateJalali = (v: unknown): string | null => {
-  const s = String(v ?? '').trim();
-  if (!s) return null;
-  const jal = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/.exec(s);
-  if (jal) {
-    const year = Number(jal[1]);
-    if (year < 1600) return normJalali(`${jal[1]}/${jal[2]}/${jal[3]}`);
-    const iso = fromIsoDate(`${jal[1]}-${jal[2]}-${jal[3]}`);
-    return iso ? normJalali(jalaliDateOf(iso)) : null;
-  }
-  const iso = fromIsoDate(s);
-  return iso ? normJalali(jalaliDateOf(iso)) : null;
-};
+const jalaliOfDateCol = (d: unknown): string | null => normalizeExamDate(d);
+
+/** تاریخ یک «جلسهٔ امتحان» — همان منطق تحمل‌پذیر (نام قدیمی حفظ شده) */
+const sessionDateJalali = (v: unknown): string | null => normalizeExamDate(v);
 
 // ─────────────────────────── زون‌بندی ───────────────────────────
 
