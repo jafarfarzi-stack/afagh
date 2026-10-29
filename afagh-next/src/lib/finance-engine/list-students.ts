@@ -330,14 +330,14 @@ async function computeFinance(
 export async function listFinanceStudents(
   filters: FinanceListFilters = {}, universityId?: number
 ): Promise<FinanceStudentRow[]> {
-  return computeFinance(filters, universityId, 'rows') as FinanceStudentRow[];
+  return (await computeFinance(filters, universityId, 'rows')) as FinanceStudentRow[];
 }
 
 /** خلاصهٔ اعداد کارتابل روی کل دانشجویانِ فیلتر‌شده (نوار KPI). */
 export async function summarizeFinanceStudents(
   filters: FinanceListFilters = {}, universityId?: number
 ): Promise<FinanceSummary> {
-  return computeFinance(filters, universityId, 'totals') as FinanceSummary;
+  return (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
 }
 
 /** تعداد کل دانشجویانِ مطابق فیلتر — برای نوار صفحه‌بندی. */
