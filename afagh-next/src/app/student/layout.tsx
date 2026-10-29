@@ -63,17 +63,20 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const demo = await isDemoStudentUser(user.id);
   const sidebarStudentCode = demo ? DEMO_STUDENT.studentCode : me?.studentCode ?? null;
 
-  // شمارهٔ ترم تحصیلی بر مبنای ورودی — جایگاهِ ترمِ انتخاب‌شده نسبت به ترمِ ورود
-  const selectedTerm =
-    termScope.terms.find(t => t.id === termScope.selectedId) ??
+  // شمارهٔ «ترم» هدر = وضعیتِ تحصیلیِ فعلیِ دانشجو، نه ترمِ در حال مرور.
+  // پیش‌تر از «ترمِ انتخاب‌شده» حساب می‌شد؛ با مرورِ یک نیمسال قدیمی‌تر شماره
+  // اشتباهاً کم می‌شد (مثلاً ترم ۴ → ترم ۲). حالا همیشه از «ترمِ جاریِ مؤثر»
+  // محاسبه می‌شود و سوییچر نیمسال فقط فهرست‌ها را فیلتر می‌کند.
+  const currentTermForOrdinal =
     termScope.terms.find(t => t.id === termScope.effectiveId) ??
+    termScope.terms.find(t => t.isEffectiveCurrent) ??
     null;
-  const studentTermOrdinal = selectedTerm && me
+  const studentTermOrdinal = currentTermForOrdinal && me
     ? termOrdinalForEntry({
         entryYear: me.entryYear,
         entryTerm: me.entryTerm,
         terms: [],
-        targetTermCode: selectedTerm.termCode,
+        targetTermCode: currentTermForOrdinal.termCode,
       })
     : null;
 
@@ -174,19 +177,24 @@ export default async function StudentLayout({ children }: { children: React.Reac
           </div>
 
           {/* ردیف ۲ — چیپ‌های وضعیت + سوییچرها */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px]">
-            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 font-bold text-emerald-100">
-              <span>💳 مالی:</span>
-              <b className="font-black text-white">{financialLabel}</b>
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] min-w-0">
+            {/* چیپ مالی «کشسان» است: در موبایل فضای باقی‌مانده را پر می‌کند و متنش
+                کوتاه می‌شود تا سوییچر ترم همیشه در همین ردیف بماند (هدر سه‌ردیفه نشود). */}
+            <span
+              title={financialLabel}
+              className="inline-flex min-w-0 flex-1 md:flex-none items-center gap-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 font-bold text-emerald-100"
+            >
+              <span className="shrink-0">💳 مالی:</span>
+              <b className="min-w-0 truncate font-black text-white">{financialLabel}</b>
             </span>
             {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معف‌اند) */}
             {userRow?.gender !== 'FEMALE' && (
-              <span className="inline-flex items-center gap-1 rounded-lg bg-teal-500/20 border border-teal-400/30 px-1.5 py-0.5 font-bold text-teal-100">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-teal-500/20 border border-teal-400/30 px-1.5 py-0.5 font-bold text-teal-100">
                 <span>🪖 سخا:</span>
                 <b className="font-black text-white">{me?.militaryStatus || 'ثبت نشده'}</b>
               </span>
             )}
-            <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 px-1.5 py-0.5 font-bold text-indigo-100">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 px-1.5 py-0.5 font-bold text-indigo-100">
               <span>🎓 ترم:</span>
               <b className="font-black text-white">
                 {(studentTermOrdinal ?? me?.currentTermNo ?? 0).toLocaleString('fa-IR')}
