@@ -102,6 +102,8 @@ export interface CourseDemand {
   labWeightRatio?: number;    // e.g. 0.30 (6 marks out of 20)
   requiredRoomType: 'THEORY' | 'LAB' | 'GYM';
   capacity: number;
+  /** تعداد ثبت‌نام‌شدهٔ واقعی — مبنای پیشنهاد خودکار تعداد گروه */
+  enrolledCount: number;
   groupsCount: number;
   weekRecurrence: WeekRecurrence;
   sessionsCountPerWeek: number;

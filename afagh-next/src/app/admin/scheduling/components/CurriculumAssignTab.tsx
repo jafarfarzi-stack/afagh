@@ -3,7 +3,7 @@
 // گام ۱: چارت دروس و انتساب اساتید
 import { usePlanning } from '../PlanningProvider';
 import { ProfessorSelect } from './ProfessorSelect';
-import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE } from '../planning-core';
+import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, suggestGroupsCount } from '../planning-core';
 
 export default function CurriculumAssignTab() {
   const {
@@ -81,6 +81,10 @@ export default function CurriculumAssignTab() {
                     const profLoad = profAssignedUnitsMap[assignedProf.id]?.units || 0;
                     const coLoad = coProf ? (profAssignedUnitsMap[coProf.id]?.units || 0) : 0;
                     const isOverQuota = profLoad > assignedProf.maxWeeklyUnits;
+                    // پیشنهاد خودکار تعداد گروه از روی تعداد دانشجو (ثبت‌نام/ظرفیت)
+                    const suggestedGroups = suggestGroupsCount({
+                      enrolled: demand.enrolledCount, capacity: demand.capacity,
+                    });
                     const typeRank = demand.courseTypeRank ?? 6;
                     const typeTone = typeRank <= 1
                       ? 'bg-sky-100 text-sky-900 border border-sky-300'
@@ -137,8 +141,18 @@ export default function CurriculumAssignTab() {
                             </button>
                           </div>
                           <div className="text-[9px] font-bold text-slate-500 mt-0.5">
-                            {faNum(demand.groupsCount)} گروه
+                            {faNum(demand.groupsCount)} گروه · {faNum(demand.enrolledCount)} دانشجو
                           </div>
+                          {suggestedGroups !== demand.groupsCount && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateCourseGroupsCount(demand.id, suggestedGroups)}
+                              title={`بر اساس ${faNum(Math.max(demand.enrolledCount, demand.capacity))} دانشجو ÷ ${faNum(40)} نفر در هر گروه`}
+                              className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-black whitespace-nowrap"
+                            >
+                              💡 پیشنهاد: {faNum(suggestedGroups)} گروه
+                            </button>
+                          )}
                         </td>
 
                         <td className="p-2 border border-slate-200 min-w-[280px]">

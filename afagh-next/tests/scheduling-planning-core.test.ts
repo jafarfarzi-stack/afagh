@@ -15,7 +15,7 @@ import {
   buildRealScenario, clampGroupsCount, coTeachingWeights, computeProfUnits, courseTypeRank, DAY_NAMES, faNum, faToEnDigits,
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
   mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
-  slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab, cohortSemesterNo,
+  slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab, cohortSemesterNo, suggestGroupsCount,
 } from '../src/app/admin/scheduling/planning-core.ts';
 import type { CourseDemand, DepartmentOffering, SchedulingWorkspace } from '../src/app/admin/scheduling/types.ts';
 
@@ -210,7 +210,18 @@ eq('null → فاز ۰', resolveTab(null), 'PROGRAM_SCOPE');
 eq('رشتهٔ بی‌ربط → فاز ۰', resolveTab('../../etc/passwd'), 'PROGRAM_SCOPE');
 eq('همهٔ تب‌های مشروع برگردانده می‌شوند', PLANNING_TABS.map(resolveTab), [...PLANNING_TABS]);
 
-console.log('\n۹) تعداد گروه‌های موازی — آزاد و نرمال‌شده (clampGroupsCount)');
+console.log('\n۹) پیشنهاد خودکار تعداد گروه از روی تعداد دانشجو');
+// ورودی پرجمعیت باید خودکار چند گروه شود
+eq('۹۰ دانشجو → ۳ گروه (۴۰ نفره)', suggestGroupsCount({ enrolled: 90 }), 3);
+eq('۴۰ دانشجو → ۱ گروه', suggestGroupsCount({ enrolled: 40 }), 1);
+eq('۴۱ دانشجو → ۲ گروه', suggestGroupsCount({ enrolled: 41 }), 2);
+eq('ثبت‌نام صفر → از ظرفیت استفاده می‌شود', suggestGroupsCount({ enrolled: 0, capacity: 85 }), 3);
+eq('بزرگ‌ترِ ثبت‌نام و ظرفیت مبنا است', suggestGroupsCount({ enrolled: 30, capacity: 120 }), 3);
+eq('بدون داده → ۱ گروه', suggestGroupsCount({}), 1);
+eq('ظرفیت گروه قابل تنظیم است', suggestGroupsCount({ enrolled: 90, maxPerGroup: 30 }), 3);
+eq('سقف گروه‌ها رعایت می‌شود', suggestGroupsCount({ enrolled: 5000 }), MAX_GROUPS_PER_COURSE);
+
+console.log('\n۹ب) تعداد گروه‌های موازی — آزاد و نرمال‌شده (clampGroupsCount)');
 eq('۴ گروه پذیرفته می‌شود (قبلاً UI فقط ۱..۳ می‌داد)', clampGroupsCount(4), 4);
 eq('۶ گروه پذیرفته می‌شود', clampGroupsCount(6), 6);
 eq('صفر → حداقل ۱', clampGroupsCount(0), 1);

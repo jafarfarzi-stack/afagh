@@ -46,6 +46,30 @@ export const clampGroupsCount = (n: unknown): number => {
   return Math.min(MAX_GROUPS_PER_COURSE, v);
 };
 
+/** ظرفیت پیش‌فرض یک گروه کلاسی — مبنای پیشنهاد خودکار تعداد گروه */
+export const DEFAULT_MAX_STUDENTS_PER_GROUP = 40;
+
+/**
+ * پیشنهاد خودکار تعداد گروه بر اساس تعداد دانشجو.
+ *
+ * ورودی‌های پرجمعیت (مثلاً ورودی مهر با ۹۰ نفر) یک گروه ۴۰ نفره جواب نمی‌دهد؛
+ * سیستم خودش «۲ گروه» پیشنهاد می‌دهد و مدیرگروه با یک کلیک اعمالش می‌کند.
+ * مبنای محاسبه: بزرگ‌ترِ «ثبت‌نام‌شده» و «ظرفیت» — چون پیش از پایان ثبت‌نام،
+ * ظرفیتِ اعلامی نمایندهٔ واقعیِ تقاضاست.
+ */
+export function suggestGroupsCount(opts: {
+  enrolled?: number | null;
+  capacity?: number | null;
+  maxPerGroup?: number | null;
+}): number {
+  const enrolled = Math.max(0, Number(opts.enrolled ?? 0) || 0);
+  const capacity = Math.max(0, Number(opts.capacity ?? 0) || 0);
+  const per = Math.max(1, Number(opts.maxPerGroup ?? DEFAULT_MAX_STUDENTS_PER_GROUP) || DEFAULT_MAX_STUDENTS_PER_GROUP);
+  const students = Math.max(enrolled, capacity);
+  if (students <= 0) return 1;
+  return clampGroupsCount(Math.ceil(students / per));
+}
+
 export const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه'];
 export const faToEnDigits = (s: string) =>
   String(s)
@@ -122,6 +146,7 @@ export function mapDemands(demands: SchedulingWorkspace['demands']): CourseDeman
     coProfId: d.coProfId ?? undefined,
     requiredRoomType: 'THEORY',
     capacity: d.capacity,
+    enrolledCount: d.enrolledCount,
     groupsCount: 1,
     weekRecurrence: 'ALL',
     sessionsCountPerWeek: 1,
