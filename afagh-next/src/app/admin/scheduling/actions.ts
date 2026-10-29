@@ -20,7 +20,8 @@ import {
   degree_level_configs, faculties, majors, offering_professors, schedules,
   professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
+import { requireRole, getStaffByUser } from '@/lib/auth';
+import { headedDepartments } from '@/lib/group-manager';
 import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, getSmartSuggestions } from '@/lib/scheduling-engine';
 import { runSchedulingHealthCheck, type HealthReport } from '@/lib/scheduling-health';
@@ -59,6 +60,21 @@ function uniOrGlobal(column: any, universityId: number | undefined): any {
   return isRealUniversityId(universityId) ? or(eq(column, universityId), isNull(column)) : sql`1 = 0`;
 }
 
+/**
+ * دامنهٔ «مدیر گروه» — فقط وقتی نقشش صرفاً DEP_HEAD است (نه ادمین/کارشناس آموزش).
+ * در این حالت دادهٔ کارتابل برنامه‌ریزی به دروسِ گروه‌های تحت مدیریتش محدود می‌شود.
+ * ادمین/کارشناس آموزش همیشه دامنهٔ کامل دارند (بدون تغییر رفتار قبلی).
+ */
+async function deptHeadScope(user: { id: number; roles: string[] }): Promise<{ isDeptHead: boolean; deptIds: number[] }> {
+  const isEditor = user.roles.some(r => EDITORS.includes(r));
+  const isHead = user.roles.includes('DEP_HEAD');
+  if (!isHead || isEditor) return { isDeptHead: false, deptIds: [] };
+  const st = await getStaffByUser(user.id).catch(() => null);
+  if (!st) return { isDeptHead: true, deptIds: [] };
+  const depts = await headedDepartments(st.id, st.departmentId ?? null).catch(() => []);
+  return { isDeptHead: true, deptIds: depts.map(d => d.id) };
+}
+
 /** رشته‌ها = majors + دانشکده (فقط فعال) — فیلتر شده بر اساس universityId */
 async function listRealPrograms(universityId?: number) {
   const majorWhere = and(eq(majors.isActive, 1), universityEq(majors.universityId, universityId));
@@ -71,6 +87,7 @@ async function listRealPrograms(universityId?: number) {
       degreeLevel: degree_level_configs.title,
       facultyId: majors.facultyId,
       deptFacultyId: departments.facultyId,
+      departmentId: majors.departmentId,
     })
     .from(majors)
     .leftJoin(degree_level_configs, eq(degree_level_configs.id, majors.degreeLevelId))
@@ -370,6 +387,7 @@ async function listMakeupSessions(termId: number, universityId?: number) {
   const rows = await db
     .select({
       id: class_sessions.id,
+      offeringId: class_sessions.offeringId,
       courseCode: courses.code,
       courseTitle: courses.title,
       profFirstName: users.firstName,
@@ -390,6 +408,7 @@ async function listMakeupSessions(termId: number, universityId?: number) {
 
   return rows.map(r => ({
     id: r.id,
+    offeringId: r.offeringId,
     courseCode: r.courseCode,
     courseTitle: r.courseTitle,
     profName: r.profFirstName ? `${r.profFirstName} ${r.profLastName ?? ''}`.trim() : '—',
@@ -455,15 +474,17 @@ export type SchedulingWorkspaceResult =
 /** دادهٔ اولیهٔ واقعی صفحه (جایگزین INITIAL_* های Mock) */
 export async function getSchedulingWorkspaceAction(termId?: number, _universityId?: number): Promise<SchedulingWorkspaceResult> {
   try {
-    await requireRole(EDITORS);
+    const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead, deptIds } = await deptHeadScope(actor);
     const uid = await serverUniId();
-    const [terms, programs, classrooms, professors, deptRows] = await Promise.all([
+    const [terms, programRows, classrooms, professors, deptRows] = await Promise.all([
       listRealTerms(uid),
       listRealPrograms(uid),
       listRealClassrooms(uid),
       listRealProfessors(uid),
       db.select({ id: departments.id, name: departments.name }).from(departments).where(uniOrGlobal(departments.universityId, uid)).orderBy(departments.name),
     ]);
+    let programs = programRows;
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 
     let demands: Awaited<ReturnType<typeof listRealDemands>> = [];
@@ -523,6 +544,24 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
       }
     }
 
+    // ── دامنهٔ مدیرگروه: فقط ارائههای دروسِ گروههای تحت مدیریتِ خودش ──
+    // (ادمین/کارشناس آموزش: isDeptHead=false ⇒ هیچ فیلتری اعمال نمیشود)
+    if (isDeptHead) {
+      const allowed = new Set(deptIds);
+      demands = demands.filter(d => d.courseDeptId != null && allowed.has(d.courseDeptId));
+      const offIds = new Set(demands.map(d => d.offeringId));
+      approvedOfferings = approvedOfferings.filter(o => offIds.has(o.offeringId));
+      makeupSessions = makeupSessions.filter(m => offIds.has(m.offeringId));
+      sessionsByOffering = Object.fromEntries(
+        Object.entries(sessionsByOffering).filter(([k]) => offIds.has(Number(k))),
+      ) as typeof sessionsByOffering;
+      sessionsTotal = Object.values(sessionsByOffering).reduce((n, v) => n + (v?.total ?? 0), 0);
+      // رشته‌ها هم فقط رشته‌های گروه‌های خودش — وگرنه انتخاب رشتهٔ دیگر، چارت
+      // دانشگاه را در همین تابلو نشان می‌داد.
+      const ownPrograms = programs.filter(p => p.departmentId != null && allowed.has(p.departmentId));
+      if (ownPrograms.length) programs = ownPrograms;
+    }
+
     return {
       ok: true,
       terms: terms.map(t => ({ id: t.id, code: t.code, title: t.title, isCurrent: t.isCurrent === 1 })),
@@ -570,7 +609,17 @@ export type CurriculumDemandsResult =
 
 export async function getCurriculumDemandsAction(termId: number, programId: number, _universityId?: number): Promise<CurriculumDemandsResult> {
   try {
-    await requireRole(EDITORS);
+    // خواندنِ تقاضای چارت — مدیرگروه هم مجاز است (فقط مشاهده، فقط رشته‌های خودش)
+    const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead, deptIds } = await deptHeadScope(actor);
+    if (isDeptHead) {
+      const owned = await db
+        .select({ id: majors.id })
+        .from(majors)
+        .where(and(eq(majors.id, programId), inArray(majors.departmentId, deptIds.length ? deptIds : [-1])))
+        .limit(1);
+      if (!owned.length) return { ok: false, error: 'این رشته در دپارتمان‌های تحت مدیریت شما نیست.' };
+    }
     const demands = await listCurriculumDemands(termId, programId, await serverUniId());
     return { ok: true, demands };
   } catch (e: any) {
@@ -592,7 +641,11 @@ export async function generateClassSessionsAction(px: {
   dryRun?: boolean;
 }): Promise<GenerateSessionsOutcome> {
   try {
-    const user = await requireRole(EDITORS);
+    const user = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead } = await deptHeadScope(user);
+    if (isDeptHead) {
+      return { ok: false as const, generated: 0 as const, error: 'تولید جلسات برای کل ترم توسط کارشناس آموزش انجام می‌شود.' };
+    }
     const result = await generateClassSessionsForTerm(user.id, px.termId, {
       sessionsCount: px.sessionsCount,
       holidays: px.holidays,
@@ -616,7 +669,11 @@ export async function generateClassSessionsAction(px: {
 /** گذار فاز برنامه‌ریزی (SUPPLY→ALLOCATION→REVIEW→PUBLISHED پله‌ای) — گیت: انتشار فقط بدون تداخل سخت */
 export async function transitionSchedulingPhaseAction(termId: number, to: 'ALLOCATION' | 'REVIEW' | 'PUBLISHED'): Promise<{ ok: true; phase: 'ALLOCATION' | 'REVIEW' | 'PUBLISHED'; from: string } | { ok: false; error: string }> {
   try {
-    const user = await requireRole(EDITORS);
+    const user = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead } = await deptHeadScope(user);
+    if (isDeptHead) {
+      return { ok: false as const, error: 'گذار فاز برنامه‌ریزی (انتشار ترم) مخصوص کارشناس آموزش است.' };
+    }
     if (to === 'PUBLISHED') {
       const insp = await inspectSchedulingHardConflicts(termId);
       if (insp.total > 0) {
@@ -787,7 +844,11 @@ export async function supplyGroupDraftsAction(px: {
             professorId: number; classroomId: number; dayOfWeek: number; startTime: string; endTime: string }[];
 }): Promise<{ ok: true; created: number; offeringIds: number[] } | { ok: false; error: string }> {
   try {
-    const user = await requireRole(EDITORS);
+    const user = await requireRole([...EDITORS, 'DEP_HEAD']);
+    const { isDeptHead, deptIds } = await deptHeadScope(user);
+    if (isDeptHead && !deptIds.includes(px.ownerDepartmentId)) {
+      return { ok: false as const, error: 'فقط برای گروه‌های تحت مدیریت خودتان مجاز هستید.' };
+    }
     const res = await supplyGroupDrafts(user.id, {
       termId: px.termId, courseId: px.courseId, ownerDepartmentId: px.ownerDepartmentId,
       isSharedService: !!px.isSharedService, drafts: px.drafts,
@@ -831,7 +892,8 @@ export async function getSmartSuggestionsAction(px: {
   targetFacultyId: number | null; durationMinutes?: number;
 }): Promise<{ ok: true; suggestions: SmartSlot[] } | { ok: false; error: string }> {
   try {
-    await requireRole(EDITORS);
+    // پیشنهاد هوشمند = محاسبهٔ فقط‌خواندنی؛ مدیرگروه هم می‌تواند ببیند
+    await requireRole([...EDITORS, 'DEP_HEAD']);
     const rows = await getSmartSuggestions(px);
     return { ok: true, suggestions: rows };
   } catch (e: any) {
@@ -843,7 +905,8 @@ export async function getSmartSuggestionsAction(px: {
 export type SchedulingHealthReport = HealthReport;
 export async function getSchedulingHealthAction(termId: number): Promise<{ ok: true; health: HealthReport } | { ok: false; error: string }> {
   try {
-    await requireRole(EDITORS);
+    // عارضه‌یابی = فقط‌خواندنی؛ مدیرگروه هم می‌تواند ببیند
+    await requireRole([...EDITORS, 'DEP_HEAD']);
     const health = await runSchedulingHealthCheck(termId);
     return { ok: true, health };
   } catch (e: any) {

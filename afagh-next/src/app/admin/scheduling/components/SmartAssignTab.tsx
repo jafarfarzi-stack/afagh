@@ -21,6 +21,7 @@ export default function SmartAssignTab() {
     hardConflictCount,
     health,
     healthLoading,
+    isDeptScope,
     ownedDeptId,
     phaseBusy,
     selectedTermId,
@@ -81,29 +82,37 @@ export default function SmartAssignTab() {
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-indigo-200 font-bold">
                     تداخل سخت فعلی: {faNum(hardConflictCount)} — انتشار فقط بدون قید سخت
                   </span>
-                  {currentPhase === 'SUPPLY' && (
-                    <button onClick={() => handlePhaseTransition('ALLOCATION')} disabled={phaseBusy}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold disabled:opacity-50">
-                      {phaseBusy ? '…' : 'تأیید تأمین ← تخصیص'}
-                    </button>
-                  )}
-                  {currentPhase === 'ALLOCATION' && (
-                    <button onClick={() => handlePhaseTransition('REVIEW')} disabled={phaseBusy}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold disabled:opacity-50">
-                      {phaseBusy ? '…' : 'تأیید تخصیص ← بازبینی کارشناس'}
-                    </button>
-                  )}
-                  {currentPhase === 'REVIEW' && (
-                    <button onClick={() => handlePhaseTransition('PUBLISHED')} disabled={phaseBusy}
-                      className="px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-extrabold disabled:opacity-50"
-                      title={hardConflictCount > 0 ? 'ابتدا تداخل‌های سخت را رفع کنید' : ''}
-                    >
-                      {phaseBusy ? '…' : '🚀 انتشار برنامهٔ نهایی'}
-                    </button>
+                  {isDeptScope ? (
+                    <span className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-[11px] font-bold text-indigo-100">
+                      🔒 گذار فاز در اختیار مدیر آموزش است
+                    </span>
+                  ) : (
+                    <>
+                      {currentPhase === 'SUPPLY' && (
+                        <button onClick={() => handlePhaseTransition('ALLOCATION')} disabled={phaseBusy}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold disabled:opacity-50">
+                          {phaseBusy ? '…' : 'تأیید تأمین ← تخصیص'}
+                        </button>
+                      )}
+                      {currentPhase === 'ALLOCATION' && (
+                        <button onClick={() => handlePhaseTransition('REVIEW')} disabled={phaseBusy}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold disabled:opacity-50">
+                          {phaseBusy ? '…' : 'تأیید تخصیص ← بازبینی کارشناس'}
+                        </button>
+                      )}
+                      {currentPhase === 'REVIEW' && (
+                        <button onClick={() => handlePhaseTransition('PUBLISHED')} disabled={phaseBusy}
+                          className="px-3.5 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-extrabold disabled:opacity-50"
+                          title={hardConflictCount > 0 ? 'ابتدا تداخل‌های سخت را رفع کنید' : ''}
+                        >
+                          {phaseBusy ? '…' : '🚀 انتشار برنامهٔ نهایی'}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

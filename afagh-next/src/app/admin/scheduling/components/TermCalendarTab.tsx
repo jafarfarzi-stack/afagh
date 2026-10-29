@@ -10,6 +10,7 @@ export default function TermCalendarTab() {
     generatedTermSessionsCount,
     handleGenerateSessions,
     hardConflictCount,
+    isDeptScope,
     isGeneratingSessions,
     makeupSessions,
     sessionsByOffering,
@@ -29,13 +30,19 @@ export default function TermCalendarTab() {
                   </p>
                 </div>
 
-                <button
-                  onClick={handleGenerateSessions}
-                  disabled={isGeneratingSessions}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-extrabold text-xs shadow-md flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-wait"
-                >
-                  <span>{isGeneratingSessions ? '⏳ در حال تولید جلسات از برنامهٔ مصوب…' : `⚡ تولید و زمان‌بندی خودکار ${faNum(calendarConfig.sessionsCount)} جلسه ترم برای کلیه دروس`}</span>
-                </button>
+                {isDeptScope ? (
+                  <span className="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-300 text-slate-600 font-bold text-xs">
+                    🔒 تولید جلسات ترم برای کل دانشگاه در اختیار مدیر آموزش است
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleGenerateSessions}
+                    disabled={isGeneratingSessions}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-extrabold text-xs shadow-md flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    <span>{isGeneratingSessions ? '⏳ در حال تولید جلسات از برنامهٔ مصوب…' : `⚡ تولید و زمان‌بندی خودکار ${faNum(calendarConfig.sessionsCount)} جلسه ترم برای کلیه دروس`}</span>
+                  </button>
+                )}
               </div>
 
               {/* Calendar Settings Grid */}

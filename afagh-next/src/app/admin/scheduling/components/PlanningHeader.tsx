@@ -12,6 +12,7 @@ export default function PlanningHeader() {
     currentPhase,
     currentTerm,
     isLoadingWorkspace,
+    isDeptScope,
     programs,
     reloadWorkspace,
     selectedCohortId,
@@ -33,18 +34,23 @@ export default function PlanningHeader() {
           {/* Title Bar */}
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950">
-                  سامانه جامع چیدمان متمرکز دانشگاهی
+                  {isDeptScope ? 'کارتابل برنامه‌ریزی دپارتمان' : 'سامانه جامع چیدمان متمرکز دانشگاهی'}
                 </span>
                 <span className="text-xs text-indigo-200">{currentTerm?.title ?? 'نیمسال تعریف‌نشده'}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-700/60 text-indigo-100 font-bold mr-2">
                   فاز: {PHASE_LABELS[currentPhase] ?? currentPhase}{isLoadingWorkspace ? ' — در حال بارگذاری…' : ''}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                🗓️ کارتابل یکپارچه برنامه‌ریزی درسی و چیدمان متمرکز مدیر گروه
+              <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight">
+                🗓️ {isDeptScope ? 'برنامه‌ریزی درسی هوشمند دپارتمان' : 'کارتابل یکپارچه برنامه‌ریزی درسی و چیدمان متمرکز مدیر گروه'}
               </h1>
+              {isDeptScope && (
+                <p className="mt-1 text-[11px] sm:text-xs text-indigo-200 font-bold">
+                  داده‌ها فقط دپارتمان‌های تحت مدیریت شما را نشان می‌دهد — گذار فاز و تولید جلسات ترم در اختیار مدیر آموزش است.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -56,17 +62,19 @@ export default function PlanningHeader() {
                 <span>{isLoadingWorkspace ? '⏳ در حال بازخوانی…' : '📥 بازخوانی کارتابل از سرور'}</span>
               </button>
               <Link
-                href="/admin/exams"
+                href={isDeptScope ? '/group-manager' : '/admin/exams'}
                 className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-800 hover:to-indigo-900 text-white font-extrabold text-xs border border-indigo-500/50 flex items-center gap-1.5 shadow-md transition"
               >
-                <span>📝 ماژول مدیریت و تخصیص امتحانات ←</span>
+                <span>{isDeptScope ? '← بازگشت به کارتابل مدیر گروه' : '📝 ماژول مدیریت و تخصیص امتحانات ←'}</span>
               </Link>
-              <Link
-                href="/admin/curriculum"
-                className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
-              >
-                📚 چارت کلی دانشگاه
-              </Link>
+              {!isDeptScope && (
+                <Link
+                  href="/admin/curriculum"
+                  className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
+                >
+                  📚 چارت کلی دانشگاه
+                </Link>
+              )}
             </div>
           </div>
 
