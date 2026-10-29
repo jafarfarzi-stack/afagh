@@ -52,8 +52,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     await requireRoleOrPermission([], ['*']).catch(() => {});
   }
   // بارگذاری مجوزهای کاربر (بدون نقش سیستمی هم کار می‌کند) برای منوی مبتنی بر RBAC
-  const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+  const { getUserPermissionCodes, getUserCustomPermissionCodes } = await import('@/lib/permissions-enforcer');
   const permissionCodes = await getUserPermissionCodes(user.id).catch(() => []);
+  // سوییچر کارتابل‌ها فقط باید مجوزهای «نقش سفارشی» را ملاک بگیرد (نه مجوزهای ذاتیِ
+  // نقش‌های سیستمی)؛ وگرنه مدیرگروه/استادِ صرف هم لینک «داشبورد مدیریت» می‌بیند.
+  // permissionCodes بالا برای منوی مبتنی بر RBAC دست‌نخورده می‌ماند.
+  const customPermissionCount = (await getUserCustomPermissionCodes(user.id).catch(() => [])).length;
   // انتخاب دانشگاه فعال، ابزار مدیریتی است؛ به دو نقش محدود بالا نشان داده نمی‌شود
   // (کنشِ `setUniversityCookie` خودش گارد ندارد — گزارش شود).
   const canSwitchUniversity = user.roles.some(r => AREA_ROLES.includes(r));
@@ -111,7 +115,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <PanelSwitcher
         roles={user.roles}
         current="admin"
-        permissionCount={permissionCodes.length}
+        permissionCount={customPermissionCount}
         siblings={siblings}
       />
       <TermSwitcher terms={termScope.terms} selectedId={termScope.selectedId} />

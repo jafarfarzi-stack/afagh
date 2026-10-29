@@ -45,8 +45,10 @@ export default async function ProfessorLayout({ children }: { children: React.Re
   const alreadyAdmin = user.roles.some(r => (ADMIN_PANEL_ROLES as readonly string[]).includes(r));
   let permissionCount = 0;
   if (!alreadyAdmin) {
-    const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
-    permissionCount = (await getUserPermissionCodes(user.id).catch(() => [])).length;
+    // فقط مجوزهای «نقش سفارشی» شمرده می‌شود؛ نقش‌های سیستمی (DEP_HEAD/PROFESSOR/STUDENT)
+    // مجوزهای ذاتی دارند و نباید لینک «داشبورد مدیریت» بسازند.
+    const { getUserCustomPermissionCodes } = await import('@/lib/permissions-enforcer');
+    permissionCount = (await getUserCustomPermissionCodes(user.id).catch(() => [])).length;
   }
 
   // حساب‌های هم‌شخص (کد پرسنلی/دانشجویی دیگرِ همین کدملی) برای بنر جابه‌جایی
