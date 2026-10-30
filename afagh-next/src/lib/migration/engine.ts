@@ -18,6 +18,7 @@ import {
 } from './reference-rows';
 import { iterate, pickTable, type Table } from './tabular';
 import { codeRewriterFor, noopRewriter, resolverFor, type CodeRewriter, type MapDomain } from './codemap';
+import { roleFromBankType } from '@/lib/bank-roles';
 
 // ═══ سامانهٔ مهاجرت داده از سیستم قدیمی — آموزشی + مالی ═══
 // معماری: parse → normalize → validate → (dry-run گزارش | commit تراکنشی idempotent)
@@ -263,9 +264,12 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
         'کارگاه': 'WORKSHOP', 'workshop': 'WORKSHOP',
       };
       const ROLE_CODES = ['CORE', 'MAJOR', 'SPECIALIZED', 'ELECTIVE', 'GENERAL', 'THESIS', 'INTERNSHIP', 'WORKSHOP'];
-      const role = ROLE_MAP[roleRaw] ?? ROLE_MAP[norm(roleRaw)] ?? (ROLE_CODES.includes(roleRaw.toUpperCase()) ? roleRaw.toUpperCase() : 'CORE');
+      // ستون نقش خالی ⇒ null (نه CORE): نوع درس از بانک دروس خوانده می‌شود
+      const role = roleRaw
+        ? (ROLE_MAP[roleRaw] ?? ROLE_MAP[norm(roleRaw)] ?? (ROLE_CODES.includes(roleRaw.toUpperCase()) ? roleRaw.toUpperCase() : 'CORE'))
+        : null;
       if (roleRaw && !ROLE_MAP[roleRaw] && !ROLE_MAP[norm(roleRaw)] && !ROLE_CODES.includes(roleRaw.toUpperCase()))
-        warn(`نقش درس «${roleRaw}» شناخته نشد — به «پایه (CORE)» تبدیل شد.`);
+        warn(`نقش درس «${roleRaw}» شناخته نشد — از نوع درس در بانک خوانده می‌شود.`);
       const isRequired = isReqRaw == null || isReqRaw === '' ? true : boolFa(isReqRaw);
       rows.push({
         majorCode: majorCode || null, majorName: majorName || null,
@@ -1100,12 +1104,13 @@ export async function commit(
     const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors)
       // 🔒 دانشگاه مقصد: کد ۸۴ در دانشگاه ۱ و ۲ می‌تواند دو رشتهٔ متفاوت باشد
       .where(universityId ? eq(majors.universityId, universityId) : undefined);
-    const allCourses = await db.select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units }).from(courses);
+    const allCourses = await db.select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units, courseType: courses.courseType }).from(courses);
     const courseByCode = new Map(allCourses.map(c => [c.code, c]));
     const rwCourse = await rewriter('COURSE');
 
     // گروه‌بندی ردیف‌ها بر اساس (majorId, degreeLevelId, entryYearFrom, entryYearTo) → یک نسخهٔ چارت
-    type ChartRow = { courseCode: string; courseTitle: string | null; units: number | null; recommendedSemester: number | null; roleType: string; isRequired: boolean };
+    // roleType = null یعنی در فایل خالی بود ⇒ از نوع درس در بانک دروس خوانده می‌شود
+    type ChartRow = { courseCode: string; courseTitle: string | null; units: number | null; recommendedSemester: number | null; roleType: string | null; isRequired: boolean };
     const groups = new Map<string, { majorId: number; degreeLevelId: number; entryYearFrom: number | null; entryYearTo: number | null; label: string; items: ChartRow[] }>();
     for (const r of rows) {
       const mCode = norm(String(r.majorCode ?? ''));
@@ -1122,11 +1127,11 @@ export async function commit(
       groups.get(key)!.items.push({
         courseCode: rwCourse.apply(String(r.courseCode)), courseTitle: (r.courseTitle as string | null) ?? null,
         units: (r.units as number | null) ?? null, recommendedSemester: (r.recommendedSemester as number | null) ?? null,
-        roleType: String(r.roleType ?? 'CORE'), isRequired: r.isRequired !== false,
+        roleType: (r.roleType as string | null) ?? null, isRequired: r.isRequired !== false,
       });
     }
 
-    let versionsMade = 0, coursesLinked = 0;
+    let versionsMade = 0, coursesLinked = 0, rolesFromBank = 0;
     for (const g of groups.values()) {
       // نسخهٔ چارتِ این رشته/مقطع/بازهٔ ورودی — با وضعیت «پیش‌نویس»
       // تا کاربر ابتدا بازبینی کند و بعد خودش منتشر کند.
@@ -1134,13 +1139,20 @@ export async function commit(
       const versionCode = `LEGACY-${g.entryYearFrom}${g.entryYearTo ? `-${g.entryYearTo}` : ''}`;
 
       // محاسبهٔ خودکار جمع واحدها بر حسب نقش و کل واحد لازم برای فارغ‌التحصیلی
+      // نقشِ خالی از بانک دروس خوانده می‌شود (نه «پایه» به‌صورت پیش‌فرض)
+      const roleOf = (it: ChartRow): string => {
+        if (it.roleType) return it.roleType;
+        const c = courseByCode.get(it.courseCode);
+        return roleFromBankType(c?.courseType ?? null);
+      };
       const byRole: Record<string, number> = {};
       let totalUnitsCalc = 0;
       for (const it of g.items) {
         const c = courseByCode.get(it.courseCode);
         const u = Number(it.units ?? c?.units ?? 0);
         if (!Number.isFinite(u) || u <= 0) continue;
-        byRole[it.roleType] = (byRole[it.roleType] ?? 0) + u;
+        const role = roleOf(it);
+        byRole[role] = (byRole[role] ?? 0) + u;
         totalUnitsCalc += u;
       }
       for (const k of Object.keys(byRole)) byRole[k] = Math.round(byRole[k] * 10) / 10;
@@ -1179,13 +1191,15 @@ export async function commit(
       for (const it of g.items) {
         const c = courseByCode.get(it.courseCode);
         if (!c) { report.warnings.push({ row: 0, msg: `درس ${it.courseCode} یافت نشد — وصل نشد.` }); continue; }
+        const roleType = roleOf(it);
+        if (!it.roleType) rolesFromBank++;
         const r0 = await db.insert(curriculum_courses).values({
-          curriculumVersionId: versionId, courseId: c.id, roleType: it.roleType,
-          units: it.units != null ? String(it.units) : null,
-          isRequired: it.isRequired ? 1 : 0, isElective: it.roleType === 'ELECTIVE' ? 1 : 0,
+          curriculumVersionId: versionId, courseId: c.id, roleType,
+          units: it.units != null ? String(it.units) : (c.units != null ? String(c.units) : null),
+          isRequired: it.isRequired ? 1 : 0, isElective: roleType === 'ELECTIVE' ? 1 : 0,
           // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
           // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
-          isGraduationRequired: it.isRequired && ['CORE', 'MAJOR', 'SPECIALIZED'].includes(it.roleType) ? 1 : 0,
+          isGraduationRequired: it.isRequired && ['CORE', 'MAJOR', 'SPECIALIZED'].includes(roleType) ? 1 : 0,
           recommendedSemester: it.recommendedSemester,
         }).onConflictDoNothing().returning({ id: curriculum_courses.id });
         if (r0.length) { coursesLinked++; inserted++; } else existing++;
@@ -1193,6 +1207,7 @@ export async function commit(
     }
     if (versionsMade) report.warnings.push({ row: 0, msg: `${versionsMade} نسخهٔ چارت با وضعیت «پیش‌نویس (DRAFT)» ساخته شد — پس از بازبینی، خودتان منتشر کنید.` });
     if (coursesLinked) report.warnings.push({ row: 0, msg: `${coursesLinked} درس به چارت‌ها وصل شد.` });
+    if (rolesFromBank) report.warnings.push({ row: 0, msg: `نقش ${rolesFromBank} درس در فایل خالی بود — نوع درس از بانک دروس خوانده و اعمال شد.` });
     reportRewrites(rwCourse, 'درس (چارت)');
   }
 
