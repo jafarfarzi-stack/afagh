@@ -18,6 +18,9 @@ export default function MigrationClient(props: {
   entities: Entity[];
   domains: DomainDef[];
   sources: { code: string; title: string }[];
+  /** فهرست دانشگاه‌ها — در سامانهٔ چنددانشگاهی مقصد انتقال باید انتخاب شود */
+  universities?: { id: number; title: string }[];
+  currentUniversityId?: number | null;
   formulas: React.ComponentProps<typeof TuitionTab>['formulas'];
   compareRuns: React.ComponentProps<typeof TuitionTab>['runs'];
   financialCount: number;
@@ -25,6 +28,10 @@ export default function MigrationClient(props: {
 }) {
   const [tab, setTab] = useState<'core' | 'codes' | 'photos' | 'tuition' | 'grades' | 'batches' | 'history'>('core');
   const [sourceCode, setSourceCode] = useState(props.sources[0]?.code ?? 'LEGACY');
+  const uniList = props.universities ?? [];
+  const [universityId, setUniversityId] = useState<number | ''>(
+    props.currentUniversityId ?? (uniList.length === 1 ? uniList[0].id : ''),
+  );
 
   const tabs = [
     { id: 'core', title: '📦 دادهٔ پایه' },
@@ -38,6 +45,37 @@ export default function MigrationClient(props: {
 
   return (
     <div className="space-y-4">
+      {/* ── دانشگاه مقصد ── */}
+      <div className="card border-indigo-200 bg-indigo-50/40">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <h3 className="text-sm font-black text-indigo-900">🏛️ انتقال برای کدام دانشگاه است؟</h3>
+            <p className="mt-0.5 text-[11px] leading-5 text-indigo-800/80">
+              {uniList.length > 1
+                ? 'سامانه چنددانشگاهی است — پیش از هر انتقال، دانشگاه مقصد را انتخاب کنید. تطبیق رشته و ثبت رکوردها فقط داخل همین دانشگاه انجام می‌شود.'
+                : 'تنها یک دانشگاه در سامانه ثبت شده و انتقال برای همان انجام می‌شود.'}
+            </p>
+          </div>
+          <div className="ms-auto flex items-center gap-2">
+            <select
+              className="input min-w-56 py-1.5 text-xs font-bold"
+              value={String(universityId)}
+              disabled={uniList.length <= 1}
+              onChange={e => setUniversityId(Number(e.target.value) || '')}
+            >
+              {uniList.length === 0 && <option value="">— دانشگاهی تعریف نشده —</option>}
+              {uniList.length > 1 && <option value="">— انتخاب کنید —</option>}
+              {uniList.map(u => <option key={u.id} value={u.id}>{u.title}</option>)}
+            </select>
+            {universityId === '' && uniList.length > 1 && (
+              <span className="rounded-lg bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-900">
+                ⚠️ الزامی است
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="card flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1">
           {tabs.map(t => (
@@ -58,7 +96,7 @@ export default function MigrationClient(props: {
         </div>
       </div>
 
-      {tab === 'core' && <CoreTab entities={props.entities} sourceCode={sourceCode} />}
+      {tab === 'core' && <CoreTab entities={props.entities} sourceCode={sourceCode} universityId={universityId} />}
       {tab === 'codes' && <CodeMapTab domains={props.domains} sourceCode={sourceCode} />}
       {tab === 'photos' && <PhotosTab />}
       {tab === 'tuition' && <TuitionTab sourceCode={sourceCode} formulas={props.formulas} runs={props.compareRuns} financialCount={props.financialCount} />}
@@ -69,11 +107,12 @@ export default function MigrationClient(props: {
   );
 }
 
-function CoreTab({ entities, sourceCode }: { entities: Entity[]; sourceCode: string }) {
+function CoreTab({ entities, sourceCode, universityId }: { entities: Entity[]; sourceCode: string; universityId: number | '' }) {
   const [entity, setEntity] = useState(entities[0]?.id ?? 'student');
   const [rewriteCodes, setRewriteCodes] = useState(true);
   const [report, setReport] = useState<(ImportReport & { error?: string; willInsert?: number; existing?: number }) | null>(null);
   const cur = entities.find(e => e.id === entity);
+  const uniExtra = universityId === '' ? {} : { universityId: String(universityId) };
 
   return (
     <div className="space-y-4">
@@ -95,11 +134,16 @@ function CoreTab({ entities, sourceCode }: { entities: Entity[]; sourceCode: str
             {entities.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
           </select>
           <div className="md:col-span-9">
+            {universityId === '' && (
+              <p className="mb-2 rounded-lg bg-amber-100 px-2 py-1.5 text-[11px] font-bold text-amber-900">
+                ⚠️ اول از بالای صفحه «دانشگاه مقصد» را انتخاب کنید؛ تا آن موقع انتقال غیرفعال است.
+              </p>
+            )}
             <Uploader
               kind={entity} sourceCode={sourceCode} templateKind={entity} label="" mappable
               actions={[
-                { id: 'dry', title: 'تحلیل اولیه', url: '/api/admin/migration/dry-run', extra: { entity } },
-                { id: 'commit', title: 'ثبت نهایی', url: '/api/admin/migration/commit', primary: true, extra: { entity, rewriteCodes: rewriteCodes ? '1' : '0' } },
+                { id: 'dry', title: 'تحلیل اولیه', url: '/api/admin/migration/dry-run', extra: { entity, ...uniExtra } },
+                { id: 'commit', title: 'ثبت نهایی', url: '/api/admin/migration/commit', primary: true, extra: { entity, rewriteCodes: rewriteCodes ? '1' : '0', ...uniExtra } },
               ]}
               onDone={r => setReport(r)}
             />

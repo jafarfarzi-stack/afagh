@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { legacy_financial_records, legacy_sources, legacy_tuition_formulas } from '@/db/schema';
+import { legacy_financial_records, legacy_sources, legacy_tuition_formulas, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { ENTITIES } from '@/lib/migration/engine';
 import { MAP_DOMAINS } from '@/lib/migration/codemap';
@@ -20,7 +20,14 @@ export default async function MigrationPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+
+  // سامانهٔ چنددانشگاهی: مقصد انتقال باید صریح انتخاب شود تا کد رشتهٔ مشترک
+  // (مثل ۸۴) به رشتهٔ دانشگاه دیگر وصل نشود و رکوردها به دانشگاه اشتباه نچسبند.
+  const universityRows = await db
+    .select({ id: universities.id, title: universities.title })
+    .from(universities)
+    .orderBy(universities.title);
+  const universitiesList = universityRows.length ? universityRows : [];
 
   const [sourcesRaw, formulas, compareRuns, finCount, gStats] = await Promise.all([
     db.select({ code: legacy_sources.code, title: legacy_sources.title }).from(legacy_sources).orderBy(legacy_sources.code),
@@ -63,6 +70,8 @@ export default async function MigrationPage() {
         entities={ENTITIES}
         domains={MAP_DOMAINS.map(d => ({ id: d.id, title: d.title, hint: d.hint }))}
         sources={sources}
+        universities={universitiesList}
+        currentUniversityId={currentUniversityId}
         formulas={formulas.map(f => ({
           id: f.id, formulaCode: f.formulaCode, title: f.title, termCode: f.termCode,
           degreeCode: f.degreeCode, majorCode: f.majorCode, fixedAmount: f.fixedAmount,

@@ -278,7 +278,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
 }
 
 // ── مرحلهٔ ۳: dry-run — شبیه‌سازی بدون نوشتن ──
-export async function dryRun(entity: Entity, tables: Table[], fileName: string): Promise<Report> {
+export async function dryRun(entity: Entity, tables: Table[], fileName: string, universityId?: number | null): Promise<Report> {
   const { report, rows } = prepare(entity, tables, fileName);
   const codes = rows.map(r => String(r.studentCode ?? ''));
 
@@ -330,7 +330,9 @@ export async function dryRun(entity: Entity, tables: Table[], fileName: string):
     }
   }
   if (entity === 'curriculum') {
-    const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors);
+    const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors)
+      // 🔒 اگر دانشگاه مقصد انتخاب شده، فقط رشته‌های همان دانشگاه بررسی می‌شوند
+      .where(universityId ? eq(majors.universityId, universityId) : undefined);
     const courseRows = await db.select({ id: courses.id, code: courses.code }).from(courses)
       .where(inArray(courses.code, [...new Set(rows.map(r => String(r.courseCode)))]));
     const courseSet = new Set(courseRows.map(c => c.code));
@@ -362,6 +364,12 @@ export async function commit(
   sourceCode = 'LEGACY',
   /** جایگزینی کد قدیمی با «کد جدید»ِ تأییدشده در میز تطبیق کدها (پیش‌فرض: روشن) */
   rewriteCodes = true,
+  /**
+   * دانشگاه مقصد. در سامانهٔ چنددانشگاهی، کاربر پیش از انتقال انتخاب می‌کند؛
+   * رکوردهای ساخته‌شده به همین دانشگاه می‌چسبند و تطبیق رشته هم فقط داخل
+   * همین دانشگاه انجام می‌شود تا کد مشترکِ دو دانشگاه، رشتهٔ اشتباه را نگیرد.
+   */
+  universityId: number | null = null,
 ): Promise<Report> {
   const { report, rows } = prepare(entity, tables, fileName);
   let inserted = 0; let existing = 0;
@@ -481,6 +489,7 @@ export async function commit(
         const [st] = await tx.insert(students).values({
           userId: u.id, studentCode: String(r.studentCode), majorId: major?.id ?? null,
           degreeLevelId: reg.degreeLevelId, regulationId: reg.id, entryYear: entryYr, entryTerm: Number(r.entryTerm) ?? 1, status: String(r.status),
+          ...(universityId ? { universityId } : {}),
         }).onConflictDoNothing().returning({ id: students.id });
         return { studentInserted: !!st, userCreated };
       });
@@ -639,6 +648,7 @@ export async function commit(
       const values = {
         name: String(r.name), degreeLevelId: degree.id, departmentId, facultyId,
         majorCode: finalCode,
+        universityId: universityId ?? null,
         minUnits: (r.minUnits as number | null) ?? null,
         standardCode: (r.standardCode as string | null) ?? null,
         establishedDate: (r.establishedDate as string | null) ?? null,
@@ -660,6 +670,7 @@ export async function commit(
         majorId = cur.id;
         // تکمیل فیلدهای خالیِ رشتهٔ موجود (بدون بازنویسی دادهٔ پرشده)
         const patch: Record<string, unknown> = {};
+        if (cur.universityId == null && universityId != null) patch.universityId = universityId;
         if (cur.departmentId == null && departmentId != null) patch.departmentId = departmentId;
         if (cur.facultyId == null && facultyId != null) patch.facultyId = facultyId;
         if (cur.minUnits == null && values.minUnits != null) patch.minUnits = values.minUnits;
@@ -1082,7 +1093,9 @@ export async function commit(
     //    سرفصل بعد از دو سال عوض شد، دو بازهٔ مختلف دو نسخهٔ جدا می‌گیرند.
     const degreeRows = await db.select({ id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title }).from(degree_level_configs);
     const degreeMap = await resolverFor(sourceCode, 'DEGREE');
-    const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors);
+    const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors)
+      // 🔒 دانشگاه مقصد: کد ۸۴ در دانشگاه ۱ و ۲ می‌تواند دو رشتهٔ متفاوت باشد
+      .where(universityId ? eq(majors.universityId, universityId) : undefined);
     const allCourses = await db.select({ id: courses.id, code: courses.code, title: courses.title, units: courses.units }).from(courses);
     const courseByCode = new Map(allCourses.map(c => [c.code, c]));
     const rwCourse = await rewriter('COURSE');
@@ -1142,6 +1155,7 @@ export async function commit(
           status: 'PUBLISHED', entryYearFrom: g.entryYearFrom, entryYearTo: g.entryYearTo,
           totalRequiredUnits: String(totalUnitsCalc),
           minRoleUnits: minRoleUnitsJson,
+          universityId: universityId ?? null,
         }).returning({ id: curriculum_versions.id });
         versionId = ins?.id ?? null;
         if (versionId) versionsMade++;
