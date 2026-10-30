@@ -261,6 +261,9 @@ export default function GradeCodesClient({
         facesHours: Number(fd.get('facesHours') || 0) || null,
         equivalentCourseCodes: String(fd.get('equivalentCourseCodes') || '') || null,
       };
+      // در حالت ویرایش، فیلد «کد» غیرفعال است و در FormData نمی‌آید؛
+      // فرستادن رشتهٔ خالی باعث رد شدن اعتبارسنجی و ذخیره‌نشدن می‌شد.
+      if (!payload.code) delete payload.code;
 
       const isEdit = !!editingCourse;
       let url = '/api/admin/curriculum/bank';

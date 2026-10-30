@@ -55,7 +55,9 @@ const bankCreateSchema = z.object({
 });
 
 const bankPatchSchema = z.object({
-  code: z.string().trim().min(1).max(20).optional(),
+  // «کد» در ویرایش قابل تغییر نیست و فیلد غیرفعال در FormData نمی‌آید؛
+  // پس خالی/نبودنش نباید کل ذخیره را رد کند.
+  code: z.string().trim().max(20).optional(),
   title: z.string().trim().min(1).max(200).optional(),
   theoreticalUnits: unitsNumber.optional(),
   practicalUnits: unitsNumber.optional(),
