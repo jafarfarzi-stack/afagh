@@ -140,6 +140,8 @@ export interface DepWarning {
   extra: string[];
   /** درس وابسته در اولین ترمِ ممکن (ترم ۱) ثبت شده در حالی که پیش‌نیاز دارد — غیرممکن (ترم ۰ وجود ندارد) */
   impossibleTerm: boolean;
+  /** قاعدهٔ شکست‌خورده از نوع «یا» بود — هر گزینه‌ای کافی است، ولی هیچ‌کدام برقرار نبود */
+  anyOf?: boolean;
 }
 
 /**
@@ -175,37 +177,92 @@ export function dependencyWarnings(
     if (!dep) continue; // قاعدهٔ درس خارج‌از‌نسخه (توسط چک دیگری رصد می‌شود)
     const codes = leafCourseCodesOf(r.logicTree);
     const extraText = nonCourseConditionsText(r.logicTree);
-    const names: Record<string, string> = {};
-    const missing: string[] = [];
-    const unassigned: string[] = [];
-    const badOrder: string[] = [];
-    const viaEquivalent: { code: string; equivalent: string }[] = [];
-    for (const code of codes) {
+
+    type Issues = {
+      names: Record<string, string>;
+      missing: string[]; unassigned: string[]; badOrder: string[];
+      viaEquivalent: { code: string; equivalent: string }[];
+    };
+    const emptyIssues = (): Issues => ({ names: {}, missing: [], unassigned: [], badOrder: [], viaEquivalent: [] });
+    const mergeInto = (dst: Issues, src: Issues) => {
+      Object.assign(dst.names, src.names);
+      for (const k of ['missing', 'unassigned', 'badOrder'] as const) {
+        for (const c of src[k]) if (!dst[k].includes(c)) dst[k].push(c);
+      }
+      for (const v of src.viaEquivalent) if (!dst.viaEquivalent.some(x => x.code === v.code)) dst.viaEquivalent.push(v);
+    };
+
+    /**
+     * ارزیابی شرط با احترام به عملگرها.
+     * برای OR کافی است **یکی** برقرار باشد؛ پس تا وقتی یک شرط برقرار است،
+     * بقیه حتی ارزیابی/گزارش نمی‌شوند (خطای پیشین: همهٔ کدها AND فرض می‌شدند).
+     */
+    const evalCond = (cond: { course?: string; operator?: 'AND' | 'OR'; conditions?: unknown[] }): { ok: boolean; issues: Issues } => {
+      if (cond.operator) {
+        const children = ((cond.conditions ?? []) as { course?: string; operator?: 'AND' | 'OR'; conditions?: unknown[] }[]).map(evalCond);
+        if (cond.operator === 'OR') {
+          if (children.some(c => c.ok)) return { ok: true, issues: emptyIssues() };
+          const iss = emptyIssues();
+          for (const c of children) mergeInto(iss, c.issues);
+          return { ok: false, issues: iss };
+        }
+        let ok = true;
+        const iss = emptyIssues();
+        for (const c of children) { if (!c.ok) ok = false; mergeInto(iss, c.issues); }
+        return { ok, issues: iss };
+      }
+      // شرط غیردرسی (واحد/ترم/نمره) — در هشدار چارت بررسی نمی‌شود
+      const code = String(cond.course ?? '').toUpperCase().trim();
+      if (!code) return { ok: true, issues: emptyIssues() };
+
+      const iss = emptyIssues();
       const target = byCode.get(code);
       if (!target) {
         // شاید هم‌ارزش در چارت باشد — «خارج از نسخه» گفتن در این حالت گمراه‌کننده است
         const eq = findEquivalentInVersion(code, courses);
-        if (eq) { viaEquivalent.push({ code, equivalent: eq.code }); names[code] = eq.title; }
-        else missing.push(code);
-        continue;
+        if (eq) {
+          iss.names[code] = eq.title;
+          const eqSem = eq.recommendedSemester ?? null;
+          const bad = dep.recommendedSemester != null && eqSem != null && (
+            ruleType === 'PREREQ' ? eqSem >= dep.recommendedSemester : eqSem > dep.recommendedSemester
+          );
+          if (bad) { iss.badOrder.push(code); return { ok: false, issues: iss }; }
+          iss.viaEquivalent.push({ code, equivalent: eq.code });
+          return { ok: true, issues: emptyIssues() };
+        }
+        iss.missing.push(code);
+        return { ok: false, issues: iss };
       }
-      names[code] = target.title;
-      if (target.recommendedSemester == null) { unassigned.push(code); continue; }
+      iss.names[code] = target.title;
+      if (target.recommendedSemester == null) { iss.unassigned.push(code); return { ok: false, issues: iss }; }
       // پیش‌نیاز باید در ترمی زودتر باشد؛ هم‌نیاز باید هم‌ترم یا در ترمی زودتر باشد (فقط ترمِ بعدتر خطاست)
-      if (ruleType === 'PREREQ' && dep.recommendedSemester != null && target.recommendedSemester >= dep.recommendedSemester) {
-        badOrder.push(code);
-      } else if (ruleType === 'COREQ' && dep.recommendedSemester != null && target.recommendedSemester > dep.recommendedSemester) {
-        badOrder.push(code);
-      }
-    }
+      const badOrder =
+        dep.recommendedSemester != null && (
+          ruleType === 'PREREQ'
+            ? target.recommendedSemester >= dep.recommendedSemester
+            : target.recommendedSemester > dep.recommendedSemester
+        );
+      if (badOrder) { iss.badOrder.push(code); return { ok: false, issues: iss }; }
+      return { ok: true, issues: emptyIssues() };
+    };
+
+    const verdict = evalCond(r.logicTree as { operator: 'AND' | 'OR'; conditions: unknown[] });
     // درس دارای پیش‌نیاز در اولین ترم (ترم ۱ ≤) → غیرممکن: ترم ۰ وجود ندارد
     const impossibleTerm =
+      !verdict.ok &&
       ruleType === 'PREREQ' &&
       dep.recommendedSemester != null &&
       dep.recommendedSemester <= 1 &&
       codes.length > 0;
-    if (missing.length || unassigned.length || badOrder.length || viaEquivalent.length || impossibleTerm) {
-      out.push({ courseId: dep.courseId, code: dep.code, type: ruleType, missing, unassigned, badOrder, viaEquivalent, names, extra: extraText ? [extraText] : [], impossibleTerm });
+    if (!verdict.ok && (verdict.issues.missing.length || verdict.issues.unassigned.length || verdict.issues.badOrder.length || verdict.issues.viaEquivalent.length || impossibleTerm)) {
+      out.push({
+        courseId: dep.courseId, code: dep.code, type: ruleType,
+        missing: verdict.issues.missing, unassigned: verdict.issues.unassigned, badOrder: verdict.issues.badOrder,
+        viaEquivalent: verdict.issues.viaEquivalent, names: verdict.issues.names,
+        extra: extraText ? [extraText] : [], impossibleTerm,
+        // قاعده با «یا» شکست خورده ⇒ هیچ‌کدام از گزینه‌ها برقرار نبود
+        anyOf: r.logicTree?.operator === 'OR',
+      });
     }
   }
   return out;
@@ -234,6 +291,7 @@ const labelOf = (w: DepWarning, code: string): string => {
 /** متن فارسی هشدار — برای tooltip / نمایش زیر کارت درس */
 export function dependencyWarningText(w: DepWarning): string {
   const parts: string[] = [];
+  const any = w.anyOf ? ' (یکی از این دروس کافی است)' : '';
   if (w.impossibleTerm) {
     parts.push('این درس پیش‌نیاز دارد و نمی‌تواند در ترم ۱ ثبت شود — زیرا امکان گذراندن پیش‌نیاز در ترم ۰ (که وجود ندارد) وجود ندارد؛ پیش‌نیاز باید در ترمی زودتر گذرانده شود.');
   }
@@ -247,8 +305,8 @@ export function dependencyWarningText(w: DepWarning): string {
   if (w.unassigned.length) {
     parts.push(
       w.type === 'PREREQ'
-        ? `پیش‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده — ابتدا آن را در یک ترم زودتر قرار دهید.`
-        : `هم‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده — باید هم‌ترم با این درس باشد.`,
+        ? `پیش‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده${any} — ابتدا یکی از آن‌ها را در ترمی زودتر قرار دهید.`
+        : `هم‌نیاز «${w.unassigned.map(c => labelOf(w, c)).join('، ')}» هنوز ترم‌بندی نشده${any} — باید هم‌ترم با این درس باشد.`,
     );
   }
   if (w.viaEquivalent.length) {
@@ -259,8 +317,8 @@ export function dependencyWarningText(w: DepWarning): string {
   if (w.missing.length) {
     parts.push(
       w.type === 'PREREQ'
-        ? `پیش‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست و درس هم‌ارزی هم برایش در چارت پیدا نشد — ابتدا درس پیش‌نیاز را به چارت اضافه کنید.`
-        : `هم‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست و درس هم‌ارزی هم برایش پیدا نشد — ابتدا درس اصلی را اضافه کنید، سپس درس هم‌نیاز.`,
+        ? `پیش‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست${any} — ابتدا درس پیش‌نیاز را به چارت اضافه کنید.`
+        : `هم‌نیاز «${w.missing.join('، ')}» در نسخه موجود نیست${any} — ابتدا درس اصلی را اضافه کنید، سپس درس هم‌نیاز.`,
     );
   }
   if (w.extra.length) {
@@ -289,7 +347,8 @@ export function depWarningBadge(warns: DepWarning[]): { icon: string; label: str
     return { icon: '🔁', label: `${type} از طریق هم‌ارزی: ${eqTitles.join('، ')}`, tone: 'blue' };
   }
   const head = titles.length > 0 ? `: ${titles.join('، ')}` : '';
-  return { icon: impossible ? '⛔' : '⚠️', label: `${type} ناقص${head}`, tone: impossible ? 'red' : 'amber' };
+  const anyOf = warns.some(w => w.anyOf);
+  return { icon: impossible ? '⛔' : '⚠️', label: `${type} ناقص${anyOf ? ' (هیچ‌کدام از گزینه‌ها)' : ''}${head}`, tone: impossible ? 'red' : 'amber' };
 }
 
 
