@@ -53,7 +53,7 @@ type Props = {
   initialMajors: MajorSimple[];
 };
 
-const COURSE_TYPES = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری'];
+const COURSE_TYPES = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری', 'جبرانی', 'کارورزی', 'پروژه', 'پایان‌نامه', 'کارگاهی'];
 const COURSE_NATURES = ['نظری', 'عملی', 'نظری-عملی', 'کارگاهی', 'کارآموزی', 'پروژه', 'پایان‌نامه', 'رساله', 'معرفی به استاد', 'خودخوان'];
 const OFFERING_SCOPES = [
   { value: 'DEPARTMENTAL', label: 'گروهی (DEPARTMENTAL)' },
@@ -733,7 +733,8 @@ export default function GradeCodesClient({
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">نوع درس</label>
                   <select name="courseType" defaultValue={editingCourse?.courseType ?? 'تخصصی'} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white">
-                    {COURSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    {/* نوعِ فعلی اگر در فهرست استاندارد نبود هم نمایش داده می‌شود تا با ذخیره، اشتباهی عوض نشود */}
+                    {[...new Set([...COURSE_TYPES, editingCourse?.courseType].filter((t): t is string => !!t && t.trim() !== ''))].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>

@@ -7,7 +7,7 @@ import { createCourseAction, deleteCourseAction, updateCourseAction } from './ac
 
 export const dynamic = 'force-dynamic';
 
-const TYPE_OPTS = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری'];
+const TYPE_OPTS = ['عمومی', 'پایه', 'اصلی', 'تخصصی', 'اختیاری', 'جبرانی', 'کارورزی', 'پروژه', 'پایان‌نامه', 'کارگاهی'];
 
 export default async function CoursesPage({ searchParams }: { searchParams: Promise<{ msg?: string; err?: string }> }) {
   const sp = await searchParams;
