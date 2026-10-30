@@ -897,6 +897,13 @@
       "when": 1795100000000,
       "tag": "0122_curriculum_published_range",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1795100000100,
+      "tag": "0123_curriculum_role_specialized",
+      "breakpoints": true
     }
   ]
 }

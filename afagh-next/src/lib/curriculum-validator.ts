@@ -336,7 +336,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     results.push(err(
       'GRADUATION_COVERAGE',
       'هیچ درسی به‌عنوان «شرط الزامی فارغ‌التحصیلی» علامت‌گذاری نشده است؛ بدون آن تطبیق سرفصل در فارغ‌التحصیلی ممکن نیست.',
-      input.courses.filter((c) => c.roleType === 'CORE' || c.roleType === 'MAJOR').slice(0, 10).map((c) => c.code)
+      input.courses.filter((c) => c.roleType === 'CORE' || c.roleType === 'MAJOR' || c.roleType === 'SPECIALIZED').slice(0, 10).map((c) => c.code)
     ));
   }
 
@@ -369,7 +369,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       countByRole.set(c.roleType, (countByRole.get(c.roleType) ?? 0) + 1);
     }
     const roleFa: Record<string, string> = {
-      CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+      CORE: 'پایه', MAJOR: 'اصلی', SPECIALIZED: 'تخصصی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
       COMPENSATORY: 'جبرانی',
     };
@@ -392,7 +392,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       unitsByRole.set(c.roleType, (unitsByRole.get(c.roleType) ?? 0) + (Number(c.units) || 0));
     }
     const roleFa: Record<string, string> = {
-      CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+      CORE: 'پایه', MAJOR: 'اصلی', SPECIALIZED: 'تخصصی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
       COMPENSATORY: 'جبرانی',
     };

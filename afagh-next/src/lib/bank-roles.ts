@@ -24,7 +24,7 @@ const BANK_TYPE_TO_ROLE: Record<string, string> = {
   // ── شش نوع سماء ──
   'عمومی': 'GENERAL',
   'پایه': 'CORE',
-  'تخصصی': 'MAJOR',
+  'تخصصی': 'SPECIALIZED',
   'اصلی': 'MAJOR',
   'اختیاری': 'ELECTIVE',
   'جبرانی': 'ELECTIVE',
@@ -34,6 +34,7 @@ const BANK_TYPE_TO_ROLE: Record<string, string> = {
   // ── نقش‌های مستقیم (اگر بانک همان نقش را داشت) ──
   'CORE': 'CORE',
   'MAJOR': 'MAJOR',
+  'SPECIALIZED': 'SPECIALIZED',
   'ELECTIVE': 'ELECTIVE',
   'THESIS': 'THESIS',
   'INTERNSHIP': 'INTERNSHIP',
@@ -45,7 +46,7 @@ const BANK_TYPE_TO_ROLE: Record<string, string> = {
   // ── حالت‌های فاصله‌دار/کشیده که بعد از نرمال‌سازی می‌چسبند ──
   'درسعمومی': 'GENERAL',
   'درسپایه': 'CORE',
-  'درستخصصی': 'MAJOR',
+  'درستخصصی': 'SPECIALIZED',
   'درساصلی': 'MAJOR',
   'درساختیاری': 'ELECTIVE',
 };

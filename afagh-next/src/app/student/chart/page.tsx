@@ -26,8 +26,9 @@ import { DemoChart } from '../demo-sections';
 export const dynamic = 'force-dynamic';
 
 const roleFa: Record<string, string> = {
-  CORE: 'اصلی',
-  MAJOR: 'تخصصی',
+  CORE: 'پایه',
+  MAJOR: 'اصلی',
+  SPECIALIZED: 'تخصصی',
   ELECTIVE: 'اختیاری',
   GENERAL: 'عمومی',
   THESIS: 'پایان‌نامه',

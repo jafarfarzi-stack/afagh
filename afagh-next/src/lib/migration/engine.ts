@@ -252,15 +252,19 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const sem = semRaw != null && semRaw >= 1 && semRaw <= 9 ? semRaw : null;
       if (semRaw != null && sem == null) warn(`ترم پیشنهادی «${semRaw}» خارج از بازهٔ ۱..۹ است — خالی گذاشته می‌شود.`);
       // نگاشت فارسی/انگلیسی نقش به کد استاندارد چارت
+      // ⚠️ «اصلی» و «تخصصی» دو نوعِ جدا هستند (در بانک دروس هم جدا تعریف شده‌اند)
       const ROLE_MAP: Record<string, string> = {
-        'پایه': 'CORE', 'core': 'CORE', 'اصلی': 'MAJOR', 'تخصصی': 'MAJOR', 'major': 'MAJOR',
+        'پایه': 'CORE', 'core': 'CORE',
+        'اصلی': 'MAJOR', 'major': 'MAJOR',
+        'تخصصی': 'SPECIALIZED', 'specialized': 'SPECIALIZED',
         'اختیاری': 'ELECTIVE', 'انتخابی': 'ELECTIVE', 'elective': 'ELECTIVE',
         'عمومی': 'GENERAL', 'مشترک': 'GENERAL', 'general': 'GENERAL',
-        'پایان‌نامه': 'THESIS', 'thesis': 'THESIS', 'کارآموزی': 'INTERNSHIP', 'internship': 'INTERNSHIP',
+        'پایان‌نامه': 'THESIS', 'thesis': 'THESIS', 'کارآموزی': 'INTERNSHIP', 'کارورزی': 'INTERNSHIP', 'internship': 'INTERNSHIP',
         'کارگاه': 'WORKSHOP', 'workshop': 'WORKSHOP',
       };
-      const role = ROLE_MAP[roleRaw] ?? ROLE_MAP[norm(roleRaw)] ?? (['CORE', 'MAJOR', 'ELECTIVE', 'GENERAL', 'THESIS', 'INTERNSHIP', 'WORKSHOP'].includes(roleRaw.toUpperCase()) ? roleRaw.toUpperCase() : 'CORE');
-      if (roleRaw && !ROLE_MAP[roleRaw] && !ROLE_MAP[norm(roleRaw)] && !['CORE', 'MAJOR', 'ELECTIVE', 'GENERAL', 'THESIS', 'INTERNSHIP', 'WORKSHOP'].includes(roleRaw.toUpperCase()))
+      const ROLE_CODES = ['CORE', 'MAJOR', 'SPECIALIZED', 'ELECTIVE', 'GENERAL', 'THESIS', 'INTERNSHIP', 'WORKSHOP'];
+      const role = ROLE_MAP[roleRaw] ?? ROLE_MAP[norm(roleRaw)] ?? (ROLE_CODES.includes(roleRaw.toUpperCase()) ? roleRaw.toUpperCase() : 'CORE');
+      if (roleRaw && !ROLE_MAP[roleRaw] && !ROLE_MAP[norm(roleRaw)] && !ROLE_CODES.includes(roleRaw.toUpperCase()))
         warn(`نقش درس «${roleRaw}» شناخته نشد — به «پایه (CORE)» تبدیل شد.`);
       const isRequired = isReqRaw == null || isReqRaw === '' ? true : boolFa(isReqRaw);
       rows.push({
@@ -1124,7 +1128,8 @@ export async function commit(
 
     let versionsMade = 0, coursesLinked = 0;
     for (const g of groups.values()) {
-      // نسخهٔ چارتِ منتشرشدهٔ این رشته/مقطع/بازهٔ ورودی
+      // نسخهٔ چارتِ این رشته/مقطع/بازهٔ ورودی — با وضعیت «پیش‌نویس»
+      // تا کاربر ابتدا بازبینی کند و بعد خودش منتشر کند.
       const verLabel = g.entryYearTo ? `${g.entryYearFrom}–${g.entryYearTo}` : `${g.entryYearFrom} به بعد`;
       const versionCode = `LEGACY-${g.entryYearFrom}${g.entryYearTo ? `-${g.entryYearTo}` : ''}`;
 
@@ -1144,15 +1149,15 @@ export async function commit(
 
       const [existingVer] = await db.select({ id: curriculum_versions.id, totalRequiredUnits: curriculum_versions.totalRequiredUnits, minRoleUnits: curriculum_versions.minRoleUnits }).from(curriculum_versions)
         .where(and(eq(curriculum_versions.majorId, g.majorId), eq(curriculum_versions.degreeLevelId, g.degreeLevelId),
+          isNull(curriculum_versions.trackId),
           eq(curriculum_versions.entryYearFrom, g.entryYearFrom),
-          g.entryYearTo == null ? isNull(curriculum_versions.entryYearTo) : eq(curriculum_versions.entryYearTo, g.entryYearTo),
-          eq(curriculum_versions.status, 'PUBLISHED'))).limit(1);
+          g.entryYearTo == null ? isNull(curriculum_versions.entryYearTo) : eq(curriculum_versions.entryYearTo, g.entryYearTo))).limit(1);
       let versionId = existingVer?.id ?? null;
       if (!versionId) {
         const [ins] = await db.insert(curriculum_versions).values({
           majorId: g.majorId, degreeLevelId: g.degreeLevelId, trackId: null,
           versionCode, title: `برنامهٔ درسی مهاجرتی ${g.label} (ورودی ${verLabel})`,
-          status: 'PUBLISHED', entryYearFrom: g.entryYearFrom, entryYearTo: g.entryYearTo,
+          status: 'DRAFT', entryYearFrom: g.entryYearFrom, entryYearTo: g.entryYearTo,
           totalRequiredUnits: String(totalUnitsCalc),
           minRoleUnits: minRoleUnitsJson,
           universityId: universityId ?? null,
@@ -1178,12 +1183,15 @@ export async function commit(
           curriculumVersionId: versionId, courseId: c.id, roleType: it.roleType,
           units: it.units != null ? String(it.units) : null,
           isRequired: it.isRequired ? 1 : 0, isElective: it.roleType === 'ELECTIVE' ? 1 : 0,
+          // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
+          // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
+          isGraduationRequired: it.isRequired && ['CORE', 'MAJOR', 'SPECIALIZED'].includes(it.roleType) ? 1 : 0,
           recommendedSemester: it.recommendedSemester,
         }).onConflictDoNothing().returning({ id: curriculum_courses.id });
         if (r0.length) { coursesLinked++; inserted++; } else existing++;
       }
     }
-    if (versionsMade) report.warnings.push({ row: 0, msg: `${versionsMade} نسخهٔ چارت (وضعیت PUBLISHED) ساخته شد.` });
+    if (versionsMade) report.warnings.push({ row: 0, msg: `${versionsMade} نسخهٔ چارت با وضعیت «پیش‌نویس (DRAFT)» ساخته شد — پس از بازبینی، خودتان منتشر کنید.` });
     if (coursesLinked) report.warnings.push({ row: 0, msg: `${coursesLinked} درس به چارت‌ها وصل شد.` });
     reportRewrites(rwCourse, 'درس (چارت)');
   }

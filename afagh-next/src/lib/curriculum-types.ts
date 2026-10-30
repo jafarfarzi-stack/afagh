@@ -63,8 +63,9 @@ export function transitionTargets(status: CurriculumVersionStatus): readonly Cur
 
 /** نوع نقش هر درس در برنامه (جایگزینِ courseType آزادِ UI قدیم) */
 export const COURSE_ROLE_TYPES = [
-  'CORE',        // اصلی
-  'MAJOR',       // تخصصی
+  'CORE',        // پایه
+  'MAJOR',       // اصلی
+  'SPECIALIZED', // تخصصی  ← در بانک دروس از «اصلی» جدا است
   'ELECTIVE',    // اختیاری
   'GENERAL',     // عمومی
   'THESIS',      // پایان‌نامه

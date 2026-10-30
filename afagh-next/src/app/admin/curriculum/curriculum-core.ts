@@ -20,7 +20,7 @@ export const STATUS_UI: Record<string, { label: string; cls: string }> = {
 };
 
 export const ROLE_LABELS: Record<string, string> = {
-  CORE: 'پایه', MAJOR: 'اصلی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
+  CORE: 'پایه', MAJOR: 'اصلی', SPECIALIZED: 'تخصصی', ELECTIVE: 'اختیاری', GENERAL: 'عمومی',
   THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
 };
 

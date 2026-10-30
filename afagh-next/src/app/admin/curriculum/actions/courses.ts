@@ -243,7 +243,7 @@ export async function markGraduationRequiredBulkAction(versionId: number): Promi
       .from(curriculum_courses)
       .where(and(
         eq(curriculum_courses.curriculumVersionId, versionId),
-        or(eq(curriculum_courses.isRequired, 1), inArray(curriculum_courses.roleType, ['CORE', 'MAJOR'])),
+        or(eq(curriculum_courses.isRequired, 1), inArray(curriculum_courses.roleType, ['CORE', 'MAJOR', 'SPECIALIZED'])),
       ));
     const toUpdate = rows.filter(r => r.isGraduationRequired !== 1).map(r => r.courseId);
     if (toUpdate.length) {
