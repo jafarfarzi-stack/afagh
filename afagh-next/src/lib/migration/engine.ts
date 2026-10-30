@@ -97,7 +97,7 @@ const ENTITY_HINTS: Record<Entity, string[][]> = {
   enrollment: [['شماره دانشجویی', 'student_code'], ['کد درس', 'course_code'], ['نمره', 'grade']],
   ledger: [['شماره دانشجویی', 'student_code'], ['مبلغ', 'amount'], ['نوع', 'type']],
   clearance: [['شماره دانشجویی', 'student_code'], ['تسویه', 'cleared']],
-  curriculum: [['کد رشته', 'major_code'], ['کد درس', 'course_code'], ['نام درس', 'course_title']],
+  curriculum: [['کد رشته', 'major_code'], ['کد درس', 'course_code']],
 };
 
 /**
@@ -243,13 +243,13 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       if (entryFromRaw && (entryFrom == null || entryFrom < 1300 || entryFrom > 1500)) return err(`«از ورودی» نامعتبر: ${entryFromRaw} (۱۳۰۰..۱۵۰۰)`);
       if (entryToRaw && (entryTo == null || entryTo < 1300 || entryTo > 1500)) return err(`«تا ورودی» نامعتبر: ${entryToRaw} (۱۳۰۰..۱۵۰۰)`);
       if (entryFrom != null && entryTo != null && entryTo < entryFrom) return err(`«تا ورودی» (${entryTo}) کوچک‌تر از «از ورودی» (${entryFrom}) است.`);
-      const units = num(get(['واحد', 'تعداد واحد', 'واحدها', 'units']));
+      // ⛔ ستون «واحد» عمداً خوانده نمی‌شود: واحدِ هر درس فقط از بانک دروس می‌آید.
+      //    (اگر در فایل عددی خلاف بانک نوشته شود، نباید در چارت بنشیند.)
       const semRaw = num(get(['ترم پیشنهادی', 'ترم', 'ترم تحصیلی', 'semester', 'recommended_semester']));
       const roleRaw = String(get(['نقش', 'نوع درس در چارت', 'نقش درس', 'role', 'role_type']) || '').trim();
       const isReqRaw = get(['الزامی', 'درس الزامی', 'is_required', 'required']);
       if (!majorCode && !majorName) return err('کد یا نام رشته الزامی است.');
       if (!courseCode) return err('کد درس الزامی است.');
-      if (units != null && (units < 0 || units > 12)) return err(`واحد نامعتبر: ${units}`);
       const sem = semRaw != null && semRaw >= 1 && semRaw <= 9 ? semRaw : null;
       if (semRaw != null && sem == null) warn(`ترم پیشنهادی «${semRaw}» خارج از بازهٔ ۱..۹ است — خالی گذاشته می‌شود.`);
       // نگاشت فارسی/انگلیسی نقش به کد استاندارد چارت
@@ -275,7 +275,7 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
         majorCode: majorCode || null, majorName: majorName || null,
         degreeCode: degreeCode || null, degreeName: degreeName || null,
         entryYearFrom: entryFrom ?? null, entryYearTo: entryTo ?? null,
-        courseCode, courseTitle: courseTitle || null, units, recommendedSemester: sem, roleType: role, isRequired,
+        courseCode, courseTitle: courseTitle || null, units: null, recommendedSemester: sem, roleType: role, isRequired,
       });
     }
   });
@@ -1132,6 +1132,7 @@ export async function commit(
     }
 
     let versionsMade = 0, coursesLinked = 0, rolesFromBank = 0;
+    const zeroUnitWarned = new Set<string>();
     for (const g of groups.values()) {
       // نسخهٔ چارتِ این رشته/مقطع/بازهٔ ورودی — با وضعیت «پیش‌نویس»
       // تا کاربر ابتدا بازبینی کند و بعد خودش منتشر کند.
@@ -1192,10 +1193,16 @@ export async function commit(
         const c = courseByCode.get(it.courseCode);
         if (!c) { report.warnings.push({ row: 0, msg: `درس ${it.courseCode} یافت نشد — وصل نشد.` }); continue; }
         const roleType = roleOf(it);
+        // واحد فقط از بانک دروس — عددِ داخل فایل نادیده گرفته می‌شود
+        const bankUnits = Number(c.units ?? 0);
+        if (!(bankUnits > 0) && zeroUnitWarned.size < 10) {
+          zeroUnitWarned.add(c.code);
+          report.warnings.push({ row: 0, msg: `درس ${c.code} در بانک دروس «۰ واحد» است — همان ۰ در چارت ثبت شد؛ واحد را در بانک دروس اصلاح کنید.` });
+        }
         if (!it.roleType) rolesFromBank++;
         const r0 = await db.insert(curriculum_courses).values({
           curriculumVersionId: versionId, courseId: c.id, roleType,
-          units: it.units != null ? String(it.units) : (c.units != null ? String(c.units) : null),
+          units: c.units != null ? String(c.units) : null,
           isRequired: it.isRequired ? 1 : 0, isElective: roleType === 'ELECTIVE' ? 1 : 0,
           // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
           // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
