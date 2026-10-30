@@ -1206,7 +1206,8 @@ export async function commit(
           isRequired: it.isRequired ? 1 : 0, isElective: roleType === 'ELECTIVE' ? 1 : 0,
           // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
           // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
-          isGraduationRequired: it.isRequired && ['CORE', 'MAJOR', 'SPECIALIZED'].includes(roleType) ? 1 : 0,
+          // پایان‌نامه و کارآموزی هم شرط فارغ‌التحصیلی‌اند، نه فقط پایه/اصلی/تخصصی.
+          isGraduationRequired: it.isRequired && ['CORE', 'MAJOR', 'SPECIALIZED', 'THESIS', 'INTERNSHIP'].includes(roleType) ? 1 : 0,
           recommendedSemester: it.recommendedSemester,
         }).onConflictDoNothing().returning({ id: curriculum_courses.id });
         if (r0.length) { coursesLinked++; inserted++; } else existing++;

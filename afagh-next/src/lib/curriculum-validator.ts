@@ -336,7 +336,7 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     results.push(err(
       'GRADUATION_COVERAGE',
       'هیچ درسی به‌عنوان «شرط الزامی فارغ‌التحصیلی» علامت‌گذاری نشده است؛ بدون آن تطبیق سرفصل در فارغ‌التحصیلی ممکن نیست.',
-      input.courses.filter((c) => c.roleType === 'CORE' || c.roleType === 'MAJOR' || c.roleType === 'SPECIALIZED').slice(0, 10).map((c) => c.code)
+      input.courses.filter((c) => ['CORE', 'MAJOR', 'SPECIALIZED', 'THESIS', 'INTERNSHIP'].includes(c.roleType)).slice(0, 10).map((c) => c.code)
     ));
   }
 
