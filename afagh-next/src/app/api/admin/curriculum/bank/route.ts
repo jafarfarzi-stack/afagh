@@ -12,7 +12,10 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 const ALLOWED = ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'];
 const PAGE_SIZE = 100;
 
-const courseTypeEnum = z.enum(['پایه', 'اصلی', 'تخصصی', 'عمومی', 'عملی', 'نظری', 'کارگاهی', 'اختیاری']);
+// نوع درس در بانک، دامنهٔ بسته ندارد: خروجی سما مقادیری مثل «نظري-عملي 2س»،
+// «الزامي مشترک»، «تخصصي انتخابي» و… دارد. enum بسته باعث می‌شد ویرایشِ درس
+// با خطای «داده ورودی معتبر نیست» رد شود و هیچ‌چیز ذخیره نشود.
+const courseTypeSchema = z.string().trim().min(1).max(50);
 const gradingTypeEnum = z.enum(['NUMERIC', 'PASS_FAIL']);
 const offeringScopeEnum = z.enum(['DEPARTMENTAL', 'GENERAL_SERVICE', 'UNIVERSITY_WIDE']);
 const locationTypeEnum = z.enum(['IN_CAMPUS', 'OUT_CAMPUS', 'ONLINE', 'HYBRID']);
@@ -24,7 +27,7 @@ const bankCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
   theoreticalUnits: z.coerce.number().min(0).max(20).default(0),
   practicalUnits: z.coerce.number().min(0).max(20).default(0),
-  courseType: courseTypeEnum.default('تخصصی'),
+  courseType: courseTypeSchema.default('تخصصی'),
   gradingType: gradingTypeEnum.default('NUMERIC'),
   affectsGpa: z.coerce.boolean().optional(),
   departmentId: z.coerce.number().int().positive().nullable().optional(),
@@ -56,7 +59,7 @@ const bankPatchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   theoreticalUnits: unitsNumber.optional(),
   practicalUnits: unitsNumber.optional(),
-  courseType: courseTypeEnum.optional(),
+  courseType: courseTypeSchema.optional(),
   gradingType: gradingTypeEnum.optional(),
   affectsGpa: z.coerce.boolean().optional(),
   departmentId: nullableId,
@@ -185,7 +188,13 @@ export async function PATCH(req: NextRequest) {
   }
   const parsed = bankPatchSchema.safeParse(rawBody);
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+    const first = parsed.error.issues[0];
+    const field = first?.path?.join('.') || '—';
+    return NextResponse.json({
+      ok: false,
+      error: `داده ورودی معتبر نیست — فیلد «${field}»: ${first?.message ?? ''}`,
+      details: parsed.error.flatten(),
+    }, { status: 400 });
   }
   const body = parsed.data;
   const patch: Record<string, unknown> = {};
@@ -252,7 +261,13 @@ export async function POST(req: NextRequest) {
   }
   const result = bankCreateSchema.safeParse(rawBody);
   if (!result.success) {
-    return NextResponse.json({ ok: false, error: 'داده ورودی معتبر نیست.' }, { status: 400 });
+    const first = result.error.issues[0];
+    const field = first?.path?.join('.') || '—';
+    return NextResponse.json({
+      ok: false,
+      error: `داده ورودی معتبر نیست — فیلد «${field}»: ${first?.message ?? ''}`,
+      details: result.error.flatten(),
+    }, { status: 400 });
   }
   const body = result.data;
   const code = body.code;
