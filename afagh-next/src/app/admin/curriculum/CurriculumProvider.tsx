@@ -357,9 +357,10 @@ function useCurriculumWorkspace(
    * «پیش‌نیاز / هم‌نیاز» را از **جدول دروس** می‌خواند و در قواعد همین نسخه
    * ثبت می‌کند. قواعد دستیِ موجود دست نمی‌خورند (overwrite=false).
    */
-  const handleSyncRequisites = async () => {
+  const handleSyncRequisites = async (overwrite = false) => {
     if (selectedVersionId == null) { showToast('اول یک نسخه را انتخاب کنید.', 'error'); return; }
-    const ok = await run(() => syncRequisiteRulesAction(selectedVersionId));
+    if (overwrite && !window.confirm('قواعد پیش‌نیاز/هم‌نیازِ موجود این نسخه با متن «جدول دروس» بازنویسی می‌شود. ادامه می‌دهید؟')) return;
+    const ok = await run(() => syncRequisiteRulesAction(selectedVersionId, overwrite));
     if (ok) await reloadDetail(selectedVersionId);
   };
 

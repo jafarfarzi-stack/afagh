@@ -64,8 +64,17 @@ eq('با +', parseRequisiteText('CM101 + CM102'),
   { operator: 'AND', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
 eq('با ویرگول لاتین', parseRequisiteText('CM101, CM102'),
   { operator: 'AND', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
-eq('با لولهٔ سما (خروجی واقعی جدول دروس)', parseRequisiteText('1100|27007'),
-  { operator: 'AND', conditions: [{ course: '1100' }, { course: '27007' }] });
+eq('با لولهٔ سما → «یا» (دروس هم‌ارز)', parseRequisiteText('1100|27007'),
+  { operator: 'OR', conditions: [{ course: '1100' }, { course: '27007' }] });
+eq('سه کد با لوله → یا', parseRequisiteText('23105|23005|99108'),
+  { operator: 'OR', conditions: [{ course: '23105' }, { course: '23005' }, { course: '99108' }] });
+eq('پرانتز + & → (الف یا ب) و ج', parseRequisiteText('(27003|17003)&27002'),
+  { operator: 'AND', conditions: [
+    { operator: 'OR', conditions: [{ course: '27003' }, { course: '17003' }] },
+    { course: '27002' },
+  ] });
+eq('& صریح → و', parseRequisiteText('CM101 & CM102'),
+  { operator: 'AND', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
 
 console.log('\n۶) «یا» یعنی OR (یکی کافی است)');
 eq('دو گزینه', parseRequisiteText('CM101 یا CM102'),
@@ -77,6 +86,8 @@ eq('یا با برچسب', parseRequisiteText('پیش‌نیاز: CM101 یا CM1
 eq('or انگلیسی', parseRequisiteText('CM101 or CM102'),
   { operator: 'OR', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
 eq('|| یعنی یا', parseRequisiteText('CM101||CM102'),
+  { operator: 'OR', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
+eq('| تک یعنی یا', parseRequisiteText('CM101|CM102'),
   { operator: 'OR', conditions: [{ course: 'CM101' }, { course: 'CM102' }] });
 
 console.log('\n۷) هم‌نیاز (همان parser)');

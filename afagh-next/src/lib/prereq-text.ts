@@ -30,13 +30,130 @@ const EMPTY_TOKENS = ['', '-', '—', '–', 'ندارد', 'هیچ', 'بدون �
 const LABEL_RE = /^\s*(پیش\s*نیاز|پیشنیاز|هم\s*نیاز|همنیاز|هم\s*ارز|همارز|معادل|دروس\s*معادل|prereq(?:uisite)?s?|co-?req(?:uisite)?s?|equivalent)\s*[:：\-–]?\s*/i;
 
 /**
- * جداکنندهٔ «یا» (OR). تنها جداکننده‌ای است که باید تشخیص داده شود، چون
- * AND «همهٔ کدها» است و extractCourseCodes خودش همهٔ کدهای متن را جمع می‌کند
- * (با هر جداکننده‌ای: «،» «و» «+» «/» «|» خط تیره یا فاصله).
- * «|» در خروجی «جدول دروس» سما جداکنندهٔ AND است (مثال واقعی: `1100|27007`)
- * و «||» به‌صورت OR تفسیر می‌شود.
+ * جداکننده‌های عملگر — قرارداد واقعی «جدول دروس» سما:
+ *
+ *   `|`  → **یا (OR)**   ← دو درسِ هم‌ارز؛ هر کدام کافی است (مثال واقعی: `14|12`)
+ *   `&`  → **و (AND)**    ← هر دو لازم است (مثال واقعی: `(27003|17003)&27002`)
+ *   پرانتز → گروه‌بندی
+ *
+ * پیش‌تر `|` به‌اشتباه AND خوانده می‌شد و نتیجه این بود که درس هم‌ارز
+ * به‌جای «یکی کافی است»، «هر دو لازم است» ثبت می‌شد.
  */
-const OR_SPLIT_RE = /\s*(?:\s+یا\s+|\s+or\s+|\|\|)\s*/i;
+const OR_WORD_RE = /\s+(?:یا|or)\s+/gi;
+const AND_WORD_RE = /\s+(?:و|and)\s+/gi;
+
+/** یک عملوند: کد درس (حروف لاتین اختیاری + ۲..۶ رقم) */
+const OPERAND_RE = /^[A-Za-z]{0,6}\d{2,6}$/;
+
+/**
+ * متن پیش‌نیاز/هم‌نیاز → درخت منطقی (همان ساختار course_rules.logicTree).
+ *  • `|` و «یا» → OR
+ *  • `&` و «،» و `,` و `+` و «و» → AND
+ *  • پرانتز → گروه‌بندی
+ *  • اگر کدی پیدا نشود → null (یعنی قاعده‌ای ثبت نشود)
+ */
+export function parseRequisiteText(text: string | null | undefined): ParsedLogic | null {
+  const raw = normalizeRequisiteText(text).replace(LABEL_RE, '');
+  if (EMPTY_TOKENS.includes(raw.toLowerCase())) return null;
+
+  // یکسان‌سازی عملگرها روی متن
+  const s = raw
+    .replace(/\|\|/g, '|')
+    .replace(/&&/g, '&')
+    .replace(OR_WORD_RE, ' | ')
+    .replace(AND_WORD_RE, ' & ')
+    .replace(/[،,؛;+]/g, ' & ');
+
+  // توکن‌سازی: فقط کدها و عملگرها (متن آزاد نادیده گرفته می‌شود)
+  const tokens: string[] = [];
+  const re = /([A-Za-z]{0,6}\d{2,6})|([|&()])/g;
+  for (const m of s.matchAll(re)) {
+    if (m[1]) tokens.push(m[1].toUpperCase());
+    else if (m[2]) tokens.push(m[2]);
+  }
+  if (tokens.length === 0) return null;
+
+  let i = 0;
+  type PNode = LogicLeaf | ParsedLogic;
+  const peek = () => tokens[i];
+  const isOperand = (t: string | undefined) => !!t && t !== '|' && t !== '&' && t !== '(' && t !== ')';
+
+  /** OR پایین‌ترین اولویت را دارد: A&B|C = (A&B)|C */
+  function parseOr(): PNode | null {
+    const parts: PNode[] = [];
+    const first = parseAnd();
+    if (!first) return null;
+    parts.push(first);
+    while (peek() === '|') {
+      i++;
+      const nxt = parseAnd();
+      if (!nxt) break;
+      parts.push(nxt);
+    }
+    return parts.length === 1 ? parts[0] : normalizeGroup('OR', parts);
+  }
+
+  function parseAnd(): PNode | null {
+    const parts: PNode[] = [];
+    const first = parseAtom();
+    if (!first) return null;
+    parts.push(first);
+    // عملگر صریح `&` یا عملوندِ چسبیده (مثل «CM101 CM102») هر دو AND هستند
+    while (peek() === '&' || isOperand(peek()) || peek() === '(') {
+      if (peek() === '&') i++;
+      const nxt = parseAtom();
+      if (!nxt) break;
+      parts.push(nxt);
+    }
+    return parts.length === 1 ? parts[0] : normalizeGroup('AND', parts);
+  }
+
+  function parseAtom(): PNode | null {
+    const t = peek();
+    if (t === '(') {
+      i++;
+      const inner = parseOr();
+      if (peek() === ')') i++;
+      return inner;
+    }
+    if (isOperand(t)) {
+      i++;
+      return { course: t as string };
+    }
+    return null;
+  }
+
+  const tree = parseOr();
+  if (!tree) return null;
+  // درسِ تنها → قالب سادهٔ AND (سازگار با داده و بک‌اند قبلی)
+  const root: ParsedLogic = 'course' in tree ? { operator: 'AND', conditions: [tree] } : tree;
+  if (root.conditions.length === 0) return null;
+  return dedupe(root);
+}
+
+/** ادغام گروه‌های هم‌نوع و حذف تکرار */
+function normalizeGroup(operator: 'AND' | 'OR', nodes: (LogicLeaf | ParsedLogic)[]): ParsedLogic {
+  const flat: ParsedLogic['conditions'] = [];
+  for (const n of nodes) {
+    if ('operator' in n && n.operator === operator) flat.push(...(n as ParsedLogic).conditions);
+    else flat.push(n);
+  }
+  return { operator, conditions: flat };
+}
+
+/** حذف کدهای تکراری در هر گروه */
+function dedupe(node: ParsedLogic): ParsedLogic {
+  const seen = new Set<string>();
+  const conditions: ParsedLogic['conditions'] = [];
+  for (const c of node.conditions) {
+    if ('operator' in c) { conditions.push(dedupe(c as ParsedLogic)); continue; }
+    const code = (c as LogicLeaf).course;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    conditions.push(c);
+  }
+  return { operator: node.operator, conditions };
+}
 
 /**
  * استخراج کدهای درس از یک متن آزاد.
@@ -53,28 +170,6 @@ export function extractCourseCodes(text: string | null | undefined): string[] {
     if (!out.includes(code)) out.push(code);
   }
   return out;
-}
-
-/**
- * متن پیش‌نیاز/هم‌نیاز → درخت منطقی (همان ساختار course_rules.logicTree).
- *  • «یا» → OR ، بقیه (ویرگول/و/+) → AND
- *  • اگر کدی پیدا نشود → null (یعنی قاعده‌ای ثبت نشود)
- */
-export function parseRequisiteText(text: string | null | undefined): ParsedLogic | null {
-  const s = normalizeRequisiteText(text).replace(LABEL_RE, '');
-  if (EMPTY_TOKENS.includes(s.toLowerCase())) return null;
-
-  const orParts = s.split(OR_SPLIT_RE).filter(p => p.trim() !== '');
-  if (orParts.length > 1) {
-    const codes: string[] = [];
-    for (const p of orParts) for (const c of extractCourseCodes(p)) if (!codes.includes(c)) codes.push(c);
-    if (codes.length === 0) return null;
-    return { operator: 'OR', conditions: codes.map(course => ({ course })) };
-  }
-
-  const codes = extractCourseCodes(s);
-  if (codes.length === 0) return null;
-  return { operator: 'AND', conditions: codes.map(course => ({ course })) };
 }
 
 /** متن «دروس هم‌ارز» → فهرست کدها (بدون خودِ درس) */

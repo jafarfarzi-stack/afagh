@@ -147,15 +147,15 @@ export async function setCourseGradeStatusCodesAction(
  * نسخهٔ منتشرشده هم باید همین قواعد را داشته باشد، وگرنه هشدار پیش‌نیاز هرگز
  * نمایش داده نمی‌شود. قواعد دستیِ موجود هم بازنویسی نمی‌شوند (overwrite=false).
  */
-export async function syncRequisiteRulesAction(versionId: number): Promise<Act<{ message: string; stats: SyncStats }>> {
+export async function syncRequisiteRulesAction(versionId: number, overwrite = false): Promise<Act<{ message: string; stats: SyncStats }>> {
   const user = await requireRole(EDITORS);
   try {
-    const stats = await syncRequisiteRulesFromCourses({ versionId, overwrite: false });
+    const stats = await syncRequisiteRulesFromCourses({ versionId, overwrite });
     await db.transaction(async (tx) => {
       await appendAudit(tx, {
         actorUserId: user.id,
         action: 'CURRICULUM_REQUISITE_SYNC', entityType: PHASE, entityId: versionId,
-        details: JSON.stringify({ prereqRules: stats.prereqRules, coreqRules: stats.coreqRules, skipped: stats.skippedExisting }),
+        details: JSON.stringify({ prereqRules: stats.prereqRules, coreqRules: stats.coreqRules, skipped: stats.skippedExisting, overwrite }),
       });
     });
     revalidateCurriculumPaths();
