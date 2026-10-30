@@ -6,7 +6,7 @@ import {
   departments, educational_regulations, enrollments, faculties, financial_clearances,
   majors, migration_runs, roles, staff, student_ledger, students, user_roles, users,
 } from '@/db/schema';
-import { boolFa, checkNationalCode, dateFa, norm, num } from './normalize';
+import { boolFa, checkNationalCode, codeOf, dateFa, norm, num } from './normalize';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { computeGradeStatus } from '@/lib/grade-utils';
 import { COURSE_ALIASES, parseCourseRow } from './course-row';
@@ -129,9 +129,9 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
       const majorName = get(['نام رشته', 'رشته', 'گرایش', 'major']);
       // ⭐ «کد رشته» سند اصالت است: نام رشته می‌تواند در دو مقطع یا دو دانشکده
       //    تکرار شود، ولی کد یکتاست و مقطع/گروه/دانشکده را هم مشخص می‌کند.
-      const majorCode = get(['کد رشته', 'کدرشته', 'major_code']);
+      const majorCode = codeOf(get(['کد رشته', 'کدرشته', 'major_code']));
       const degreeName = get(['مقطع', 'مقطع تحصیلی', 'سطح', 'degree', 'degree_level']);
-      const degreeCode = get(['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code']);
+      const degreeCode = codeOf(get(['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code']));
       const statusFa = get(['وضعیت']) || 'فعال';
       // اطلاعات شناسنامه‌ای (اختیاری در فایل قدیمی، ولی برای اسناد رسمی لازم است)
       const birthCertNo = get(['شماره شناسنامه', 'شمارهشناسنامه', 'birth_cert_no', 'shenasname']);
@@ -194,9 +194,9 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
     }
 
     if (entity === 'enrollment') {
-      const sc = get(['شماره دانشجویی', 'student_code']);
-      const cc = get(['کد درس', 'course_code']);
-      const tc = get(['کد ترم', 'term_code']);
+      const sc = codeOf(get(['شماره دانشجویی', 'student_code']));
+      const cc = codeOf(get(['کد درس', 'course_code']));
+      const tc = codeOf(get(['کد ترم', 'term_code']));
       const grade = num(get(['نمره', 'grade', 'نمره نهایی']));
       const gsRaw = get(['وضعیت نمره', 'grade_status']) || 'قطعی';
       if (!sc || !cc || !tc) return err('شماره دانشجویی، کد درس و کد ترم الزامی است.');
@@ -227,11 +227,13 @@ export function prepare(entity: Entity, tables: Table[], fileName: string): Prep
     }
 
     if (entity === 'curriculum') {
-      const majorCode = get(['کد رشته', 'کدرشته', 'major_code']);
+      // ⚠️ کدها با codeOf خوانده می‌شوند: اکسلِ خروجی پایتون عدد را «84.0» می‌دهد
+      //    و بدون این، رشته/مقطع/درسِ موجود هم «یافت نشد» می‌شد.
+      const majorCode = codeOf(get(['کد رشته', 'کدرشته', 'major_code']));
       const majorName = get(['نام رشته', 'رشته', 'major', 'major_name']);
-      const degreeCode = get(['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code']);
+      const degreeCode = codeOf(get(['کد مقطع', 'کد مقطع تحصیلی', 'degree_code', 'degree_level_code']));
       const degreeName = get(['مقطع', 'مقطع تحصیلی', 'degree', 'degree_level']);
-      const courseCode = get(['کد درس', 'کددرس', 'course_code']);
+      const courseCode = codeOf(get(['کد درس', 'کددرس', 'course_code']));
       const courseTitle = get(['نام درس', 'عنوان درس', 'نام', 'course_title', 'title']);
       const entryFromRaw = get(['از ورودی', 'ازورودی', 'ورودی از', 'entry_from', 'entryYearFrom', 'entry_year_from']);
       const entryToRaw = get(['تا ورودی', 'تاورودی', 'ورودی تا', 'entry_to', 'entryYearTo', 'entry_year_to']);

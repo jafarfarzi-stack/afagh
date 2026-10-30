@@ -9,7 +9,7 @@
 // گروه آموزشی و تفکیک واحد نظری/عملی در انتقال از بین می‌رفت و کاتالوگ جدید
 // برای شهریه و برنامه‌ریزی درسی ناقص می‌ماند.
 
-import { norm, num } from './normalize';
+import { codeOf, norm, num } from './normalize';
 
 /** خوانندهٔ ستون: فهرست نامک‌ها → مقدار سلول (رشتهٔ خالی اگر ستون نبود) */
 /**
@@ -82,7 +82,7 @@ export function parseCourseRow(get: CellReader): CourseRowResult {
   const warnings: string[] = [];
   const A = COURSE_ALIASES;
 
-  const code = get([...A.code]);
+  const code = codeOf(get([...A.code]));
   const title = get([...A.title]);
   const rawUnits = get([...A.units], { exact: true });
   const type = get([...A.type]);
@@ -92,8 +92,8 @@ export function parseCourseRow(get: CellReader): CourseRowResult {
   const prereqText = get([...A.prereq]) || null;
   const coreqText = get([...A.coreq]) || null;
   const equivText = get([...A.equiv]) || null;
-  const deptCode = get([...A.departmentCode]);
-  const degreeCode = get([...A.degreeCode]);
+  const deptCode = codeOf(get([...A.departmentCode]));
+  const degreeCode = codeOf(get([...A.degreeCode]));
 
   let theory = num(get([...A.theory]));
   let practical = num(get([...A.practical]));
