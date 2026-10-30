@@ -46,6 +46,7 @@ const bankCreateSchema = z.object({
   courseIsActive: z.coerce.boolean().optional(),
   emergencyWithdrawal: z.coerce.boolean().optional(),
   coRequisites: z.string().max(500).nullable().optional(),
+  prereqText: z.string().max(1000).nullable().optional(),
   facesHours: unitsNumber.nullable().optional(),
   equivalentCourseCodes: z.string().max(500).nullable().optional(),
 });
@@ -77,6 +78,7 @@ const bankPatchSchema = z.object({
   courseIsActive: z.coerce.boolean().optional(),
   emergencyWithdrawal: z.coerce.boolean().optional(),
   coRequisites: z.string().max(500).nullable().optional(),
+  prereqText: z.string().max(1000).nullable().optional(),
   facesHours: unitsNumber.nullable().optional(),
   equivalentCourseCodes: z.string().max(500).nullable().optional(),
 }).strict();
@@ -140,6 +142,7 @@ export async function GET(req: NextRequest) {
       courseIsActive: courses.courseIsActive,
       emergencyWithdrawal: courses.emergencyWithdrawal,
       coRequisites: courses.coRequisites,
+      prereqText: courses.prereqText,
       facesHours: courses.facesHours,
       equivalentCourseCodes: courses.equivalentCourseCodes,
     })
@@ -212,6 +215,7 @@ export async function PATCH(req: NextRequest) {
   if (body.courseIsActive != null) patch.courseIsActive = body.courseIsActive ? 1 : 0;
   if (body.emergencyWithdrawal != null) patch.emergencyWithdrawal = body.emergencyWithdrawal ? 1 : 0;
   if (body.coRequisites != null) patch.coRequisites = body.coRequisites || null;
+  if (body.prereqText != null) patch.prereqText = body.prereqText || null;
   if (body.facesHours != null) patch.facesHours = String(body.facesHours);
   if (body.equivalentCourseCodes != null) patch.equivalentCourseCodes = body.equivalentCourseCodes || null;
 
@@ -303,6 +307,7 @@ export async function POST(req: NextRequest) {
     courseIsActive: body.courseIsActive != null ? (body.courseIsActive ? 1 : 0) : 1,
     emergencyWithdrawal: body.emergencyWithdrawal ? 1 : 0,
     coRequisites: body.coRequisites || null,
+    prereqText: body.prereqText || null,
     facesHours: body.facesHours ? String(body.facesHours) : null,
     equivalentCourseCodes: body.equivalentCourseCodes || null,
   }).returning({ id: courses.id });

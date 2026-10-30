@@ -23,7 +23,7 @@ type BankCourse = {
   weeklyTheoryHours: string | null; weeklyPracticalHours: string | null;
   isThesis: number | null; hasProject: number | null; internshipUnits: string | null;
   minPassedMark: string | null; defaultAcceptMarkState: string | null; defaultRejectMarkState: string | null;
-  courseIsActive: number | null; emergencyWithdrawal: number | null; coRequisites: string | null; facesHours: string | null;
+  courseIsActive: number | null; emergencyWithdrawal: number | null; coRequisites: string | null; prereqText: string | null; facesHours: string | null;
   equivalentCourseCodes: string | null;
 };
 
@@ -257,6 +257,7 @@ export default function GradeCodesClient({
         courseIsActive: fd.get('courseIsActive') === 'on' ? 1 : 0,
         emergencyWithdrawal: fd.get('emergencyWithdrawal') === 'on' ? 1 : 0,
         coRequisites: String(fd.get('coRequisites') || '') || null,
+        prereqText: String(fd.get('prereqText') || '') || null,
         facesHours: Number(fd.get('facesHours') || 0) || null,
         equivalentCourseCodes: String(fd.get('equivalentCourseCodes') || '') || null,
       };
@@ -839,6 +840,22 @@ export default function GradeCodesClient({
                     <input type="checkbox" name="courseIsActive" defaultChecked={editingCourse ? editingCourse.courseIsActive !== 0 : true} className="w-4 h-4 accent-emerald-600" /> فعال
                   </label>
                 </div>
+              </div>
+
+              {/* ردیف ۶.۵: پیش‌نیاز — منبع قواعد چارت */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">پیش‌نیاز (کدها)</label>
+                <input
+                  name="prereqText"
+                  dir="ltr"
+                  defaultValue={editingCourse?.prereqText ?? ''}
+                  placeholder="مثلاً 1100|27007  یا  (27003|17003)&27002"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white"
+                />
+                <p className="mt-1 text-[10px] text-slate-500 leading-5">
+                  <b>|</b> یعنی «یا» (دروس هم‌ارز — یکی کافی است) · <b>&amp;</b> یا <b>کاما</b> یعنی «و» (همه لازم‌اند) · پرانتز مجاز است.
+                  بعد از ذخیره، در ماژول «برنامهٔ درسی» دکمهٔ <b>♻️ بازسازی قواعد</b> را بزن تا در چارت‌ها اعمال شود.
+                </p>
               </div>
 
               {/* ردیف ۷: همنیاز + ساعات چهره‌به‌چهره */}
