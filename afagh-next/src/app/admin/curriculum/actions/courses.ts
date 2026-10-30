@@ -336,9 +336,10 @@ export async function updateCourseInCurriculumAction(
     const row = existing[0];
 
     const nextRequired = patch.isRequired ?? row.isRequired;
-    // «الزامی در ترم» ⇒ «شرط فارغ‌التحصیلی»: هر درس الزامی، خودکار شرط فارغ‌التحصیلی هم هست.
-    // (عکسش لازم نیست: پایان‌نامه/کارآموزی می‌توانند شرط فارغ‌التحصیلی باشند بدون الزامیِ ترم.)
-    const nextGradRequired = patch.isGraduationRequired ?? ((nextRequired === 1) ? 1 : row.isGraduationRequired);
+    // «الزامی در ترم» ⇒ «شرط فارغ‌التحصیلی» فقط در لحظهٔ روشن‌شدن الزامی.
+    // اگر کاربر بعداً خودش تیک «شرط فارغ‌التحصیلی» را بردارد، دیگر برنمی‌گردد.
+    const requirementTurnedOn = patch.isRequired === 1 && row.isRequired !== 1;
+    const nextGradRequired = patch.isGraduationRequired ?? (requirementTurnedOn ? 1 : (row.isGraduationRequired ?? 0));
 
     await db.update(curriculum_courses).set({
       roleType: patch.roleType ?? row.roleType,

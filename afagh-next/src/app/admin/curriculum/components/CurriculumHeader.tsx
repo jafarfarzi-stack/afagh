@@ -1,6 +1,7 @@
 'use client';
 
-// بنر + فیلتر درختی دانشکده ← گروه ← رشته + دکمهٔ «نسخهٔ جدید»
+// بنر + فیلتر درختی دانشکده ← گروه ← رشته + جستجوی رشته + دکمهٔ «نسخهٔ جدید»
+import { useState } from 'react';
 import { useCurriculum } from '../curriculum-context';
 import { faNum } from '../curriculum-core';
 import { termCountForDegree } from '@/lib/term-plan';
@@ -25,6 +26,16 @@ export default function CurriculumHeader() {
     setSelectedVersionId,
     tracks,
   } = useCurriculum();
+
+  // جستجوی رشته: هم با کد، هم نام، هم دانشکده/گروه/مقطع — بدون نیاز به اسکرول در سلکت
+  const [majorQuery, setMajorQuery] = useState('');
+  const q = majorQuery.trim();
+  const shownMajors = q
+    ? filteredMajors.filter(m => {
+        const hay = `${m.code} ${m.name} ${m.degreeTitle ?? ''} ${m.facultyName ?? ''} ${m.departmentName ?? ''}`;
+        return hay.includes(q) || hay.replace(/ي/g, 'ی').replace(/ك/g, 'ک').includes(q);
+      })
+    : filteredMajors;
 
   return (
     <>
@@ -78,18 +89,24 @@ export default function CurriculumHeader() {
             </select>
           </div>
           <div>
-            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع {filteredMajors.length !== majors.length ? `(${faNum(filteredMajors.length)} از ${faNum(majors.length)})` : `(${faNum(majors.length)})`}:</label>
+            <label className="text-indigo-200 font-bold block mb-1">رشته / مقطع {shownMajors.length !== majors.length ? `(${faNum(shownMajors.length)} از ${faNum(majors.length)})` : `(${faNum(majors.length)})`}:</label>
+            <input
+              value={majorQuery}
+              onChange={e => setMajorQuery(e.target.value)}
+              placeholder="🔍 جستجوی رشته: کد، نام، دانشکده یا گروه…"
+              className="mb-1 w-full bg-slate-900/90 text-white placeholder:text-indigo-300/60 border border-indigo-400/50 rounded-lg px-2.5 py-1.5 text-[11px] font-bold"
+            />
             <select
               value={selectedMajorId}
               onChange={e => { setSelectedMajorId(Number(e.target.value)); setSelectedVersionId(null); setDetail(null); }}
               className="w-full bg-slate-900/90 text-white border border-indigo-400/50 rounded-lg px-2.5 py-2 font-bold"
             >
-              {filteredMajors.map(m => (
+              {shownMajors.map(m => (
                 <option key={m.id} value={m.id}>
                   {m.code} — {m.name} — {m.degreeTitle ?? '—'}{m.facultyName ? ` (${m.facultyName}${m.departmentName ? ` / ${m.departmentName}` : ''})` : ''}
                 </option>
               ))}
-              {filteredMajors.length === 0 && <option value={selectedMajorId}>— موردی با این فیلتر یافت نشد —</option>}
+              {shownMajors.length === 0 && <option value={selectedMajorId}>— رشته‌ای با «{q}» یافت نشد —</option>}
             </select>
           </div>
         </div>

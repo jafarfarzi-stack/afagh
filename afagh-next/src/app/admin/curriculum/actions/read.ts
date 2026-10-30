@@ -19,7 +19,7 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
     const { getCurrentUniversity } = await import('@/lib/university-scope');
     const uni = await getCurrentUniversity().catch(() => null);
     const uw = uni ? eq(majors.universityId, uni.id) : undefined;
-    const [majorRows, versionRows, trackRows, termRows] = await Promise.all([
+    const [majorRows, versionRows, trackRows, termRows, countRows] = await Promise.all([
       db.select({
         id: majors.id, code: majors.majorCode, name: majors.name,
         degreeLevelId: majors.degreeLevelId, degreeTitle: degree_level_configs.title,
@@ -41,7 +41,6 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
         entryYearFrom: curriculum_versions.entryYearFrom,
         entryYearTo: curriculum_versions.entryYearTo,
         totalRequiredUnits: curriculum_versions.totalRequiredUnits,
-        courseCount: sql<number>`(select count(*) from ${curriculum_courses} where ${curriculum_courses.curriculumVersionId} = ${curriculum_versions.id})`,
       }).from(curriculum_versions)
         .where(uni ? eq(curriculum_versions.universityId, uni.id) : undefined)
         .orderBy(desc(curriculum_versions.id)),
@@ -53,8 +52,16 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
         .where(uni ? eq(financial_terms.universityId, uni.id) : undefined)
         .orderBy(desc(financial_terms.termCode))
         .limit(40),
+      // تعداد درس هر نسخه — یک کوئری گروهی (به‌جای زیرکوئری هم‌بسته که عدد اشتباه می‌داد)
+      db.select({ versionId: curriculum_courses.curriculumVersionId, n: sql<number>`count(*)::int` })
+        .from(curriculum_courses)
+        .groupBy(curriculum_courses.curriculumVersionId),
     ]);
-    return { ok: true, data: { majors: majorRows, versions: versionRows, tracks: trackRows, terms: termRows } };
+    const countByVersion = new Map<number, number>(
+      (countRows ?? []).map(r => [Number(r.versionId), Number(r.n)]),
+    );
+    const versionsWithCount = versionRows.map(v => ({ ...v, courseCount: countByVersion.get(Number(v.id)) ?? 0 }));
+    return { ok: true, data: { majors: majorRows, versions: versionsWithCount, tracks: trackRows, terms: termRows } };
   } catch (err: any) {
     console.error('getCurriculumOverviewAction:', err);
     return { ok: false, error: 'خطا در بارگیری نمای کلی برنامهٔ درسی' };
