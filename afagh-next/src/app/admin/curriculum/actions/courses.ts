@@ -335,14 +335,19 @@ export async function updateCourseInCurriculumAction(
     if (existing.length === 0) return { ok: false, error: 'درس در این نسخه وجود ندارد.' };
     const row = existing[0];
 
+    const nextRequired = patch.isRequired ?? row.isRequired;
+    // «الزامی در ترم» ⇒ «شرط فارغ‌التحصیلی»: هر درس الزامی، خودکار شرط فارغ‌التحصیلی هم هست.
+    // (عکسش لازم نیست: پایان‌نامه/کارآموزی می‌توانند شرط فارغ‌التحصیلی باشند بدون الزامیِ ترم.)
+    const nextGradRequired = patch.isGraduationRequired ?? ((nextRequired === 1) ? 1 : row.isGraduationRequired);
+
     await db.update(curriculum_courses).set({
       roleType: patch.roleType ?? row.roleType,
       units: patch.units !== undefined ? (patch.units != null ? String(patch.units) : null) : row.units,
       theoryUnits: patch.theoryUnits !== undefined ? (patch.theoryUnits != null ? String(patch.theoryUnits) : null) : row.theoryUnits,
       practicalUnits: patch.practicalUnits !== undefined ? (patch.practicalUnits != null ? String(patch.practicalUnits) : null) : row.practicalUnits,
-      isRequired: patch.isRequired ?? row.isRequired,
+      isRequired: nextRequired,
       isElective: patch.isElective ?? row.isElective,
-      isGraduationRequired: patch.isGraduationRequired ?? row.isGraduationRequired,
+      isGraduationRequired: nextGradRequired,
       minGrade: patch.minGrade !== undefined ? (patch.minGrade != null ? String(patch.minGrade) : null) : row.minGrade,
       autoCorequisiteAllowed: patch.autoCorequisiteAllowed ?? row.autoCorequisiteAllowed,
       passGradeStatusCode: patch.passGradeStatusCode !== undefined ? patch.passGradeStatusCode : row.passGradeStatusCode,

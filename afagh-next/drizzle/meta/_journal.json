@@ -904,6 +904,13 @@
       "when": 1795100000100,
       "tag": "0123_curriculum_role_specialized",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1795100000200,
+      "tag": "0124_graduation_required_from_required",
+      "breakpoints": true
     }
   ]
 }

@@ -265,6 +265,7 @@ export default function CoursesTab() {
                         type="checkbox"
                         checked={c.isRequired === 1}
                         disabled={!isDraft}
+                        title="الزامی در ترم: این درس برای دانشجوی این ورودی اجباری است و در مجموع واحد الزامی شمرده می‌شود. با تیک‌زدن، «شرط فارغ‌التحصیلی» هم خودکار تیک می‌خورد."
                         onChange={e => handleUpdateRequired(c.courseId, e.target.checked ? 1 : 0)}
                         className="accent-indigo-700 w-4 h-4"
                       />
@@ -274,6 +275,7 @@ export default function CoursesTab() {
                         type="checkbox"
                         checked={c.isGraduationRequired === 1}
                         disabled={!isDraft}
+                        title="شرط فارغ‌التحصیلی: بدون گذراندن این درس، دانشجو فارغ‌التحصیل نمی‌شود (حتی اگر الزامیِ ترم نباشد، مثل پایان‌نامه/کارآموزی)."
                         onChange={e => handleUpdateGradReq(c.courseId, e.target.checked ? 1 : 0)}
                         className="accent-indigo-700 w-4 h-4"
                       />
