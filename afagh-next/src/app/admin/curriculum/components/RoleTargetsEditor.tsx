@@ -15,9 +15,11 @@ const OPTIONS: { key: string; label: string; hint?: string }[] = ROLE_TARGET_KEY
   hint: ROLE_LABELS[k] ? undefined : 'خارج از چارت رسمی — فقط سهم واحد',
 }));
 
-export default function RoleTargetsEditor({ initial, unitsByRole, totalRequired, disabled, onSave }: {
+export default function RoleTargetsEditor({ initial, unitsByRole, countsByRole, totalRequired, disabled, onSave }: {
   initial: Record<string, number>;
   unitsByRole: Map<string, number>;
+  /** تعداد درس موجود هر نوع — از خود دروسِ همین چارت شمرده می‌شود */
+  countsByRole?: Map<string, number>;
   totalRequired: number;
   disabled: boolean;
   onSave: (targets: Record<string, number>) => void;
@@ -96,7 +98,9 @@ export default function RoleTargetsEditor({ initial, unitsByRole, totalRequired,
               </div>
 
               <span className={`text-[11px] font-bold ${short ? 'text-amber-700' : 'text-slate-500'}`}>
-                {r.role ? `موجود ${faNum(have)} واحد${short ? ` (کسری ${faNum(want - have)})` : ''}` : 'نوع درس تعیین نشده'}
+                {r.role
+                  ? `${faNum(countsByRole?.get(r.role) ?? 0)} درس · ${faNum(have)} واحد${short ? ` (کسری ${faNum(want - have)})` : ''}`
+                  : 'نوع درس تعیین نشده'}
               </span>
 
               <button

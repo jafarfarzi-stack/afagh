@@ -413,6 +413,13 @@ export function unitsByRoleMap(courses: CourseRow[] | null | undefined): Map<str
   return m;
 }
 
+/** تعداد درس موجود هر نقش — «چند درس از هر نوع» از خودِ همین چارت شمرده می‌شود */
+export function countsByRoleMap(courses: CourseRow[] | null | undefined): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const c of courses ?? []) m.set(c.roleType, (m.get(c.roleType) ?? 0) + 1);
+  return m;
+}
+
 // ─────────────────── فیلتر درختی رشته و بانک دروس ───────────────────
 
 const faSort = (a: string, b: string) => a.localeCompare(b, 'fa');

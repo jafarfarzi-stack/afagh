@@ -17,6 +17,7 @@ export default function RoleTargetsCard({ showHint = true }: { showHint?: boolea
     roleTargets,
     roleTargetsKey,
     unitsByRole,
+    countsByRole,
   } = useCurriculum();
 
   if (!detail) return null;
@@ -41,6 +42,7 @@ export default function RoleTargetsCard({ showHint = true }: { showHint?: boolea
         key={roleTargetsKey}
         initial={roleTargets}
         unitsByRole={unitsByRole}
+        countsByRole={countsByRole}
         totalRequired={Number(detail.version.totalRequiredUnits ?? 0)}
         disabled={!isDraft || busy}
         onSave={handleSaveRoleTargets}

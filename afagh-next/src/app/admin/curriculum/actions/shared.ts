@@ -178,18 +178,16 @@ export const DEFAULT_MIN_ROLES: Record<string, number> = defaultMinRoles();
  */
 export async function buildCheckInput(data: Awaited<ReturnType<typeof loadVersionData>>) {
   let maxUnitsPerTerm: number | null = data.version.maxUnitsPerTerm;
-  let minRoleCounts: Partial<Record<string, number>> = { ...DEFAULT_MIN_ROLES };
   const [deg] = await db
     .select({ code: degree_level_configs.code, title: degree_level_configs.title, maxUnitsPerTerm: degree_level_configs.maxUnitsPerTerm, isGraduate: degree_level_configs.isGraduate })
     .from(degree_level_configs)
     .where(eq(degree_level_configs.id, data.version.degreeLevelId))
     .limit(1);
   if (maxUnitsPerTerm == null) maxUnitsPerTerm = deg?.maxUnitsPerTerm ?? 20;
-  // پایان‌نامه برای تحصیلات تکمیلی الزامی است: اول پرچم isGraduate، وگرنه حدس عنوان/کد (سازگار با قبل)
-  const isGraduate = !!deg && (deg.isGraduate === 1 || deg.code?.includes('MASTER') || deg.code?.includes('PHD') || deg.title?.includes('ارشد') || deg.title?.includes('دکترا'));
-  if (isGraduate) {
-    minRoleCounts = { ...defaultMinRoles({ isGraduate: true }), THESIS: 1 };
-  }
+  // ترکیب انواع درس از خودِ چارت خوانده می‌شود، نه از یک فهرست ثابت:
+  // هیچ «حداقل ۱ درس اصلی»ی تحمیل نمی‌شود؛ فقط نقش‌هایی که خودِ نسخه برایشان
+  // «سهم واحد» تعیین کرده، باید در چارت درسی داشته باشند (چک ۸).
+  const minRoleCounts: Partial<Record<string, number>> = {};
   const parsedTargets = parseRoleUnitTargets((data.version as { minRoleUnits?: unknown }).minRoleUnits);
   return {
     totalRequiredUnits: Number(data.version.totalRequiredUnits ?? 0),

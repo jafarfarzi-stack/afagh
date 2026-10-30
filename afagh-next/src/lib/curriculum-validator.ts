@@ -87,13 +87,13 @@ const warn = (check: string, message: string, affected: (string | number)[] = []
 /**
  * حداقل تعداد مقرر از هر نقش.
  *
- * چرا تابع شد؟ در مقاطع تحصیلات تکمیلی (ارشد/دکتری) درس «عمومی» وجود ندارد؛
- * هشدار «نقش عمومی فقط ۰ درس دارد» برای همهٔ ارشدها کاذب بود. پس:
- *   • کارشناسی/کاردانی → عمومی + پایه + اصلی
- *   • تحصیلات تکمیلی  → پایه + اصلی (+ پایان‌نامه که در buildCheckInput اضافه می‌شود)
+ * ⚠️ دیگر «حداقل ثابت» تعیین نمی‌کنیم: چارت هر رشته ترکیب خودش را دارد و
+ * تحمیل «حتماً یک درس اصلی» روی چارتی که مثلاً همهٔ دروسش پایه/تخصصی است،
+ * هشدار کاذب می‌سازد. حدِ انتظار فقط از روی «سهم واحد»ی که خودِ نسخه اعلام
+ * کرده ساخته می‌شود (پایین‌تر در validateCurriculumCore).
  */
-export function defaultMinRoles(opts: { isGraduate?: boolean | null } = {}): Record<string, number> {
-  return opts.isGraduate ? { CORE: 1, MAJOR: 1 } : { GENERAL: 1, CORE: 1, MAJOR: 1 };
+export function defaultMinRoles(_opts: { isGraduate?: boolean | null } = {}): Record<string, number> {
+  return {};
 }
 
 /** کدهای هم‌ارز یک ردیف درس (کاما/فاصله/لوله) */
@@ -362,8 +362,10 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
     }
   }
 
-  // ── ۸) ترکیب نقش‌ها: هر حداقل مقرر، باید در نسخه تأمین شده باشد ──
-  if (input.minRoleCounts && Object.keys(input.minRoleCounts).length > 0) {
+  // ── ۸) ترکیب نقش‌ها: شمارش از روی دروسِ همین چارت ──
+  // انتظار را از خودِ نسخه می‌گیریم: هر نقشی که «سهم واحد» اعلام کرده باید
+  // دست‌کم یک درس در چارت داشته باشد؛ هیچ حداقلِ ثابتی تحمیل نمی‌شود.
+  {
     const countByRole = new Map<string, number>();
     for (const c of input.courses) {
       countByRole.set(c.roleType, (countByRole.get(c.roleType) ?? 0) + 1);
@@ -373,12 +375,24 @@ export function validateCurriculumCore(input: CurriculumCheckInput): CheckResult
       THESIS: 'پایان‌نامه', INTERNSHIP: 'کارآموزی', WORKSHOP: 'کارگاه',
       COMPENSATORY: 'جبرانی',
     };
-    for (const [role, min] of Object.entries(input.minRoleCounts)) {
+    const declaredRoles = new Set<string>();
+    for (const [role, v] of Object.entries(input.minRoleUnits ?? {})) {
+      if ((v ?? 0) > 0) declaredRoles.add(role);
+    }
+    for (const [role, v] of Object.entries(input.minRoleCounts ?? {})) {
+      if ((v ?? 0) > 0) declaredRoles.add(role);
+    }
+    for (const role of declaredRoles) {
       const count = countByRole.get(role) ?? 0;
-      if (count < (min ?? 0)) {
+      const min = input.minRoleCounts?.[role] ?? 1;
+      if (count < min) {
+        const summary = [...countByRole.entries()]
+          .filter(([, n]) => n > 0)
+          .map(([r, n]) => `${roleFa[r] ?? r}: ${n}`)
+          .join('، ') || 'هیچ درسی ثبت نشده';
         results.push(warn(
           'COURSE_TYPES_COMPLETE',
-          `نقش «${roleFa[role] ?? role}» فقط ${count} درس دارد؛ حداقل مقرر ${min} درس است.`,
+          `نقش «${roleFa[role] ?? role}» در این چارت ${count} درس دارد ولی سهم واحد برایش تعیین شده است. شمارش از روی دروس همین چارت — ${summary}.`,
           input.courses.filter((c) => c.roleType === role).map((c) => c.code)
         ));
       }

@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CurriculumCtx } from './curriculum-context';
-import { allBankSelected, buildRuleTree, nonCourseConditionsOf, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
+import { allBankSelected, buildRuleTree, nonCourseConditionsOf, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, countsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
 import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
@@ -600,6 +600,7 @@ function useCurriculumWorkspace(
     [detail?.version]
   );
   const unitsByRole = useMemo(() => unitsByRoleMap(detail?.courses), [detail?.courses]);
+  const countsByRole = useMemo(() => countsByRoleMap(detail?.courses), [detail?.courses]);
   const roleTargetsKey = `${detail?.version.id ?? 0}:${JSON.stringify(roleTargets)}`;
 
   const handleSaveRoleTargets = async (targets: Record<string, number>) => {
@@ -743,6 +744,7 @@ function useCurriculumWorkspace(
     typeSummary,
     unassignedCourses,
     unitsByRole,
+    countsByRole,
     versions,
   };
 }
