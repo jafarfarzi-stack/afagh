@@ -17,10 +17,21 @@ function sha1(raw: string): string {
   return crypto.createHash('sha1').update(raw).digest('hex');
 }
 
+/** امضای درخواست با الگوریتم پیکربندی‌شده (SHA1/SHA256/SHA512) */
+export function signBbbRequest(callName: string, queryString: string, secret: string, algo: 'SHA1' | 'SHA256' | 'SHA512' = 'SHA256'): string {
+  return hashOf(algo, `${callName}${queryString}${secret}`);
+}
+
+function hashOf(algo: 'SHA1' | 'SHA256' | 'SHA512', raw: string): string {
+  const a = algo === 'SHA1' ? 'sha1' : algo === 'SHA512' ? 'sha512' : 'sha256';
+  return crypto.createHash(a).update(raw).digest('hex');
+}
+
 async function bbbCall(cfg: BbbConfig, name: string, params: Record<string, string>): Promise<{ ok: boolean; xml: string; error?: string }> {
   if (!cfg.configured) return { ok: false, xml: '', error: 'سرویس کلاس مجازی پیکربندی نشده است — پنل مدیر ← پیکربندی سامانه ← کلاس مجازی' };
   const qs = new URLSearchParams(params).toString();
-  const url = `${cfg.url}/${name}?${qs}&checksum=${sha1(`${name}${qs}${cfg.secret}`)}`;
+  const checksum = hashOf(cfg.checksumAlgo, `${name}${qs}${cfg.secret}`);
+  const url = `${cfg.url}/${name}?${qs}&checksum=${checksum}`;
   try {
     const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
     const xml = await res.text();
@@ -36,13 +47,13 @@ async function bbbCall(cfg: BbbConfig, name: string, params: Record<string, stri
 }
 
 /** ساخت جلسه در سرور BBB (اگر از قبل باشد، همان را برمی‌گرداند) */
-export async function createBbbMeeting(opts: { meetingId: string; name: string }): Promise<{ ok: boolean; error?: string }> {
+export async function createBbbMeeting(opts: { meetingId: string; name: string; moderatorPw?: string; attendeePw?: string }): Promise<{ ok: boolean; error?: string }> {
   const cfg = await getBbbConfig();
   const r = await bbbCall(cfg, 'create', {
     meetingID: opts.meetingId,
     name: opts.name.slice(0, 255),
-    moderatorPW: cfg.moderatorPw,
-    attendeePW: cfg.attendeePw,
+    moderatorPW: opts.moderatorPw || cfg.moderatorPw || `mod-${opts.meetingId}`,
+    attendeePW: opts.attendeePw || cfg.attendeePw || `att-${opts.meetingId}`,
     record: cfg.autoRecord ? 'true' : 'false',
     autoStartRecording: cfg.autoRecord ? 'true' : 'false',
     allowStartStopRecording: 'true',

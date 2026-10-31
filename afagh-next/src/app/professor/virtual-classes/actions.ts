@@ -526,6 +526,9 @@ export async function upsertVirtualClassroomAction(offeringId: number, meetingNa
     const memberIds = members.length ? members : [offeringId];
     const primaryId = Math.min(...memberIds);
     const meetingId = `afagh-off-${primaryId}`;
+    // رمزها: از تنظیمات؛ اگر خالی بود، مقدار پایدار بر پایهٔ جلسه (BBB رمز خالی را رد می‌کند)
+    const modPw = (cfg.moderatorPw || `mod-${primaryId}`).slice(0, 50);
+    const attPw = (cfg.attendeePw || `att-${primaryId}`).slice(0, 50);
 
     let classroomId: number | null = null;
     for (const mid of memberIds) {
@@ -538,8 +541,8 @@ export async function upsertVirtualClassroomAction(offeringId: number, meetingNa
         await db.update(virtual_classrooms).set({
           bbbMeetingId: meetingId,
           meetingName: name,
-          moderatorPw: cfg.moderatorPw,
-          attendeePw: cfg.attendeePw,
+          moderatorPw: modPw,
+          attendeePw: attPw,
           universityId: off.universityId,
         }).where(eq(virtual_classrooms.id, existing.id));
         if (classroomId == null) classroomId = existing.id;
@@ -548,8 +551,8 @@ export async function upsertVirtualClassroomAction(offeringId: number, meetingNa
           courseOfferingId: mid,
           bbbMeetingId: meetingId,
           meetingName: name,
-          moderatorPw: cfg.moderatorPw,
-          attendeePw: cfg.attendeePw,
+          moderatorPw: modPw,
+          attendeePw: attPw,
           universityId: off.universityId,
         }).returning({ id: virtual_classrooms.id });
         if (ins && classroomId == null) classroomId = ins.id;
@@ -557,7 +560,7 @@ export async function upsertVirtualClassroomAction(offeringId: number, meetingNa
     }
     if (classroomId == null) return { ok: false, error: 'خطا در ذخیرهٔ کلاس آنلاین' };
 
-    const ensured = await createBbbMeeting({ meetingId, name });
+    const ensured = await createBbbMeeting({ meetingId, name, moderatorPw: modPw, attendeePw: attPw });
     if (!ensured.ok) return { ok: false, error: ensured.error, classroomId };
 
     return { ok: true, classroomId };

@@ -66,13 +66,24 @@ export async function joinVirtualClassAction(params: {
 
   // جلسه باید در سرور BBB وجود داشته باشد؛ ساخت تکراری بی‌خطر است (idempotent).
   const [roomRow] = await db
-    .select({ name: virtual_classrooms.meetingName })
+    .select({ name: virtual_classrooms.meetingName, moderatorPw: virtual_classrooms.moderatorPw, attendeePw: virtual_classrooms.attendeePw })
     .from(virtual_classrooms)
     .where(eq(virtual_classrooms.bbbMeetingId, meetingId))
     .limit(1);
   if (!roomRow) return { ok: false, url: '', error: 'این کلاس آنلاین هنوز توسط استاد ساخته نشده است.' };
-  const ensured = await createBbbMeeting({ meetingId, name: roomRow.name });
+  const ensured = await createBbbMeeting({
+    meetingId,
+    name: roomRow.name,
+    moderatorPw: roomRow.moderatorPw,
+    attendeePw: roomRow.attendeePw,
+  });
   if (!ensured.ok) return { ok: false, url: '', error: ensured.error };
 
-  return getBigBlueButtonJoinUrl({ meetingId, fullName: user.name, role });
+  return getBigBlueButtonJoinUrl({
+    meetingId,
+    fullName: user.name,
+    role,
+    moderatorPw: roomRow.moderatorPw,
+    attendeePw: roomRow.attendeePw,
+  });
 }

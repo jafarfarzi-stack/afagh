@@ -67,6 +67,11 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'BBB_MODERATOR_PW', env: 'BIGBLUEBUTTON_MODERATOR_PW', group: 'کلاس مجازی (BBB / Moodle)', label: 'رمز ورود مدرس (Moderator)', type: 'secret', default: '' },
   { key: 'BBB_ATTENDEE_PW', env: 'BIGBLUEBUTTON_ATTENDEE_PW', group: 'کلاس مجازی (BBB / Moodle)', label: 'رمز ورود دانشجو (Attendee)', type: 'secret', default: '' },
   { key: 'BBB_AUTO_RECORD', env: 'BIGBLUEBUTTON_AUTO_RECORD', group: 'کلاس مجازی (BBB / Moodle)', label: 'ضبط خودکار جلسات', type: 'boolean', default: 'false' },
+  {
+    key: 'BBB_CHECKSUM_ALGO', env: 'BIGBLUEBUTTON_CHECKSUM_ALGO', group: 'کلاس مجازی (BBB / Moodle)',
+    label: 'الگوریتم چک‌سام (checksum)', type: 'text', default: 'SHA256',
+    help: 'در Moodle «BigBlueButton server checksum algorithm» را ببینید: SHA1 / SHA256 / SHA512. BBB نسخهٔ ۲.۷ به بعد SHA256 است.',
+  },
   { key: 'MOODLE_URL', env: 'MOODLE_URL', group: 'کلاس مجازی (BBB / Moodle)', label: 'نشانی سامانه Moodle', type: 'url', default: '' },
   { key: 'MOODLE_TOKEN', env: 'MOODLE_TOKEN', group: 'کلاس مجازی (BBB / Moodle)', label: 'توکن وب‌سرویس Moodle', type: 'secret', default: '' },
   { key: 'MOODLE_PULL_TOKEN', env: 'MOODLE_PULL_TOKEN', group: 'کلاس مجازی (BBB / Moodle)', label: 'توکن کشش مودل (LMS pull API)', type: 'secret', default: '', help: 'کلید هدر x-lms-token برای GET /api/lms/* — خالی یعنی API بسته است. این توکن را در پلاگین مودل بگذارید تا درس‌ها، کاربران، ثبت‌نامی‌ها و برنامهٔ کلاسی را بکشد' },
@@ -383,17 +388,21 @@ export async function getPublicBaseUrl(): Promise<string> {
 }
 
 export async function getBbbConfig() {
-  const [url, secret, moderatorPw, attendeePw] = await Promise.all([
+  const [url, secret, moderatorPw, attendeePw, algo] = await Promise.all([
     getSetting('BBB_URL'),
     getSetting('BBB_SECRET'),
     getSetting('BBB_MODERATOR_PW'),
     getSetting('BBB_ATTENDEE_PW'),
+    getSetting('BBB_CHECKSUM_ALGO').catch(() => 'SHA256'),
   ]);
+  const norm = String(algo || 'SHA256').trim().toUpperCase();
   return {
     url: url.replace(/\/+$/, ''),
     secret,
     moderatorPw,
     attendeePw,
+    // الگوریتم امضا: BBB نسخهٔ ۲.۷+ پیش‌فرض SHA256 است (SHA1 برای نصب‌های قدیمی)
+    checksumAlgo: (norm === 'SHA1' || norm === 'SHA512' ? norm : 'SHA256') as 'SHA1' | 'SHA256' | 'SHA512',
     autoRecord: await getBool('BBB_AUTO_RECORD'),
     configured: Boolean(url && secret),
   };
