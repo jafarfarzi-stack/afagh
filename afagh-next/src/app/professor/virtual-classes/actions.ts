@@ -10,9 +10,10 @@ import {
   staff,
   users,
   virtual_classrooms,
+  virtual_class_recordings,
 } from '@/db/schema';
 import { getSessionUser, getStaffByUser, requireRole } from '@/lib/auth';
-import { createBbbMeeting, getBbbStatus } from '@/lib/bbb-api';
+import { createBbbMeeting, getBbbRecordings, getBbbStatus } from '@/lib/bbb-api';
 import { getBbbConfig } from '@/lib/settings';
 import { getTermScope } from '@/lib/term-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -267,7 +268,43 @@ export async function syncVirtualClassStatusAction(classroomId?: number | null):
   }
 }
 
-export interface AdminVirtualRow {
+/** همگام‌سازی ضبط‌های یک یا همهٔ کلاس‌ها از سرور BBB */
+export async function syncBbbRecordingsAction(classroomId?: number | null): Promise<{ ok: boolean; error?: string; classrooms?: number; added?: number }> {
+  try {
+    const me = await requireRole(['PROFESSOR', 'ADMIN', 'EDU_EXPERT']);
+    const st = await getStaffByUser(me.id);
+    const base = db.select({ id: virtual_classrooms.id, meetingId: virtual_classrooms.bbbMeetingId, universityId: virtual_classrooms.universityId }).from(virtual_classrooms);
+    const rows = classroomId
+      ? await base.where(eq(virtual_classrooms.id, classroomId))
+      : await base;
+    let added = 0;
+    for (const r of rows) {
+      const rec = await getBbbRecordings(r.meetingId);
+      if (!rec.ok) continue;
+      const existing = await db
+        .select({ url: virtual_class_recordings.recordingUrl })
+        .from(virtual_class_recordings)
+        .where(eq(virtual_class_recordings.classroomId, r.id));
+      const known = new Set(existing.map(e => e.url));
+      for (const x of rec.recordings) {
+        if (!x.playbackUrl || known.has(x.playbackUrl)) continue;
+        await db.insert(virtual_class_recordings).values({
+          classroomId: r.id,
+          sessionTitle: x.name,
+          recordingUrl: x.playbackUrl,
+          durationMinutes: x.durationMinutes,
+          recordedAt: x.startTime ?? new Date(),
+          viewsCount: 0,
+          universityId: r.universityId ?? null,
+        });
+        added++;
+      }
+    }
+    return { ok: true, classrooms: rows.length, added };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
   id: number;
   meetingId: string;
   name: string;

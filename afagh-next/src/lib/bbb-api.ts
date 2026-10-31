@@ -51,6 +51,54 @@ export async function createBbbMeeting(opts: { meetingId: string; name: string }
 }
 
 /** وضعیت زندهٔ جلسه: در حال برگزاری؟ و چند نفر حاضرند؟ */
+export interface BbbRecording {
+  recordId: string;
+  meetingId: string;
+  name: string;
+  published: boolean;
+  startTime: Date | null;
+  endTime: Date | null;
+  durationMinutes: number;
+  sizeBytes: number;
+  playbackUrl: string;
+  format: string;
+}
+
+/** فهرست ضبط‌های یک جلسه از سرور بیگ‌بلوباتن */
+export async function getBbbRecordings(meetingId: string): Promise<{ ok: boolean; recordings: BbbRecording[]; error?: string }> {
+  const cfg = await getBbbConfig();
+  const r = await bbbCall(cfg, 'getRecordings', { meetingID: meetingId });
+  if (!r.ok) return { ok: false, recordings: [], error: r.error };
+  const recordings: BbbRecording[] = [];
+  for (const m of r.xml.matchAll(/<recording>([\s\S]*?)<\/recording>/g)) {
+    const body = m[1];
+    const recordId = /<recordID>([^<]+)<\/recordID>/.exec(body)?.[1]?.trim();
+    if (!recordId) continue;
+    const name = /<name>([^<]*)<\/name>/.exec(body)?.[1]?.trim() || meetingId;
+    const published = /<published>([^<]+)<\/published>/.exec(body)?.[1]?.trim() === 'true';
+    const startMs = Number(/<startTime>(\d+)<\/startTime>/.exec(body)?.[1] ?? 0);
+    const endMs = Number(/<endTime>(\d+)<\/endTime>/.exec(body)?.[1] ?? 0);
+    const size = Number(/<size>(\d+)<\/size>/.exec(body)?.[1] ?? 0);
+    const fmt = /<format><type>([^<]+)<\/type>/.exec(body)?.[1]?.trim() || 'presentation';
+    const url = /<format>[\s\S]*?<url>([^<]+)<\/url>/.exec(body)?.[1]?.trim() || '';
+    const duration = endMs > startMs ? Math.round((endMs - startMs) / 60000) : 90;
+    recordings.push({
+      recordId,
+      meetingId,
+      name,
+      published,
+      startTime: startMs > 0 ? new Date(startMs) : null,
+      endTime: endMs > 0 ? new Date(endMs) : null,
+      durationMinutes: duration > 0 ? duration : 90,
+      sizeBytes: Number.isFinite(size) ? size : 0,
+      playbackUrl: url,
+      format: fmt,
+    });
+  }
+  return { ok: true, recordings };
+}
+
+/** وضعیت زندهٔ جلسه: در حال برگزاری؟ و چند نفر حاضرند؟ */
 export async function getBbbStatus(meetingId: string): Promise<{ ok: boolean; running: boolean; participantCount: number; error?: string }> {
   const cfg = await getBbbConfig();
   const running = await bbbCall(cfg, 'isMeetingRunning', { meetingID: meetingId });
