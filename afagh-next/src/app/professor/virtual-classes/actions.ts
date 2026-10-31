@@ -358,3 +358,191 @@ export async function syncBbbRecordingsAction(classroomId?: number | null): Prom
     return { ok: false, error: (e as Error).message };
   }
 }
+
+export async function listMyVirtualOfferings(): Promise<{ ok: true; rows: ProfOfferingRow[] } | { ok: false; error: string }> {
+  try {
+    const me = await requireRole(['PROFESSOR']);
+    const st = await getStaffByUser(me.id);
+    if (!st) return { ok: false, error: 'پروندهٔ استادی یافت نشد.' };
+
+    const uni = await getCurrentUniversity().catch(() => null);
+    const scope = await getTermScope(uni?.id ?? null).catch(() => null);
+    const termId = scope?.selectedId ?? scope?.effectiveId ?? null;
+    if (!termId) return { ok: false, error: 'ابتدا یک نیم‌سال را در سوئیچر بالا انتخاب کنید.' };
+
+    const viaMain = await db
+      .select({ offeringId: course_offerings.id })
+      .from(course_offerings)
+      .where(and(eq(course_offerings.professorId, st.id), eq(course_offerings.termId, termId)))
+      .limit(1000);
+    const viaCo = await db
+      .select({ offeringId: offering_professors.offeringId })
+      .from(offering_professors)
+      .innerJoin(course_offerings, eq(course_offerings.id, offering_professors.offeringId))
+      .where(and(eq(offering_professors.staffId, st.id), eq(course_offerings.termId, termId)))
+      .limit(1000);
+    const ids = [...new Set([...viaMain, ...viaCo].map(r => r.offeringId))];
+    if (!ids.length) return { ok: true, rows: [] };
+
+    const rows = await db
+      .select({
+        id: course_offerings.id,
+        termId: course_offerings.termId,
+        groupNumber: course_offerings.groupNumber,
+        enrolledCount: course_offerings.enrolledCount,
+        professorId: course_offerings.professorId,
+        courseCode: courses.code,
+        courseTitle: courses.title,
+        termTitle: academic_terms.title,
+      })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .leftJoin(academic_terms, eq(academic_terms.id, course_offerings.termId))
+      .where(inArray(course_offerings.id, ids))
+      .orderBy(asc(courses.title), asc(course_offerings.groupNumber));
+
+    const sharedRows = ids.length
+      ? await db
+          .select({ offeringId: offering_professors.offeringId })
+          .from(offering_professors)
+          .where(and(eq(offering_professors.staffId, st.id), inArray(offering_professors.offeringId, ids)))
+      : [];
+    const sharedOfferings = new Set(sharedRows.map(r => r.offeringId));
+
+    const classroomRows = await db
+      .select({
+        id: virtual_classrooms.id,
+        offeringId: virtual_classrooms.courseOfferingId,
+        meetingId: virtual_classrooms.bbbMeetingId,
+        name: virtual_classrooms.meetingName,
+        isRunning: virtual_classrooms.isRunning,
+        participantCount: virtual_classrooms.currentAttendanceCount,
+        lastSyncedAt: virtual_classrooms.lastSyncedAt,
+        lastRunningAt: virtual_classrooms.lastRunningAt,
+        recordingsCount: sql<number>`(select count(*)::int from virtual_class_recordings vr where vr."classroomId" = ${virtual_classrooms.id})`,
+      })
+      .from(virtual_classrooms)
+      .where(inArray(virtual_classrooms.courseOfferingId, ids));
+
+    const classroomByOffering = new Map(classroomRows.map(r => [r.offeringId, r]));
+
+    const out: ProfOfferingRow[] = rows.map(r => {
+      const c = classroomByOffering.get(r.id);
+      return {
+        offeringId: r.id,
+        termId: r.termId ?? null,
+        termTitle: r.termTitle ?? '',
+        courseCode: r.courseCode ?? '',
+        courseTitle: r.courseTitle ?? '',
+        groupNumber: r.groupNumber ?? 1,
+        enrolledCount: r.enrolledCount ?? 0,
+        isOwner: r.professorId === st.id || sharedOfferings.has(r.id),
+        classroom: c ? {
+          id: c.id,
+          meetingId: c.meetingId,
+          name: c.name,
+          isRunning: c.isRunning === 1,
+          participantCount: c.participantCount ?? 0,
+          lastSyncedAt: c.lastSyncedAt ? c.lastSyncedAt.toISOString() : null,
+          lastRunningAt: c.lastRunningAt ? c.lastRunningAt.toISOString() : null,
+          recordingsCount: Number(c.recordingsCount ?? 0),
+        } : null,
+      };
+    });
+
+    return { ok: true, rows: out };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function upsertVirtualClassroomAction(offeringId: number, meetingName: string): Promise<{ ok: boolean; error?: string; classroomId?: number }> {
+  try {
+    const me = await requireRole(['PROFESSOR', 'ADMIN', 'EDU_EXPERT']);
+    const st = await getStaffByUser(me.id);
+    if (!st) return { ok: false, error: 'پروندهٔ استادی یافت نشد.' };
+
+    const [off] = await db
+      .select({ id: course_offerings.id, professorId: course_offerings.professorId, courseTitle: courses.title, courseCode: courses.code, universityId: course_offerings.universityId })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(eq(course_offerings.id, offeringId))
+      .limit(1);
+    if (!off) return { ok: false, error: 'ارائه یافت نشد.' };
+
+    const isOwner = off.professorId === st.id;
+    let isShared = false;
+    if (!isOwner) {
+      const [co] = await db
+        .select({ id: offering_professors.id })
+        .from(offering_professors)
+        .where(and(eq(offering_professors.offeringId, offeringId), eq(offering_professors.staffId, st.id)))
+        .limit(1);
+      isShared = !!co;
+    }
+    if (!isOwner && !isShared && !me.roles.some(r => ['ADMIN', 'EDU_EXPERT'].includes(r))) {
+      return { ok: false, error: 'این کلاس مال شما نیست.' };
+    }
+
+    const name = String(meetingName || '').trim() || `${off.courseCode} — ${off.courseTitle}`;
+    const meetingId = `afagh-off-${offeringId}`;
+    const cfg = await getBbbConfig();
+    if (!cfg.configured) return { ok: false, error: 'سرویس بیگ‌بلوباتن پیکربندی نشده است — پنل مدیر ← پیکربندی سامانه ← کلاس مجازی' };
+
+    const [existing] = await db
+      .select({ id: virtual_classrooms.id })
+      .from(virtual_classrooms)
+      .where(eq(virtual_classrooms.courseOfferingId, offeringId))
+      .limit(1);
+
+    let classroomId: number;
+    if (existing) {
+      await db.update(virtual_classrooms).set({
+        meetingName: name,
+        moderatorPw: cfg.moderatorPw,
+        attendeePw: cfg.attendeePw,
+        universityId: off.universityId,
+      }).where(eq(virtual_classrooms.id, existing.id));
+      classroomId = existing.id;
+    } else {
+      const [ins] = await db.insert(virtual_classrooms).values({
+        courseOfferingId: offeringId,
+        bbbMeetingId: meetingId,
+        meetingName: name,
+        moderatorPw: cfg.moderatorPw,
+        attendeePw: cfg.attendeePw,
+        universityId: off.universityId,
+      }).returning({ id: virtual_classrooms.id });
+      if (!ins) return { ok: false, error: 'خطا در ذخیرهٔ کلاس آنلاین' };
+      classroomId = ins.id;
+    }
+
+    const ensured = await createBbbMeeting({ meetingId, name });
+    if (!ensured.ok) return { ok: false, error: ensured.error, classroomId };
+
+    return { ok: true, classroomId };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function deleteVirtualClassroomAction(classroomId: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const me = await requireRole(['PROFESSOR', 'ADMIN', 'EDU_EXPERT']);
+    const st = await getStaffByUser(me.id);
+    const [row] = await db
+      .select({ id: virtual_classrooms.id, offeringId: virtual_classrooms.courseOfferingId, professorId: course_offerings.professorId })
+      .from(virtual_classrooms)
+      .innerJoin(course_offerings, eq(course_offerings.id, virtual_classrooms.courseOfferingId))
+      .where(eq(virtual_classrooms.id, classroomId))
+      .limit(1);
+    if (!row) return { ok: false, error: 'کلاس آنلاین یافت نشد.' };
+    const isOwner = st && row.professorId === st.id;
+    if (!isOwner && !me.roles.some(r => ['ADMIN', 'EDU_EXPERT'].includes(r))) return { ok: false, error: 'دسترسی ندارید.' };
+    await db.delete(virtual_classrooms).where(eq(virtual_classrooms.id, classroomId));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+EOF
