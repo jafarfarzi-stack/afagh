@@ -305,6 +305,8 @@ export async function syncBbbRecordingsAction(classroomId?: number | null): Prom
     return { ok: false, error: (e as Error).message };
   }
 }
+
+export interface AdminVirtualRow {
   id: number;
   meetingId: string;
   name: string;
