@@ -122,6 +122,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/virtual-classes',
+    icon: '📡',
+    title: 'کلاس‌های آنلاین (BBB)',
+    desc: 'گزارش برگزاری، در حال برگزاری، دانشجو و ضبط‌ها',
+    group: 'reports',
+    roles: EDU,
+    accent: 'from-indigo-950 to-purple-950 border-indigo-700/50',
+    iconBg: 'bg-indigo-700/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/grade-status-codes',
     icon: '🏷️',
     title: 'مدیریت دروس و کدهای وضعیت نمره',
