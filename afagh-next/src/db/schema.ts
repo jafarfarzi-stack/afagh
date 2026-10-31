@@ -2296,6 +2296,10 @@ export const virtual_classrooms = pgTable('virtual_classrooms', {
   attendeePw: varchar('attendeePw', { length: 50 }).notNull(),
   isRunning: integer('isRunning').default(0),
   currentAttendanceCount: integer('currentAttendanceCount').default(0),
+  /** آخرین بار که وضعیت این جلسه از سرور BBB خوانده شد */
+  lastSyncedAt: timestamp('lastSyncedAt'),
+  /** آخرین زمانی که جلسه «در حال برگزاری» دیده شد (برای گزارش «برگزار شده») */
+  lastRunningAt: timestamp('lastRunningAt'),
   moodleCourseId: integer('moodleCourseId'),
   createdAt: timestamp('createdAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),

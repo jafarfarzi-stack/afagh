@@ -13,6 +13,7 @@ import { db } from '@/db';
 import { course_offerings, offering_professors, virtual_classrooms } from '@/db/schema';
 import { getSessionUser, getStaffByUser } from '@/lib/auth';
 import { getBigBlueButtonJoinUrl } from '@/lib/moodle-bbb';
+import { createBbbMeeting } from '@/lib/bbb-api';
 
 /** نقش‌هایی که برای پشتیبانی کلاس‌ها مجاز به ورود به‌عنوان مدیر اتاق‌اند */
 const SUPPORT_ROLES = ['ADMIN', 'VICE_EDU', 'EDU_EXPERT', 'DEP_HEAD'];
@@ -62,6 +63,16 @@ export async function joinVirtualClassAction(params: {
   } catch {
     /* در نبود تطبیق، نقش محافظه‌کارانهٔ ATTENDEE می‌ماند */
   }
+
+  // جلسه باید در سرور BBB وجود داشته باشد؛ ساخت تکراری بی‌خطر است (idempotent).
+  const [roomRow] = await db
+    .select({ name: virtual_classrooms.meetingName })
+    .from(virtual_classrooms)
+    .where(eq(virtual_classrooms.bbbMeetingId, meetingId))
+    .limit(1);
+  if (!roomRow) return { ok: false, url: '', error: 'این کلاس آنلاین هنوز توسط استاد ساخته نشده است.' };
+  const ensured = await createBbbMeeting({ meetingId, name: roomRow.name });
+  if (!ensured.ok) return { ok: false, url: '', error: ensured.error };
 
   return getBigBlueButtonJoinUrl({ meetingId, fullName: user.name, role });
 }

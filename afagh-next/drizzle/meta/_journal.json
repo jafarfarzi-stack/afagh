@@ -918,6 +918,13 @@
       "when": 1795100000300,
       "tag": "0125_attendance_late_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1795100000400,
+      "tag": "0126_virtual_classroom_sync",
+      "breakpoints": true
     }
   ]
 }
