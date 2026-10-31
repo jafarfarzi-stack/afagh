@@ -123,5 +123,3 @@ export default function AdminVirtualClassesClient({ terms, initialRows, initialE
     </div>
   );
 }
-EOF
-echo done

@@ -136,5 +136,3 @@ export default function ProfVirtualClassesClient({ rows: initial }: { rows: Prof
     </div>
   );
 }
-EOF
-echo done
