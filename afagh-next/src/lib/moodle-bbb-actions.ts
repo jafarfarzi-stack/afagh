@@ -8,7 +8,7 @@
 //    URL امضاشده با رمز مدیر اتاق بگیرد (ورود به اتاق فرمان هر کلاس + جعل نام).
 //    اکنون: نام از نشست، و MODERATOR فقط برای استادِ همان ارائه (یا نقش‌های
 //    آموزشی/مدیریتی پشتیبان) صادر می‌شود؛ در غیر این صورت ATTENDEE.
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { course_offerings, offering_professors, virtual_classrooms } from '@/db/schema';
 import { getSessionUser, getStaffByUser } from '@/lib/auth';
@@ -31,26 +31,26 @@ export async function joinVirtualClassAction(params: {
   try {
     const staff = await getStaffByUser(user.id);
     if (staff) {
-      const [room] = await db
+      const rooms = await db
         .select({ offeringId: virtual_classrooms.courseOfferingId })
         .from(virtual_classrooms)
-        .where(eq(virtual_classrooms.bbbMeetingId, meetingId))
-        .limit(1);
+        .where(eq(virtual_classrooms.bbbMeetingId, meetingId));
+      const offeringIds = rooms.map(r => r.offeringId);
 
-      if (room?.offeringId) {
-        const [off] = await db
-          .select({ professorId: course_offerings.professorId })
+      if (offeringIds.length) {
+        // مالکیت: استادِ اصلی یا استادِ مشترکِ هر یک از عرضه‌های همین جلسه
+        const offs = await db
+          .select({ id: course_offerings.id, professorId: course_offerings.professorId })
           .from(course_offerings)
-          .where(eq(course_offerings.id, room.offeringId))
-          .limit(1);
-        if (off?.professorId === staff.id) {
+          .where(inArray(course_offerings.id, offeringIds));
+        if (offs.some(o => o.professorId === staff.id)) {
           role = 'MODERATOR';
         } else {
           const [co] = await db
             .select({ id: offering_professors.id })
             .from(offering_professors)
             .where(and(
-              eq(offering_professors.offeringId, room.offeringId),
+              inArray(offering_professors.offeringId, offeringIds),
               eq(offering_professors.staffId, staff.id),
             ))
             .limit(1);

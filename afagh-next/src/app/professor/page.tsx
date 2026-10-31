@@ -237,10 +237,24 @@ export default async function ProfessorHome() {
         </Link>
 
         <Link
+          href="/professor/virtual-classes"
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-sky-400 hover:shadow-md transition space-y-2 group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+            📡
+          </div>
+          <div>
+            <h3 className="font-extrabold text-[11px] sm:text-sm text-slate-900 leading-tight">کلاس آنلاین</h3>
+            <p className="hidden sm:block text-[11px] text-slate-500 mt-0.5 leading-4">
+              تعریف جلسهٔ BigBlueButton برای هر کلاس و ورود به اتاق
+            </p>
+          </div>
+        </Link>
+
+        <Link
           href="/professor/attendance"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 hover:shadow-md transition space-y-2 group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+        >          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
             📋
           </div>
           <div>

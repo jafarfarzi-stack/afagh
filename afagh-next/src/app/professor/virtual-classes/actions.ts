@@ -19,14 +19,19 @@ import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
 import { getTermScope } from '@/lib/term-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { createBbbMeeting, getBbbRecordings, getBbbStatus } from '@/lib/bbb-api';
+import { getBbbConfig } from '@/lib/settings';
 
 export interface ProfOfferingRow {
   offeringId: number;
+  /** همهٔ عرضه‌های این کلاس ادغامی؛ اپراتور روی همه اعمال می‌شود */
+  memberOfferingIds: number[];
   termId: number | null;
   termTitle: string;
   courseCode: string;
   courseTitle: string;
   groupNumber: number;
+  /** اگر کلاس ادغامی است، شمارهٔ همهٔ گروه‌های عضو */
+  mergedGroupNumbers: number[] | null;
   enrolledCount: number;
   isOwner: boolean;
   classroom: {
@@ -391,6 +396,7 @@ export async function listMyVirtualOfferings(): Promise<{ ok: true; rows: ProfOf
         groupNumber: course_offerings.groupNumber,
         enrolledCount: course_offerings.enrolledCount,
         professorId: course_offerings.professorId,
+        sharedKey: course_offerings.sharedScheduleGroupKey,
         courseCode: courses.code,
         courseTitle: courses.title,
         termTitle: academic_terms.title,
@@ -426,17 +432,32 @@ export async function listMyVirtualOfferings(): Promise<{ ok: true; rows: ProfOf
 
     const classroomByOffering = new Map(classroomRows.map(r => [r.offeringId, r]));
 
-    const out: ProfOfferingRow[] = rows.map(r => {
-      const c = classroomByOffering.get(r.id);
+    // ── گروه‌بندی ادغامی: یک ردیف برای هر جلسهٔ مشترک، نه هر عرضه ──
+    const groups = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const key = r.sharedKey && !r.sharedKey.startsWith('SOLO-') ? `K:${r.sharedKey}` : `O:${r.id}`;
+      const list = groups.get(key) ?? [];
+      list.push(r);
+      groups.set(key, list);
+    }
+
+    const out: ProfOfferingRow[] = [...groups.values()].map(list => {
+      const primary = list[0];
+      // کلاس آنلاین از هر عضوِ گروه (معمولاً اولین عضو) خوانده می‌شود
+      const c = list.map(r => classroomByOffering.get(r.id)).find(Boolean) ?? null;
+      const codes = [...new Set(list.map(r => r.courseCode ?? '').filter(Boolean))];
+      const groupsNos = list.map(r => r.groupNumber ?? 1);
       return {
-        offeringId: r.id,
-        termId: r.termId ?? null,
-        termTitle: r.termTitle ?? '',
-        courseCode: r.courseCode ?? '',
-        courseTitle: r.courseTitle ?? '',
-        groupNumber: r.groupNumber ?? 1,
-        enrolledCount: r.enrolledCount ?? 0,
-        isOwner: r.professorId === st.id || sharedOfferings.has(r.id),
+        offeringId: primary.id,
+        memberOfferingIds: list.map(r => r.id),
+        termId: primary.termId ?? null,
+        termTitle: primary.termTitle ?? '',
+        courseCode: codes.join(' / ') || primary.courseCode || '',
+        courseTitle: primary.courseTitle ?? '',
+        groupNumber: primary.groupNumber ?? 1,
+        enrolledCount: list.reduce((s, r) => s + (r.enrolledCount ?? 0), 0),
+        isOwner: list.some(r => r.professorId === st.id || sharedOfferings.has(r.id)),
+        mergedGroupNumbers: groupsNos.length > 1 ? groupsNos : null,
         classroom: c ? {
           id: c.id,
           meetingId: c.meetingId,
@@ -485,37 +506,56 @@ export async function upsertVirtualClassroomAction(offeringId: number, meetingNa
     }
 
     const name = String(meetingName || '').trim() || `${off.courseCode} — ${off.courseTitle}`;
-    const meetingId = `afagh-off-${offeringId}`;
     const cfg = await getBbbConfig();
     if (!cfg.configured) return { ok: false, error: 'سرویس بیگ‌بلوباتن پیکربندی نشده است — پنل مدیر ← پیکربندی سامانه ← کلاس مجازی' };
 
-    const [existing] = await db
-      .select({ id: virtual_classrooms.id })
-      .from(virtual_classrooms)
-      .where(eq(virtual_classrooms.courseOfferingId, offeringId))
+    // ── کلاس ادغامی: یک جلسهٔ BBB برای همهٔ عرضه‌های همان گروه ──
+    const [self] = await db
+      .select({ sharedKey: course_offerings.sharedScheduleGroupKey, termId: course_offerings.termId })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, offeringId))
       .limit(1);
+    const key = self?.sharedKey && !self.sharedKey.startsWith('SOLO-') ? self.sharedKey : null;
+    const members = key
+      ? (await db
+          .select({ id: course_offerings.id })
+          .from(course_offerings)
+          .where(and(eq(course_offerings.sharedScheduleGroupKey, key), eq(course_offerings.termId, self.termId)))
+          .limit(50)).map(r => r.id)
+      : [offeringId];
+    const memberIds = members.length ? members : [offeringId];
+    const primaryId = Math.min(...memberIds);
+    const meetingId = `afagh-off-${primaryId}`;
 
-    let classroomId: number;
-    if (existing) {
-      await db.update(virtual_classrooms).set({
-        meetingName: name,
-        moderatorPw: cfg.moderatorPw,
-        attendeePw: cfg.attendeePw,
-        universityId: off.universityId,
-      }).where(eq(virtual_classrooms.id, existing.id));
-      classroomId = existing.id;
-    } else {
-      const [ins] = await db.insert(virtual_classrooms).values({
-        courseOfferingId: offeringId,
-        bbbMeetingId: meetingId,
-        meetingName: name,
-        moderatorPw: cfg.moderatorPw,
-        attendeePw: cfg.attendeePw,
-        universityId: off.universityId,
-      }).returning({ id: virtual_classrooms.id });
-      if (!ins) return { ok: false, error: 'خطا در ذخیرهٔ کلاس آنلاین' };
-      classroomId = ins.id;
+    let classroomId: number | null = null;
+    for (const mid of memberIds) {
+      const [existing] = await db
+        .select({ id: virtual_classrooms.id })
+        .from(virtual_classrooms)
+        .where(eq(virtual_classrooms.courseOfferingId, mid))
+        .limit(1);
+      if (existing) {
+        await db.update(virtual_classrooms).set({
+          bbbMeetingId: meetingId,
+          meetingName: name,
+          moderatorPw: cfg.moderatorPw,
+          attendeePw: cfg.attendeePw,
+          universityId: off.universityId,
+        }).where(eq(virtual_classrooms.id, existing.id));
+        if (classroomId == null) classroomId = existing.id;
+      } else {
+        const [ins] = await db.insert(virtual_classrooms).values({
+          courseOfferingId: mid,
+          bbbMeetingId: meetingId,
+          meetingName: name,
+          moderatorPw: cfg.moderatorPw,
+          attendeePw: cfg.attendeePw,
+          universityId: off.universityId,
+        }).returning({ id: virtual_classrooms.id });
+        if (ins && classroomId == null) classroomId = ins.id;
+      }
     }
+    if (classroomId == null) return { ok: false, error: 'خطا در ذخیرهٔ کلاس آنلاین' };
 
     const ensured = await createBbbMeeting({ meetingId, name });
     if (!ensured.ok) return { ok: false, error: ensured.error, classroomId };
@@ -531,7 +571,7 @@ export async function deleteVirtualClassroomAction(classroomId: number): Promise
     const me = await requireRole(['PROFESSOR', 'ADMIN', 'EDU_EXPERT']);
     const st = await getStaffByUser(me.id);
     const [row] = await db
-      .select({ id: virtual_classrooms.id, offeringId: virtual_classrooms.courseOfferingId, professorId: course_offerings.professorId })
+      .select({ id: virtual_classrooms.id, offeringId: virtual_classrooms.courseOfferingId, meetingId: virtual_classrooms.bbbMeetingId, professorId: course_offerings.professorId })
       .from(virtual_classrooms)
       .innerJoin(course_offerings, eq(course_offerings.id, virtual_classrooms.courseOfferingId))
       .where(eq(virtual_classrooms.id, classroomId))
@@ -539,7 +579,8 @@ export async function deleteVirtualClassroomAction(classroomId: number): Promise
     if (!row) return { ok: false, error: 'کلاس آنلاین یافت نشد.' };
     const isOwner = st && row.professorId === st.id;
     if (!isOwner && !me.roles.some(r => ['ADMIN', 'EDU_EXPERT'].includes(r))) return { ok: false, error: 'دسترسی ندارید.' };
-    await db.delete(virtual_classrooms).where(eq(virtual_classrooms.id, classroomId));
+    // کلاس ادغامی: همهٔ ردیف‌هایی که به همین جلسه اشاره می‌کنند پاک می‌شوند
+    await db.delete(virtual_classrooms).where(eq(virtual_classrooms.bbbMeetingId, row.meetingId));
     return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };

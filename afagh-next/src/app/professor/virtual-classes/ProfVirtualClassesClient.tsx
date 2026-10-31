@@ -66,7 +66,9 @@ export default function ProfVirtualClassesClient({ rows: initial }: { rows: Prof
                 <td className="p-2.5 text-right font-extrabold text-slate-900">
                   <span className="font-mono text-[11px] text-indigo-900 ml-1">{r.courseCode}</span>
                   {r.courseTitle}
-                  <span className="text-[10px] text-slate-500 mr-1">— گروه {faNum(r.groupNumber)}</span>
+                  <span className="text-[10px] text-slate-500 mr-1">
+                    {r.mergedGroupNumbers ? `— کلاس ادغامی (گروه‌های ${r.mergedGroupNumbers.map(faNum).join('، ')})` : `— گروه ${faNum(r.groupNumber)}`}
+                  </span>
                 </td>
                 <td className="p-2.5 font-bold">{faNum(r.enrolledCount)}</td>
                 <td className="p-2.5">

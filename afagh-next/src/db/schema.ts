@@ -2290,7 +2290,7 @@ export const staff_roles = pgTable('staff_roles', {
 export const virtual_classrooms = pgTable('virtual_classrooms', {
   id: serial('id').primaryKey(),
   courseOfferingId: integer('courseOfferingId').notNull(),
-  bbbMeetingId: varchar('bbbMeetingId', { length: 100 }).notNull().unique(),
+  bbbMeetingId: varchar('bbbMeetingId', { length: 100 }).notNull(),
   meetingName: varchar('meetingName', { length: 255 }).notNull(),
   moderatorPw: varchar('moderatorPw', { length: 50 }).notNull(),
   attendeePw: varchar('attendeePw', { length: 50 }).notNull(),
