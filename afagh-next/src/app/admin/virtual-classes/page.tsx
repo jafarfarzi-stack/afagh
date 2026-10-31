@@ -31,5 +31,3 @@ export default async function AdminVirtualClassesPage() {
     </div>
   );
 }
-EOF
-echo done

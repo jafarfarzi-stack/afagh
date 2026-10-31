@@ -25,5 +25,3 @@ export default async function ProfVirtualClassesPage() {
     </div>
   );
 }
-EOF
-echo done
