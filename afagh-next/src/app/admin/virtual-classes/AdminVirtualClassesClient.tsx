@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { faNum } from '@/app/admin/curriculum/curriculum-core';
-import { listVirtualClassroomsAdminAction, syncVirtualClassStatusAction } from './actions';
+import { listVirtualClassroomsAdminAction, syncVirtualClassStatusAction, syncBbbRecordingsAction } from './actions';
 import type { AdminVirtualRow } from '@/app/professor/virtual-classes/actions';
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString('fa-IR') : '—');
@@ -35,6 +35,14 @@ export default function AdminVirtualClassesClient({ terms, initialRows, initialE
     startTransition(async () => {
       const r = await syncVirtualClassStatusAction(null);
       if (r.ok) { setMsg(`✓ ${faNum(r.updated ?? 0)} کلاس همگام شد.`); reload(termId); }
+      else setMsg(`✗ ${r.error}`);
+    });
+  };
+
+  const syncRecordings = () => {
+    startTransition(async () => {
+      const r = await syncBbbRecordingsAction(null);
+      if (r.ok) { setMsg(`✓ ${faNum(r.added ?? 0)} ضبط تازه از ${faNum(r.classrooms ?? 0)} کلاس ثبت شد.`); reload(termId); }
       else setMsg(`✗ ${r.error}`);
     });
   };
@@ -73,6 +81,9 @@ export default function AdminVirtualClassesClient({ terms, initialRows, initialE
         </div>
         <button disabled={pending} onClick={syncAll} className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-extrabold text-[11px] disabled:opacity-50">
           {pending ? '…' : '🔄 همگام‌سازی وضعیت از BBB'}
+        </button>
+        <button disabled={pending} onClick={syncRecordings} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-extrabold text-[11px] disabled:opacity-50">
+          🎬 همگام‌سازی ضبط‌ها
         </button>
         <span className="text-[11px] text-slate-500 mr-auto">{faNum(filtered.length)} کلاس</span>
       </div>
