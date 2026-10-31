@@ -545,4 +545,3 @@ export async function deleteVirtualClassroomAction(classroomId: number): Promise
     return { ok: false, error: (e as Error).message };
   }
 }
-EOF
