@@ -328,7 +328,6 @@ export interface AdminVirtualRow {
 export async function listVirtualClassroomsAdminAction(termId?: number | null): Promise<{ ok: true; rows: AdminVirtualRow[] } | { ok: false; error: string }> {
   try {
     await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU']);
-    const termFilter = termId ? sql`where o."termId" = ${termId}` : sql``;
     const rows = (await db.execute(sql`
       select vc.id as "id", vc."bbbMeetingId" as "meetingId", vc."meetingName" as "name",
              vc."isRunning" as "isRunning", coalesce(vc."currentAttendanceCount",0)::int as "participantCount",
@@ -344,7 +343,7 @@ export async function listVirtualClassroomsAdminAction(termId?: number | null): 
         left join staff st on st.id = o."professorId"
         left join users pu on pu.id = st."userId"
         left join academic_terms t on t.id = o."termId"
-       ${termFilter}
+       ${termId ? sql`where o."termId" = ${termId}` : sql``}
        order by t.id desc nulls last, c.code, o."groupNumber"
     `)).rows ?? []) as unknown as AdminVirtualRow[];
     return { ok: true, rows: rows.map(r => ({
