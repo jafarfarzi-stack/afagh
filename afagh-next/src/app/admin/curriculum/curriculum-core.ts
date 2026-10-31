@@ -336,10 +336,15 @@ export function depWarningBadge(warns: DepWarning[]): { icon: string; label: str
   const impossible = warns.some(w => w.impossibleTerm);
   const type = warns.some(w => w.type === 'PREREQ') ? 'پیش‌نیاز' : 'هم‌نیاز';
   const codes = [...new Set(warns.flatMap(w => [...w.missing, ...w.unassigned, ...w.badOrder]))];
+  // اگر دو کدِ مختلف نامِ یکسان داشته باشند (مثلاً «مبانی فیزیولوژی» با دو کد),
+  // نمایش فقط نام گمراه‌کننده است — پس کد را هم می‌نویسیم.
   const titles = [...new Set(codes.map(c => {
     const w = warns.find(x => x.names[c]);
-    return w ? w.names[c] : c;
+    const t = w ? w.names[c] : c;
+    return titles.has(t) ? `${t} (${c})` : t;
   }))];
+  const titleCounts = new Map<string, number>();
+  for (const t of titles) titleCounts.set(t, (titleCounts.get(t) ?? 0) + 1);
   const eqOnly = codes.length === 0 && warns.some(w => w.viaEquivalent.length > 0);
   const eqTitles = [...new Set(warns.flatMap(w => w.viaEquivalent.map(v => w.names[v.equivalent] ?? v.equivalent)))];
 

@@ -1325,8 +1325,8 @@ export default function ProfessorAttendanceClient({
                     <span className="flex items-center justify-center gap-1">
                       <button type="button" title="ثبت «حاضر» برای همهٔ دانشجویان" onClick={() => markAll('PRESENT')} className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold transition">همه حاضر</button>
                       <button type="button" title="ثبت «غایب» برای همهٔ دانشجویان" onClick={() => markAll('ABSENT')} className="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold transition">همه غایب</button>
-                      <button type="button" title="ثبت «تأخیر» برای همهٔ دانشجویان" onClick={() => markAll('LATE')} className="px-2 py-0.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold transition">همه تأخیر</button>
                       <button type="button" title="ثبت «موجه» برای همهٔ دانشجویان" onClick={() => markAll('EXCUSED')} className="px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold transition">همه موجه</button>
+                      <button type="button" title="ثبت «تأخیر» برای همهٔ دانشجویان" onClick={() => markAll('LATE')} className="px-2 py-0.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold transition">همه تأخیر</button>
                     </span>
                   </div>
                 </th>

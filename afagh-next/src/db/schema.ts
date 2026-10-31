@@ -1793,6 +1793,8 @@ export const student_class_attendance = pgTable('student_class_attendance', {
   sessionId: integer('sessionId').notNull().references(() => class_sessions.id),
   enrollmentId: integer('enrollmentId').notNull().references(() => enrollments.id),
   status: varchar('status', { length: 10 }).notNull(),
+  /** فقط برای وضعیت LATE: مدت تأخیر به دقیقه (۱..۶۰) */
+  lateMinutes: integer('lateMinutes'),
   UNIQUE: text('UNIQUE'),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
 });

@@ -911,6 +911,13 @@
       "when": 1795100000200,
       "tag": "0124_graduation_required_from_required",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1795100000300,
+      "tag": "0125_attendance_late_minutes",
+      "breakpoints": true
     }
   ]
 }
