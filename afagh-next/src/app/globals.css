@@ -624,7 +624,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   body.printing-portrait .transcript-print-area .tr-term-table td { padding: 1pt 1.5pt !important; }
   body.printing-portrait .transcript-print-area .tr-term-footer { font-size: 7pt; }
   /* کارنامهٔ مالی در کاغذ عمودی: بعد از افزودن «واحد نظری/عملی» و کد نوع درس،
-     جدول ۸ستونه در دو کارتِ ~96mm جا نمیشود؛ یک کارتِ تمامعرض (~194mm) چاپ میشود. */
+     جدول ۱۱ستونۀ ریز دروس در دو کارتِ ~96mm جا نمیشود؛ یک کارتِ تمامعرض (~194mm) چاپ میشود. */
   @media print and (orientation: portrait) {
     .transcript-print-area .tr-fin-row { grid-template-columns: minmax(0, 1fr) !important; }
   }
@@ -675,8 +675,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root .tr-breakdown > h3 { font-size: 8pt !important; padding: 0.5mm 2mm !important; }
 
   /* گرید ترمها در چاپ **تکستونه (یک کارت تمامعرض)**:
-     جدول دروس اکنون ۸ ستون دارد (ردیف/کد/نام/نظری/عملی/نمره/نوع مالی/مبلغ)
-     و سربرگ ترم چهار قلم (نام/وضع/مبنا/کد گروه) دارد؛ دو کارتِ ~96mm خوانا نیست.
+     جدول دروس اکنون ۱۱ ستون دارد (کد/نام/نظری/عملی/نوع آموزشی/نوع انتخاب/نمره/وضع/نوع انتخاب شهریه/نوع مالی/شهریه)
+     و سربرگ ترم شش قلم (نیمسال/وضع/کد ثابت/اولیه/کد متغیر/اولیه) دارد؛ دو کارتِ ~96mm خوانا نیست.
      ردیف بیرونی و خودِ گرید در چاپ آزاد میشکنند تا کارتهای پشتسرهم
      بین صفحهها تقسیم شوند، ولی هر کارت (term-block) avoid میماند. */
   .tr-fin-root .tr-fin-row { grid-template-columns: minmax(0, 1fr) !important; gap: 1.2mm !important; break-inside: auto !important; page-break-inside: auto !important; }
@@ -684,7 +684,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   /* عنوان «ریز ترم‌به‌ترم» از کارت اولش جدا نشود */
   .tr-fin-root .tr-courses-title { break-after: avoid !important; page-break-after: avoid !important; }
   .tr-fin-root .term-block { border-width: 0.6pt !important; border-radius: 1.2mm !important; }
-  /* سربرگ کارت ترم: فشرده ولی خوانا (چهار قلم باید در یک ردیف چاپ شود) */
+  /* سربرگ کارت ترم: فشرده ولی خوانا (شش قلم باید در یک ردیف چاپ شود) */
   .tr-fin-root .term-block > div:first-child { padding: 0.5mm 1mm !important; }
   .tr-fin-root .term-block h4 { font-size: 7.2pt !important; line-height: 1.25 !important; white-space: normal !important; }
 

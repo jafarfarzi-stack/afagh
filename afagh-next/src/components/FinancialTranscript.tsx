@@ -380,7 +380,7 @@ export default function FinancialTranscript({
   const grand = balanceBadge(totals.balance);
   const isFinance = viewerRole === 'FINANCE' || viewerRole === 'ADMIN';
 
-  // یک ترم در هر ردیف — جدول ۸ستونۀ ریز دروس و سربرگ ۴قلمی ترم در A4
+  // یک ترم در هر ردیف — جدول ۱۱ستونۀ ریز دروس و سربرگ ۶قلمی ترم در A4
   // عمودی فقط در یک کارت تمامعرض خوانا است (دو کارتِ ~۹۶mm جا نمیشود).
   const chunks: TranscriptTermView[][] = [];
   for (let i = 0; i < terms.length; i += 1) chunks.push(terms.slice(i, i + 1));
