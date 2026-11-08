@@ -110,6 +110,11 @@ const fin = await getStudentFinance(studentId, {
     courses: courseMap[t.termId]?.lines ?? [],
     coursesBasis: courseMap[t.termId]?.basis,
     tariffGroupCode: courseMap[t.termId]?.tariffGroupCode ?? null,
+    // چهار کد سربرگ ترم کارنامهٔ نوع الف (همگی از دیتابیس، هیچ عددی سختکد نشده)
+    variablePriceCode: courseMap[t.termId]?.variablePriceCode ?? null,
+    fixedPriceCode: courseMap[t.termId]?.fixedPriceCode ?? null,
+    initialFixedPriceCode: courseMap[t.termId]?.initialFixedPriceCode ?? null,
+    initialVariablePriceCode: courseMap[t.termId]?.initialVariablePriceCode ?? null,
   }));
 
   // نوع الف = کارتی · نوع ب = تخت — هر دو دقیقاً یک قرارداد پراپ دارند

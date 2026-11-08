@@ -27,9 +27,31 @@ const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-I
  */
 const courseTypeLabel = (c: TranscriptCourseView) => courseTypeLabelOf(c);
 
-/** «مبنای نرخ» — یکسان در نوع الف و نوع ب تا دو سند با هم نخوانند. */
-const rateBasisLabel = (t: TranscriptTermView): string =>
-  t.coursesBasis === 'TARIFF' ? 'تعرفهٔ رسمی همان سال' : 'محاسباتی (دفتر کل)';
+/**
+ * «نوع درس آموزشی» سند قدیمی: ماهیت درس (courses.courseNature) بههمراه کد
+ * نوع سما. اگر ماهیت ثبت نشده باشد، از تفکیک واحد نظری/عملی استنتاج میشود؛
+ * هیچ برچسبِ ساختگی ساخته نمیشود و در نبود همهٔ دادهها «—» چاپ میشود.
+ */
+const educationalTypeLabel = (c: TranscriptCourseView): string => {
+  const theory = Number(c.theoreticalUnits ?? 0);
+  const practical = Number(c.practicalUnits ?? 0);
+  const nature = String(c.courseNature ?? '').trim()
+    || (theory > 0 && practical > 0 ? 'نظری-عملی' : practical > 0 ? 'عملی' : theory > 0 ? 'نظری' : '');
+  const code = c.maliType != null ? ` ${fa(c.maliType)}` : '';
+  return nature ? `${nature}${code}` : (code.trim() || '—');
+};
+
+/** «نوع انتخاب شهریه»: ضریب همان نیمسال از tuition_coefficients (ضریب نیمسال ورود). */
+const tuitionSelectionLabel = (c: TranscriptCourseView): string =>
+  c.tuitionCoefficient != null && Number(c.tuitionCoefficient) > 0
+    ? `ضریب ${fa(c.tuitionCoefficient)} نیمسال ورود`
+    : '—';
+
+/** کدهای سربرگ ترم: عدد از دیتابیس، ارقام فارسی، تهی = «—» (هیچ کُدی سختکد نیست). */
+const priceCode = (v: string | number | null | undefined): string => {
+  const s = String(v ?? '').trim();
+  return s ? faDigits(s) : '—';
+};
 
 /**
  * تاریخ شمسی خوانا؛ تهی → خط تیره.
@@ -91,6 +113,13 @@ export interface TranscriptCourseView {
   offeringType?: string | null;
   theoreticalUnits?: number;
   practicalUnits?: number;
+  // ── ستونهای کارنامهٔ مالی «نوع الف» (سند قدیمی سما) ──
+  /** «نوع انتخاب درس» (انتخاب واحد / درس انتقالی / درس مستقل / …) */
+  selectionType?: string | null;
+  /** «وضع» = کد وضعیت نمرهٔ سما (enrollments.samaGradeStatusCode) */
+  gradeStatusCode?: string | null;
+  /** ضریب شهریهٔ نیمسال (tuition_coefficients) — مبنای «نوع انتخاب شهریه» */
+  tuitionCoefficient?: number | null;
 }
 
 export interface TranscriptTermView {
@@ -135,6 +164,15 @@ export interface TranscriptTermView {
   coursesBasis?: 'TARIFF' | 'LEDGER';
   /** «کد گروه تعرفه» (uPriceCode) — همان گروهی که نرخ نوع درس مالی از آن آمد */
   tariffGroupCode?: string | null;
+  // ── چهار کد سربرگ ترم نوع الف: «کد ثابت · اولیه · کد متغیر · اولیه» ──
+  /** کد ثابت (FPrice_code) — ثابت در تمام ترمها، از قالب نیمسال ورود */
+  fixedPriceCode?: string | null;
+  /** اولیهٔ کد ثابت */
+  initialFixedPriceCode?: string | null;
+  /** کد متغیر (UPrice_code) مربوط به **همان** نیمسال — سالبهسال تغییر میکند */
+  variablePriceCode?: string | null;
+  /** اولیهٔ کد متغیر = کد متغیر سال ورود */
+  initialVariablePriceCode?: string | null;
 }
 
 export interface TranscriptTotalsView {
@@ -157,6 +195,9 @@ export interface TranscriptStudentView {
   nationalCode?: string | null;
   majorTitle?: string | null;
   degreeTitle?: string | null;
+  /** کد رشته (majors.majorCode) و کد مقطع (degree_level_configs.code) — جلوی عنوانشان چاپ میشود */
+  majorCode?: string | null;
+  degreeCode?: string | null;
   entryYear?: number | null;
   /** نیمسال ورود: ۱=مهر، ۲=بهمن، ۳=تابستان (students.entryTerm) */
   entryTerm?: number | null;
@@ -434,9 +475,15 @@ export default function FinancialTranscript({
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">مقطع</td>
-              <td className="border border-slate-300 px-1.5 py-1">{student.degreeTitle || '—'}</td>
+              <td className="border border-slate-300 px-1.5 py-1">
+                {student.degreeTitle || '—'}
+                {student.degreeCode ? <span className="ms-1 whitespace-nowrap font-mono font-bold text-slate-700" dir="ltr">({priceCode(student.degreeCode)})</span> : null}
+              </td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">رشته</td>
-              <td className="border border-slate-300 px-1.5 py-1">{student.majorTitle || '—'}</td>
+              <td className="border border-slate-300 px-1.5 py-1">
+                {student.majorTitle || '—'}
+                {student.majorCode ? <span className="ms-1 whitespace-nowrap font-mono font-bold text-slate-700" dir="ltr">({priceCode(student.majorCode)})</span> : null}
+              </td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نیمسال ورود</td>
               <td className="border border-slate-300 px-1.5 py-1">
                 {student.entryTerm
@@ -589,55 +636,75 @@ export default function FinancialTranscript({
                         {/* سربرگ ترم: وضع نیمسال + مبنای نرخ + کد گروه تعرفه.
                             «وضع نیمسال» همیشه چاپ میشود (حتی اگر داده نداشته باشد)
                             تا کارشناس مالی بداند فیلد وجود دارد و خالی است. */}
-                        <div className="tr-term-meta grid grid-cols-3 gap-1 border-b border-slate-200 bg-white px-2 py-1 text-[9px] leading-tight">
-                          <div className="min-w-0"><span className="text-slate-500">وضع نیمسال: </span><b className="font-bold text-slate-800">{t.statusTitle || '—'}</b></div>
-                          <div className="min-w-0"><span className="text-slate-500">مبنای نرخ: </span><b className="font-bold text-slate-800">{rateBasisLabel(t)}</b></div>
-                          <div className="min-w-0"><span className="text-slate-500">کد گروه تعرفه: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{t.tariffGroupCode || '—'}</b></div>
+                        {/* سربرگ ترم نوع الف — عیناً شش قلم سند قدیمی سما:
+                            نیمسال · وضعیت دانشجو · کد ثابت · اولیه · کد متغیر · اولیه
+                            ⚠ کدها همگی از دیتابیس میآیند: ثابت از «قالب نیمسال ورود»،
+                            متغیر از tuition_term_tariff همان سال. پیشتر هر سه کد
+                            یک tariffGroupCode تکراری بودند؛ اینجا جدا و درستاند. */}
+                        <div className="tr-term-meta grid grid-cols-2 gap-x-2 gap-y-0.5 border-b border-slate-200 bg-white px-2 py-1 text-[9px] leading-tight sm:grid-cols-3 lg:grid-cols-6">
+                          <div className="min-w-0"><span className="text-slate-500">نیمسال: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{priceCode(t.termCode)}</b></div>
+                          <div className="min-w-0"><span className="text-slate-500">وضعیت دانشجو: </span><b className="font-bold text-slate-800">{t.statusTitle || '—'}</b></div>
+                          <div className="min-w-0"><span className="text-slate-500">کد ثابت: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{priceCode(t.fixedPriceCode)}</b></div>
+                          <div className="min-w-0"><span className="text-slate-500">اولیه: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{priceCode(t.initialFixedPriceCode ?? t.fixedPriceCode)}</b></div>
+                          <div className="min-w-0"><span className="text-slate-500">کد متغیر: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{priceCode(t.variablePriceCode ?? t.tariffGroupCode)}</b></div>
+                          <div className="min-w-0"><span className="text-slate-500">اولیه: </span><b className="font-mono font-bold text-slate-800" dir="ltr">{priceCode(t.initialVariablePriceCode)}</b></div>
                         </div>
                         {t.courses && t.courses.length > 0 && (
                           <div className="border-t border-slate-200">
                             <p className="bg-slate-50 px-2 py-1 text-[9px] font-black text-slate-700">ریز شهریه متغیر دروس</p>
                             <table className="tr-term-table tr-fin-courses w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
+                              {/* ۱۱ ستون دقیقِ سند قدیمی سما — بدون «ردیف».
+                                  جدول RTL است: اولین <th> سمت راست قرار میگیرد،
+                                  پس ترتیب زیر همان «راست به چپ» تأییدشدهٔ همکاران مالی است. */}
                               <colgroup>
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '20%' }} />
                                 <col style={{ width: '5%' }} />
+                                <col style={{ width: '5%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '9%' }} />
+                                <col style={{ width: '5%' }} />
+                                <col style={{ width: '4%' }} />
+                                <col style={{ width: '12%' }} />
                                 <col style={{ width: '11%' }} />
-                                <col style={{ width: '23%' }} />
-                                <col style={{ width: '8%' }} />
-                                <col style={{ width: '8%' }} />
-                                <col style={{ width: '7%' }} />
-                                <col style={{ width: '21%' }} />
-                                <col style={{ width: '17%' }} />
+                                <col style={{ width: '9%' }} />
                               </colgroup>
                               <thead>
                                 <tr className="bg-slate-50 text-slate-600">
-                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">ردیف</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">کد درس</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 font-bold">نام درس</th>
-                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">واحد نظری</th>
-                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">واحد عملی</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نظری</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">عملی</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نوع درس آموزشی</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نوع انتخاب درس</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نمره</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">وضع</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نوع انتخاب شهریه</th>
                                   <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">نوع درس مالی</th>
-                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">مبلغ متغیر</th>
+                                  <th className="border-t border-slate-200 px-1 py-0.5 text-center font-bold">شهریه</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {t.courses.map((c, i) => (
                                   <tr key={i} className="border-t border-slate-100">
-                                    <td className="px-1 py-0.5 text-center text-slate-500">{fa(i + 1)}</td>
-                                    <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode || '—'}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{c.courseCode ? faDigits(String(c.courseCode)) : '—'}</td>
                                     <td className="tr-course-title px-1 py-0.5 font-medium">{c.courseTitle || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.theoreticalUnits ?? 0)}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{fa(c.practicalUnits ?? 0)}</td>
+                                    <td className="px-1 py-0.5 text-center">{educationalTypeLabel(c)}</td>
+                                    <td className="px-1 py-0.5 text-center">{c.selectionType || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{c.grade != null ? fa(c.grade) : '—'}</td>
+                                    <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{priceCode(c.gradeStatusCode)}</td>
+                                    <td className="px-1 py-0.5 text-center">{tuitionSelectionLabel(c)}</td>
                                     <td className="px-1 py-0.5 text-center">
                                       {courseTypeLabel(c)}
                                       {c.maliType != null ? <span className="tr-mali-code ms-1 font-mono font-bold text-slate-700">({fa(c.maliType)})</span> : null}
                                     </td>
-                                    <td className="px-1 py-0.5 text-left font-bold">{fa(c.amount)}</td>
+                                    <td className="px-1 py-0.5 text-left font-black">{fa(c.amount)}</td>
                                   </tr>
                                 ))}
                                 <tr className="border-t border-slate-200 bg-slate-50/60">
-                                  <td colSpan={7} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
+                                  <td colSpan={10} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
                                   <td className="px-1 py-0.5 text-left font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.amount) || 0), 0))}</td>
                                 </tr>
                               </tbody>

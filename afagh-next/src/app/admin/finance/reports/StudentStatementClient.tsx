@@ -44,6 +44,11 @@ interface StatementRow {
   netPayable: number;
   coursesBasis?: 'TARIFF' | 'LEDGER';
   tariffGroupCode?: string | null;
+  // ── چهار کد سربرگ ترم کارنامهٔ نوع الف (از دیتابیس) ──
+  variablePriceCode?: string | null;
+  fixedPriceCode?: string | null;
+  initialFixedPriceCode?: string | null;
+  initialVariablePriceCode?: string | null;
   courses?: {
     courseCode: string | null;
     courseTitle: string | null;
@@ -57,6 +62,10 @@ interface StatementRow {
     courseNature?: string | null;
     theoreticalUnits?: number;
     practicalUnits?: number;
+    // ── ستونهای کارنامهٔ مالی نوع الف ──
+    selectionType?: string | null;
+    gradeStatusCode?: string | null;
+    tuitionCoefficient?: number | null;
   }[];
 }
 
@@ -64,6 +73,11 @@ interface Props {
   studentId: number;
   studentName: string;
   studentCode: string;
+  /** کد رشته / کد مقطع و عنوانشان — سربرگ کارنامهٔ نوع الف */
+  majorCode?: string | null;
+  degreeCode?: string | null;
+  majorTitle?: string | null;
+  degreeTitle?: string | null;
   universityTitle?: string | null;
   logoUrl?: string | null;
   verify?: { url: string; qr: string; expiresAt: string | null } | null;
@@ -105,7 +119,10 @@ function SumBox({ icon, label, value, tone, sub }: { icon: string; label: string
   );
 }
 
-export default function StudentStatementClient({ studentId, studentName, studentCode, universityTitle, logoUrl, verify }: Props) {
+export default function StudentStatementClient({
+  studentId, studentName, studentCode, majorCode, degreeCode, majorTitle, degreeTitle,
+  universityTitle, logoUrl, verify,
+}: Props) {
   const [data, setData] = useState<StatementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
@@ -271,7 +288,7 @@ export default function StudentStatementClient({ studentId, studentName, student
       {/* سند رسمی — همیشه رندر می‌شود تا چاپ از هر حالتی درست خروجی دهد */}
       <div className="print-area">
         <FinancialTranscript
-          student={{ fullName: studentName, studentCode }}
+          student={{ fullName: studentName, studentCode, majorCode, degreeCode, majorTitle, degreeTitle }}
           terms={data.map((d) => ({
             termId: d.termId,
             termTitle: d.termTitle,
@@ -296,6 +313,10 @@ export default function StudentStatementClient({ studentId, studentName, student
             courses: d.courses ?? [],
             coursesBasis: d.coursesBasis ?? 'LEDGER',
             tariffGroupCode: d.tariffGroupCode ?? null,
+            variablePriceCode: d.variablePriceCode ?? null,
+            fixedPriceCode: d.fixedPriceCode ?? null,
+            initialFixedPriceCode: d.initialFixedPriceCode ?? null,
+            initialVariablePriceCode: d.initialVariablePriceCode ?? null,
           }))}
           totals={totals}
           showEvents={false}

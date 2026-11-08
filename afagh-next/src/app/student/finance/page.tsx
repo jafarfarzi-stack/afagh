@@ -127,6 +127,11 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
     courses: courseMap[t.termId]?.lines ?? [],
     coursesBasis: courseMap[t.termId]?.basis,
     tariffGroupCode: courseMap[t.termId]?.tariffGroupCode ?? null,
+    // چهار کد سربرگ ترم کارنامهٔ نوع الف (همگی از دیتابیس، هیچ عددی سختکد نشده)
+    variablePriceCode: courseMap[t.termId]?.variablePriceCode ?? null,
+    fixedPriceCode: courseMap[t.termId]?.fixedPriceCode ?? null,
+    initialFixedPriceCode: courseMap[t.termId]?.initialFixedPriceCode ?? null,
+    initialVariablePriceCode: courseMap[t.termId]?.initialVariablePriceCode ?? null,
   }));
 
   const remindDays = Math.max(0, Math.round(toNum(remindDaysRaw) || 0));

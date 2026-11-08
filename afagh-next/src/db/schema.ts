@@ -3586,13 +3586,49 @@ export const tuition_term_tariff = pgTable('tuition_term_tariff', {
   maliType: integer('maliType').notNull(),
   thPrice: numeric('thPrice', { precision: 16, scale: 2 }).notNull().default('0'),
   opPrice: numeric('opPrice', { precision: 16, scale: 2 }).notNull().default('0'),
+  /** «کد قیمت واحد» (UPrice_code) — کد متغیر شهریه، سالبهسال عوض میشود */
   uPriceCode: varchar('uPriceCode', { length: 20 }),
+  /** «کد قیمت ثابت» (FPrice_code) — کد ثابت شهریه؛ مهاجرت ۰۱۳۶ (واردسازی TermPrice) */
+  fPriceCode: varchar('fPriceCode', { length: 30 }),
   source: varchar('source', { length: 40 }).default('SAMA'),
   updatedAt: timestamp('updatedAt').defaultNow(),
 }, (t) => [
   unique('uq_tuition_term_tariff').on(t.universityId, t.termCode, t.majorId, t.entryYear, t.maliType),
   index('idx_tuition_term_tariff_lookup').on(t.universityId, t.termCode, t.majorId, t.entryYear),
   index('idx_tuition_term_tariff_year').on(t.universityId, t.termYear, t.majorId, t.entryYear),
+]);
+
+/**
+ * «قالب کدهای شهریه» بهازای نیمسالِ ورود دانشجو (مهاجرت ۰۱۳۶).
+ *
+ * سربرگ کارنامهٔ مالی نوع الف چهار کد دارد: «کد ثابت» و «اولیهٔ ثابت» که
+ * در تمام ترمها یکیاند، و «کد متغیر» (سالبهسال از tuition_term_tariff) و
+ * «اولیهٔ متغیر» که کد متغیرِ همان سالِ ورود است. FPrice_code در واردسازی
+ * اولیهٔ سما ذخیره نشده بود؛ این جدول محلِ قابلپیکربندی آن است تا لایهٔ
+ * نمایش هرگز عددی را سختکد نکند. کلیدهای NULL یعنی «همه» (wildcard) و
+ * خاصترین ردیف برنده است.
+ */
+export const tuition_price_code_templates = pgTable('tuition_price_code_templates', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  majorId: integer('majorId').references(() => majors.id),
+  degreeLevelId: integer('degreeLevelId').references(() => degree_level_configs.id),
+  /** ۰ = همهٔ سالهای ورود */
+  entryYear: integer('entryYear').notNull().default(0),
+  /** ۰ = همهٔ نیمسالهای ورود (۱=مهر، ۲=بهمن، ۳=تابستان) */
+  entryTerm: integer('entryTerm').notNull().default(0),
+  /** کد ثابت (FPrice_code) — در تمام ترمها ثابت */
+  fixedPriceCode: varchar('fixedPriceCode', { length: 30 }),
+  /** اولیهٔ کد ثابت؛ اگر خالی باشد همان fixedPriceCode */
+  initialFixedPriceCode: varchar('initialFixedPriceCode', { length: 30 }),
+  /** اولیهٔ کد متغیر = UPrice_code سالِ ورود */
+  initialVariablePriceCode: varchar('initialVariablePriceCode', { length: 30 }),
+  source: varchar('source', { length: 40 }).notNull().default('SAMA'),
+  note: text('note'),
+  isActive: integer('isActive').notNull().default(1),
+  updatedAt: timestamp('updatedAt').defaultNow(),
+}, (t) => [
+  index('idx_tuition_price_code_lookup').on(t.universityId, t.majorId, t.entryYear, t.entryTerm),
 ]);
 
 // ══════════════════════════════════════════════════════════════════════

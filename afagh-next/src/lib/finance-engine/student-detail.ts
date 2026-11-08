@@ -27,6 +27,9 @@ export interface StudentFinanceDetail {
     nationalCode: string | null;
     majorTitle: string | null;
     degreeTitle: string | null;
+    /** کد رشته (majors.majorCode) و کد مقطع (degree_level_configs.code) — سربرگ کارنامهٔ نوع الف */
+    majorCode: string | null;
+    degreeCode: string | null;
     entryYear: number | null;
     status: string | null;
     // ── فیلدهای سربرگ کارنامه (انعکاس سیستم قدیمی) ──
@@ -70,7 +73,9 @@ export async function getStudentFinance(
     lastName: users.lastName,
     nationalCode: users.nationalCode,
     majorTitle: majors.name,
+    majorCode: majors.majorCode,
     degreeTitle: degree_level_configs.title,
+    degreeCode: degree_level_configs.code,
     entryYear: students.entryYear,
     status: students.status,
     quotaType: students.quotaType,
@@ -273,7 +278,9 @@ export async function getStudentFinance(
       fullName: `${studentRow.firstName || ''} ${studentRow.lastName || ''}`.trim(),
       nationalCode: studentRow.nationalCode,
       majorTitle: studentRow.majorTitle,
+      majorCode: studentRow.majorCode,
       degreeTitle: studentRow.degreeTitle,
+      degreeCode: studentRow.degreeCode,
       entryYear: studentRow.entryYear,
       status: studentRow.status,
       facultyTitle: studentRow.facultyTitle,

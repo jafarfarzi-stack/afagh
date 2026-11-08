@@ -29,5 +29,15 @@ export default async function StudentStatementPage(props: { searchParams: Promis
   const fin = await getStudentFinance(studentId, { universityId: currentUniversity.id });
   if (!fin) return <div className="card p-6 text-center text-slate-500">اطلاعات مالی یافت نشد</div>;
 
-  return <StudentStatementClient studentId={studentId} studentName={fin.student.fullName} studentCode={fin.student.studentCode ?? ''} />;
+  return (
+    <StudentStatementClient
+      studentId={studentId}
+      studentName={fin.student.fullName}
+      studentCode={fin.student.studentCode ?? ''}
+      majorCode={fin.student.majorCode}
+      degreeCode={fin.student.degreeCode}
+      majorTitle={fin.student.majorTitle}
+      degreeTitle={fin.student.degreeTitle}
+    />
+  );
 }

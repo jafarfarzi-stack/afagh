@@ -105,6 +105,11 @@ export async function GET(request: Request) {
       courses: courses?.lines ?? [],
       coursesBasis: courses?.basis ?? 'LEDGER',
       tariffGroupCode: courses?.tariffGroupCode ?? null,
+      // چهار کد سربرگ ترم کارنامهٔ نوع الف (همگی از دیتابیس)
+      variablePriceCode: courses?.variablePriceCode ?? null,
+      fixedPriceCode: courses?.fixedPriceCode ?? null,
+      initialFixedPriceCode: courses?.initialFixedPriceCode ?? null,
+      initialVariablePriceCode: courses?.initialVariablePriceCode ?? null,
     };
   });
 
@@ -112,7 +117,12 @@ export async function GET(request: Request) {
     rows,
     totals: fin.totals,
     balance,
-    student: { name: fin.student.fullName, code: fin.student.studentCode },
+    student: {
+      name: fin.student.fullName,
+      code: fin.student.studentCode,
+      majorCode: fin.student.majorCode,
+      degreeCode: fin.student.degreeCode,
+    },
   });
   } catch (e) {
     // 🔒 پیام خام به کلاینت برنمی‌گردد — فقط لاگ سرور. (ریدایرکت/404 نکست را دست نمی‌زنیم.)
