@@ -29,13 +29,14 @@ const MIN_MATCH = Number(args['min-match'] || 0.9);
 const DIR = args.dir || '/tmp/lp2v2/fin_export_uems';
 const DB_ENV = args['db-env'] || '/root/afagh/.env';
 const DB_HOST = args['db-host'] || '172.20.0.3';
+const DB_PORT = Number(args['db-port'] || 5432);
 
 const req = createRequire(import.meta.url);
 const { Pool } = req('pg');
 const envTxt = readFileSync(DB_ENV, 'utf8');
 const m = envTxt.match(/^POSTGRES_PASSWORD=(.*)$/m);
 if (!m) { console.error('POSTGRES_PASSWORD not found in ' + DB_ENV); process.exit(2); }
-const pool = new Pool({ host: DB_HOST, port: 5432, user: 'afagh', password: m[1].replace(/\r$/, ''), database: 'afagh_db', max: 5 });
+const pool = new Pool({ host: DB_HOST, port: DB_PORT, user: 'afagh', password: m[1].replace(/\r$/, ''), database: 'afagh_db', max: 5 });
 const q = async (t, p) => (await pool.query(t, p)).rows;
 
 const readTsv = (name) => {

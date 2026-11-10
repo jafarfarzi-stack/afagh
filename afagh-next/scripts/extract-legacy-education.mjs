@@ -17,7 +17,7 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, openSync, writeSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 
 const raw = process.argv.slice(2);
@@ -28,6 +28,8 @@ for (let i = 0; i < raw.length; i++) {
 const SERVER = args.server || 'localhost\\AFAGH';
 const USER = args.user || 'sa';
 const PASS = args.pass || '';
+const TRUSTED = args.trusted === 'true';   // --trusted ⇒ ویندوز integrated auth (بدون رمز)
+const AUTH = TRUSTED ? ['-E'] : ['-U', USER, '-P', PASS];
 const DB = args.db || 'uems';
 const OUT = args.out || 'D:\\farzi\\git\\backup\\edu_export_uems';
 
@@ -36,23 +38,56 @@ const SQLCMD = process.env.SQLCMD || 'C:\\Program Files\\Microsoft SQL Server\\C
 
 mkdirSync(OUT, { recursive: true });
 
-/** اتصال پنهان‌شده: پاسورد در CMD دیده نشود */
+/** خروجی Unicode از sqlcmd (-u -o) → TSV با سرستون و UTF-8.
+ *  بدون -h -1 سرستونها هم میآیند؛ migrate-legacy-education با نام ستون کار میکند،
+ *  و -u از تبدیل عنوانهای فارسی به کدپیج DOS (و موژیبیک شدنشان) جلوگیری میکند. */
 function run(sql, label) {
+  const tmp = join(OUT, label + '.__u16.tmp');
   const r = spawnSync(SQLCMD, [
-    '-S', SERVER, '-U', USER, '-P', PASS, '-d', DB,
+    '-S', SERVER, ...AUTH, '-d', DB,
     '-Q', sql,
-    '-W', '-s', '\t', '-u', '-h', '-1',
-  ], { encoding: 'utf8', windowsHide: true, maxBuffer: 1024 * 1024 * 512 });
+    '-W', '-s', '\t', '-u', '-o', tmp,
+  ], { encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) {
     console.error('FAIL ' + label + '\n' + (r.stderr || r.stdout).slice(0, 2000));
     process.exit(1);
   }
-  const csv = r.stdout.replace(/^\uFEFF/, '');
+  if (!existsSync(tmp)) { console.error('FAIL ' + label + ': خروجی sqlcmd ساخته نشد'); process.exit(1); }
+  const buf = readFileSync(tmp);
+  unlinkSync(tmp);
   const file = join(OUT, label + '.tsv');
-  writeFileSync(file, csv);
-  const lines = csv.split(/\r?\n/).filter(l => l.trim() !== '');
-  console.log(`  ${label}.tsv  ${(lines.length - 1).toLocaleString('en-US')} rows -> ${file}`);
-  return { file, rows: lines.length - 1 };
+  const fd = openSync(file, 'w');
+  // decode جریانی: فایلهای چندصد مگابایتی را نمیتوان یکجا به رشته تبدیل کرد
+  // (محدودیت طول رشتهٔ V8) — خطبهخط مینویسیم.
+  const dec = new TextDecoder('utf-16le');
+  const CH = 2 * 1024 * 1024; // زوج، تا جفتهای UTF-16 نبرند
+  let carry = '', header = null, sepSkipped = false, rows = 0, warned = false;
+  const emit = (line, final) => {
+    if (!line.trim() && !final) return;
+    if (!line.trim()) return;
+    if (header === null) {
+      header = line.replace(/^\uFEFF/, '');
+      writeSync(fd, Buffer.from(header + '\n', 'utf8'));
+      return;
+    }
+    if (!sepSkipped && /^[\s\t]*-[\s\t\-]*$/.test(line)) { sepSkipped = true; return; }
+    if (/^Msg\s+\d+,\s*Level\s+\d+/i.test(line) || /Invalid (column|object) name/i.test(line)) {
+      if (!warned) { console.error(`  ⚠ ${label}: خطای SQL — ${line.slice(0, 160)}`); warned = true; }
+      return;
+    }
+    writeSync(fd, Buffer.from(line + '\n', 'utf8'));
+    rows++;
+  };
+  for (let off = 0; off < buf.length; off += CH) {
+    const text = dec.decode(buf.slice(off, Math.min(off + CH, buf.length)), { stream: true });
+    const lines = (carry + text).split(/\r?\n/);
+    carry = lines.pop();
+    for (const l of lines) emit(l, false);
+  }
+  for (const l of (carry + dec.decode()).split(/\r?\n/)) emit(l, true);
+  closeSync(fd);
+  console.log(`  ${label}.tsv  ${rows.toLocaleString('en-US')} rows -> ${file}`);
+  return { file, rows };
 }
 
 console.log('════ Extract educational uems → TSV ════');
@@ -88,7 +123,7 @@ run(`SET NOCOUNT ON; SELECT * FROM TermType ORDER BY Code;`, 'TermType');
 run(`SET NOCOUNT ON; SELECT * FROM ParentStudyLevel ORDER BY Code;`, 'ParentStudyLevel');
 run(`SET NOCOUNT ON; SELECT * FROM StudyLevelSet ORDER BY Code;`, 'StudyLevelSet');
 run(`SET NOCOUNT ON; SELECT * FROM DegreeType ORDER BY Code;`, 'DegreeType');
-run(`SET NOCOUNT ON; SELECT Code, Title, StartDate, EndDate, Enroldate, WeekCount, IsHalfTerm FROM TermCodes ORDER BY Termcode;`, 'TermCodes');
+run(`SET NOCOUNT ON; SELECT Termcode AS Code, Title, StartDate, EndDate, Enroldate, WeekCount, IsHalfTerm FROM TermCodes ORDER BY Termcode;`, 'TermCodes');
 
 // ── 2) دانشجویان ──
 console.log('\n[phase 2] students');
@@ -116,10 +151,7 @@ run(
    FROM LT52 ORDER BY TermCode, LessonCode, LessonGroup;`, 'LT52_offerings');
 
 run(
-  `SET NOCOUNT ON;
-   SELECT TermCode, LessonCode, LessonGroup, ProfessorCode, Unit, PrimaryGrade, FinallyGrade,
-          PrimaryGradeStatusId, FinallyGradeStatusId, StudentMessage, ProfessorMessage
-   FROM ProfessorStudentGrades ORDER BY TermCode, LessonCode;`, 'ProfessorStudentGrades');
+  `SET NOCOUNT ON; SELECT * FROM ProfessorStudentGrades ORDER BY ProfessorStudentGradeId;`, 'ProfessorStudentGrades');
 
 // استادِ هر ارائه معلق در TeacherSalary_LessonProfessor
 run(

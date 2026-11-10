@@ -30,6 +30,8 @@ for (let i = 0; i < raw.length; i++) {
 const SERVER = args.server || 'localhost\\AFAGH';
 const USER = args.user || 'sa';
 const PASS = args.pass || '';
+const TRUSTED = args.trusted === 'true';   // --trusted ⇒ ویندوز integrated auth (بدون رمز)
+const AUTH = TRUSTED ? ['-E'] : ['-U', USER, '-P', PASS];
 const DB = args.db || 'uems';
 const OUT = args.out || 'D:\\farzi\\git\\backup\\uems_rates';
 
@@ -104,7 +106,7 @@ ORDER BY l.Reshte, LEFT(l.TermEnter, 4), l.Termcode;
 function main() {
   const r = spawnSync(
     SQLCMD,
-    ['-S', SERVER, '-U', USER, '-P', PASS, '-d', DB, '-Q', SQL, '-W', '-s', '\t', '-h', '-1'],
+    ['-S', SERVER, ...AUTH, '-d', DB, '-Q', SQL, '-W', '-s', '\t', '-h', '-1'],
     { encoding: 'utf8', windowsHide: true, maxBuffer: 1024 * 1024 * 64 },
   );
   if (r.status !== 0) {

@@ -26,7 +26,9 @@
  *    --target-pass <pw>  رمز Postgres مقصد (مستقیم؛ توصیهشده روی ویندوز)
  *    --target-env <p>    مسیر یک فایل .env «محلی» حاوی POSTGRES_PASSWORD
  *                        (جایگزین --target-pass؛ دیگر نیازی به /root/afagh/.env سرور نیست)
- *    --uems-server / --uems-user / --uems-pass / --uems-db  (در حالت --yes الزامی)
+ *    --uems-server / --uems-user / --uems-pass / --uems-db  (در حالت --yes الزامی، مگر --uems-trusted)
+ *    --uems-trusted   احراز هویت یکپارچهٔ ویندوز (sqlcmd -E)؛ نیازی به --uems-user/--uems-pass نیست
+ *    --target-port <n> پورت Postgres مقصد (پیشفرض ۵۴۳۲؛ برای تونل SSH پورت محلی را بدهید)
  *    --sqlcmd <p>     مسیر sqlcmd.exe (اگر روی PATH نیست)
  *    --uni <n>        شناسهٔ دانشگاه (پیشفرض ۱)
  *    --work-dir <p>   پوشهٔ کاری خروجی TSV (پیشفرض: پوشهٔ موقت سیستم)
@@ -82,8 +84,10 @@ async function gatherInteractive(plan) {
   console.log('\n── آدرس دیتابیسِ پشتیبان (UEMS / SQL Server) را وارد کنید ──');
   out.uemsServer = await ask(rl, '  server (مثال localhost\\AFAGH یا 127.0.0.1,62133):', 'localhost\\AFAGH');
   out.uemsDb = await ask(rl, '  database:', 'uems');
-  out.uemsUser = await ask(rl, '  user:', 'sa');
-  out.uemsPass = await ask(rl, '  password:', '');
+  const trusted = (await ask(rl, '  احراز هویت ویندوز، بدون رمز؟ (y/N):', 'n')).toLowerCase();
+  out.uemsTrusted = trusted === 'y' || trusted === 'yes' || trusted === 'آره' || trusted === 'بله';
+  out.uemsUser = out.uemsTrusted ? '' : await ask(rl, '  user:', 'sa');
+  out.uemsPass = out.uemsTrusted ? '' : await ask(rl, '  password:', '');
   console.log('\n── مقصد: دیتابیس آفاق (Postgres) ──');
   out.targetHost = await ask(rl, '  host قابل دسترس از این سیستم (IP سرور/تونل SSH):', '172.20.0.3');
   out.targetSecret = plan ? '' : await ask(rl, '  رمز Postgres مقصد (یا مسیر فایل .env محلی):', '');
@@ -92,7 +96,8 @@ async function gatherInteractive(plan) {
 }
 
 function gatherNonInteractive() {
-  const need = ['uems-server', 'uems-user', 'uems-db'];
+  const trusted = A['uems-trusted'] === 'true';
+  const need = trusted ? ['uems-server', 'uems-db'] : ['uems-server', 'uems-user', 'uems-db'];
   // password may be empty for trusted auth; warn but allow
   const missing = need.filter((k) => !A[k]);
   if (missing.length) {
@@ -102,8 +107,9 @@ function gatherNonInteractive() {
   return {
     uemsServer: A['uems-server'],
     uemsDb: A['uems-db'],
-    uemsUser: A['uems-user'],
+    uemsUser: A['uems-user'] || '',
     uemsPass: A['uems-pass'] || '',
+    uemsTrusted: trusted,
     targetHost: A['target-host'] || '172.20.0.3',
     targetSecret: A['target-pass'] || A['target-env'] || '',
   };
@@ -188,6 +194,7 @@ async function main() {
   writeFileSync(dbEnvPath, `POSTGRES_PASSWORD=${pass}\n`, 'utf8');
 
   const targetPort = A['target-port'] || '5432';
+  const AUTH_ARGS = cfg.uemsTrusted ? ['--trusted'] : ['--user', cfg.uemsUser, '--pass', cfg.uemsPass];
   const targetDb = A['target-db'] || 'afagh_db';
   const targetUser = A['target-user'] || 'afagh';
   const DATABASE_URL = `postgres://${targetUser}:${encodeURIComponent(pass)}@${cfg.targetHost}:${targetPort}/${targetDb}`;
@@ -202,17 +209,17 @@ async function main() {
   if (!SKIP_EXTRACT) {
     steps.push({
       phase: 'extract', name: 'extract-uems-tuition (تعرفهٔ قوانین شهریه)', file: 'extract-uems-tuition.mjs',
-      args: ['--server', cfg.uemsServer, '--user', cfg.uemsUser, '--pass', cfg.uemsPass, '--db', cfg.uemsDb, '--out', ratesDir],
+      args: ['--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', ratesDir, ...AUTH_ARGS],
       summary: 'TSV قوانین شهریه',
     });
     steps.push({
       phase: 'extract', name: 'extract-uems-tariff (تعرفهٔ تفصیلی ترم)', file: 'extract-uems-tariff.mjs',
-      args: ['--server', cfg.uemsServer, '--user', cfg.uemsUser, '--pass', cfg.uemsPass, '--db', cfg.uemsDb, '--out', ratesDir],
+      args: ['--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', ratesDir, ...AUTH_ARGS],
       summary: 'TSV تعرفهٔ ترم + انواع درس',
     });
     steps.push({
       phase: 'extract', name: 'extract-legacy-education (دادهٔ آموزشی)', file: 'extract-legacy-education.mjs',
-      args: ['--server', cfg.uemsServer, '--user', cfg.uemsUser, '--pass', cfg.uemsPass, '--db', cfg.uemsDb, '--out', eduDir],
+      args: ['--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', eduDir, ...AUTH_ARGS],
       summary: 'TSVهای آموزشی (دروس/ارائه/نمرات/...)',
     });
   }
@@ -230,12 +237,12 @@ async function main() {
   });
   steps.push({
     phase: 'load', name: 'migrate-legacy-finance (دفتر مالی: TermAms/StdPays → student_ledger)', file: 'migrate-legacy-finance.mjs',
-    args: ['--dir', FIN_DIR, '--uni', String(UNI), '--apply', '--db-host', cfg.targetHost, '--db-env', dbEnvPath],
+    args: ['--dir', FIN_DIR, '--uni', String(UNI), '--apply', '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath],
     summary: 'دفتر مالی دانشجو + تسویهحساب',
   });
   steps.push({
     phase: 'load', name: 'migrate-legacy-education (آموزشی → courses/offerings/schedules/enrollments/grades)', file: 'migrate-legacy-education.mjs',
-    args: ['--dir', eduDir, '--uni', String(UNI), '--apply', '--db-host', cfg.targetHost, '--db-env', dbEnvPath],
+    args: ['--dir', eduDir, '--uni', String(UNI), '--apply', '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath],
     summary: 'کاتالوگ دروس/ارائه/زمانبندی/نمرات',
   });
 
