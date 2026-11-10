@@ -41,7 +41,7 @@ const DB_ENV = args['db-env'] || '/root/afagh/.env';
 const DB_HOST = args['db-host'] || '172.20.0.3';
 const TERMS_FILE = args.terms || ''; // فایل جدا: termCode,title,startDate,endDate,isCurrent
 
-const req = createRequire(resolve(DIR, '..', 'package.json'));
+const req = createRequire(import.meta.url);
 const { Pool } = req('pg');
 const envTxt = readFileSync(DB_ENV, 'utf8');
 const m = envTxt.match(/^POSTGRES_PASSWORD=(.*)$/m);
@@ -50,7 +50,8 @@ const pool = new Pool({ host: DB_HOST, port: 5432, user: 'afagh', password: m[1]
 const q = async (t, p) => (await pool.query(t, p)).rows;
 
 const readTsv = (name) => {
-  const p = join(DIR, name);
+  let p = join(DIR, name);
+  if (!existsSync(p)) p = join(DIR, name + '.tsv');
   if (!existsSync(p)) return { header: [], rows: [] };
   const txt = readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
   const lines = txt.split(/\r?\n/).filter(l => l.trim() !== '');
