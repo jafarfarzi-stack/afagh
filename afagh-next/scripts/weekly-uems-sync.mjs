@@ -6,8 +6,12 @@
  *  چه میکند:
  *    ۱) آدرس/اتصال «دیتابیسِ پشتیبان» (UEMS) را از کاربر میگیرد (یا از آرگومان).
  *    ۲) از UEMS استخراج میکند (tuition / tariff / دادهٔ آموزشی) → TSV.
- *    ۳) همهٔ اطلاعات (مالی + آموزشی) را در دیتابیس آفاق بارگذاری میکند.
+ *    ۳) همهٔ اطلاعات (مالی + آموزشی + کدهای قیمت سربرگ کارنامه) را بارگذاری میکند.
  *    ۴) در انتها یک گزارش یکپارچه چاپ میکند.
+ *
+ *  گام هشتم (import-tuition-price-codes) بکفیل «کد ثابت شهریه» است که پیش از این
+ *  extract-uems-tuition استخراج میکرد و import-uems-tuition دور میریخت. نیازمند
+ *  مهاجرت ۰۱۳۶ (جدول tuition_price_code_templates + ستون fPriceCode) روی مقصد است.
  *
  *  اجرای تعاملی (آدرس دیتابیس پشتیبان را میپرسد):
  *    node scripts/weekly-uems-sync.mjs
@@ -236,6 +240,13 @@ async function main() {
     phase: 'load', name: 'import-uems-tariff (تعرفهٔ ترم → tuition_term_tariff)', file: 'import-uems-tariff.mjs',
     args: ['--tariff', join(ratesDir, 'uems_term_tariff.tsv'), '--lessons', join(ratesDir, 'uems_lesson_types.tsv'), '--apply', '--university', String(UNI)],
     summary: 'تعرفهٔ ترم + انواع درس مالی',
+  });
+  // پس از import-uems-tariff اجرا میشود تا ردیفهای tuition_term_tariff ساخته شده باشند
+  // و UPDATE مربوط به fPriceCode روی آنها بنشیند. ورودی همان TSV استخراجشده در گام ۱ است.
+  steps.push({
+    phase: 'load', name: 'import-tuition-price-codes (کد ثابت/متغیر → tuition_price_code_templates)', file: 'import-tuition-price-codes.mjs',
+    args: ['--in', join(ratesDir, 'uems_tuition_rules.tsv'), '--apply', '--university', String(UNI)],
+    summary: 'بکفیل کد ثابت شهریه + ستون fPriceCode تعرفه',
   });
   steps.push({
     phase: 'load', name: 'migrate-legacy-finance (دفتر مالی: TermAms/StdPays → student_ledger)', file: 'migrate-legacy-finance.mjs',
