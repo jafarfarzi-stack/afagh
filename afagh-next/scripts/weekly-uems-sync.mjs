@@ -26,6 +26,7 @@
  *    --target-pass <pw>  رمز Postgres مقصد (مستقیم؛ توصیهشده روی ویندوز)
  *    --target-env <p>    مسیر یک فایل .env «محلی» حاوی POSTGRES_PASSWORD
  *                        (جایگزین --target-pass؛ دیگر نیازی به /root/afagh/.env سرور نیست)
+ *    AFAGH_TARGET_PASSWORD  رمز مقصد از متغیر محیط (امنتر: در args پروسه دیده نمیشود)
  *    --uems-server / --uems-user / --uems-pass / --uems-db  (در حالت --yes الزامی، مگر --uems-trusted)
  *    --uems-trusted   احراز هویت یکپارچهٔ ویندوز (sqlcmd -E)؛ نیازی به --uems-user/--uems-pass نیست
  *    --target-port <n> پورت Postgres مقصد (پیشفرض ۵۴۳۲؛ برای تونل SSH پورت محلی را بدهید)
@@ -122,7 +123,8 @@ function gatherNonInteractive() {
  *  هیچ وابستهای به /root/afagh/.env سرور وجود ندارد. */
 function resolvePassword(cfg, plan) {
   if (plan) return '***';
-  const v = String(cfg.targetSecret || '').trim();
+  // اولویت: --target-pass / --target-env ← متغیر محیط (رمز در لیست پروسهها دیده نشود)
+  const v = String(cfg.targetSecret || process.env.AFAGH_TARGET_PASSWORD || '').trim();
   if (!v) {
     console.error('رمز Postgres مقصد مشخص نشد. یکی از --target-pass / --target-env را بدهید (یا در حالت تعاملی وارد کنید).');
     process.exit(2);
