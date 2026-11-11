@@ -17,6 +17,11 @@ rem                                   TSVs into FIN_DIR (old files are backed
 rem                                   up to FIN_DIR.bak-<stamp> first)
 rem    UEMS_SYNC_FIN_STATIC=1         ignore fresh finance extraction and keep
 rem                                   reading the static FIN_DIR TSVs
+rem    UEMS_SYNC_FIN_UPSERT=1        also propagate source-side amount/text
+rem                                   corrections to student_ledger. A JSONL
+rem                                   backup of affected rows is written to the
+rem                                   work-dir; restore with
+rem                                   migrate-legacy-finance.mjs --restore
 rem ===================================================================
 
 set "ROOT=%~dp0.."
@@ -57,6 +62,7 @@ rem finance TSVs into <work-dir>\fin_export unless UEMS_SYNC_FIN_STATIC=1.
 set FINFLAG=--fin-dir "%FIN_DIR%"
 if /i "%UEMS_SYNC_FIN_REFRESH%"=="1" set FINFLAG=%FINFLAG% --fin-refresh
 if /i "%UEMS_SYNC_FIN_STATIC%"=="1" set FINFLAG=%FINFLAG% --fin-static
+if /i "%UEMS_SYNC_FIN_UPSERT%"=="1" set FINFLAG=%FINFLAG% --fin-upsert
 
 set "LOGDIR=%TEMP%\afagh-uems-sync"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1

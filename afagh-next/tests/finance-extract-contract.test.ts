@@ -56,8 +56,12 @@ const has = (cols: string[], want: string[], label: string): void => {
 // ستونهایی که migrate-legacy-finance.mjs با col(..., 'X') میخواند
 has(termAms, ['Stno', 'TermCode', 'Fix_Price', 'Units_Price', 'FinallAcc', 'TermAmsId'], 'TermAms');
 has(stdPays, ['Stno', 'TermCode', 'Mab', 'Fish_no', 'pay_type', 'StdPaysId'], 'StdPays');
-ok(MIGRATE.includes("readTsv('TermAms.tsv')") && MIGRATE.includes("readTsv('StdPays.tsv')") &&
-   MIGRATE.includes("readTsv('paytype.tsv')"), 'مهاجرت مالی همان سه فایل را میخواند');
+// امضای readTsv اکنون (dir, name) است؛ قرارداد «کدام فایلها خوانده میشوند»
+// باید پابرجا بماند حتی اگر شکل فراخوانی عوض شود.
+for (const f of ['TermAms.tsv', 'StdPays.tsv', 'paytype.tsv']) {
+  ok(new RegExp(`readTsv\\([^)]*'${f.replace('.', '\\.')}'\\)`).test(MIGRATE),
+    `مهاجرت مالی ${f} را میخواند`);
+}
 
 // ── ۲) ایمنی استخراج ──────────────────────────────────────────────────────
 ok(EXTRACT.includes("-u', '-o'"), 'خروجی Unicode sqlcmd (جلوگیری از موژیبیک فارسی)');

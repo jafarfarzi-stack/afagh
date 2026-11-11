@@ -34,6 +34,10 @@
  *    --fin-out <p>    پوشهٔ خروجی استخراج مالی تازه (پیشفرض: <work-dir>/fin_export)
  *    --fin-static     حتی با استخراج فعال، مهاجرت مالی همان --fin-dir قدیمی را بخواند
  *    --fin-refresh    فایلهای تازه را (با پشتیبانگیری) در --fin-dir هم مینویسد
+ *    --fin-upsert     پس از درج، اصلاحات مبلغ/شرح منبع را هم به student_ledger منتقل کند.
+ *                     پیشفرض خاموش است (رفتار قدیمی = فقط INSERT ایدمپاتنت). وقتی روشن
+ *                     باشد یک بکاپ JSONL از ردیفهای در شُرف تغییر در work-dir نوشته
+ *                     میشود (قابل بازگردانی با migrate-legacy-finance.mjs --restore).
  *    --skip-extract   از TSVهای موجود استفاده میکند (استخراج را رد میزند)
  *    --target-host / --target-port / --target-db / --target-user
  *    --target-pass <pw>  رمز Postgres مقصد (مستقیم؛ توصیهشده روی ویندوز)
@@ -84,6 +88,7 @@ const UNI = Number(A.uni || 1);
 const FIN_STATIC_DIR = A['fin-dir'] || 'D:\\backups\\fin_export';
 const FIN_STATIC = A['fin-static'] === 'true';
 const FIN_REFRESH = A['fin-refresh'] === 'true';
+const FIN_UPSERT = A['fin-upsert'] === 'true';
 const SQLCMD = A.sqlcmd || process.env.SQLCMD || 'C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\sqlcmd.exe';
 
 // ── پرسش تعاملی ──────────────────────────────────────────────────────────
@@ -279,8 +284,12 @@ async function main() {
   });
   steps.push({
     phase: 'load', name: 'migrate-legacy-finance (دفتر مالی: TermAms/StdPays → student_ledger)', file: 'migrate-legacy-finance.mjs',
-    args: ['--dir', FIN_DIR, '--uni', String(UNI), '--apply', '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath],
-    summary: 'دفتر مالی دانشجو + تسویهحساب',
+    args: [
+      '--dir', FIN_DIR, '--uni', String(UNI), '--apply',
+      '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath,
+      ...(FIN_UPSERT ? ['--upsert', '--backup', join(workDir, 'ledger-before-upsert-' + Date.now() + '.jsonl')] : []),
+    ],
+    summary: FIN_UPSERT ? 'دفتر مالی + اصلاح مبلغ/شرح (با بکاپ)' : 'دفتر مالی دانشجو + تسویهحساب',
   });
   steps.push({
     phase: 'load', name: 'migrate-legacy-education (آموزشی → courses/offerings/schedules/enrollments/grades)', file: 'migrate-legacy-education.mjs',
@@ -294,6 +303,7 @@ async function main() {
   console.log('  مقصد (آفاق PG):               ' + cfg.targetHost + ':' + targetPort + ' / db=' + targetDb + ' / user=' + targetUser);
   console.log('  دادهٔ مالی از:                ' + FIN_DIR + (EXTRACT_FIN ? '  (استخراج تازه ✓)' : '  (ایستا/آفلاین)'));
   if (FIN_REFRESH) console.log('  آینهٔ پوشهٔ مالی ایستا:       ' + FIN_STATIC_DIR + '  (با پشتیبانگیری)');
+  if (FIN_UPSERT) console.log('  اصلاح مقادیر مالی:            فعال (بکاپ JSONL در پوشهٔ کاری)');
   console.log('  فایل env موقت مقصد:          ' + dbEnvPath);
   console.log('  پوشهٔ کاری:                   ' + workDir);
   console.log('  گامها:                        ' + steps.length + ' (' + steps.filter((s) => s.phase === 'extract').length + ' extract + ' + steps.filter((s) => s.phase === 'load').length + ' load)');
