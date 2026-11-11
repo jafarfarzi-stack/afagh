@@ -5,11 +5,16 @@
  *
  *  چه میکند:
  *    ۱) آدرس/اتصال «دیتابیسِ پشتیبان» (UEMS) را از کاربر میگیرد (یا از آرگومان).
- *    ۲) از UEMS استخراج میکند (tuition / tariff / دادهٔ آموزشی) → TSV.
+ *    ۲) از UEMS استخراج میکند (tuition / tariff / آموزشی / **مالی**) → TSV.
  *    ۳) همهٔ اطلاعات (مالی + آموزشی + کدهای قیمت سربرگ کارنامه) را بارگذاری میکند.
  *    ۴) در انتها یک گزارش یکپارچه چاپ میکند.
  *
- *  گام هشتم (import-tuition-price-codes) بکفیل «کد ثابت شهریه» است که پیش از این
+ *  گام «استخراج مالی» (extract-legacy-finance) جایگزین پوشهٔ ایستای قدیمی
+ *  D:\backups\fin_export شد: هر اجرا TermAms/StdPays/paytype/TermPrice/_t را
+ *  مستقیم از SQL Server میگیرد و migrate-legacy-finance همان خروجی تازه را
+ *  میخواند. پوشهٔ ایستا فقط در --skip-extract / --fin-static بهکار میرود.
+ *
+ *  گام import-tuition-price-codes بکفیل «کد ثابت شهریه» است که پیش از این
  *  extract-uems-tuition استخراج میکرد و import-uems-tuition دور میریخت. نیازمند
  *  مهاجرت ۰۱۳۶ (جدول tuition_price_code_templates + ستون fPriceCode) روی مقصد است.
  *
@@ -24,7 +29,11 @@
  *  پرچمها:
  *    --yes            غیرتعاملی (بدون پرسش / بدون تأیید) — برای زمانبندی
  *    --plan           فقط دستوراتی که اجرا میشوند را چاپ میکند و خارج میشود
- *    --fin-dir <p>    مسیر TSVهای مالی (پیشفرض: D:\backups\fin_export)
+ *    --fin-dir <p>    مسیر TSVهای مالی «ایستا/آفلاین» (پیشفرض: D:\backups\fin_export)
+ *                     فقط با --skip-extract یا --fin-static بهعنوان ورودی استفاده میشود
+ *    --fin-out <p>    پوشهٔ خروجی استخراج مالی تازه (پیشفرض: <work-dir>/fin_export)
+ *    --fin-static     حتی با استخراج فعال، مهاجرت مالی همان --fin-dir قدیمی را بخواند
+ *    --fin-refresh    فایلهای تازه را (با پشتیبانگیری) در --fin-dir هم مینویسد
  *    --skip-extract   از TSVهای موجود استفاده میکند (استخراج را رد میزند)
  *    --target-host / --target-port / --target-db / --target-user
  *    --target-pass <pw>  رمز Postgres مقصد (مستقیم؛ توصیهشده روی ویندوز)
@@ -72,7 +81,9 @@ const YES = A.yes === 'true';
 const PLAN = A.plan === 'true';
 const SKIP_EXTRACT = A['skip-extract'] === 'true';
 const UNI = Number(A.uni || 1);
-const FIN_DIR = A['fin-dir'] || 'D:\\backups\\fin_export';
+const FIN_STATIC_DIR = A['fin-dir'] || 'D:\\backups\\fin_export';
+const FIN_STATIC = A['fin-static'] === 'true';
+const FIN_REFRESH = A['fin-refresh'] === 'true';
 const SQLCMD = A.sqlcmd || process.env.SQLCMD || 'C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\sqlcmd.exe';
 
 // ── پرسش تعاملی ──────────────────────────────────────────────────────────
@@ -194,6 +205,14 @@ async function main() {
   mkdirSync(ratesDir, { recursive: true });
   mkdirSync(eduDir, { recursive: true });
 
+  // مالی دیگر ایستا نیست: وقتی استخراج فعال است، TSVهای تازه داخل work-dir
+  // ساخته میشوند و همانها به مهاجرت مالی داده میشوند. پوشهٔ قدیمی فقط
+  // منبع آفلاین/--skip-extract باقی میماند (و با --fin-refresh بروز میشود).
+  const EXTRACT_FIN = !SKIP_EXTRACT && !FIN_STATIC;
+  const finOutDir = A['fin-out'] || join(workDir, 'fin_export');
+  const FIN_DIR = EXTRACT_FIN ? finOutDir : FIN_STATIC_DIR;
+  if (EXTRACT_FIN) mkdirSync(finOutDir, { recursive: true });
+
   const pass = resolvePassword(cfg, PLAN);
   // فایل env موقت «محلی» برای اسکریپتهای migrate (جایگزین /root/afagh/.env سرور).
   const dbEnvPath = join(workDir, 'afagh.env');
@@ -228,6 +247,16 @@ async function main() {
       args: ['--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', eduDir, ...AUTH_ARGS],
       summary: 'TSVهای آموزشی (دروس/ارائه/نمرات/...)',
     });
+    if (EXTRACT_FIN) {
+      steps.push({
+        phase: 'extract', name: 'extract-legacy-finance (دادهٔ مالی تازه از UEMS)', file: 'extract-legacy-finance.mjs',
+        args: [
+          '--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', finOutDir,
+          ...(FIN_REFRESH ? ['--mirror', FIN_STATIC_DIR] : []), ...AUTH_ARGS,
+        ],
+        summary: 'TSVهای مالی (TermAms/StdPays/paytype/TermPrice) + manifest',
+      });
+    }
   }
 
   // ── بارگذاری: مالی (از fin_export) + آموزشی (از استخراج) + تعرفه/قوانین ──
@@ -263,7 +292,8 @@ async function main() {
   console.log('\n══════════════════════════════════════════════════════════════');
   console.log('  منبع (دیتابیس پشتیبان UEMS):  ' + cfg.uemsServer + ' / db=' + cfg.uemsDb);
   console.log('  مقصد (آفاق PG):               ' + cfg.targetHost + ':' + targetPort + ' / db=' + targetDb + ' / user=' + targetUser);
-  console.log('  دادهٔ مالی از:                ' + FIN_DIR);
+  console.log('  دادهٔ مالی از:                ' + FIN_DIR + (EXTRACT_FIN ? '  (استخراج تازه ✓)' : '  (ایستا/آفلاین)'));
+  if (FIN_REFRESH) console.log('  آینهٔ پوشهٔ مالی ایستا:       ' + FIN_STATIC_DIR + '  (با پشتیبانگیری)');
   console.log('  فایل env موقت مقصد:          ' + dbEnvPath);
   console.log('  پوشهٔ کاری:                   ' + workDir);
   console.log('  گامها:                        ' + steps.length + ' (' + steps.filter((s) => s.phase === 'extract').length + ' extract + ' + steps.filter((s) => s.phase === 'load').length + ' load)');
@@ -278,6 +308,7 @@ async function main() {
     for (const s of steps) {
       console.log('  [' + s.phase + '] ' + s.name + '\n    node ' + s.file + ' ' + s.args.map((a) => (/[ \\]/.test(a) ? `"${a}"` : a)).join(' '));
     }
+    try { unlinkSync(dbEnvPath); } catch { /* ignore */ }
     return;
   }
 

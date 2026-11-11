@@ -12,6 +12,11 @@ rem    UEMS_SYNC_SSH_TUNNEL=1         open/close an SSH tunnel to server PG
 rem    UEMS_SYNC_FETCH_DB_PASSWORD=1  read POSTGRES_PASSWORD from the server
 rem                                   over SSH; the temp file is removed at
 rem                                   once, no secret is stored permanently
+rem    UEMS_SYNC_FIN_REFRESH=1        also write the freshly extracted finance
+rem                                   TSVs into FIN_DIR (old files are backed
+rem                                   up to FIN_DIR.bak-<stamp> first)
+rem    UEMS_SYNC_FIN_STATIC=1         ignore fresh finance extraction and keep
+rem                                   reading the static FIN_DIR TSVs
 rem ===================================================================
 
 set "ROOT=%~dp0.."
@@ -47,6 +52,11 @@ set "SKIPFLAG="
 if /i "%UEMS_SYNC_SKIP_EXTRACT%"=="1" set "SKIPFLAG=--skip-extract"
 set "WDFLAG="
 if defined UEMS_SYNC_WORK_DIR set "WDFLAG=--work-dir "%UEMS_SYNC_WORK_DIR%""
+rem FIN_DIR is now the offline/mirror folder: the orchestrator extracts fresh
+rem finance TSVs into <work-dir>\fin_export unless UEMS_SYNC_FIN_STATIC=1.
+set FINFLAG=--fin-dir "%FIN_DIR%"
+if /i "%UEMS_SYNC_FIN_REFRESH%"=="1" set FINFLAG=%FINFLAG% --fin-refresh
+if /i "%UEMS_SYNC_FIN_STATIC%"=="1" set FINFLAG=%FINFLAG% --fin-static
 
 set "LOGDIR=%TEMP%\afagh-uems-sync"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1
@@ -73,11 +83,11 @@ echo.
 if /i "%UEMS_TRUSTED%"=="1" goto RUN_TRUSTED
 if not defined UEMS_USER echo [ERROR] UEMS_USER missing in config & goto FAIL_USER
 if not defined UEMS_PASS echo [ERROR] UEMS_PASS missing in config & goto FAIL_USER
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" --fin-dir "%FIN_DIR%" > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% > "%LOG%" 2>&1
 goto RAN
 
 :RUN_TRUSTED
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" --fin-dir "%FIN_DIR%" > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% > "%LOG%" 2>&1
 
 :RAN
 set "EC=%ERRORLEVEL%"
