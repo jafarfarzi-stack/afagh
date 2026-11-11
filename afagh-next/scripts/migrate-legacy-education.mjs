@@ -78,6 +78,21 @@ const toOurTerm = (legacy) => {
   if (/^\d{5}$/.test(s)) return s;             // 14051 / 13831
   return s;
 };
+/** زمان کلاس LT55: HHMM (یا HH:MM) → «HH:MM» قابلقبول برای time بدون منطقهٔ زمانی.
+ *  هر مقدار نامعتبر (خالی، منفی، ساعت>۲۳، دقیقه>۵۹، متن) ⇒ null. */
+const toClock = (s) => {
+  const v = String(s ?? '').trim().replace(/[,\s]/g, '');
+  if (!v) return null;
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(v)) {
+    const [h, m] = v.split(':').map(Number);
+    return h <= 23 && m <= 59 ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` : null;
+  }
+  if (!/^\d{1,4}$/.test(v)) return null;
+  const p = v.padStart(4, '0');
+  const h = Number(p.slice(0, 2));
+  const m = Number(p.slice(2));
+  return h <= 23 && m <= 59 ? `${p.slice(0, 2)}:${p.slice(2)}` : null;
+};
 const report = { dry: !APPLY, uni: UNI, terms: null, courses: null, chart: null, offerings: null, grades: null, history: null, errors: [] };
 
 (async () => {
@@ -199,13 +214,16 @@ const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
       const off = (await q('SELECT id FROM course_offerings WHERE "universityId"=$1 AND "termId"=$2 AND "courseId"=$3 AND "groupNumber"=$4 LIMIT 1', [UNI, termId, courseId, groupNumber]))[0];
       if (!off) continue;
       const dayOfWeek = int(col(r, lt55.header, 'DayCode'));
-      const startMin = int(col(r, lt55.header, 'StartTime'));
-      const endMin = int(col(r, lt55.header, 'EndTime'));
-      const toTime = (min) => min == null ? null : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+      // LT55 «StartTime/EndTime» را بهصورت HHMM ذخیره میکند (۷۳۰→07:30، ۱۵۴۵→15:45).
+      // فرض قدیمی «دقیقه از نیمهشب» برای ۱۵۴۵ مقدار ۲۵:۴۵ میساخت و ستون time
+      // در Postgres با DateTimeParseError کل مهاجرت آموزشی را متوقف میکرد.
+      // مقدار نامعتبر ⇒ NULL تا یک ردیف خراب کل اجرا را نشکند.
+      const startTime = toClock(col(r, lt55.header, 'StartTime'));
+      const endTime = toClock(col(r, lt55.header, 'EndTime'));
       if (APPLY) {
         await q(
           `INSERT INTO schedules ("universityId","offeringId","scheduleType","dayOfWeek","startTime","endTime") VALUES ($1,$2,'CLASS',$3,$4,$5) ON CONFLICT DO NOTHING`,
-          [UNI, off.id, dayOfWeek, toTime(startMin), toTime(endMin)]);
+          [UNI, off.id, dayOfWeek, startTime, endTime]);
       }
       sched++;
     }
