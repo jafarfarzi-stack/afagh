@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { useCurriculum } from '../curriculum-context';
 import { ROLE_LABELS, compareCourseCode, faDate, faNum, semLabel, dependencyWarningText, depWarningBadge, roleLabel } from '../curriculum-core';
-import { describeLogicNode } from '@/lib/curriculum-types';
+import { describeLogicNode, canDeleteStatus, type CurriculumVersionStatus } from '@/lib/curriculum-types';
 import { SUMMER_SEMESTER } from '@/lib/term-plan';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 import { roleFromBankType } from '@/lib/bank-roles';
@@ -49,6 +49,14 @@ export default function CoursesTab() {
   };
 
   const filtersActive = query.trim() !== '' || roleFilter !== '' || semFilter !== '';
+
+  /**
+   * برداشتنِ درس از چارت تا وقتی نسخه **منتشر نشده** مجاز است (هم‌قاعده با
+   * حذف کل نسخه). چرا جدا از isDraft: اگر درسی اشتباهی اضافه شده باشد،
+   * برداشتنش اصلاح است نه ویرایش محتوا — و در نسخهٔ تأییدنشده‌ی منتشرنشده
+   * سابقهٔ دانشجویی وجود ندارد.
+   */
+  const canRemove = canDeleteStatus((detail?.version.status ?? 'DRAFT') as CurriculumVersionStatus);
 
   const visibleCourses = useMemo(() => {
     const courses = detail?.courses ?? [];
@@ -214,7 +222,9 @@ export default function CoursesTab() {
                   <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
                   <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی (از curriculum_courses.failGradeStatusCode)">کد مردودی</th>
                   <th className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
-                  <th className="p-2.5 border border-slate-800">عملیات</th>
+                  {/* ستون چسبان: در جدول ۱۲ ستونی، دکمهٔ حذف باید همیشه دیده شود
+                      (قبلاً انتهای جدولِ اسکرول‌شونده بود و پیدا نمی‌شد) */}
+                  <th className="p-2.5 border border-slate-800 sticky left-0 z-20 bg-slate-900 shadow-[4px_0_6px_-4px_rgba(0,0,0,.5)]">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -349,14 +359,20 @@ export default function CoursesTab() {
                         </button>
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 text-center">
-                      {isDraft && (
+                    <td className={`p-2 border border-slate-200 text-center sticky left-0 z-10 shadow-[4px_0_6px_-4px_rgba(0,0,0,.12)] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                      {canRemove ? (
                         <button
                           onClick={() => handleRemoveCourse(c.courseId)}
-                          className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-3xs"
+                          disabled={busy}
+                          title="برداشتن کامل این درس از کاتالوگ (تخصیص + قواعد پیش‌نیاز/هم‌نیاز)"
+                          className="px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-3xs disabled:opacity-40"
                         >
-                          حذف
+                          🗑️ حذف
                         </button>
+                      ) : (
+                        <span className="text-3xs font-bold text-slate-400" title="نسخه منتشر/بایگانی شده — برای تغییر چارت نسخهٔ R+1 بسازید">
+                          —
+                        </span>
                       )}
                     </td>
                   </tr>

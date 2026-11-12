@@ -575,8 +575,18 @@ function useCurriculumWorkspace(
 
   const handleRemoveCourse = async (courseId: number) => {
     if (selectedVersionId == null) return;
-    const ok = await run(() => removeCourseFromCurriculumAction(selectedVersionId, courseId));
-    if (ok) reloadDetail(selectedVersionId);
+    const c = detail?.courses.find(x => x.courseId === courseId);
+    const ok = await askConfirm({
+      title: `برداشتن درس «${c?.title ?? courseId}» از کاتالوگ؟`,
+      body: `${c ? `درس ${c.code} (${c.units} واحد) ` : ''}به‌همراه قواعد پیش‌نیاز/هم‌نیازش از این نسخه حذف می‌شود. `
+        + 'خودِ درس در بانک دروس دست‌نخورده می‌ماند و در نسخه‌های دیگر تغییری نمی‌کند.',
+      confirmText: 'برداشتن از کاتالوگ',
+      cancelText: 'انصراف',
+      danger: true,
+    });
+    if (!ok) return;
+    const done = await run(() => removeCourseFromCurriculumAction(selectedVersionId, courseId));
+    if (done) reloadDetail(selectedVersionId);
   };
 
   const handleAssignSemester = async (courseId: number, semesterNo: number | null) => {

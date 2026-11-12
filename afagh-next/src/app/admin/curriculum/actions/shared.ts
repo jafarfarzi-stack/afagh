@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { course_rules, courses, curriculum_courses, curriculum_versions, degree_level_configs, majors, staff } from '@/db/schema';
 import { type SessionUser } from '@/lib/auth';
-import { CheckResult, CurriculumVersionStatus, assertTransition, canEditStatus, collectCourseCodes } from '@/lib/curriculum-types';
+import { CheckResult, CurriculumVersionStatus, assertTransition, canDeleteStatus, canEditStatus, collectCourseCodes } from '@/lib/curriculum-types';
 import { defaultMinRoles, parseRoleUnitTargets, validateCurriculumCore } from '@/lib/curriculum-validator';
 import { buildRulesWithCatalogFallback } from '@/lib/curriculum-rules';
 
@@ -49,6 +49,25 @@ export async function assertEditable(versionId: number) {
   const v = await getVersionOrThrow(versionId);
   if (!canEditStatus(v.status as CurriculumVersionStatus)) {
     throw new Error(`ویرایش نسخه در وضعیت «${v.status}» مجاز نیست؛ ابتدا نسخه را به DRAFT برگردانید (فقط قبل از تأیید) یا نسخهٔ جدید (R1) بسازید.`);
+  }
+  return v;
+}
+
+/**
+ * گاردِ «برداشتن درس از چارت» — یک پله بازتر از ویرایش.
+ *
+ * چرا: اگر درسی اشتباهی به کاتالوگ اضافه شده باشد، حذفش یک **اصلاح** است نه
+ * تغییرِ محتوا؛ و تا وقتی نسخه منتشر نشده، سابقهٔ تحصیلی هیچ دانشجویی به آن
+ * گره نخورده. پس همان قاعدهٔ «حذف نسخه» این‌جا هم اعمال می‌شود:
+ * DRAFT / REVIEW / APPROVED مجاز، PUBLISHED / ARCHIVED ممنوع.
+ */
+export async function assertRemovable(versionId: number) {
+  const v = await getVersionOrThrow(versionId);
+  if (!canDeleteStatus(v.status as CurriculumVersionStatus)) {
+    throw new Error(
+      `نسخه در وضعیت «${v.status}» منتشر/بایگانی شده است و برداشتن درس از آن مجاز نیست؛ `
+      + 'برای تغییر چارتِ منتشرشده، ابتدا نسخهٔ جدید (R+1) بسازید.',
+    );
   }
   return v;
 }

@@ -12,7 +12,7 @@ import { course_offerings, course_rules, courses, curriculum_courses, department
 import { appendAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/auth';
 import { roleFromBankType } from '@/lib/bank-roles';
-import { type Act, type AddCourseInput, type CreateBankCourseInput, EDITORS, PHASE, assertEditable, revalidateCurriculumPaths } from './shared';
+import { type Act, type AddCourseInput, type CreateBankCourseInput, EDITORS, PHASE, assertEditable, assertRemovable, revalidateCurriculumPaths } from './shared';
 
 /**
  * تعریف درس جدید از صفر در بانک دروس (معادل «معرفی درس جدید» سامانهٔ قدیم).
@@ -277,7 +277,8 @@ export async function markGraduationRequiredBulkAction(versionId: number): Promi
 export async function removeCourseFromCurriculumAction(versionId: number, courseId: number): Promise<Act<{ message: string }>> {
   await requireRole(EDITORS);
   try {
-    await assertEditable(versionId);
+    // برداشتن درس = اصلاح، نه ویرایش محتوا → تا وقتی نسخه منتشر نشده مجاز است
+    await assertRemovable(versionId);
     const [courseRow] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
     if (!courseRow) return { ok: false, error: 'درس یافت نشد.' };
 
