@@ -58,6 +58,15 @@ export default function CoursesTab() {
    */
   const canRemove = canDeleteStatus((detail?.version.status ?? 'DRAFT') as CurriculumVersionStatus);
 
+  /**
+   * شمارش دروسِ بدون ترم پیشنهادی — سناریوی رایج: چند درس اشتباهی از بانک
+   * اضافه شده و در هیچ ترمی هم استفاده نشده؛ کاربر باید فوراً پیدایشان کند.
+   */
+  const noSemCount = useMemo(
+    () => (detail?.courses ?? []).filter(c => c.recommendedSemester == null).length,
+    [detail?.courses],
+  );
+
   const visibleCourses = useMemo(() => {
     const courses = detail?.courses ?? [];
     const needle = query.trim().toLowerCase();
@@ -200,6 +209,21 @@ export default function CoursesTab() {
                   className="rounded-lg bg-slate-200 hover:bg-slate-300 px-2.5 py-1.5 text-2xs font-extrabold text-slate-700 transition-colors"
                 >
                   ✕ پاک‌کردن فیلتر
+                </button>
+              )}
+              {noSemCount > 0 && (
+                <button
+                  onClick={() => setSemFilter(semFilter === 'NONE' ? '' : 'NONE')}
+                  title="فقط درس‌هایی را نشان بده که در هیچ ترمی برنامه‌ریزی نشده‌اند — همان‌هایی که معمولاً اشتباهی از بانک اضافه شده‌اند"
+                  className={`rounded-lg px-2.5 py-1.5 text-2xs font-extrabold transition-colors ${
+                    semFilter === 'NONE'
+                      ? 'bg-rose-600 text-white hover:bg-rose-700'
+                      : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                  }`}
+                >
+                  {semFilter === 'NONE'
+                    ? `✕ نمایش همه (${faNum(noSemCount)} بدون ترم)`
+                    : `⚠️ ${faNum(noSemCount)} درس بدون ترم`}
                 </button>
               )}
               <span className={`ms-auto text-2xs font-black ${visibleCourses.length === detail.courses.length ? 'text-slate-500' : 'text-indigo-800'}`}>
@@ -370,8 +394,11 @@ export default function CoursesTab() {
                           🗑️ حذف
                         </button>
                       ) : (
-                        <span className="text-3xs font-bold text-slate-400" title="نسخه منتشر/بایگانی شده — برای تغییر چارت نسخهٔ R+1 بسازید">
-                          —
+                        <span
+                          className="inline-block px-2 py-1 rounded-lg bg-slate-100 text-slate-500 font-extrabold text-3xs cursor-help"
+                          title="این نسخه منتشر یا بایگانی شده است و چارتش قفل است. برای برداشتن/افزودن درس، از تب «انتقال کاتالوگ» نسخهٔ جدید (R+1) بسازید."
+                        >
+                          🔒 قفل
                         </span>
                       )}
                     </td>

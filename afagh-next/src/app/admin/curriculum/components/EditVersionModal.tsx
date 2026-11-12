@@ -5,6 +5,7 @@
 import { useCurriculum } from '../curriculum-context';
 import { ROLE_LABELS, STATUS_UI, faNum } from '../curriculum-core';
 import { roleFromBankType } from '@/lib/bank-roles';
+import { canDeleteStatus, type CurriculumVersionStatus } from '@/lib/curriculum-types';
 
 export default function EditVersionModal() {
   const {
@@ -42,6 +43,10 @@ export default function EditVersionModal() {
   const editingVersion = (majorVersions ?? []).find((v) => v.id === editVersionId);
   const entryOnly = editingVersion ? editingVersion.status !== 'DRAFT' : !isDraft;
   const lockedCls = entryOnly ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : '';
+  /** برداشتن درس تا وقتی نسخه منتشر/بایگانی نشده مجاز است (هم‌قاعده با CoursesTab) */
+  const canRemove = canDeleteStatus(
+    (editingVersion?.status ?? (isDraft ? 'DRAFT' : 'PUBLISHED')) as CurriculumVersionStatus,
+  );
 
   return (
     <>
@@ -106,7 +111,7 @@ export default function EditVersionModal() {
                       <span className="font-mono text-indigo-900 shrink-0">{c.code}</span>
                       <span className="truncate flex-1">{c.title}</span>
                       <span className="text-slate-400 shrink-0">({faNum(c.units)} واحد)</span>
-                      {isDraft && (
+                      {canRemove && (
                         <button
                           onClick={() => handleRemoveCourse(c.courseId)}
                           disabled={busy}

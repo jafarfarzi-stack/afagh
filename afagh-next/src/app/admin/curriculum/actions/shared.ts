@@ -42,9 +42,6 @@ export async function getVersionOrThrow(versionId: number) {
 }
 
 /** قاعدهٔ طلایی: ویرایش فقط در DRAFT؛ هر گذار با assertTransition قفل شده */
-
-
-/** قاعدهٔ طلایی: ویرایش فقط در DRAFT؛ هر گذار با assertTransition قفل شده */
 export async function assertEditable(versionId: number) {
   const v = await getVersionOrThrow(versionId);
   if (!canEditStatus(v.status as CurriculumVersionStatus)) {
@@ -71,9 +68,6 @@ export async function assertRemovable(versionId: number) {
   }
   return v;
 }
-
-/** برای ثبت رویداد تأیید، حساب کاربر باید به پروندهٔ کارکنان متصل باشد */
-
 
 /** برای ثبت رویداد تأیید، حساب کاربر باید به پروندهٔ کارکنان متصل باشد */
 export async function requireActorStaff(user: SessionUser): Promise<number> {
