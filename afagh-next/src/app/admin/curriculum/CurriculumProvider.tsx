@@ -15,6 +15,8 @@ import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCu
 import { addCourseToCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, markGraduationRequiredBulkAction, removeCourseFromCurriculumAction, syncRolesFromBankAction, updateCourseInCurriculumAction } from './actions/courses';
 import { setCourseCorequisiteAction, setCourseGradeStatusCodesAction, setCoursePassingGradeAction, setCoursePrerequisiteAction, syncRequisiteRulesAction } from './actions/rules';
 import { approveCurriculumAction, archiveCurriculumAction, publishCurriculumAction, rejectCurriculumAction, submitCurriculumForApprovalAction, validateCurriculumAction } from './actions/lifecycle';
+import { deleteCurriculumVersionAction, listUndoableTransfersAction, type UndoableTransfer } from './actions/delete';
+import { askConfirm } from '@/lib/ui-feedback';
 import { describeLogicNode } from '@/lib/curriculum-types';
 import { parseRoleUnitTargets } from '@/lib/curriculum-validator';
 import { roleFromBankType } from '@/lib/bank-roles';
@@ -74,6 +76,9 @@ function useCurriculumWorkspace(
   const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
   const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '', minUnits: '', minTerm: '' });
   const [activeTab, setActiveTab] = useState<CurriculumTab>(resolveTab(initialTab));
+  /** انتقال‌های اخیرِ قابل لغو (نسخه‌های DRAFT ساخته‌شده با کپی عمیق) — تب انتقال */
+  const [transfers, setTransfers] = useState<UndoableTransfer[]>([]);
+  const [transfersLoading, setTransfersLoading] = useState(false);
   const [transferMajorId, setTransferMajorId] = useState(0);
   /** نیم‌سال ورودیِ نسخهٔ مقصد در «انتقال کاتالوگ» (0 = تعیین‌نشده) */
   const [transferEntryTermId, setTransferEntryTermId] = useState(0);
@@ -109,6 +114,18 @@ function useCurriculumWorkspace(
     }
   }, [showToast]);
 
+  /** فهرست انتقال‌های قابل لغو (فقط تب «انتقال کاتالوگ» لازمش دارد) */
+  const reloadTransfers = useCallback(async () => {
+    setTransfersLoading(true);
+    try {
+      const r = await listUndoableTransfersAction();
+      if (!r.ok) { showToast(r.error, 'error'); return; }
+      setTransfers(r.data);
+    } finally {
+      setTransfersLoading(false);
+    }
+  }, [showToast]);
+
   // پاک‌سازی انتخاب بانک هنگام بستن مودال
   const closeAddCourse = () => {
     setModal(null);
@@ -123,6 +140,12 @@ function useCurriculumWorkspace(
     if (selectedVersionId == null) { setDetail(null); return; }
     reloadDetail(selectedVersionId);
   }, [selectedVersionId, reloadDetail]);
+
+  // «انتقال‌های اخیر» فقط وقتی تب انتقال باز است خوانده می‌شود (هزینهٔ کوئری بی‌مورد نه)
+  useEffect(() => {
+    if (activeTab !== 'TRANSFER') return;
+    reloadTransfers();
+  }, [activeTab, reloadTransfers]);
 
   // بانک دروس — جست‌وجوی سمتِ سرور (کد یا عنوان درس) + سقف ردیف.
   // پیش‌تر *همه* دروس دانشگاه بی‌سقف می‌آمد و این‌جا فیلتر می‌شد؛ حالا سرور
@@ -213,6 +236,65 @@ function useCurriculumWorkspace(
     if (selectedVersionId == null) return;
     const ok = await run(() => archiveCurriculumAction(selectedVersionId));
     if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
+  };
+
+  /**
+   * حذف کاتالوگِ منتشرنشده (DRAFT) — برگشت‌ناپذیر.
+   * تأیید دومرحله‌ای: تعداد دروس در متنِ تأیید نوشته می‌شود تا کاربر بداند
+   * دقیقاً چه چیزی پاک می‌شود (نه یک «حذف» مبهم). گارد وضعیت سمتِ سرور است؛
+   * دکمه فقط برای DRAFT رندر می‌شود.
+   */
+  const handleDeleteVersion = async (v: { id: number; versionCode: string; title: string; courseCount: number }) => {
+    const ok = await askConfirm({
+      title: `حذف کاتالوگ «${v.versionCode}»؟`,
+      body: `«${v.title}» با ${v.courseCount} درس و همهٔ قواعد پیش‌نیاز/هم‌نیازش برای همیشه پاک می‌شود. `
+        + 'این عمل برگشت‌ناپذیر است و فقط برای کاتالوگ‌های پیش‌نویس (منتشرنشده) انجام می‌شود.',
+      confirmText: 'حذف قطعی',
+      cancelText: 'انصراف',
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await deleteCurriculumVersionAction(v.id);
+      if (!r.ok) { showToast(r.error, 'error'); return; }
+      showToast(r.message, 'success');
+      // اگر همان نسخه باز/در حال ویرایش بود، انتخاب و مودال پاک شود
+      if (selectedVersionId === v.id) { setSelectedVersionId(null); setDetail(null); }
+      if (editVersionId === v.id) { setEditVersionId(null); setModal(null); }
+      await reloadOverview();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * «لغو انتقال» — نسخهٔ DRAFTی که با کپی عمیق ساخته شده پاک می‌شود و رشتهٔ
+   * مقصد به وضعیت قبل از انتقال برمی‌گردد. همان اکشن حذف را صدا می‌زند تا
+   * گاردها (DRAFT-only، نبودِ وابستگی دانشجو) یک‌جا اعمال شوند.
+   */
+  const handleUndoTransfer = async (t: UndoableTransfer) => {
+    const ok = await askConfirm({
+      title: `لغو انتقال «${t.versionCode}»؟`,
+      body: `نسخهٔ کپی‌شده در رشتهٔ «${t.majorName}» (${t.courseCount} درس) حذف می‌شود و آن رشته به وضعیت قبل از انتقال برمی‌گردد. `
+        + `منبع: ${t.sourceNote ?? 'نامشخص'}. این عمل برگشت‌ناپذیر است.`,
+      confirmText: 'لغو انتقال',
+      cancelText: 'انصراف',
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await deleteCurriculumVersionAction(t.id);
+      if (!r.ok) { showToast(r.error, 'error'); return; }
+      showToast(`انتقال لغو شد: ${r.message}`, 'success');
+      if (selectedVersionId === t.id) { setSelectedVersionId(null); setDetail(null); }
+      if (editVersionId === t.id) { setEditVersionId(null); setModal(null); }
+      await reloadOverview();
+      await reloadTransfers();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleCreateRevision = async () => {
@@ -326,6 +408,7 @@ function useCurriculumWorkspace(
       });
       if (!r.ok) { showToast(r.error, 'error'); return; }
       await reloadOverview();
+      await reloadTransfers();
       // پرش به رشته و نسخهٔ مقصد (تب دروس) تا کاربر فوراً دروس کپی‌شده را ببیند
       setSelectedMajorId(targetMajor.id);
       setSelectedVersionId(r.data.id);
@@ -673,6 +756,7 @@ function useCurriculumWorkspace(
     handleCreateBankCourse,
     handleCreateRevision,
     handleCreateVersion,
+    handleDeleteVersion,
     handleMarkGradReq,
     handlePublish,
     handleReject,
@@ -683,6 +767,7 @@ function useCurriculumWorkspace(
     handleSyncRequisites,
     handleSyncRoles,
     handleTransferToMajor,
+    handleUndoTransfer,
     handleUpdateGradReq,
     handleUpdateVersion,
     handleUpdateGradeStatusCodes,
@@ -759,6 +844,9 @@ function useCurriculumWorkspace(
     transferMajorId,
     transferEntryTermId,
     setTransferEntryTermId,
+    transfers,
+    transfersLoading,
+    reloadTransfers,
     terms,
     typeSummary,
     unassignedCourses,
