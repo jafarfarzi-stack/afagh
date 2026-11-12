@@ -113,7 +113,12 @@ const CASES: [string, React.ComponentType, string[], Record<string, unknown>?][]
   ['CatalogTab (منتشرشده)', CatalogTab, ['منتشرشده', '🗓️ ورودی', '!🗑️ حذف'], { activeTab: 'CATALOG', majorVersions: [{ ...detail.version, status: 'PUBLISHED' }] }],
   ['DetailHeaderBar', DetailHeaderBar, ['برنامهٔ کارشناسی ۱۴۰۲', 'ایجاد نسخهٔ جدید'], { activeTab: 'COURSES' }],
   ['VerifyTab', VerifyTab, ['🎯 سهم واحد هر نوع درس', 'جمع واحدها از سقف واحد ترم کمتر است', 'واحد (Enter/Blur برای ذخیره)', '!در حال بارگذاری جزئیات از سرور'], { activeTab: 'VERIFY' }],
-  ['CoursesTab', CoursesTab, ['مبانی برنامه‌سازی', 'پیش‌نیاز / هم‌نیاز', 'افزودن درس از بانک'], { activeTab: 'COURSES' }],
+  ['CoursesTab', CoursesTab, ['مبانی برنامه‌سازی', 'پیش‌نیاز / هم‌نیاز', 'افزودن درس از بانک', '🗑️ حذف', 'درس بدون ترم'], { activeTab: 'COURSES' }],
+  // نسخهٔ منتشرشده: دکمهٔ حذف درس نیست، به‌جایش نشان «قفل» با توضیح R+1
+  ['CoursesTab (منتشرشده)', CoursesTab, ['🔒 قفل', '!🗑️ حذف'], {
+    activeTab: 'COURSES',
+    detail: { ...detail, version: { ...detail.version, status: 'PUBLISHED' } },
+  }],
   ['SemestersTab', SemestersTab, ['تابستان', 'نامشخص', 'ساختار داده'], { activeTab: 'SEMESTERS' }],
   ['TransferTab', TransferTab, ['نسخهٔ جدید (R+1) از همین نسخه', 'مهندسی کامپیوتر', 'لغو انتقال'], { activeTab: 'TRANSFER' }],
   ['NewVersionModal', NewVersionModal, ['ایجاد نسخهٔ جدید برای', '1404-1', 'کپی عمیق از نسخهٔ دیگر'], { modal: 'NEW_VERSION' }],
