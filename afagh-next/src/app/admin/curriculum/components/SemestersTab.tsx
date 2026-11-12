@@ -16,7 +16,6 @@ export default function SemestersTab() {
     degreeMajor,
     depWarnings,
     detail,
-    detailLoading,
     dragCourseId,
     dropTarget,
     gridTerms,
@@ -87,16 +86,9 @@ export default function SemestersTab() {
 
   if (!selectedVersion) return null;
 
-  if (activeTab === 'SEMESTERS' && !detail) {
-    if (detailLoading) {
-      return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-center text-[12px] font-bold text-slate-500">
-          در حال بارگذاری ترم‌بندی…
-        </div>
-      );
-    }
-    return null;
-  }
+  // کارت «در حال بارگذاری / بارگذاری نشد» را VersionDetailPanel (DetailFallback)
+  // نشان می‌دهد تا هر چهار تب رفتار یکسان داشته باشند.
+  if (activeTab === 'SEMESTERS' && !detail) return null;
 
   return (
     <>

@@ -6,7 +6,7 @@
 //  محاسبات خالص هم در curriculum-core.ts است (قابل Unit Test).
 // ════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CurriculumCtx } from './curriculum-context';
 import { allBankSelected, buildRuleTree, nonCourseConditionsOf, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, countsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
 import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
@@ -39,6 +39,12 @@ function useCurriculumWorkspace(
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
   const [detail, setDetail] = useState<VersionDetail | null>(initialDetail ?? null);
   const [detailLoading, setDetailLoading] = useState(false);
+  /**
+   * خطای بارگذاری جزئیات — قبلاً اگر Promise سرور-اکشن reject می‌شد (قطعی شبکه،
+   * 502، تایم‌اوت) خطا بلعیده می‌شد و تب‌ها «صفحهٔ سفید» می‌شدند: نه پیام، نه
+   * راهِ تلاش دوباره. حالا پیام نگه داشته می‌شود تا UI کارت خطا نشان دهد.
+   */
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [bank, setBank] = useState<BankCourse[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankQuery, setBankQuery] = useState('');
@@ -105,10 +111,20 @@ function useCurriculumWorkspace(
 
   const reloadDetail = useCallback(async (versionId: number) => {
     setDetailLoading(true);
+    setDetailError(null);
     try {
       const r = await getCurriculumVersionDetailAction(versionId);
-      if (!r.ok) { showToast(r.error, 'error'); return; }
+      if (!r.ok) {
+        setDetailError(r.error);
+        showToast(r.error, 'error');
+        return;
+      }
       setDetail(r.data as unknown as VersionDetail);
+    } catch (e) {
+      // خطای شبکه/سرور: قبلاً بی‌صدا بلعیده می‌شد و تب سفید می‌ماند
+      const msg = e instanceof Error ? e.message : String(e);
+      setDetailError(msg);
+      showToast(`بارگذاری جزئیات نسخه ناموفق بود: ${msg}`, 'error');
     } finally {
       setDetailLoading(false);
     }
@@ -140,6 +156,22 @@ function useCurriculumWorkspace(
     if (selectedVersionId == null) { setDetail(null); return; }
     reloadDetail(selectedVersionId);
   }, [selectedVersionId, reloadDetail]);
+
+  /**
+   * بازیابی خودکار «تب سفید»: اگر بارگذاری جزئیات شکست خورده باشد و کاربر
+   * روی تبی برود که به `detail` نیاز دارد، یک‌بار دیگر تلاش می‌کنیم.
+   * `retriedRef` جلوی حلقهٔ بی‌پایان را می‌گیرد: هر (نسخه، تب) فقط یک تلاش.
+   */
+  const retriedRef = useRef<string>('');
+  useEffect(() => {
+    if (selectedVersionId == null) return;
+    if (detail != null || detailLoading) return;
+    if (activeTab === 'CATALOG') return;
+    const key = `${selectedVersionId}:${activeTab}`;
+    if (retriedRef.current === key) return;
+    retriedRef.current = key;
+    reloadDetail(selectedVersionId);
+  }, [activeTab, selectedVersionId, detail, detailLoading, reloadDetail]);
 
   // «انتقال‌های اخیر» فقط وقتی تب انتقال باز است خوانده می‌شود (هزینهٔ کوئری بی‌مورد نه)
   useEffect(() => {
@@ -748,6 +780,8 @@ function useCurriculumWorkspace(
     deptsLoading,
     detail,
     detailLoading,
+    detailError,
+    reloadDetail,
     depWarnings,
     dragCourseId,
     dropTarget,
@@ -800,7 +834,6 @@ function useCurriculumWorkspace(
     overflowTerms,
     planTerms,
     rejectNote,
-    reloadDetail,
     reloadOverview,
     roleForBank,
     roleTargets,

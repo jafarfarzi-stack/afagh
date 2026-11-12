@@ -128,6 +128,8 @@ const CASES: [string, React.ComponentType, string[], Record<string, unknown>?][]
   ['RejectModal', RejectModal, ['رد نسخه و بازگشت به پیش‌نویس', 'کسری واحد عمومی'], { modal: 'REJECT' }],
   ['RoleTargetsEditor', RoleTargetsCase, ['۳ واحد (کسری ۵۷)', 'ذخیره سهم‌ها', 'کسری ۵۷'], undefined],
   ['VersionDetailPanel', VersionDetailPanel, ['ساختار داده', 'پیش‌نیاز / هم‌نیاز'], { activeTab: 'COURSES' }],
+  // حالت «تب سفید»: جزئیات بارگذاری نشده → کارت خطا + دکمهٔ تلاش دوباره
+  ['VersionDetailPanel (بدون جزئیات)', VersionDetailPanel, ['جزئیات این نسخه بارگذاری نشد', 'تلاش دوباره', 'بارگذاری مجدد صفحه'], { activeTab: 'SEMESTERS', detail: null, detailError: 'خطای شبکه' }],
   ['CurriculumShell', CurriculumShell, ['مدیریت نسخه‌های برنامهٔ درسی', 'تعریف کاتالوگ رشته', '🗂️ نسخه‌های این رشته'], undefined],
 ];
 
