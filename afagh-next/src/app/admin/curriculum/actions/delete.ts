@@ -1,7 +1,7 @@
 'use server';
 
 // ════════════════════════════════════════════════════════════════════════
-//  حذف کاتالوگِ منتشرنشده (DRAFT).
+//  حذف کاتالوگِ منتشرنشده (DRAFT / REVIEW / APPROVED).
 //
 //  چرا جدا از lifecycle.ts: «حذف» یک گذارِ وضعیت نیست، یک عملیاتِ
 //  مخربِ برگشت‌ناپذیر است؛ جدا نگه‌داشتنش باعث می‌شود در بازبینی، مسیرِ
@@ -9,9 +9,9 @@
 //
 //  قواعد ایمنی (به ترتیب چک شدن):
 //    ۱) فقط نقش‌های ویرایشگر (ADMIN / EDU_EXPERT)
-//    ۲) فقط نسخهٔ DRAFT — هر نسخه‌ای که یک‌بار به REVIEW رفته (یا تأیید/
-//       منتشر/بایگانی شده) قابل حذف نیست، چون زنجیرهٔ تأیید و سابقهٔ
-//       دانشگاهی دارد. برای آن‌ها مسیر درست «بایگانی» است.
+//    ۲) فقط نسخه‌ای که هنوز منتشر نشده — DRAFT / REVIEW / APPROVED.
+//       نسخهٔ PUBLISHED (در حال اجرا برای دانشجو) و ARCHIVED (سابقهٔ
+//       تاریخی) هرگز حذف نمی‌شوند؛ مسیر درستشان «بایگانی» است.
 //    ۳) اگر دانشجویی به این نسخه گره خورده باشد (student_course_grants)
 //       حذف انجام نمی‌شود؛ پیام می‌دهد چند رکورد وابسته است.
 //    ۴) حذف آبشاریِ صریح و در یک تراکنش: approvals → rules → courses →
@@ -31,7 +31,7 @@ import {
 } from '@/db/schema';
 import { appendAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/auth';
-import { type CurriculumVersionStatus, canEditStatus } from '@/lib/curriculum-types';
+import { type CurriculumVersionStatus, canDeleteStatus } from '@/lib/curriculum-types';
 import { type Act, EDITORS, PHASE, getVersionOrThrow, revalidateCurriculumPaths } from './shared';
 
 export type DeleteVersionResult = Act<{
@@ -135,13 +135,13 @@ export async function deleteCurriculumVersionAction(versionId: number): Promise<
 
     const version = await getVersionOrThrow(versionId);
 
-    // ── گارد ۲: فقط پیش‌نویس ──
-    if (!canEditStatus(version.status as CurriculumVersionStatus)) {
+    // ── گارد ۲: هر چیزی که هنوز منتشر نشده (DRAFT / REVIEW / APPROVED) ──
+    if (!canDeleteStatus(version.status as CurriculumVersionStatus)) {
       return {
         ok: false,
         error: `نسخهٔ «${version.versionCode}» در وضعیت «${version.status}» است و حذف نمی‌شود. `
-          + 'حذف فقط برای کاتالوگ‌هایی مجاز است که هرگز به بازبینی/تأیید نرفته‌اند؛ '
-          + 'برای بقیه از «بایگانی» استفاده کنید.',
+          + 'حذف فقط برای کاتالوگ‌هایی مجاز است که هنوز منتشر نشده‌اند (پیش‌نویس / در بازبینی / تأییدشده)؛ '
+          + 'برای نسخهٔ منتشرشده یا بایگانی‌شده از «بایگانی» استفاده کنید.',
       };
     }
 

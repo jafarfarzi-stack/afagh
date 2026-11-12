@@ -108,6 +108,9 @@ const CASES: [string, React.ComponentType, string[], Record<string, unknown>?][]
   ['CurriculumHeader', CurriculumHeader, ['مدیریت نسخه‌های برنامهٔ درسی', 'دانشکده:', 'مهندسی کامپیوتر', 'چارت ۴ ترمه'], undefined],
   ['CurriculumTabsBar', CurriculumTabsBar, ['تعریف کاتالوگ رشته', 'نسخهٔ فعال: 1402-1', 'پیش‌نویس'], undefined],
   ['CatalogTab', CatalogTab, ['🗂️ نسخه‌های این رشته', 'کد نسخه', '1402-1', '🗑️ حذف'], { activeTab: 'CATALOG' }],
+  // حذف فقط برای نسخهٔ منتشرنشده: تأییدشده دکمه دارد، منتشرشده ندارد
+  ['CatalogTab (تأییدشده)', CatalogTab, ['تأییدشده', '🗑️ حذف'], { activeTab: 'CATALOG', majorVersions: [{ ...detail.version, status: 'APPROVED' }] }],
+  ['CatalogTab (منتشرشده)', CatalogTab, ['منتشرشده', '🗓️ ورودی', '!🗑️ حذف'], { activeTab: 'CATALOG', majorVersions: [{ ...detail.version, status: 'PUBLISHED' }] }],
   ['DetailHeaderBar', DetailHeaderBar, ['برنامهٔ کارشناسی ۱۴۰۲', 'ایجاد نسخهٔ جدید'], { activeTab: 'COURSES' }],
   ['VerifyTab', VerifyTab, ['🎯 سهم واحد هر نوع درس', 'جمع واحدها از سقف واحد ترم کمتر است', 'واحد (Enter/Blur برای ذخیره)', '!در حال بارگذاری جزئیات از سرور'], { activeTab: 'VERIFY' }],
   ['CoursesTab', CoursesTab, ['مبانی برنامه‌سازی', 'پیش‌نیاز / هم‌نیاز', 'افزودن درس از بانک'], { activeTab: 'COURSES' }],
