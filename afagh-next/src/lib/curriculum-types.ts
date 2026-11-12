@@ -35,6 +35,17 @@ export const CURRICULUM_TRANSITIONS: Record<CurriculumVersionStatus, readonly Cu
 /** فقط در DRAFT ویرایش مجاز است (بخش ۵.۶ — قاعدهٔ ۱) */
 export const EDITABLE_STATUSES: readonly CurriculumVersionStatus[] = ['DRAFT'];
 
+/**
+ * وضعیت‌هایی که «حذف کامل» در آن‌ها مجاز است — یعنی هر چیزی که **هنوز منتشر
+ * نشده**: پیش‌نویس، در بازبینی، و تأییدشده.
+ *
+ * چرا APPROVED هم هست: تأییدشده یعنی «شورا قبول کرد» ولی هنوز برای دانشجو
+ * جاری نشده؛ حذفش سابقهٔ تحصیلی کسی را خراب نمی‌کند. در مقابل PUBLISHED
+ * (در حال اجرا برای دانشجو) و ARCHIVED (سابقهٔ تاریخی) هرگز حذف نمی‌شوند —
+ * برای آن‌ها مسیر درست «بایگانی» است.
+ */
+export const DELETABLE_STATUSES: readonly CurriculumVersionStatus[] = ['DRAFT', 'REVIEW', 'APPROVED'];
+
 export function canTransitionStatus(from: CurriculumVersionStatus, to: CurriculumVersionStatus): boolean {
   return CURRICULUM_TRANSITIONS[from]?.includes(to) ?? false;
 }
@@ -52,6 +63,11 @@ export function assertTransition(from: CurriculumVersionStatus, to: CurriculumVe
 /** آیا این وضعیت قابل ویرایش است؟ (فقط DRAFT) */
 export function canEditStatus(status: CurriculumVersionStatus): boolean {
   return EDITABLE_STATUSES.includes(status);
+}
+
+/** آیا این نسخه قابل حذف است؟ (هر چیزی که منتشر/بایگانی نشده) */
+export function canDeleteStatus(status: CurriculumVersionStatus): boolean {
+  return DELETABLE_STATUSES.includes(status);
 }
 
 /** مقصدهای ممکن یک وضعیت (برای رندر UI دکمه‌ها و Audit) */

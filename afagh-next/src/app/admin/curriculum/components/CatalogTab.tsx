@@ -3,6 +3,7 @@
 // تب ۱: کاتالوگ نسخه‌های رشته (انتخاب/ایجاد/میان‌بری)
 import { useCurriculum } from '../curriculum-context';
 import { STATUS_UI, faNum } from '../curriculum-core';
+import { canDeleteStatus, type CurriculumVersionStatus } from '@/lib/curriculum-types';
 import RoleTargetsCard from './RoleTargetsCard';
 
 export default function CatalogTab() {
@@ -82,13 +83,14 @@ export default function CatalogTab() {
                             🗓️ ورودی
                           </button>
                         )}
-                        {/* حذف فقط برای کاتالوگِ منتشرنشده (DRAFT) — نسخه‌ای که هرگز
-                            به بازبینی/تأیید نرفته. گارد وضعیت سمتِ سرور هم هست. */}
-                        {v.status === 'DRAFT' && (
+                        {/* حذف برای هر کاتالوگی که **هنوز منتشر نشده** (پیش‌نویس/در بازبینی/
+                            تأییدشده). نسخهٔ منتشرشده و بایگانی‌شده حذف نمی‌شوند — بایگانی می‌شوند.
+                            گارد وضعیت سمتِ سرور هم دقیقاً همین است. */}
+                        {canDeleteStatus(v.status as CurriculumVersionStatus) && (
                           <button
                             onClick={() => handleDeleteVersion(v)}
                             disabled={busy}
-                            title="حذف کامل این کاتالوگ پیش‌نویس (دروس + قواعد) — برگشت‌ناپذیر"
+                            title="حذف کامل این کاتالوگ منتشرنشده (دروس + قواعد) — برگشت‌ناپذیر"
                             className="px-3 py-1.5 rounded-lg font-extrabold text-2xs transition bg-rose-100 text-rose-800 hover:bg-rose-200 disabled:opacity-40"
                           >
                             🗑️ حذف
