@@ -8,9 +8,11 @@ import RoleTargetsCard from './RoleTargetsCard';
 export default function CatalogTab() {
   const {
     activeTab,
+    busy,
     isDraft,
     majorVersions,
     openEditVersion,
+    handleDeleteVersion,
     selectedVersionId,
     setSelectedVersionId,
   } = useCurriculum();
@@ -34,7 +36,7 @@ export default function CatalogTab() {
                 <th className="p-2.5 border border-slate-800">واحد الزامی</th>
                 <th className="p-2.5 border border-slate-800">تعداد درس</th>
                 <th className="p-2.5 border border-slate-800">وضعیت</th>
-                <th className="p-2.5 border border-slate-800 w-28">عملیات</th>
+                <th className="p-2.5 border border-slate-800 w-56">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -78,6 +80,18 @@ export default function CatalogTab() {
                             className="px-3 py-1.5 rounded-lg font-extrabold text-2xs transition bg-slate-100 text-slate-700 hover:bg-slate-200"
                           >
                             🗓️ ورودی
+                          </button>
+                        )}
+                        {/* حذف فقط برای کاتالوگِ منتشرنشده (DRAFT) — نسخه‌ای که هرگز
+                            به بازبینی/تأیید نرفته. گارد وضعیت سمتِ سرور هم هست. */}
+                        {v.status === 'DRAFT' && (
+                          <button
+                            onClick={() => handleDeleteVersion(v)}
+                            disabled={busy}
+                            title="حذف کامل این کاتالوگ پیش‌نویس (دروس + قواعد) — برگشت‌ناپذیر"
+                            className="px-3 py-1.5 rounded-lg font-extrabold text-2xs transition bg-rose-100 text-rose-800 hover:bg-rose-200 disabled:opacity-40"
+                          >
+                            🗑️ حذف
                           </button>
                         )}
                       </div>
