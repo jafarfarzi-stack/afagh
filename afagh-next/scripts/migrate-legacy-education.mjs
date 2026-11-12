@@ -5,29 +5,45 @@
  *
  *  منبع: فایل‌های TSV حاصل از extract-legacy-education.mjs
  *    LT7_lessons            → courses (کاتالوگ دروس)
- *    CSRUnit + LT51 + CSRUnitLessonTypeSumUnit → چارت «درس به تفکیک ورودی» (ورودی=entryYear)
- *    MAININFO_students + People_identity → students (فعلاً فقط گزارش تطبیق؛ مبدأ اصلی سما است)
- *    LT52_offerings         → course_offerings (ارائهٔ ترم) (+ ردیف‌های پیش از ثبت‌نام)
+ *    CSRUnit + LT51 + CSRUnitLessonTypeSumUnit → چارت «درس به تفکیک ورودی»
+ *    LT52_offerings         → course_offerings (ارائهٔ ترم)
  *    LT55_sessions          → schedules (CLASS هفتگی)
  *    SUS_grades             → enrollments + grade (نمرات/انتخاب واحد)
- *    StudentLessonsHistory  → legacy_grades (تاریخچهٔ کامل — برای مقایسه)
+ *    StudentLessonsHistory  → legacy_grades (تاریخچهٔ کامل)
  *    TermCodes              → academic_terms (تعریف ترم)
  *
- *  قانون (همان مالی): idempotent با (universityId + کد)؛ همهٔ insertها
- *  universityId صریح دارند. فعلاً فقط برای آفاق (--uni 1) اجرا می‌شود؛ اما
- *  ستون‌ها ثابت‌اند و با --uni هر دانشگاه هم‌مدل دیگر هم کار می‌کند.
+ *  قانون: idempotent با (universityId + کد)؛ همهٔ insertها universityId صریح
+ *  دارند. فعلاً فقط آفاق (--uni 1)؛ ستونها ثابتاند و --uni دیگری هم کار میکند.
  *
- *  ترم‌بندی: کاتالوگ ترم در سیستم قدیم تعریف نشده؛ ترم‌ها را خودمان از یک
- *  فایل جدا (terms.tsv: termCode,title,start,end,isCurrent) می‌دهیم.
+ *  ── بارگذاری دستهأی (۲۰۲۶-۱۱-۱۲) ──────────────────────────────────────
+ *  نسخهٔ قبل برای هر ردیف SUS/StudentLessonsHistory/LT55 یک SELECT ارائه و
+ *  یک INSERT جدا میفرستاد: ≈۲٫۵ میلیون round-trip و ۶٬۹۰۱ ثانیه روی لایو.
+ *  الان: TSVهای بزرگ جریانی خوانده میشوند، نقشهٔ offeringId یکبار از DB
+ *  گرفته میشود، و INSERTها با unnest در قطعههای --chunk انجام میشوند.
+ *  schedules هیچ ایندکس یکتایی ندارد (ON CONFLICT DO NOTHING بیاثر بود و
+ *  اجراهای قبل ردیف تکراری ساختند) ⇒ ایدمپاتنسی با Set در حافظه تأمین میشود.
  *
  *    node migrate-legacy-education.mjs --dir <tsv> --db-host <ip> --uni 1            (dry)
  *    node migrate-legacy-education.mjs --dir <tsv> --db-host <ip> --uni 1 --apply
- *    Flags: --db-env /root/afagh/.env  --terms <path-to-terms.tsv>
+ *    node migrate-legacy-education.mjs --dir <tsv> --apply --chunk 5000
+ *
+ *  تعمیر تکراریهای قدیمی schedules (اختیاری، نیازمند --apply و --backup):
+ *    node migrate-legacy-education.mjs --apply --dedupe-schedules --dedupe-only \
+ *         --backup ./schedules-dupes.jsonl
+ *
+ *  Flags: --db-env /root/afagh/.env  --terms <terms.tsv>  --chunk N
+ *         --dedupe-schedules --dedupe-only --backup <jsonl>
  * ══════════════════════════════════════════════════════════════════════
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import {
+  BULK, BulkWriter, CHUNK_DEFAULT, OFFERING_KEY, scheduleKey,
+  enrollmentKey, historyKey, EXISTING_KEYS_SQL,
+  readTsvStream as streamFrom, DEDUPE_SELECT_SQL, DEDUPE_DELETE_SQL,
+} from './lib/legacy-education-batch.mjs';
 
 const raw = process.argv.slice(2);
 const args = {};
@@ -40,15 +56,17 @@ const DIR = args.dir || '/tmp/lp2v2/edu_export_uems';
 const DB_ENV = args['db-env'] || '/root/afagh/.env';
 const DB_HOST = args['db-host'] || '172.20.0.3';
 const DB_PORT = Number(args['db-port'] || 5432);
-const TERMS_FILE = args.terms || ''; // فایل جدا: termCode,title,startDate,endDate,isCurrent
+const TERMS_FILE = args.terms || '';
+const CHUNK = Math.max(1, Number(args.chunk || CHUNK_DEFAULT));
+const DEDUPE = args['dedupe-schedules'] === 'true';
+const DEDUPE_ONLY = args['dedupe-only'] === 'true';
+const BACKUP = args.backup && args.backup !== 'true' ? args.backup : '';
 
 const req = createRequire(import.meta.url);
 const { Pool } = req('pg');
-const envTxt = readFileSync(DB_ENV, 'utf8');
-const m = envTxt.match(/^POSTGRES_PASSWORD=(.*)$/m);
-if (!m) { console.error('POSTGRES_PASSWORD not found in ' + DB_ENV); process.exit(2); }
-const pool = new Pool({ host: DB_HOST, port: DB_PORT, user: 'afagh', password: m[1].replace(/\r$/, ''), database: 'afagh_db', max: 5 });
-const q = async (t, p) => (await pool.query(t, p)).rows;
+
+let pool;
+let q;
 
 const readTsv = (name) => {
   let p = join(DIR, name);
@@ -61,6 +79,10 @@ const readTsv = (name) => {
   const rows = lines.slice(1).map(l => l.split('\t'));
   return { header, rows };
 };
+
+/** پوشهٔ ورودی را به لایهٔ جریانی مشترک پین میکنیم. */
+const readTsvStream = (name) => streamFrom(DIR, name);
+
 const col = (row, header, ...names) => {
   for (const n of names) {
     let i = header.indexOf(n);
@@ -93,16 +115,96 @@ const toClock = (s) => {
   const m = Number(p.slice(2));
   return h <= 23 && m <= 59 ? `${p.slice(0, 2)}:${p.slice(2)}` : null;
 };
-const report = { dry: !APPLY, uni: UNI, terms: null, courses: null, chart: null, offerings: null, grades: null, history: null, errors: [] };
 
-(async () => {
+export { col, num, int, toOurTerm, toClock, readTsv, readTsvStream, scheduleKey };
+
+const START = Date.now();
+const report = {
+  dry: !APPLY, uni: UNI, chunk: CHUNK, terms: null, courses: null, chart: null,
+  offerings: null, grades: null, history: null, sessions: null, errors: [],
+  batches: [], dedupe: null, elapsedSeconds: null,
+};
+const writers = [];
+const writer = (spec, label) => {
+  const w = new BulkWriter(pool, spec, { chunk: CHUNK, label, enabled: APPLY });
+  writers.push(w);
+  return w;
+};
+const flushAllSummaries = () => { report.batches = writers.map(w => w.summary()); };
+const finish = async () => {
+  flushAllSummaries();
+  report.elapsedSeconds = Number(((Date.now() - START) / 1000).toFixed(3));
+  console.log('\n=== REPORT (dry=' + report.dry + ') ===');
+  console.log(JSON.stringify(report, null, 2));
+  if (!APPLY) console.log('*** DRY: فقط گزارش، بدون نوشتن *** (برای اعمال: --apply)');
+  if (pool) await pool.end();
+};
+
+const loadOfferings = async () => {
+  const rs = await q('SELECT id, "termId", "courseId", "groupNumber" FROM course_offerings WHERE "universityId"=$1', [UNI]);
+  const keys = new Set();
+  const ids = new Map();
+  for (const r of rs) {
+    const k = OFFERING_KEY(r.termId, r.courseId, r.groupNumber);
+    keys.add(k);
+    const id = Number(r.id);
+    const prev = ids.get(k);
+    if (prev == null || id < prev) ids.set(k, id); // معادل LIMIT 1 قدیم، ولی قطعی
+  }
+  return { keys, ids };
+};
+
+const loadCourses = async () => new Map(
+  (await q('SELECT code, id FROM courses WHERE "universityId"=$1', [UNI]))
+    .map(r => [String(r.code), Number(r.id)]));
+
+/**
+ * کلیدهای موجود را یکبار میگیریم تا اجرای هفتگیِ بدون تغییر داده، هیچ INSERT
+ * بیفایده صادر نکند. ON CONFLICT DO NOTHING همچنان پشتوانهٔ همزمانی باقی است.
+ */
+const loadKeySet = async (sql) => new Set((await q(sql, []))[0]?.keys || []);
+
+/** تعمیر ردیفهای تکراری ساختهشده توسط اجراهای قبل (فقط ردیفهای مهاجرت). */
+async function dedupeSchedules() {
+  if (!APPLY) throw new Error('--dedupe-schedules نیازمند --apply است');
+  if (!BACKUP) throw new Error('--dedupe-schedules نیازمند --backup <file.jsonl> است (بکاپ قابل بازگردانی اجباری)');
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    const doomed = (await client.query(DEDUPE_SELECT_SQL, [UNI])).rows;
+    writeFileSync(BACKUP, doomed.map(r => JSON.stringify(r)).join('\n') + (doomed.length ? '\n' : ''), 'utf8');
+    const del = await client.query(DEDUPE_DELETE_SQL, [UNI]);
+    await client.query('COMMIT');
+    const out = { deleted: Number(del.rowCount || 0), backupRows: doomed.length, backup: BACKUP };
+    console.log(`dedupe schedules: ${out.deleted} حذف شد، ${out.backupRows} ردیف در ${BACKUP} پشتیبانگیری شد`);
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function main() {
+  try {
+    const envTxt = readFileSync(DB_ENV, 'utf8');
+    const m = envTxt.match(/^POSTGRES_PASSWORD=(.*)$/m);
+    if (!m) { console.error('POSTGRES_PASSWORD not found in ' + DB_ENV); process.exit(2); }
+    pool = new Pool({ host: DB_HOST, port: DB_PORT, user: 'afagh', password: m[1].replace(/\r$/, ''), database: 'afagh_db', max: 5 });
+    q = async (t, p) => (await pool.query(t, p)).rows;
+
     const uni = (await q('SELECT id, code, title FROM universities WHERE id=$1', [UNI]))[0];
     if (!uni) throw new Error('university not found: ' + UNI);
-    console.log('university:', uni.code, uni.title, 'apply=', APPLY, 'dir=', DIR);
+    console.log('university:', uni.code, uni.title, 'apply=', APPLY, 'dir=', DIR, 'chunk=', CHUNK);
+
+    if (DEDUPE) {
+      report.dedupe = await dedupeSchedules();
+      if (DEDUPE_ONLY) { await finish(); return; }
+    }
 
     // ── ترم‌ها: از فایل جدا (کاتالوگ ترم در قدیم تعریف نشده) ──
-    const termsTsv = existsSync(TERMS_FILE) ? readFileSync(TERMS_FILE, 'utf8').replace(/^\uFEFF/, '') : '';
+    const termsTsv = TERMS_FILE && existsSync(TERMS_FILE) ? readFileSync(TERMS_FILE, 'utf8').replace(/^\uFEFF/, '') : '';
     const termLines = termsTsv.split(/\r?\n/).filter(l => l.trim() !== '');
     const termDefs = termLines.length > 1
       ? termLines.slice(1).map(l => { const p = l.split('\t'); return { termCode: toOurTerm(p[0]), title: p[1], startDate: p[2] || null, endDate: p[3] || null, isCurrent: Number(p[4] || 0) }; })
@@ -135,34 +237,36 @@ const report = { dry: !APPLY, uni: UNI, terms: null, courses: null, chart: null,
       for (const x of terms) termIdByCode.set(String(x.termCode), Number(x.id));
     }
 
-    // ── 1) کاتالوگ دروس ──
+    // ── 1) کاتالوگ دروس ─────────────────────────────────────────────────
     const lt7 = readTsv('LT7_lessons');
-    const existingCourses = new Map((await q('SELECT code, id, "universityId" FROM courses WHERE "universityId"=$1', [UNI])).map(r => [String(r.code), Number(r.id)]));
+    let existingCourses = await loadCourses();
+    const seenCodes = new Set(existingCourses.keys());
     let courseAdded = 0, courseSkipped = 0;
+    const cw = writer(BULK.courses, 'courses');
+    const UEMS_TYPEMAP = { 0: 'نامشخص', 1: 'عمومی', 2: 'پایه', 3: 'تخصصی', 4: 'اصلي', 5: 'کارورزي', 6: 'آزمایشگاه', 7: 'کارگاه', 8: 'پروژه', 9: 'تخصصی انتخابی', 10: 'اختیاری', 11: 'مشترک', 13: 'الزامی مشترک', 14: 'اختصاصی', 16: 'تخصصی الزامی', 17: 'انتخابی', 18: 'الزامی', 19: 'اصلي تخصصی', 20: 'جبرانی', 22: 'پایان‌نامه', 40: 'معرفي به استاد', 50: 'خودخوان' };
     for (const r of lt7.rows) {
       const code = col(r, lt7.header, 'Code');
       if (!code) continue;
-      if (existingCourses.has(code)) { courseSkipped++; continue; }
+      if (seenCodes.has(code)) { courseSkipped++; continue; }
       const units = num(col(r, lt7.header, 'Unit'));
       const th = num(col(r, lt7.header, 'Th'));
       const oh = num(col(r, lt7.header, 'Oh'));
       const typeId = int(col(r, lt7.header, 'Type'));
       const title = col(r, lt7.header, 'Name') || code;
       const deptId = int(col(r, lt7.header, 'Daneshkadeh'));
-      const UEMS_TYPEMAP = { 0: 'نامشخص', 1: 'عمومی', 2: 'پایه', 3: 'تخصصی', 4: 'اصلي', 5: 'کارورزي', 6: 'آزمایشگاه', 7: 'کارگاه', 8: 'پروژه', 9: 'تخصصی انتخابی', 10: 'اختیاری', 11: 'مشترک', 13: 'الزامی مشترک', 14: 'اختصاصی', 16: 'تخصصی الزامی', 17: 'انتخابی', 18: 'الزامی', 19: 'اصلي تخصصی', 20: 'جبرانی', 22: 'پایان‌نامه', 40: 'معرفي به استاد', 50: 'خودخوان' };
-const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
-      if (APPLY) {
-        const ins = await q(
-          `INSERT INTO courses ("universityId", code, title, units, "practicalUnits", "courseType", "departmentId") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-          [UNI, code, title, units, oh != null ? oh : (th != null && units != null ? units - th : null), courseType, deptId]);
-        existingCourses.set(code, Number(ins[0].id));
-      }
+      const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
+      await cw.push([UNI, code, title, units,
+        oh != null ? oh : (th != null && units != null ? units - th : null), courseType, deptId]);
+      // نسخهٔ قدیم فقط در حالت apply کد تازه را به نقشه اضافه میکرد (dry دوباره میشمرد)
+      if (APPLY) seenCodes.add(code);
       courseAdded++;
     }
-    console.log(`courses: +${courseAdded} added, ${courseSkipped} existing`);
+    await cw.flush();
+    if (APPLY && courseAdded) existingCourses = await loadCourses();
+    console.log(`courses: +${courseAdded} added, ${courseSkipped} existing  [${cw.statements} statements / ${cw.affected} rows]`);
     report.courses = { added: courseAdded, existing: courseSkipped };
 
-    // ── 2) چارت «درس به تفکیک ورودی» ──
+    // ── 2) چارت «درس به تفکیک ورودی» ────────────────────────────────────
     const csr = readTsv('CSRUnit');
     const lt51 = readTsv('LT51_csr_lesson');
     const unitsByType = readTsv('CSRUnitLessonTypeSumUnit');
@@ -178,11 +282,14 @@ const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
     console.log(`chart entries (درس به تفکیک ورودی): ${log.length} CSRUnit → ${log.reduce((a, b) => a + b.lessons, 0)} lesson-links, ${log.reduce((a, b) => a + b.units, 0)} unit-type rows`);
     report.chart = log.length;
 
-    // ── 3) ارائه‌های ترمی ──
+    // ── 3) ارائه‌های ترمی ────────────────────────────────────────────────
     const lt52 = readTsv('LT52_offerings');
-    const existingOff = new Set((await q('SELECT "termId", "courseId", "groupNumber" FROM course_offerings WHERE "universityId"=$1', [UNI])).map(r => `${r.termId}|${r.courseId}|${r.groupNumber}`));
-    const offersByTerm = new Map(await q('SELECT id, "termCode" FROM academic_terms WHERE "universityId"=$1', [UNI]).then(rs => rs.map(r => [String(r.termCode), Number(r.id)])));
+    const offersByTerm = new Map((await q('SELECT id, "termCode" FROM academic_terms WHERE "universityId"=$1', [UNI])).map(r => [String(r.termCode), Number(r.id)]));
+    const off0 = await loadOfferings();
+    let existingOff = off0.keys;
+    let offeringIdByKey = off0.ids;
     let off = 0, offSkip = 0;
+    const ow = writer(BULK.offerings, 'course_offerings');
     for (const r of lt52.rows) {
       const termCode = toOurTerm(col(r, lt52.header, 'TermCode'));
       const termId = offersByTerm.get(termCode);
@@ -190,103 +297,118 @@ const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
       if (!termId || !courseCode) { offSkip++; continue; }
       const courseId = existingCourses.get(courseCode);
       const groupNumber = int(col(r, lt52.header, 'LessonGroup')) ?? 1;
-      if (!courseId || existingOff.has(`${termId}|${courseId}|${groupNumber}`)) { offSkip++; continue; }
-      if (APPLY) {
-        const ins = await q(
-          `INSERT INTO course_offerings ("universityId","termId","courseId","groupNumber","isActive","capacity") VALUES ($1,$2,$3,$4,1,$5) RETURNING id`,
-          [UNI, termId, courseId, groupNumber, 200]);
-        existingOff.add(`${termId}|${courseId}|${groupNumber}`);
-      }
+      if (!courseId || existingOff.has(OFFERING_KEY(termId, courseId, groupNumber))) { offSkip++; continue; }
+      await ow.push([UNI, termId, courseId, groupNumber, 1, 200]);
+      if (APPLY) existingOff.add(OFFERING_KEY(termId, courseId, groupNumber));
       off++;
     }
-    console.log(`offerings: +${off} added, ${offSkip} skipped (missing term/course/dup)`);
+    await ow.flush();
+    if (APPLY && off) {
+      const fresh = await loadOfferings();
+      existingOff = fresh.keys; offeringIdByKey = fresh.ids;
+    }
+    console.log(`offerings: +${off} added, ${offSkip} skipped (missing term/course/dup)  [${ow.statements} statements / ${ow.affected} rows]`);
     report.offerings = { added: off, skipped: offSkip };
 
-    // ── 4) زمان‌بندی هفتگی (CLASS) ──
-    const lt55 = readTsv('LT55_sessions');
-    let sched = 0;
-    for (const r of lt55.rows) {
-      const termCode = toOurTerm(col(r, lt55.header, 'TermCode'));
+    // ── 4) زمانبندی هفتگی (CLASS) ───────────────────────────────────────
+    // schedules ایندکس یکتا ندارد ⇒ ON CONFLICT DO NOTHING هرگز عمل نمیکرد.
+    // یک Set از کلید ردیفهای موجود، ایدمپاتنسی واقعی را بدون migration میدهد.
+    const existingSchedules = new Set(
+      (await q(`SELECT "universityId","offeringId","dayOfWeek","startTime","endTime"
+                 FROM schedules WHERE "scheduleType"='CLASS'`, []))
+        .map(r => scheduleKey(r.universityId, r.offeringId, r.dayOfWeek, r.startTime, r.endTime)));
+    let sched = 0, schedDup = 0, schedNullTime = 0;
+    const sw = writer(BULK.schedules, 'schedules');
+    for await (const { header, row } of readTsvStream('LT55_sessions')) {
+      const termCode = toOurTerm(col(row, header, 'TermCode'));
       const termId = offersByTerm.get(termCode);
-      const courseId = existingCourses.get(col(r, lt55.header, 'LessonCode'));
-      const groupNumber = int(col(r, lt55.header, 'LessonGroup')) ?? 1;
+      const courseId = existingCourses.get(col(row, header, 'LessonCode'));
+      const groupNumber = int(col(row, header, 'LessonGroup')) ?? 1;
       if (!termId || !courseId) continue;
-      const off = (await q('SELECT id FROM course_offerings WHERE "universityId"=$1 AND "termId"=$2 AND "courseId"=$3 AND "groupNumber"=$4 LIMIT 1', [UNI, termId, courseId, groupNumber]))[0];
-      if (!off) continue;
-      const dayOfWeek = int(col(r, lt55.header, 'DayCode'));
-      // LT55 «StartTime/EndTime» را بهصورت HHMM ذخیره میکند (۷۳۰→07:30، ۱۵۴۵→15:45).
-      // فرض قدیمی «دقیقه از نیمهشب» برای ۱۵۴۵ مقدار ۲۵:۴۵ میساخت و ستون time
-      // در Postgres با DateTimeParseError کل مهاجرت آموزشی را متوقف میکرد.
-      // مقدار نامعتبر ⇒ NULL تا یک ردیف خراب کل اجرا را نشکند.
-      const startTime = toClock(col(r, lt55.header, 'StartTime'));
-      const endTime = toClock(col(r, lt55.header, 'EndTime'));
-      if (APPLY) {
-        await q(
-          `INSERT INTO schedules ("universityId","offeringId","scheduleType","dayOfWeek","startTime","endTime") VALUES ($1,$2,'CLASS',$3,$4,$5) ON CONFLICT DO NOTHING`,
-          [UNI, off.id, dayOfWeek, startTime, endTime]);
-      }
+      const offeringId = offeringIdByKey.get(OFFERING_KEY(termId, courseId, groupNumber));
+      if (!offeringId) continue; // همان SELECT ... LIMIT 1 قدیم
+      const dayOfWeek = int(col(row, header, 'DayCode'));
+      // LT55 «StartTime/EndTime» را HHMM ذخیره میکند (۷۳۰→07:30، ۱۵۴۵→15:45).
+      const startTime = toClock(col(row, header, 'StartTime'));
+      const endTime = toClock(col(row, header, 'EndTime'));
       sched++;
+      // ستونهای time در PG NOT NULL اند؛ یک ردیف خراب نباید کل قطعه را بترکاند.
+      if (startTime == null || endTime == null) { schedNullTime++; continue; }
+      const key = scheduleKey(UNI, offeringId, dayOfWeek, startTime, endTime);
+      if (existingSchedules.has(key)) { schedDup++; continue; }
+      existingSchedules.add(key);
+      await sw.push([UNI, offeringId, 'CLASS', dayOfWeek, startTime, endTime]);
     }
-    console.log(`weekly sessions (CLASS): ${sched} rows`);
-    report.sessions = sched;
+    await sw.flush();
+    console.log(`weekly sessions (CLASS): ${sched} rows, ${schedDup} already present, ${schedNullTime} bad time  [${sw.statements} statements / ${sw.affected} rows]`);
+    report.sessions = { mapped: sched, duplicatesSkipped: schedDup, invalidTimeSkipped: schedNullTime };
 
-    // ── 5) نمرات/انتخاب واحد (SUS) ──
-    const sus = readTsv('SUS_grades');
+    // ── 5) نمرات/انتخاب واحد (SUS) ──────────────────────────────────────
     const students = new Map((await q('SELECT id, "studentCode" FROM students WHERE "universityId"=$1', [UNI])).map(r => [String(r.studentCode), Number(r.id)]));
-    let enr = 0, enrSkip = 0;
-    for (const r of sus.rows) {
-      const stno = col(r, sus.header, 'Stno');
-      const termCode = toOurTerm(col(r, sus.header, 'TermCode'));
-      const courseCode = col(r, sus.header, 'LessonCode');
+    let existingEnrollments = await loadKeySet(EXISTING_KEYS_SQL.enrollments);
+    let enr = 0, enrSkip = 0, enrPresent = 0;
+    const ew = writer(BULK.enrollments, 'enrollments');
+    for await (const { header, row } of readTsvStream('SUS_grades')) {
+      const stno = col(row, header, 'Stno');
+      const termCode = toOurTerm(col(row, header, 'TermCode'));
+      const courseCode = col(row, header, 'LessonCode');
       const stuId = students.get(stno);
       const termId = offersByTerm.get(termCode);
       const courseId = existingCourses.get(courseCode);
-      const groupNumber = int(col(r, sus.header, 'LessonGroup')) ?? 1;
+      const groupNumber = int(col(row, header, 'LessonGroup')) ?? 1;
       if (!stuId || !termId || !courseId) { enrSkip++; continue; }
-      const off = (await q('SELECT id FROM course_offerings WHERE "universityId"=$1 AND "termId"=$2 AND "courseId"=$3 AND "groupNumber"=$4 LIMIT 1', [UNI, termId, courseId, groupNumber]))[0];
-      if (!off) { enrSkip++; continue; }
-      const mark = num(col(r, sus.header, 'Mark'));
-      const don = num(col(r, sus.header, 'DonMark'));
+      const offeringId = offeringIdByKey.get(OFFERING_KEY(termId, courseId, groupNumber));
+      if (!offeringId) { enrSkip++; continue; }
+      const mark = num(col(row, header, 'Mark'));
+      const don = num(col(row, header, 'DonMark'));
       const gradeValue = mark != null ? mark : don;
-      const markStat = int(col(r, sus.header, 'MarkStat'));
+      const markStat = int(col(row, header, 'MarkStat'));
       const status = markStat === 10 && gradeValue == null ? 'REGISTERED' : 'FINALIZED';
-      if (APPLY) {
-        await q(
-          `INSERT INTO enrollments ("universityId","studentId","offeringId","status","gradeValue","gradeStatus","enrolledByUserId")
-           VALUES ($1,$2,$3,$4,$5,'FINALIZED',NULL) ON CONFLICT DO NOTHING`,
-          [UNI, stuId, off.id, status, gradeValue]);
-      }
       enr++;
+      const key = enrollmentKey(stuId, offeringId);
+      if (existingEnrollments.has(key)) { enrPresent++; }
+      else {
+        existingEnrollments.add(key); // تکراری درون فایل منبع هم فقط یکبار درج میشود
+        await ew.push([UNI, stuId, offeringId, status, gradeValue, 'FINALIZED', null]);
+      }
+      if (enr % 250000 === 0) console.log(`  … enrollments ${enr} rows / ${ew.statements} statements / ${((Date.now() - START) / 1000).toFixed(1)}s`);
     }
-    console.log(`enrollments (SUS): ${enr} mapped, ${enrSkip} skipped`);
-    report.grades = { mapped: enr, skipped: enrSkip };
+    await ew.flush();
+    existingEnrollments = null; // آزاد کردن ~۷۰۰هزار کلید پیش از ساخت Set تاریخچه
+    console.log(`enrollments (SUS): ${enr} mapped, ${enrSkip} skipped, ${enrPresent} already present  [${ew.statements} statements / ${ew.affected} rows]`);
+    report.grades = { mapped: enr, skipped: enrSkip, alreadyPresent: enrPresent };
 
-    // ── 6) تاریخچهٔ کامل → legacy_grades ──
-    const hist = readTsv('StudentLessonsHistory');
-    const existingHist = new Set((await q('SELECT "termCode","courseCode" FROM legacy_grades WHERE "universityId"=$1', [UNI]).catch(() => [])).map(r => `${r.termCode}|${r.courseCode}`)); // approx
-    let h = 0;
-    for (const r of hist.rows) {
-      const stno = col(r, hist.header, 'STNO');
-      const termCode = toOurTerm(col(r, hist.header, 'TermCode'));
-      const courseCode = col(r, hist.header, 'LessonCode');
-      const gradeValue = num(col(r, hist.header, 'Mark')) ?? num(col(r, hist.header, 'DonMark'));
-      if (APPLY) {
-        await q(
-          `INSERT INTO legacy_grades ("sourceCode","studentCode","termCode","courseCode","gradeValue","gradeRaw","universityId","compareStatus")
-           VALUES ('UEMS',$1,$2,$3,$4,$5,$6,'PENDING') ON CONFLICT DO NOTHING`,
-          [stno, termCode, courseCode, gradeValue, col(r, hist.header, 'MarkStat') || null, UNI]);
+    // ── 6) تاریخچهٔ کامل → legacy_grades ─────────────────────────────────
+    const existingHistory = await loadKeySet(EXISTING_KEYS_SQL.legacyGrades);
+    let h = 0, hPresent = 0;
+    const hw = writer(BULK.legacyGrades, 'legacy_grades');
+    for await (const { header, row } of readTsvStream('StudentLessonsHistory')) {
+      const stno = col(row, header, 'STNO');
+      const termCode = toOurTerm(col(row, header, 'TermCode'));
+      const courseCode = col(row, header, 'LessonCode');
+      const gradeValue = num(col(row, header, 'Mark')) ?? num(col(row, header, 'DonMark'));
+      const key = historyKey('UEMS', stno, termCode, courseCode);
+      if (existingHistory.has(key)) { hPresent++; }
+      else {
+        existingHistory.add(key);
+        await hw.push(['UEMS', stno, termCode, courseCode, gradeValue,
+          col(row, header, 'MarkStat') || null, UNI, 'PENDING']);
       }
       h++;
+      if (h % 500000 === 0) console.log(`  … legacy_grades ${h} rows / ${hw.statements} statements / ${((Date.now() - START) / 1000).toFixed(1)}s`);
     }
-    console.log(`history rows (legacy_grades): ${h} (unique: ${hist.rows.length})`);
-    report.history = h;
+    await hw.flush();
+    console.log(`history rows (legacy_grades): ${h}, ${hPresent} already present  [${hw.statements} statements / ${hw.affected} rows]`);
+    report.history = { rows: h, alreadyPresent: hPresent };
 
-    console.log('\n=== REPORT (dry=' + report.dry + ') ===');
-    console.log(JSON.stringify(report, null, 2));
-    if (!APPLY) console.log('*** DRY: فقط گزارش، بدون نوشتن *** (برای اعمال: --apply)');
-    await pool.end();
+    await finish();
   } catch (e) {
     console.error('FATAL', e);
+    try { if (pool) await pool.end(); } catch { /* ignore */ }
     process.exit(1);
   }
-})();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
