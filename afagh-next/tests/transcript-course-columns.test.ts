@@ -110,6 +110,12 @@ for (const [name, src] of [['ادمین', ADMIN], ['دانشجو', STU], ['صو�
   ok(src.includes('variablePriceCode') && src.includes('fixedPriceCode') && src.includes('initialVariablePriceCode'), `${name}: چهار کد سربرگ تحویل شد`);
 }
 
+console.log('\n── نوع انتخاب شهریه: ضریب پیشفرض ۱ (بدون تغییر) ──');
+ok(TC.includes('coeffByTerm.get(termId) || 1'), 'نبود ردیف ضریب = ۱، همان قرارداد موتور شهریه');
+ok(!TC.includes('coeffByTerm.get(termId) ?? null'), 'دیگر ضریب تهی به کارنامه فرستاده نمیشود');
+ok(A.includes('c.tuitionCoefficient ?? 1'), 'لایهٔ نما هم در نبود داده ضریب ۱ را چاپ میکند');
+ok(A.includes('ضریب ${fa(v)} نیمسال ورود'), 'متن سند قدیمی: ضریب … نیمسال ورود');
+
 console.log('\n── نوع ب: قرارداد قدیمی ۸ستونه دستنخورده ──');
 ok(B.includes('نوع درس مالی'), 'نوع ب: سرستون «نوع درس مالی»');
 ok(B.includes('واحد نظری') && B.includes('واحد عملی'), 'نوع ب: واحد نظری و عملی جدا');

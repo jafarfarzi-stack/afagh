@@ -41,11 +41,16 @@ const educationalTypeLabel = (c: TranscriptCourseView): string => {
   return nature ? `${nature}${code}` : (code.trim() || '—');
 };
 
-/** «نوع انتخاب شهریه»: ضریب همان نیمسال از tuition_coefficients (ضریب نیمسال ورود). */
-const tuitionSelectionLabel = (c: TranscriptCourseView): string =>
-  c.tuitionCoefficient != null && Number(c.tuitionCoefficient) > 0
-    ? `ضریب ${fa(c.tuitionCoefficient)} نیمسال ورود`
-    : '—';
+/**
+ * «نوع انتخاب شهریه»: ضریب همان نیمسال از tuition_coefficients
+ * (ضریب نیمسال ورود). ضریب تعریفنشده = ۱ «بدون تغییر» — همان قرارداد موتور
+ * شهریه — پس در حالت عادی این ستون هرگز خط تیره نمیشود. فقط مقدار نامعتبر
+ * (صفر/منفی/NaN) به «—» میانجامد تا عدد اشتباهی چاپ نشود.
+ */
+const tuitionSelectionLabel = (c: TranscriptCourseView): string => {
+  const v = Number(c.tuitionCoefficient ?? 1);
+  return Number.isFinite(v) && v > 0 ? `ضریب ${fa(v)} نیمسال ورود` : '—';
+};
 
 /** کدهای سربرگ ترم: عدد از دیتابیس، ارقام فارسی، تهی = «—» (هیچ کُدی سختکد نیست). */
 const priceCode = (v: string | number | null | undefined): string => {

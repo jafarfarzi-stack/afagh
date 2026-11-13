@@ -154,11 +154,16 @@ export async function buildTranscriptCourses(
   const eduMap = new Map<string, (typeof eduRows)[number]>();
   for (const r of eduRows) eduMap.set(`${r.termId}|${String(r.courseCode ?? '').trim()}`, r);
 
-  const coeffByTerm = new Map<number, number | null>();
+  // ضریب ۱ یعنی «بدون تغییر» — همان قرارداد موتور شهریه
+  // (tuition-engine › getCoefficientForTerm) و همان پیشفرض ستون
+  // tuition_coefficients.variable_coefficient ('1.00'). اگر جدول خالی باشد یا
+  // برای این نیمسال ردیفی ثبت نشده باشد، نباید ستون «نوع انتخاب شهریه» خط
+  // تیره چاپ کند؛ محاسبهای که واقعاً اعمال شده ضریب ۱ نیمسال ورود است.
+  const coeffByTerm = new Map<number, number>();
   for (const r of coeffRows) {
     if (coeffByTerm.has(r.termId)) continue;
     const v = toNum(r.variableCoefficient);
-    coeffByTerm.set(r.termId, Number.isFinite(v) && v > 0 ? v : null);
+    if (Number.isFinite(v) && v > 0) coeffByTerm.set(r.termId, v);
   }
 
   const out: Record<number, TranscriptCourses> = {};
@@ -174,7 +179,8 @@ export async function buildTranscriptCourses(
         )
       : weights.map((w) => Math.round(w));
     const pc = priceCodes?.byTerm[termId] ?? null;
-    const coefficient = coeffByTerm.get(termId) ?? null;
+    // نبود ردیف ضریب = ۱ (بدون تغییر)، دقیقاً مثل موتور محاسبهٔ شهریه.
+    const coefficient = coeffByTerm.get(termId) || 1;
     out[termId] = {
       basis: tariffLines ? 'TARIFF' : 'LEDGER',
       tariffGroupCode: tariffMeta.groupCodes[termId] ?? null,
