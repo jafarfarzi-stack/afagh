@@ -79,6 +79,32 @@ function randomOneTimePassword(): string {
   return randomBytes(18).toString('base64url').slice(0, 24);
 }
 
+/**
+ * فایل اصلاحی روی نسخهٔ چارت موجود: فقط مقادیری که فایل صریحاً داده و با ردیف
+ * فعلی متفاوت است به‌صورت patch برگردانده می‌شود.
+ * - ترم پیشنهادی: null در فایل = دست‌نزدن به مقدار فعلی (idempotent).
+ * - نقش: فقط وقتی فایل نقش صریح دارد (خالی = از بانک دروس، بازنویسی نشود).
+ * - الزامی: با «شرط فارغ‌التحصیلی» هم‌گام می‌شود.
+ */
+export function curriculumCoursePatch(
+  existing: { roleType: string | null; isRequired: number | string | null; recommendedSemester: number | string | null },
+  want: { roleType: string | null; isRequired: boolean; recommendedSemester: number | null },
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (want.recommendedSemester != null && Number(existing.recommendedSemester ?? null) !== want.recommendedSemester)
+    patch.recommendedSemester = want.recommendedSemester;
+  if (want.roleType && existing.roleType !== want.roleType) {
+    patch.roleType = want.roleType;
+    patch.isElective = want.roleType === 'ELECTIVE' ? 1 : 0;
+  }
+  const wantRequired = want.isRequired ? 1 : 0;
+  if (Number(existing.isRequired ?? 1) !== wantRequired) {
+    patch.isRequired = wantRequired;
+    patch.isGraduationRequired = wantRequired; // شرط فارغ‌التحصیلی همراه الزامی
+  }
+  return patch;
+}
+
 export type Prepared = {
   report: Report;
   rows: Record<string, unknown>[];   // ردیف‌های سالمِ نرمال‌شده آمادهٔ درج
@@ -1099,6 +1125,9 @@ export async function commit(
     // ── انتقال چارت: برای هر (رشته/مقطع/بازهٔ ورودی) یک نسخهٔ PUBLISHED می‌سازیم
     //    و درس‌های آن را در curriculum_courses درج می‌کنیم (idempotent). اگر
     //    سرفصل بعد از دو سال عوض شد، دو بازهٔ مختلف دو نسخهٔ جدا می‌گیرند.
+    //    🆕 فایل اصلاحی: درسِ تکراریِ نسخهٔ موجود بی‌صدا رد نمی‌شود — اگر فایل برای
+    //    «ترم پیشنهادی» مقدار دارد یا نقش/الزامی متفاوت است، ردیف موجود به‌روزرسانی
+    //    می‌شود (ترمِ خالیِ فایل = دست‌نزدن به مقدار فعلی).
     const degreeRows = await db.select({ id: degree_level_configs.id, code: degree_level_configs.code, title: degree_level_configs.title }).from(degree_level_configs);
     const degreeMap = await resolverFor(sourceCode, 'DEGREE');
     const majorRows = await db.select({ id: majors.id, code: majors.majorCode, name: majors.name, degreeLevelId: majors.degreeLevelId }).from(majors)
@@ -1131,7 +1160,7 @@ export async function commit(
       });
     }
 
-    let versionsMade = 0, coursesLinked = 0, rolesFromBank = 0;
+    let versionsMade = 0, coursesLinked = 0, rolesFromBank = 0, coursesUpdated = 0;
     const zeroUnitWarned = new Set<string>();
     for (const g of groups.values()) {
       // نسخهٔ چارتِ این رشته/مقطع/بازهٔ ورودی — با وضعیت «پیش‌نویس»
@@ -1200,21 +1229,41 @@ export async function commit(
           report.warnings.push({ row: 0, msg: `درس ${c.code} در بانک دروس «۰ واحد» است — همان ۰ در چارت ثبت شد؛ واحد را در بانک دروس اصلاح کنید.` });
         }
         if (!it.roleType) rolesFromBank++;
-        const r0 = await db.insert(curriculum_courses).values({
-          curriculumVersionId: versionId, courseId: c.id, roleType,
-          units: c.units != null ? String(c.units) : null,
-          isRequired: it.isRequired ? 1 : 0, isElective: roleType === 'ELECTIVE' ? 1 : 0,
-          // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
-          // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
-          // پایان‌نامه و کارآموزی هم شرط فارغ‌التحصیلی‌اند، نه فقط پایه/اصلی/تخصصی.
-          isGraduationRequired: it.isRequired ? 1 : 0,
-          recommendedSemester: it.recommendedSemester,
-        }).onConflictDoNothing().returning({ id: curriculum_courses.id });
-        if (r0.length) { coursesLinked++; inserted++; } else existing++;
+        const [exRow] = await db.select({
+          id: curriculum_courses.id, roleType: curriculum_courses.roleType,
+          isRequired: curriculum_courses.isRequired, isElective: curriculum_courses.isElective,
+          recommendedSemester: curriculum_courses.recommendedSemester,
+        }).from(curriculum_courses)
+          .where(and(eq(curriculum_courses.curriculumVersionId, versionId), eq(curriculum_courses.courseId, c.id)))
+          .limit(1);
+        if (exRow) {
+          // فایل اصلاحی روی نسخهٔ موجود: مقادیر متفاوتِ فایل بازنویسی می‌شود؛
+          // ترمِ خالیِ فایل یعنی مقدار فعلی دست‌نخورده بماند (idempotent).
+          const patch = curriculumCoursePatch(exRow, {
+            roleType: it.roleType, isRequired: it.isRequired, recommendedSemester: it.recommendedSemester,
+          });
+          if (Object.keys(patch).length) {
+            await db.update(curriculum_courses).set(patch).where(eq(curriculum_courses.id, exRow.id));
+            coursesUpdated++; coursesLinked++; inserted++;
+          } else existing++;
+        } else {
+          const r0 = await db.insert(curriculum_courses).values({
+            curriculumVersionId: versionId, courseId: c.id, roleType,
+            units: c.units != null ? String(c.units) : null,
+            isRequired: it.isRequired ? 1 : 0, isElective: roleType === 'ELECTIVE' ? 1 : 0,
+            // «الزامی» در فایل باید «شرط فارغ‌التحصیلی» هم بشود، وگرنه اعتبارسنجی
+            // چارت با خطای GRADUATION_COVERAGE («هیچ درسی علامت‌گذاری نشده») می‌افتد.
+            // پایان‌نامه و کارآموزی هم شرط فارغ‌التحصیلی‌اند، نه فقط پایه/اصلی/تخصصی.
+            isGraduationRequired: it.isRequired ? 1 : 0,
+            recommendedSemester: it.recommendedSemester,
+          }).onConflictDoNothing().returning({ id: curriculum_courses.id });
+          if (r0.length) { coursesLinked++; inserted++; } else existing++;
+        }
       }
     }
     if (versionsMade) report.warnings.push({ row: 0, msg: `${versionsMade} نسخهٔ چارت با وضعیت «پیش‌نویس (DRAFT)» ساخته شد — پس از بازبینی، خودتان منتشر کنید.` });
     if (coursesLinked) report.warnings.push({ row: 0, msg: `${coursesLinked} درس به چارت‌ها وصل شد.` });
+    if (coursesUpdated) report.warnings.push({ row: 0, msg: `${coursesUpdated} درسِ موجود با مقادیر جدید فایل (ترم پیشنهادی/نقش/الزامی) به‌روزرسانی شد.` });
     if (rolesFromBank) report.warnings.push({ row: 0, msg: `نقش ${rolesFromBank} درس در فایل خالی بود — نوع درس از بانک دروس خوانده و اعمال شد.` });
     reportRewrites(rwCourse, 'درس (چارت)');
   }
