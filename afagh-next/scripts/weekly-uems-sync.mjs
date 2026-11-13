@@ -112,6 +112,12 @@ const STUDENTS_STATIC = A['students-static'] === 'true';
 const STUDENTS_REFRESH = A['students-refresh'] === 'true';
 const STUDENTS_APPLY = A['students-apply'] === 'true';
 const EXTRACT_STUDENTS = !SKIP_EXTRACT && !STUDENTS_STATIC;
+// master تازه (رشته LT66 + استاد DONBIN) — درسها در گام آموزشی ساخته میشوند.
+const MASTER_STATIC_DIR = A['master-dir'] || 'D:\\backups\\master_export';
+const MASTER_STATIC = A['master-static'] === 'true';
+const MASTER_REFRESH = A['master-refresh'] === 'true';
+const MASTER_APPLY = A['master-apply'] === 'true';
+const EXTRACT_MASTER = !SKIP_EXTRACT && !MASTER_STATIC;
 const SQLCMD = A.sqlcmd || process.env.SQLCMD || 'C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\sqlcmd.exe';
 
 // ── پرسش تعاملی ──────────────────────────────────────────────────────────
@@ -254,6 +260,11 @@ async function main() {
   const STUDENTS_DIR = EXTRACT_STUDENTS ? studentsOutDir : STUDENTS_STATIC_DIR;
   if (EXTRACT_STUDENTS) mkdirSync(studentsOutDir, { recursive: true });
 
+  // master رشته/استاد: استخراج تازهٔ مستقل (دو پرسوجوی کوچک) مگر ایستا/آفلاین.
+  const masterOutDir = A['master-out'] || join(workDir, 'master_export');
+  const MASTER_DIR = EXTRACT_MASTER ? masterOutDir : MASTER_STATIC_DIR;
+  if (EXTRACT_MASTER) mkdirSync(masterOutDir, { recursive: true });
+
   const pass = resolvePassword(cfg, PLAN);
   // فایل env موقت «محلی» برای اسکریپتهای migrate (جایگزین /root/afagh/.env سرور).
   const dbEnvPath = join(workDir, 'afagh.env');
@@ -298,6 +309,16 @@ async function main() {
         summary: 'TSV دانشجویان (MAININFO + People) + manifest',
       });
     }
+    if (EXTRACT_MASTER) {
+      steps.push({
+        phase: 'extract', name: 'extract-legacy-master (رشته/استاد تازه از UEMS)', file: 'extract-legacy-master.mjs',
+        args: [
+          '--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', masterOutDir,
+          ...(MASTER_REFRESH ? ['--mirror', MASTER_STATIC_DIR] : []), ...AUTH_ARGS,
+        ],
+        summary: 'TSV رشته (LT66) + استاد (DONBIN) + manifest',
+      });
+    }
     if (EXTRACT_FIN) {
       steps.push({
         phase: 'extract', name: 'extract-legacy-finance (دادهٔ مالی تازه از UEMS)', file: 'extract-legacy-finance.mjs',
@@ -310,7 +331,19 @@ async function main() {
     }
   }
 
-  // ── بارگذاری: master دانشجویان نخست، سپس تعرفه/قوانین + مالی + آموزشی ──
+  // ── بارگذاری: ورود master تازه (رشته/استاد/دانشجوی جدید) نخست، تا گامهای بعدی
+  //    (وضعیت دانشجویان، مالی، آموزشی) بتوانند روی ردیفهای تازه هم بنویسند ──
+  steps.push({
+    phase: 'load', name: 'import-new-master (رشته/استاد/دانشجوی جدید → majors/staff/students)', file: 'import-new-master.mjs',
+    args: [
+      '--dir', MASTER_DIR, '--students-dir', STUDENTS_DIR, '--uni', String(UNI),
+      '--report', join(workDir, 'master-gap.json'),
+      '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath,
+      ...(MASTER_APPLY ? ['--apply', '--backup', join(workDir, 'master-inserted-' + Date.now() + '.jsonl')] : []),
+    ],
+    summary: MASTER_APPLY ? 'درج رشته/استاد/دانشجوی جدید (با بکاپ JSONL)' : 'گزارش master تازه (dry)',
+    echo: true,
+  });
   steps.push({
     phase: 'load', name: 'migrate-legacy-students (وضعیت دانشجویان → students)', file: 'migrate-legacy-students.mjs',
     args: [

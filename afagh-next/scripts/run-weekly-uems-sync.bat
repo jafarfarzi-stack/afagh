@@ -29,6 +29,14 @@ rem    UEMS_SYNC_STUDENTS_APPLY=1    really update students.status and
 rem                                   students.samaStatusCode (default: report
 rem                                   only). A JSONL backup is written; restore
 rem                                   with migrate-legacy-students.mjs --restore
+rem    MASTER_DIR                    offline/mirror folder for LT66/DONBIN TSVs
+rem    UEMS_SYNC_MASTER_REFRESH=1    also mirror the fresh master TSVs into
+rem                                   MASTER_DIR (old files backed up first)
+rem    UEMS_SYNC_MASTER_STATIC=1     read MASTER_DIR instead of extracting
+rem    UEMS_SYNC_MASTER_APPLY=1      really INSERT new majors/professors/students
+rem                                   (default: report only). A JSONL backup of
+rem                                   inserted rows is written; restore with
+rem                                   import-new-master.mjs --restore
 rem ===================================================================
 
 set "ROOT=%~dp0.."
@@ -54,6 +62,7 @@ if not defined TARGET_USER set "TARGET_USER=afagh"
 if not defined UNI set "UNI=1"
 if not defined FIN_DIR set "FIN_DIR=D:\backups\fin_export"
 if not defined STUDENTS_DIR set "STUDENTS_DIR=D:\backups\students_export"
+if not defined MASTER_DIR set "MASTER_DIR=D:\backups\master_export"
 if not defined SSH_KEY set "SSH_KEY=%USERPROFILE%\.ssh\afagh_ed25519"
 if not defined SSH_HOST set "SSH_HOST=root@100.70.187.120"
 if not defined PG_INTERNAL_HOST set "PG_INTERNAL_HOST=172.20.0.5"
@@ -77,6 +86,12 @@ set STUFLAG=--students-dir "%STUDENTS_DIR%"
 if /i "%UEMS_SYNC_STUDENTS_REFRESH%"=="1" set STUFLAG=%STUFLAG% --students-refresh
 if /i "%UEMS_SYNC_STUDENTS_STATIC%"=="1" set STUFLAG=%STUFLAG% --students-static
 if /i "%UEMS_SYNC_STUDENTS_APPLY%"=="1" set STUFLAG=%STUFLAG% --students-apply
+rem Master data (majors/professors/students): fresh extraction every run;
+rem MASTER_DIR is only the offline/mirror folder.
+set MASFLAG=--master-dir "%MASTER_DIR%"
+if /i "%UEMS_SYNC_MASTER_REFRESH%"=="1" set MASFLAG=%MASFLAG% --master-refresh
+if /i "%UEMS_SYNC_MASTER_STATIC%"=="1" set MASFLAG=%MASFLAG% --master-static
+if /i "%UEMS_SYNC_MASTER_APPLY%"=="1" set MASFLAG=%MASFLAG% --master-apply
 
 set "LOGDIR=%TEMP%\afagh-uems-sync"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1
@@ -103,11 +118,11 @@ echo.
 if /i "%UEMS_TRUSTED%"=="1" goto RUN_TRUSTED
 if not defined UEMS_USER echo [ERROR] UEMS_USER missing in config & goto FAIL_USER
 if not defined UEMS_PASS echo [ERROR] UEMS_PASS missing in config & goto FAIL_USER
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% %MASFLAG% > "%LOG%" 2>&1
 goto RAN
 
 :RUN_TRUSTED
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% %MASFLAG% > "%LOG%" 2>&1
 
 :RAN
 set "EC=%ERRORLEVEL%"
