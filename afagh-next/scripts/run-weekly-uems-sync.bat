@@ -22,6 +22,13 @@ rem                                   corrections to student_ledger. A JSONL
 rem                                   backup of affected rows is written to the
 rem                                   work-dir; restore with
 rem                                   migrate-legacy-finance.mjs --restore
+rem    UEMS_SYNC_STUDENTS_REFRESH=1  also mirror the fresh student TSVs into
+rem                                   STUDENTS_DIR (old files backed up first)
+rem    UEMS_SYNC_STUDENTS_STATIC=1   read STUDENTS_DIR instead of extracting
+rem    UEMS_SYNC_STUDENTS_APPLY=1    really update students.status and
+rem                                   students.samaStatusCode (default: report
+rem                                   only). A JSONL backup is written; restore
+rem                                   with migrate-legacy-students.mjs --restore
 rem ===================================================================
 
 set "ROOT=%~dp0.."
@@ -46,6 +53,7 @@ if not defined TARGET_DB set "TARGET_DB=afagh_db"
 if not defined TARGET_USER set "TARGET_USER=afagh"
 if not defined UNI set "UNI=1"
 if not defined FIN_DIR set "FIN_DIR=D:\backups\fin_export"
+if not defined STUDENTS_DIR set "STUDENTS_DIR=D:\backups\students_export"
 if not defined SSH_KEY set "SSH_KEY=%USERPROFILE%\.ssh\afagh_ed25519"
 if not defined SSH_HOST set "SSH_HOST=root@100.70.187.120"
 if not defined PG_INTERNAL_HOST set "PG_INTERNAL_HOST=172.20.0.5"
@@ -63,6 +71,12 @@ set FINFLAG=--fin-dir "%FIN_DIR%"
 if /i "%UEMS_SYNC_FIN_REFRESH%"=="1" set FINFLAG=%FINFLAG% --fin-refresh
 if /i "%UEMS_SYNC_FIN_STATIC%"=="1" set FINFLAG=%FINFLAG% --fin-static
 if /i "%UEMS_SYNC_FIN_UPSERT%"=="1" set FINFLAG=%FINFLAG% --fin-upsert
+rem Student master data: fresh extraction every run; STUDENTS_DIR is only the
+rem offline/mirror folder, exactly like FIN_DIR for finance.
+set STUFLAG=--students-dir "%STUDENTS_DIR%"
+if /i "%UEMS_SYNC_STUDENTS_REFRESH%"=="1" set STUFLAG=%STUFLAG% --students-refresh
+if /i "%UEMS_SYNC_STUDENTS_STATIC%"=="1" set STUFLAG=%STUFLAG% --students-static
+if /i "%UEMS_SYNC_STUDENTS_APPLY%"=="1" set STUFLAG=%STUFLAG% --students-apply
 
 set "LOGDIR=%TEMP%\afagh-uems-sync"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%" >nul 2>&1
@@ -89,11 +103,11 @@ echo.
 if /i "%UEMS_TRUSTED%"=="1" goto RUN_TRUSTED
 if not defined UEMS_USER echo [ERROR] UEMS_USER missing in config & goto FAIL_USER
 if not defined UEMS_PASS echo [ERROR] UEMS_PASS missing in config & goto FAIL_USER
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-server "%UEMS_SERVER%" --uems-user "%UEMS_USER%" --uems-pass "%UEMS_PASS%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% > "%LOG%" 2>&1
 goto RAN
 
 :RUN_TRUSTED
-node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% > "%LOG%" 2>&1
+node "%SCRIPT%" --yes %PLANFLAG% %SKIPFLAG% %WDFLAG% --uems-trusted --uems-server "%UEMS_SERVER%" --uems-db "%UEMS_DB%" --target-host "%TARGET_HOST%" --target-port "%TARGET_PORT%" --target-db "%TARGET_DB%" --target-user "%TARGET_USER%" --uni "%UNI%" %FINFLAG% %STUFLAG% > "%LOG%" 2>&1
 
 :RAN
 set "EC=%ERRORLEVEL%"

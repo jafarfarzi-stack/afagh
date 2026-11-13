@@ -5,14 +5,22 @@
  *
  *  چه میکند:
  *    ۱) آدرس/اتصال «دیتابیسِ پشتیبان» (UEMS) را از کاربر میگیرد (یا از آرگومان).
- *    ۲) از UEMS استخراج میکند (tuition / tariff / آموزشی / **مالی**) → TSV.
- *    ۳) همهٔ اطلاعات (مالی + آموزشی + کدهای قیمت سربرگ کارنامه) را بارگذاری میکند.
+ *    ۲) از UEMS استخراج میکند (tuition / tariff / آموزشی / **مالی** / **دانشجویان**) → TSV.
+ *    ۳) همهٔ اطلاعات (مالی + آموزشی + وضعیت دانشجویان + کدهای قیمت سربرگ کارنامه) را بارگذاری میکند.
  *    ۴) در انتها یک گزارش یکپارچه چاپ میکند.
  *
  *  گام «استخراج مالی» (extract-legacy-finance) جایگزین پوشهٔ ایستای قدیمی
  *  D:\backups\fin_export شد: هر اجرا TermAms/StdPays/paytype/TermPrice/_t را
  *  مستقیم از SQL Server میگیرد و migrate-legacy-finance همان خروجی تازه را
  *  میخواند. پوشهٔ ایستا فقط در --skip-extract / --fin-static بهکار میرود.
+ *
+ *  گام «همگامسازی دانشجویان» (extract-legacy-students + migrate-legacy-students)
+ *  شکافی را میبندد که در آن MAININFO_students.tsv استخراج میشد ولی هیچ گامی
+ *  آن را نمیخواند: students.status و students.samaStatusCode روی لایو کهنه
+ *  مانده بودند. استخراج کوچک و مستقل است (۲ پرسوجو) تا وابسته به استخراج
+ *  ۳۳۳MB آموزشی نباشد. موتور فقط این دو ستون را مینویسد، دانشجوی تازهای
+ *  نمیسازد و شکاف (فقط در UEMS / فقط در آفاق) را گزارش میدهد. پیشفرض خشک
+ *  است؛ --students-apply (با بکاپ JSONL اجباری) نوشتن را فعال میکند.
  *
  *  گام import-tuition-price-codes بکفیل «کد ثابت شهریه» است که پیش از این
  *  extract-uems-tuition استخراج میکرد و import-uems-tuition دور میریخت. نیازمند
@@ -38,6 +46,16 @@
  *                     پیشفرض خاموش است (رفتار قدیمی = فقط INSERT ایدمپاتنت). وقتی روشن
  *                     باشد یک بکاپ JSONL از ردیفهای در شُرف تغییر در work-dir نوشته
  *                     میشود (قابل بازگردانی با migrate-legacy-finance.mjs --restore).
+ *    --students-dir <p>  مسیر TSVهای دانشجویان «ایستا/آفلاین» (پیشفرض:
+ *                        D:\backups\students_export). فقط با --skip-extract
+ *                        یا --students-static بهعنوان ورودی استفاده میشود.
+ *    --students-out <p> پوشهٔ خروجی استخراج تازهٔ دانشجویان (پیشفرض:
+ *                        <work-dir>/students_export)
+ *    --students-static  استخراج دانشجویان را رد کرده و همان --students-dir را بخواند
+ *    --students-refresh فایلهای تازه را (با پشتیبانگیری) در --students-dir هم بنویسد
+ *    --students-apply   وضعیت/کد خام سما را واقعاً بروز کند (پیشفرض: فقط گزارش).
+ *                       بکاپ JSONL از ردیفهای در شُرف تغییر در work-dir نوشته
+ *                       میشود؛ بازگردانی با migrate-legacy-students.mjs --restore.
  *    --skip-extract   از TSVهای موجود استفاده میکند (استخراج را رد میزند)
  *    --target-host / --target-port / --target-db / --target-user
  *    --target-pass <pw>  رمز Postgres مقصد (مستقیم؛ توصیهشده روی ویندوز)
@@ -89,6 +107,11 @@ const FIN_STATIC_DIR = A['fin-dir'] || 'D:\\backups\\fin_export';
 const FIN_STATIC = A['fin-static'] === 'true';
 const FIN_REFRESH = A['fin-refresh'] === 'true';
 const FIN_UPSERT = A['fin-upsert'] === 'true';
+const STUDENTS_STATIC_DIR = A['students-dir'] || 'D:\\backups\\students_export';
+const STUDENTS_STATIC = A['students-static'] === 'true';
+const STUDENTS_REFRESH = A['students-refresh'] === 'true';
+const STUDENTS_APPLY = A['students-apply'] === 'true';
+const EXTRACT_STUDENTS = !SKIP_EXTRACT && !STUDENTS_STATIC;
 const SQLCMD = A.sqlcmd || process.env.SQLCMD || 'C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\sqlcmd.exe';
 
 // ── پرسش تعاملی ──────────────────────────────────────────────────────────
@@ -192,10 +215,18 @@ function runStep(step, env) {
   });
   const ms = Date.now() - t0;
   const out = String(r.stdout || '') + String(r.stderr || '');
-  const last = out.split(/\r?\n/).filter((l) => l.trim()).slice(-12).join('\n');
+  const tailLines = out.split(/\r?\n/).filter((l) => l.trim());
+  const last = tailLines.slice(-12).join('\n');
   const ok = r.status === 0;
   if (!ok) console.error('  ⚠ خطا (exit ' + r.status + '):\n' + last);
-  else console.log('  ✓ ' + (step.summary || 'انجام شد') + '  (' + ms / 1000 + 's)');
+  else {
+    console.log('  ✓ ' + (step.summary || 'انجام شد') + '  (' + ms / 1000 + 's)');
+    // برخی گامها (مثلاً گزارش شکاف دانشجویان) خلاصهای دارند که باید در لاگ دیده شود.
+    if (step.echo) {
+      const shown = tailLines.slice(-(step.echoLines || 22)).join('\n');
+      if (shown.trim()) console.log('    ' + shown.split('\n').join('\n    '));
+    }
+  }
   return { name: step.name, phase: step.phase, ok, ms, last: ok ? '' : last };
 }
 
@@ -217,6 +248,11 @@ async function main() {
   const finOutDir = A['fin-out'] || join(workDir, 'fin_export');
   const FIN_DIR = EXTRACT_FIN ? finOutDir : FIN_STATIC_DIR;
   if (EXTRACT_FIN) mkdirSync(finOutDir, { recursive: true });
+
+  // دانشجویان: استخراج تازهٔ مستقل (کوچک) مگر اینکه صریحاً ایستا/آفلاین خواسته شود.
+  const studentsOutDir = A['students-out'] || join(workDir, 'students_export');
+  const STUDENTS_DIR = EXTRACT_STUDENTS ? studentsOutDir : STUDENTS_STATIC_DIR;
+  if (EXTRACT_STUDENTS) mkdirSync(studentsOutDir, { recursive: true });
 
   const pass = resolvePassword(cfg, PLAN);
   // فایل env موقت «محلی» برای اسکریپتهای migrate (جایگزین /root/afagh/.env سرور).
@@ -252,6 +288,16 @@ async function main() {
       args: ['--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', eduDir, ...AUTH_ARGS],
       summary: 'TSVهای آموزشی (دروس/ارائه/نمرات/...)',
     });
+    if (EXTRACT_STUDENTS) {
+      steps.push({
+        phase: 'extract', name: 'extract-legacy-students (master دانشجویان تازه از UEMS)', file: 'extract-legacy-students.mjs',
+        args: [
+          '--server', cfg.uemsServer, '--db', cfg.uemsDb, '--out', studentsOutDir,
+          ...(STUDENTS_REFRESH ? ['--mirror', STUDENTS_STATIC_DIR] : []), ...AUTH_ARGS,
+        ],
+        summary: 'TSV دانشجویان (MAININFO + People) + manifest',
+      });
+    }
     if (EXTRACT_FIN) {
       steps.push({
         phase: 'extract', name: 'extract-legacy-finance (دادهٔ مالی تازه از UEMS)', file: 'extract-legacy-finance.mjs',
@@ -264,7 +310,18 @@ async function main() {
     }
   }
 
-  // ── بارگذاری: مالی (از fin_export) + آموزشی (از استخراج) + تعرفه/قوانین ──
+  // ── بارگذاری: master دانشجویان نخست، سپس تعرفه/قوانین + مالی + آموزشی ──
+  steps.push({
+    phase: 'load', name: 'migrate-legacy-students (وضعیت دانشجویان → students)', file: 'migrate-legacy-students.mjs',
+    args: [
+      '--dir', STUDENTS_DIR, '--uni', String(UNI),
+      '--report', join(workDir, 'students-gap.json'),
+      '--db-host', cfg.targetHost, '--db-port', String(targetPort), '--db-env', dbEnvPath,
+      ...(STUDENTS_APPLY ? ['--apply', '--backup', join(workDir, 'students-before-sync-' + Date.now() + '.jsonl')] : []),
+    ],
+    summary: STUDENTS_APPLY ? 'وضعیت + کد خام سما (با بکاپ JSONL)' : 'گزارش شکاف وضعیت دانشجویان (dry)',
+    echo: true,
+  });
   steps.push({
     phase: 'load', name: 'import-uems-tuition (قوانین شهریه → tuition_rules)', file: 'import-uems-tuition.mjs',
     args: ['--in', join(ratesDir, 'uems_tuition_rules.tsv'), '--apply', '--university', String(UNI)],
@@ -302,6 +359,8 @@ async function main() {
   console.log('  منبع (دیتابیس پشتیبان UEMS):  ' + cfg.uemsServer + ' / db=' + cfg.uemsDb);
   console.log('  مقصد (آفاق PG):               ' + cfg.targetHost + ':' + targetPort + ' / db=' + targetDb + ' / user=' + targetUser);
   console.log('  دادهٔ مالی از:                ' + FIN_DIR + (EXTRACT_FIN ? '  (استخراج تازه ✓)' : '  (ایستا/آفلاین)'));
+  console.log('  دادهٔ دانشجویان از:           ' + STUDENTS_DIR + (EXTRACT_STUDENTS ? '  (استخراج تازه ✓)' : '  (ایستا/آفلاین)'));
+  console.log('  همگامسازی وضعیت دانشجویان:   ' + (STUDENTS_APPLY ? 'فعال (با بکاپ قابل بازگردانی)' : 'گزارش خشک، بدون نوشتن'));
   if (FIN_REFRESH) console.log('  آینهٔ پوشهٔ مالی ایستا:       ' + FIN_STATIC_DIR + '  (با پشتیبانگیری)');
   if (FIN_UPSERT) console.log('  اصلاح مقادیر مالی:            فعال (بکاپ JSONL در پوشهٔ کاری)');
   console.log('  فایل env موقت مقصد:          ' + dbEnvPath);
