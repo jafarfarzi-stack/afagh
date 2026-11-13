@@ -37,6 +37,12 @@ export interface ResolvableVersion {
   entryYearFrom: number;
   entryYearTo: number | null;
   entryTermId: number | null; // نیمسال ورودِ مربوط به نسخه (۱=مهر، ۲=بهمن، ۳=تابستان)
+  /**
+   * نوع کاتالوگ: 'NORMAL' | 'COMPENSATORY'.
+   * undefined/NULL = NORMAL (سازگاری با ردیف‌های پیش از مهاجرت ۰۱۳۷ و با
+   * کوئری‌هایی که این ستون را select نمی‌کنند).
+   */
+  catalogKind?: string | null;
 }
 
 /** وضعیت‌هایی که در Resolution لحاظ می‌شوند */
@@ -60,6 +66,12 @@ export interface CurriculumResolutionContext {
   entryYear: number;
   /** نیمسال ورود دانشجو (entryTerm در students: ۱=مهر، ۲=بهمن، ۳=تابستان) */
   entryTerm: number | null;
+  /**
+   * نوع کاتالوگِ خواسته‌شده — پیش‌فرض 'NORMAL'.
+   * دانشجوی دارای واحد جبرانی، علاوه بر کاتالوگ عادی، کاتالوگ جبرانی هم
+   * می‌گیرد؛ این دو نسخهٔ مستقل‌اند و نباید با هم قاطی شوند.
+   */
+  catalogKind?: 'NORMAL' | 'COMPENSATORY';
 }
 
 export type ResolutionReason =
@@ -68,7 +80,8 @@ export type ResolutionReason =
   | 'NO_ACTIVE_STATUS'     // نسخه‌ها هست، ولی هیچ‌کدام PUBLISHED/ARCHIVED نیستند
   | 'NO_MAJOR_OR_DEGREE'   // هیچ نسخه‌ای برای این رشته/مقطع نیست
   | 'NO_ENTRY_WINDOW'      // نسخه هست ولی سال ورود خارج از پنجرهٔ همه است
-  | 'NO_TRACK';            // نسخهٔ گرایش−آزاد یا همان گرایش وجود ندارد
+  | 'NO_TRACK'             // نسخهٔ گرایش−آزاد یا همان گرایش وجود ندارد
+  | 'NO_COMPENSATORY_CATALOG'; // کاتالوگ عادی هست، ولی نسخهٔ جبرانیِ جدا ثبت نشده
 
 export interface ResolutionOutcome {
   version: ResolvableVersion | null;
@@ -119,15 +132,28 @@ export function resolveApplicableCurriculum(
     return { version: null, reason: 'NO_MAJOR_OR_DEGREE', candidates: [] };
   }
 
-  // فیلتر ۳ — گرایش: دقیق ترجیح دارد؛ اگر نبود، گرایش‌آزاد (NULL)
-  const exactTrack = byMajor.filter((v) => v.trackId === ctx.trackId);
-  const genericTrack = byMajor.filter((v) => v.trackId == null);
+  // فیلتر ۳ — نوع کاتالوگ (عادی / جبرانی)
+  // ⚠ بدون این فیلتر، کاتالوگ جبرانی می‌توانست جای کاتالوگ عادی بنشیند و
+  //   دانشجوی عادی درس‌های جبرانیِ دیگران را در چارت ببیند.
+  const wantKind = ctx.catalogKind ?? 'NORMAL';
+  const byKind = byMajor.filter((v) => (v.catalogKind ?? 'NORMAL') === wantKind);
+  if (byKind.length === 0) {
+    return {
+      version: null,
+      reason: wantKind === 'COMPENSATORY' ? 'NO_COMPENSATORY_CATALOG' : 'NO_MAJOR_OR_DEGREE',
+      candidates: [],
+    };
+  }
+
+  // فیلتر ۴ — گرایش: دقیق ترجیح دارد؛ اگر نبود، گرایش‌آزاد (NULL)
+  const exactTrack = byKind.filter((v) => v.trackId === ctx.trackId);
+  const genericTrack = byKind.filter((v) => v.trackId == null);
   const byTrack = exactTrack.length > 0 ? exactTrack : genericTrack;
   if (byTrack.length === 0) {
     return { version: null, reason: 'NO_TRACK', candidates: [] };
   }
 
-  // فیلتر ۴ — پنجرهٔ سال ورود
+  // فیلتر ۵ — پنجرهٔ سال ورود
   const inWindow = byTrack.filter(
     (v) => v.entryYearFrom <= ctx.entryYear && (v.entryYearTo == null || v.entryYearTo >= ctx.entryYear)
   );
@@ -135,14 +161,14 @@ export function resolveApplicableCurriculum(
     return { version: null, reason: 'NO_ENTRY_WINDOW', candidates: [] };
   }
 
-  // فیلتر ۵ — نیمسال ورود: نسخه MUST برای همین نیمسال باشد (مگر entryTermId=NULL که برای همه است)
+  // فیلتر ۶ — نیمسال ورود: نسخه MUST برای همین نیمسال باشد (مگر entryTermId=NULL که برای همه است)
   const byTerm = inWindow.filter((v) => v.entryTermId == null || v.entryTermId === ctx.entryTerm);
   if (byTerm.length === 0) {
     return { version: null, reason: 'NO_ENTRY_WINDOW', candidates: [] };
   }
 
-  // فیلتر ۵ — رتبه‌بندی قطعی
-  const sorted = [...inWindow].sort(rankVersions);
+  // فیلتر ۷ — رتبه‌بندی قطعی (روی همان مجموعهٔ فیلترشدهٔ نیمسال، نه onWindow)
+  const sorted = [...byTerm].sort(rankVersions);
   const best = sorted[0];
   if (!best) {
     // غیرممکن است (inWindow خالی نیست)، ولی برای قطعیت نوع‌ها:

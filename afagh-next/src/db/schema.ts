@@ -515,6 +515,13 @@ export const students = pgTable('students', {
   // واحدهای جبرانیِ تعیین‌شده توسط مدیر گروه؛ به سقف واحد همان ترم اضافه می‌شود
   // (مثلاً سقف ۲۰ + ۶ جبرانی = ۲۶) و در «کف واحد» شمرده نمی‌شود.
   compensatoryUnits: integer('compensatoryUnits').notNull().default(0),
+  /**
+   * آینهٔ قابلِ کوئریِ «compensatoryUnits > 0» (مهاجرت ۰۱۳۷).
+   * منبع حقیقت همان compensatoryUnits است؛ این ستون با تریگر
+   * trg_students_needs_compensatory هم‌گام نگه داشته می‌شود و هرگز دستی
+   * نوشته نمی‌شود. استفاده: resolveStudentCurricula / گزارش‌های گروه.
+   */
+  needsCompensatory: boolean('needsCompensatory').notNull().default(false),
   // ── منبع پذیرش (مهاجرت 0130): اعلام‌شده از سنجش یا ثبت متفرقه ──
   admissionSource: varchar('admissionSource', { length: 20 }).default('LEGACY'), // SANJESH | MANUAL | LEGACY
   sanjeshFileId: integer('sanjeshFileId'),
@@ -822,6 +829,14 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   versionCode: varchar('versionCode', { length: 20 }).notNull(),        // «1404» یا «1404-R1»
   title: varchar('title', { length: 150 }).notNull(),                   // «برنامهٔ مهندسی نرم‌افزار ۱۴۰۴»
   status: varchar('status', { length: 20 }).notNull().default('DRAFT'), // DRAFT|REVIEW|APPROVED|PUBLISHED|ARCHIVED
+  /**
+   * نوع کاتالوگ (مهاجرت ۰۱۳۷): NORMAL = برنامهٔ عادی، COMPENSATORY = کاتالوگ
+   * جبرانیِ مستقل. پیش از این، دروس جبرانی داخل همان نسخهٔ عادی بودند و جمع
+   * واحد ترم را از سقف می‌گذراندند. منطق کامل: src/lib/compensatory-catalog.ts
+   */
+  catalogKind: varchar('catalogKind', { length: 20 }).notNull().default('NORMAL'),
+  /** ارجاع نسخهٔ عادی به کاتالوگ جبرانیِ متناظر (NULL = ندارد) */
+  compensatoryVersionId: integer('compensatoryVersionId').references((): AnyPgColumn => curriculum_versions.id, { onDelete: 'set null' }),
   entryYearFrom: integer('entryYearFrom').notNull(),                    // بازهٔ ورودی: از
   entryYearTo: integer('entryYearTo'),                                  // بازهٔ ورودی: تا (NULL = به بعد)
   entryTermId: integer('entryTermId').references(() => financial_terms.id), // نیمسال ورودی مربوطه (۱=مهر، ۲=بهمن، ۳=تابستان)
@@ -839,6 +854,7 @@ export const curriculum_versions = pgTable('curriculum_versions', {
   updatedAt: timestamp('updatedAt').defaultNow()
 }, (t) => ({
   statusCheck: check('curriculum_versions_status_check', sql`${t.status} in ('DRAFT','REVIEW','APPROVED','PUBLISHED','ARCHIVED')`),
+  catalogKindCheck: check('curriculum_versions_catalog_kind_check', sql`${t.catalogKind} in ('NORMAL','COMPENSATORY')`),
 }));
 
 /** دروسِ هر نسخهٔ برنامه (ارتقای syllabus_courses) */
