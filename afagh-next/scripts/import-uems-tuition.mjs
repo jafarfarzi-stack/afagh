@@ -182,7 +182,8 @@ async function main() {
       console.error('DATABASE_URL is required for --apply');
       process.exit(1);
     }
-    const { Pool } = await import('pg');
+    const pg = await import('pg');
+    const Pool = pg.Pool || pg.default?.Pool;   // pg CJS: واردات پویا Pool را زیر default میگذارد
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       await pool.query(sql);
