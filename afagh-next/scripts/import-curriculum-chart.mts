@@ -54,6 +54,13 @@ const UNI = Number(A.uni || 1);
 const REPORT = A.report || '';
 const CAP_OVERRIDE = A.cap ? Number(A.cap) : null;
 const NO_SPLIT = A['no-split'] === 'true';
+/**
+ * `--prune`: فایل TSV مرجعِ کاملِ هر نسخه است — هر ردیفی که در فایل نیست از
+ * همان نسخه حذف می‌شود. لازم است چون خروجی ویرایشگر HTML می‌تواند درسِ
+ * تکراری را «حذف» کند و ایمپورتِ فقط-درج/به‌روزرسانی نمی‌تواند حذف را بیان کند.
+ * ⚠ فقط نسخه‌هایی که در فایل حاضرند پاک‌سازی می‌شوند؛ نسخهٔ غایب دست‌نخورده است.
+ */
+const PRUNE = A.prune === 'true';
 
 if (!FILE || !existsSync(FILE)) { console.error('--file <tsv> الزامی است'); process.exit(1); }
 if (APPLY && !BACKUP) { console.error('--apply نیازمند --backup <file.jsonl> است'); process.exit(1); }
@@ -74,7 +81,8 @@ function roleFromFile(raw: string | undefined | null): string | null {
 }
 
 // ── خواندن TSV (۷ یا ۸ ستونی) ──
-const lines = readFileSync(FILE, 'utf8').split(/\r?\n/).filter((l) => l.trim());
+// BOM (اگر Excel/ویرایشگر اضافه کرده باشد) باید حذف شود وگرنه ستون اول خراب می‌شود
+const lines = readFileSync(FILE, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
 const firstCols = lines[0] ? lines[0].split('\t').length : 0;
 const EIGHT = firstCols >= 8;
 const OFF = EIGHT ? 1 : 0; // جابه‌جایی ستون‌ها بعد از «کد مقطع»
@@ -345,7 +353,7 @@ if (!APPLY) { console.log('\n(dry) برای اجرا: --apply --backup <file.jso
 if (!existsSync(dirname(BACKUP))) mkdirSync(dirname(BACKUP), { recursive: true });
 const log: any[] = [];
 const client = await pool.connect();
-let vMade = 0, iRows = 0, uRows = 0, eRows = 0, links = 0;
+let vMade = 0, iRows = 0, uRows = 0, eRows = 0, links = 0, pruned = 0;
 
 const chunk = <T,>(arr: T[], n: number): T[][] => {
   const out: T[][] = [];
@@ -468,7 +476,76 @@ try {
     uRows += ch.length;
   }
 
-  // ── ۵) لینک نسخهٔ عادی → نسخهٔ جبرانی ──
+  // ── ۵) پاک‌سازیِ ردیف‌های خارج از فایل (--prune) ──
+  // خروجی ویرایشگر HTML می‌تواند یک درس را «حذف» کند؛ ایمپورتِ درج/به‌روزرسانی
+  // نمی‌تواند حذف را بیان کند، پس این گام فایل را مرجعِ کاملِ هر نسخه می‌کند.
+  if (PRUNE) {
+    const wanted = new Map<number, Set<number>>();
+    for (const p of plan) {
+      if (!p.verId) continue;
+      const set = new Set<number>();
+      for (const r of p.rowsPlanned) {
+        const it = p.items.find((x) => x.code === r.courseCode);
+        if (it) set.add(it.courseId);
+      }
+      wanted.set(p.verId, set);
+    }
+    const ids = [...wanted.keys()];
+    if (ids.length) {
+      const current = (await client.query(
+        `SELECT id, "curriculumVersionId", "courseId" FROM curriculum_courses
+          WHERE "curriculumVersionId" = ANY($1::int[])`,
+        [ids]
+      )).rows;
+      const doomed = current
+        .filter((r: any) => !wanted.get(r.curriculumVersionId)?.has(r.courseId))
+        .map((r: any) => r.id);
+      if (doomed.length) {
+        await client.query(`DELETE FROM curriculum_courses WHERE id = ANY($1::int[])`, [doomed]);
+        log.push({ entity: 'cc_pruned', ids: doomed });
+        pruned = doomed.length;
+      }
+    }
+  }
+
+  // ── ۶) بازمحاسبهٔ جمع واحد هر نسخه (پس از درج/به‌روزرسانی/پاک‌سازی) ──
+  // بدون این، totalRequiredUnits و minRoleUnits نسخه‌های موجود با محتوای واقعی
+  // هم‌خوان نمی‌مانند (قبلاً فقط هنگام ساخت نسخهٔ نو نوشته می‌شدند).
+  {
+    const ids = [...new Set(plan.map((p) => p.verId!).filter(Boolean))];
+    if (ids.length) {
+      const totals = (await client.query(
+        `WITH per_role AS (
+           SELECT cc."curriculumVersionId" AS vid, cc."roleType" AS role,
+                  round(sum(COALESCE(cc.units, c.units, 0))::numeric, 1) AS u
+             FROM curriculum_courses cc JOIN courses c ON c.id = cc."courseId"
+            WHERE cc."curriculumVersionId" = ANY($1::int[])
+            GROUP BY 1, 2
+         )
+         SELECT vid, sum(u) AS total, jsonb_object_agg(role, u) AS roles
+           FROM per_role GROUP BY vid`,
+        [ids]
+      )).rows;
+      if (totals.length) {
+        await client.query(
+          `UPDATE curriculum_versions v
+              SET "totalRequiredUnits" = t.total::text,
+                  "minRoleUnits" = t.roles::text
+             FROM (
+               SELECT unnest($1::int[]) AS vid, unnest($2::numeric[]) AS total, unnest($3::text[]) AS roles
+             ) t
+            WHERE v.id = t.vid`,
+          [
+            totals.map((t: any) => t.vid),
+            totals.map((t: any) => Number(t.total)),
+            totals.map((t: any) => JSON.stringify(t.roles)),
+          ]
+        );
+      }
+    }
+  }
+
+  // ── ۷) لینک نسخهٔ عادی → نسخهٔ جبرانی ──
   const normalIds: number[] = [];
   const compIds: number[] = [];
   for (const p of plan.filter((x) => x.kind === 'NORMAL' && x.verId)) {
@@ -502,7 +579,7 @@ try {
 }
 
 writeFileSync(BACKUP, log.map((r) => JSON.stringify(r)).join('\n') + (log.length ? '\n' : ''), 'utf8');
-console.log(`apply → نسخه‌های ساخته‌شده: ${vMade} | درج: ${iRows} | به‌روزرسانی: ${uRows} | بدون تغییر: ${eRows} | لینک عادی↔جبرانی: ${links}`);
+console.log(`apply → نسخه‌های ساخته‌شده: ${vMade} | درج: ${iRows} | به‌روزرسانی: ${uRows} | بدون تغییر: ${eRows} | حذف‌شده(prune): ${pruned} | لینک عادی↔جبرانی: ${links}`);
 console.log('backup:', BACKUP, log.length, 'versions');
 console.log('rollback: DELETE FROM curriculum_courses WHERE "curriculumVersionId" = ANY(ids); DELETE FROM curriculum_versions WHERE id = ANY(ids);');
 await pool.end();

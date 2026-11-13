@@ -16,6 +16,7 @@ import { getTermScope } from '@/lib/term-scope';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import TermAutoScroll from '@/components/TermAutoScroll';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
+import { buildEquivalenceIndex, expandPassedCourseIds } from '@/lib/course-equivalence-map';
 import { parseRequisiteText } from '@/lib/prereq-text';
 import PrintButton from '@/components/PrintButton';
 import { faNum } from '@/lib/report-format';
@@ -106,7 +107,7 @@ export default async function StudentCurriculumChartPage() {
       .where(eq(enrollments.studentId, me.id))
   );
 
-  const passedCourseIds = new Set<number>();
+  const passedCourseIdsRaw = new Set<number>();
   const currentTermCourseIds = new Set<number>();
   for (const r of enrollmentRows) {
     const isDescriptive = r.gradingType === 'DESCRIPTIVE' || r.affectsGpa === 0;
@@ -114,9 +115,21 @@ export default async function StudentCurriculumChartPage() {
     const grade = r.grade != null ? Number(r.grade) : null;
     const passed =
       r.status === 'EQUIV_PASSED' || (grade != null && (isDescriptive ? grade !== 0 : grade >= minMark));
-    if (passed) passedCourseIds.add(r.courseId);
+    if (passed) passedCourseIdsRaw.add(r.courseId);
     if (term && r.termId === term.id && r.status !== 'DROPPED') currentTermCourseIds.add(r.courseId);
   }
+
+  // هم‌ارزی درس (courses.equivalentCourseCodes): درسِ پاس‌شده با کد هم‌ارز هم
+  // همان درس است — بدون این، ادغامِ درس‌های تکراری در چارت، تیک «پاس‌شده»
+  // دانشجو را برمی‌داشت. واحدها گسترده نمی‌شوند (فقط مجموعهٔ شناسه‌ها).
+  const equivRows = await db
+    .select({ id: courses.id, code: courses.code, equivalentCourseCodes: courses.equivalentCourseCodes })
+    .from(courses)
+    .where(eq(courses.universityId, me.universityId ?? 1));
+  const passedCourseIds = expandPassedCourseIds(
+    passedCourseIdsRaw,
+    buildEquivalenceIndex(equivRows)
+  );
 
   const versionRows = me.majorId
     ? await db

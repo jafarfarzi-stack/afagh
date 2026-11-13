@@ -19,12 +19,13 @@ import { deliveriesForUser, notifyUserMultichannel } from '@/lib/messaging';
 import { getRegulationConfig } from '@/lib/regulations-engine';
 import { aggregateAuditTranscript } from '@/lib/gpa-aggregation';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
+import { buildEquivalenceIndex, expandPassedCourseIds } from '@/lib/course-equivalence-map';
 import { safeRials } from '@/lib/money';
 import { appendAudit } from '@/lib/audit';
 import { getStudentCompliance } from '@/lib/compliance-policy-server';
 import { comprehensiveExamGraduationReasons, thesisQualitativeGraduationReasons } from '@/lib/compliance-integrations';
 import {
-  loadAuditStudentRow, loadCurriculumRequirementRows, loadGradedEnrollments,
+  loadAuditStudentRow, loadCourseEquivalenceRows, loadCurriculumRequirementRows, loadGradedEnrollments,
 } from '@/lib/graduation/graduation-queries';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -142,9 +143,26 @@ export async function auditStudent(studentId: number): Promise<AuditResult | nul
    * واحدهای هر ردیفِ قبولی همچنان شمرده می‌شوند (درس منتقل‌شده واحد می‌دهد).
    */
   const core = aggregateAuditTranscript(taken, passing);
-  const passedIds = core.passedIds;
+  let passedIds = core.passedIds;
   const passedUnits = core.passedUnits;
   const gpa = core.gpa;
+
+  /**
+   * هم‌ارزی درس (ستون courses.equivalentCourseCodes — میراث «دروس هم‌ارز»):
+   * اگر چارت درس A را بخواهد و دانشجو همان درس را با کد هم‌ارز B پاس کرده
+   * باشد، A «پاس‌نشده» نیست. تا پیش از این هیچ موتور اجرایی این ستون را
+   * نمی‌خواند و ادغامِ درس‌های تکراری، سابقهٔ دانشجو را می‌شکست.
+   *
+   * ⚠ واحدها عمداً گسترده نمی‌شوند: `passedUnits` همان واحدهای ثبت‌نام‌های
+   *   واقعی است، وگرنه یک درس دو بار واحد می‌داد.
+   */
+  try {
+    const equivRows = await loadCourseEquivalenceRows(row.universityId ?? 1);
+    const index = buildEquivalenceIndex(equivRows);
+    if (index.byId.size) passedIds = expandPassedCourseIds(passedIds, index);
+  } catch {
+    // نبودِ دادهٔ هم‌ارزی نباید فارغ‌التحصیلی را بشکند — رفتار قبلی حفظ می‌شود.
+  }
 
   // ── فاز ۵: نسخهٔ مصوب از طریق Resolution (فقط PUBLISHED/ARCHIVED) ──
   // پیش از این «جدیدترین نسخهٔ دارای پنجرهٔ منطبق» بدون توجه به وضعیت انتخاب
