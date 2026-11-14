@@ -46,7 +46,14 @@ for (const r of rows) {
 }
 
 const isComp = (code) => /-C$/.test(code || '');
-const sigOf = (list) => list.map(r => r.courseId).sort((a, b) => a - b).join(',');
+// --ignore-general: دروس عمومی (GENERAL) در مقایسه نادیده گرفته می‌شوند.
+// درسی مثل «بهداشت و تنظیم خانواده» یا «تربیت بدنی» در بعضی سال‌ها در UEMS هست و در
+// بعضی نیست؛ این نوسان نباید چارت را دو نسخه کند. در ادغام، اجتماعِ دروس نگه داشته
+// می‌شود (درس عمومیِ موجود حذف نمی‌شود).
+const IGNORE_GENERAL = A['ignore-general'] === 'true';
+const sigOf = (list) => list
+  .filter(r => !(IGNORE_GENERAL && r.roleType === 'GENERAL'))
+  .map(r => r.courseId).sort((a, b) => a - b).join(',');
 
 // ── ساخت زنجیره‌ها ──
 const groups = new Map();
