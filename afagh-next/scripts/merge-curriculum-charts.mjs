@@ -51,9 +51,17 @@ const isComp = (code) => /-C$/.test(code || '');
 // بعضی نیست؛ این نوسان نباید چارت را دو نسخه کند. در ادغام، اجتماعِ دروس نگه داشته
 // می‌شود (درس عمومیِ موجود حذف نمی‌شود).
 const IGNORE_GENERAL = A['ignore-general'] === 'true';
-const sigOf = (list) => list
+// --max-gap N: حداکثر فاصلهٔ سالِ خالی بین دو نسخه برای ادغام (پیش‌فرض ۱).
+// با مقدار بزرگ، نسخه‌های یکسان که چند سالِ بی‌چارت بین‌شان فاصله انداخته هم ادغام می‌شوند.
+const MAX_GAP = Number(A['max-gap'] ?? 1);
+// --comp-tolerance N: کاتالوگ‌های جبرانی‌ای که فهرستشان فقط N درس تفاوت دارد هم ادغام
+// می‌شوند (اجتماعِ دروس نگه داشته می‌شود). یک درسِ جبرانیِ جابه‌جا‌شده نباید کاتالوگ را
+// دو نسخه کند. برای چارت اصلی پیش‌فرض صفر است (هر تفاوت درس، تغییرِ واقعی است).
+const COMP_TOL = Number(A['comp-tolerance'] ?? 0);
+const setOf = (list) => new Set(list
   .filter(r => !(IGNORE_GENERAL && r.roleType === 'GENERAL'))
-  .map(r => r.courseId).sort((a, b) => a - b).join(',');
+  .map(r => r.courseId));
+const sigOfSet = (s) => [...s].sort((a, b) => a - b).join(',');
 
 // ── ساخت زنجیره‌ها ──
 const groups = new Map();
@@ -66,15 +74,30 @@ for (const v of versions) {
 const chains = [];
 for (const [key, list] of groups) {
   const sorted = list.slice().sort((a, b) => (a.f || 0) - (b.f || 0));
+  const comp = key.endsWith('|C');
+  const tol = comp ? COMP_TOL : 0;
   let cur = null;
   for (const v of sorted) {
-    const sig = sigOf(byVer.get(v.id) || []);
-    if (cur && sig === cur.sig && (cur.last.o == null || v.f <= cur.last.o + 1)) {
-      cur.members.push(v);
-      cur.last = v;
-      continue;
+    const set = setOf(byVer.get(v.id) || []);
+    if (cur) {
+      const gapOk = cur.last.o == null || v.f <= cur.last.o + MAX_GAP;
+      const identical = sigOfSet(set) === sigOfSet(cur.union);
+      let near = false;
+      if (!identical && tol > 0) {
+        let d = 0;
+        for (const c of set) if (!cur.union.has(c)) d++;
+        for (const c of cur.union) if (!set.has(c)) d++;
+        near = d <= tol;
+      }
+      if ((identical || near) && gapOk) {
+        cur.members.push(v);
+        cur.last = v;
+        for (const c of set) cur.union.add(c);
+        cur.near = cur.near || near;
+        continue;
+      }
     }
-    cur = { key, sig, members: [v], last: v };
+    cur = { key, union: new Set(set), members: [v], last: v, near: false };
     chains.push(cur);
   }
 }
@@ -100,7 +123,7 @@ for (const c of toMerge) {
     }
   }
   plan.push({
-    target: target.id, majorId: target.majorId, comp,
+    target: target.id, majorId: target.majorId, comp, near: c.near,
     from: target.f, to: newTo, code, title,
     merge: sources.map(s => ({ id: s.id, from: s.f, to: s.o, code: s.versionCode })),
     n: (byVer.get(target.id) || []).length,
@@ -154,11 +177,15 @@ try {
         const ins = await client.query(
           `INSERT INTO curriculum_courses ("curriculumVersionId","courseId","roleType","units","isRequired",
              "isElective","isGraduationRequired","recommendedSemester","universityId")
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT ("curriculumVersionId","courseId") DO NOTHING RETURNING *`,
           [p.target, c.courseId, c.roleType, c.units, c.isRequired, c.isElective,
             c.isGraduationRequired, c.recommendedSemester, c.universityId]);
-        log.push({ entity: 'course', inserted: ins.rows[0] });
-        movedCourses++;
+        if (ins.rows[0]) {
+          have.set(c.courseId, ins.rows[0]);   // دو نسخهٔ منبع می‌توانند درسِ یکسان داشته باشند
+          log.push({ entity: 'course', inserted: ins.rows[0] });
+          movedCourses++;
+        }
       }
     }
 

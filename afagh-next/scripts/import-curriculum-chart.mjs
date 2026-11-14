@@ -21,6 +21,7 @@ const FILE = A.file || '';
 const BACKUP = A.backup || '';
 const UNI = Number(A.uni || 1);
 const REPORT = A.report || '';
+const PRUNE = A.prune === 'true';
 if (!FILE || !existsSync(FILE)) { console.error('--file <tsv> الزامی است'); process.exit(1); }
 if (APPLY && !BACKUP) { console.error('--apply نیازمند --backup <file.jsonl> است'); process.exit(1); }
 
@@ -46,6 +47,10 @@ function roleFromFile(raw) {
 }
 
 // ── خواندن TSV ──
+// سه قالب پشتیبانی می‌شود (تشخیص با تعداد ستون):
+//  ۷ ستون : کد رشته \t از \t تا \t کد درس \t ترم \t نقش \t الزامی
+//  ۸ ستون : قالب اپ (با کد مقطع) — کد رشته \t کد مقطع \t از \t تا \t کد درس \t ترم \t نقش \t الزامی
+// ۱۰ ستون : خروجی کامل دیتابیس/HTML — … \t کد درس \t واحد \t ترم \t نقش \t الزامی \t نوع کاتالوگ
 const lines = readFileSync(FILE, 'utf8').split(/\r?\n/);
 const rows = [];
 let skipped = 0;
@@ -53,15 +58,24 @@ for (const ln of lines) {
   if (!ln.trim()) continue;
   const p = ln.split('\t');
   if (p.length < 4) { skipped++; continue; }
+  const n = p.length;
   const maj = String(p[0]).trim();
-  const yf = p[1] && String(p[1]).trim() !== '' ? Number(p[1]) : null;
-  const yt = p[2] && String(p[2]).trim() !== '' ? Number(p[2]) : null;
-  const lesson = String(p[3]).trim();
-  const sem = p[4] && String(p[4]).trim() !== '' ? Number(p[4]) : null;
-  const role = p[5] ? String(p[5]).trim() : '';
-  const req = p[6] ? String(p[6]).trim() : '';
-  if (!maj || !lesson) { skipped++; continue; }
-  rows.push({ maj, yf, yt, lesson, sem, role, req });
+  let yf, yt, lesson, sem, role, req, kind;
+  if (n >= 10) {
+    yf = p[2]; yt = p[3]; lesson = p[4]; sem = p[6]; role = p[7]; req = p[8]; kind = p[9];
+  } else if (n === 8) {
+    yf = p[2]; yt = p[3]; lesson = p[4]; sem = p[5]; role = p[6]; req = p[7]; kind = '';
+  } else {
+    yf = p[1]; yt = p[2]; lesson = p[3]; sem = p[4]; role = p[5]; req = p[6]; kind = p[7] || '';
+  }
+  const num = (x) => (x != null && String(x).trim() !== '' ? Number(String(x).trim()) : null);
+  const lessonCode = String(lesson ?? '').trim();
+  if (!maj || !lessonCode) { skipped++; continue; }
+  rows.push({
+    maj, yf: num(yf), yt: num(yt), lesson: lessonCode, sem: num(sem),
+    role: role ? String(role).trim() : '', req: req ? String(req).trim() : '',
+    comp: /جبرانی/.test(String(kind || '')),
+  });
 }
 console.log(`ردیف‌های فایل: ${rows.length} (ردشده: ${skipped})`);
 
@@ -85,8 +99,8 @@ for (const r of rows) {
   if (!c) { missingCourses.set(r.lesson, (missingCourses.get(r.lesson) || 0) + 1); continue; }
   const from = r.yf ?? 1300;
   const to = r.yt ?? null;
-  const key = `${m.id}|${m.degreeLevelId}|${from}|${to ?? 'null'}`;
-  if (!groups.has(key)) groups.set(key, { majorId: m.id, majorName: m.name, degreeLevelId: m.degreeLevelId, from, to, items: [] });
+  const key = `${m.id}|${m.degreeLevelId}|${from}|${to ?? 'null'}|${r.comp ? 'C' : 'P'}`;
+  if (!groups.has(key)) groups.set(key, { majorId: m.id, majorName: m.name, degreeLevelId: m.degreeLevelId, from, to, comp: r.comp, items: [] });
   groups.get(key).items.push({ courseId: c.id, code: String(c.code), units: c.units, courseType: c.courseType, sem: r.sem, role: r.role, req: r.req });
 }
 console.log(`گروه‌ها (نسخهٔ چارت): ${groups.size}`);
@@ -94,13 +108,16 @@ if (missingMajors.size) console.log('⚠️ رشته‌های ناموجود:', 
 if (missingCourses.size) console.log('⚠️ دروس ناموجود در بانک:', [...missingCourses.entries()].slice(0, 20), `(${missingCourses.size} کد)`);
 
 // ── وضعیت فعلی ──
-const existing = await q(`SELECT id, "majorId", "degreeLevelId", "entryYearFrom", "entryYearTo" FROM curriculum_versions WHERE "universityId" = $1`, [UNI]);
-const exKey = new Map(existing.map(v => [`${v.majorId}|${v.degreeLevelId}|${v.entryYearFrom}|${v.entryYearTo ?? 'null'}`, v.id]));
+const existing = await q(`SELECT id, "majorId", "degreeLevelId", "entryYearFrom", "entryYearTo", "versionCode" FROM curriculum_versions WHERE "universityId" = $1`, [UNI]);
+const exKey = new Map(existing.map(v => [
+  `${v.majorId}|${v.degreeLevelId}|${v.entryYearFrom}|${v.entryYearTo ?? 'null'}|${/-C$/.test(v.versionCode) ? 'C' : 'P'}`,
+  v.id,
+]));
 
 let willCreate = 0, willReuse = 0, insRows = 0, updRows = 0, sameRows = 0;
 const plan = [];
 for (const g of groups.values()) {
-  const key = `${g.majorId}|${g.degreeLevelId}|${g.from}|${g.to ?? 'null'}`;
+  const key = `${g.majorId}|${g.degreeLevelId}|${g.from}|${g.to ?? 'null'}|${g.comp ? 'C' : 'P'}`;
   const verId = exKey.get(key) ?? null;
   if (verId) willReuse++; else willCreate++;
   // جمع واحدها
@@ -151,20 +168,22 @@ if (!APPLY) { console.log('\n(dry) برای اجرا: --apply --backup <file.jso
 if (!existsSync(dirname(BACKUP))) mkdirSync(dirname(BACKUP), { recursive: true });
 const log = [];
 const client = await pool.connect();
-let vMade = 0, iRows = 0, uRows = 0, eRows = 0, noRole = 0;
+let vMade = 0, iRows = 0, uRows = 0, eRows = 0, noRole = 0, pruned = 0;
 try {
   await client.query('BEGIN');
   for (const p of plan) {
     let verId = p.verId;
     if (!verId) {
       const label = p.to ? `${p.from}–${p.to}` : `${p.from} به بعد`;
-      const code = `LEGACY-${p.from}${p.to ? '-' + p.to : ''}`;
+      const code = `LEGACY-${p.from}${p.to ? '-' + p.to : ''}${p.comp ? '-C' : ''}`;
+      const title = p.comp
+        ? `کاتالوگ جبرانی — ${p.majorName} (ورودی ${label})`
+        : `برنامهٔ درسی مهاجرتی ${p.majorName} (ورودی ${label})`;
       const ins = await client.query(
         `INSERT INTO curriculum_versions ("majorId","degreeLevelId","trackId","versionCode","title","status",
            "entryYearFrom","entryYearTo","totalRequiredUnits","minRoleUnits","universityId")
          VALUES ($1,$2,NULL,$3,$4,'DRAFT',$5,$6,$7,$8,$9) RETURNING id`,
-        [p.majorId, p.degreeLevelId, code, `برنامهٔ درسی مهاجرتی ${p.majorName} (ورودی ${label})`,
-          p.from, p.to, String(p.total || 0), JSON.stringify(p.byRole), UNI]);
+        [p.majorId, p.degreeLevelId, code, title, p.from, p.to, String(p.total || 0), JSON.stringify(p.byRole), UNI]);
       verId = ins.rows[0].id;
       vMade++;
       log.push({ entity: 'version', id: verId, key: code });
@@ -203,6 +222,25 @@ try {
         iRows++;
       }
     }
+    // --prune: ردیف‌هایی که در فایل نیستند از همین نسخه حذف می‌شوند (برای ورود دقیق
+    // خروجی HTML که حذف‌ها در آن اعمال شده). فقط نسخه‌های حاضر در فایل.
+    if (PRUNE) {
+      const keep = p.items.map(it => it.courseId);
+      const del = await client.query(
+        `DELETE FROM curriculum_courses
+          WHERE "curriculumVersionId"=$1 AND NOT ("courseId" = ANY($2::int[])) RETURNING id`,
+        [verId, keep]);
+      pruned += del.rowCount || 0;
+    }
+    // جمع واحد و سهم نقش‌ها را از دیتابیس بازمحاسبه کن (نسخهٔ موجود هم به‌روز شود)
+    const agg = (await client.query(
+      `SELECT "roleType", COALESCE(SUM(units),0)::numeric AS u
+         FROM curriculum_courses WHERE "curriculumVersionId"=$1 GROUP BY 1`, [verId])).rows;
+    const total = agg.reduce((s, a) => s + Number(a.u), 0);
+    const byRole = Object.fromEntries(agg.map(a => [a.roleType, Number(a.u)]));
+    await client.query(
+      `UPDATE curriculum_versions SET "totalRequiredUnits"=$1, "minRoleUnits"=$2 WHERE id=$3`,
+      [String(total), JSON.stringify(byRole), verId]);
   }
   await client.query('COMMIT');
 } catch (e) {
@@ -213,6 +251,6 @@ try {
   client.release();
 }
 writeFileSync(BACKUP, log.map(r => JSON.stringify(r)).join('\n') + (log.length ? '\n' : ''), 'utf8');
-console.log(`apply → نسخه‌های ساخته‌شده: ${vMade} | درج: ${iRows} | به‌روزرسانی: ${uRows} | بدون تغییر: ${eRows} | بدون نقش(⇒CORE): ${noRole}`);
+console.log(`apply → نسخه‌های ساخته‌شده: ${vMade} | درج: ${iRows} | به‌روزرسانی: ${uRows} | بدون تغییر: ${eRows} | بدون نقش(⇒CORE): ${noRole}${PRUNE ? ` | حذف‌شده(--prune): ${pruned}` : ''}`);
 console.log('backup:', BACKUP, log.length, 'rows');
 await pool.end();
