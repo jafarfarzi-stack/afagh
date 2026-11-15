@@ -16,6 +16,7 @@
  * ‏+ TUITION_CHARGE و CHARGE (موتور شهریه/گردش‌کار) + CREDIT (بستانکاری)
  * ‏+ POS_REFUND (برگشت وجه کارت‌خوان: پرداخت را خنثی می‌کند پس بدهی است)
  * ‏+ TUITION_BATES (بیتس قدیمی: تخفیف/اعتبار — علامت سیستم قدیم مثبت=طلبکار)
+ *    و زیرنوع‌های تفکیک‌شدهٔ آن (TUITION_BATES_FIXED/VARIABLE/AMOUNT)
  * ‏+ TUITION_ADJUST_DEC (تعدیل کاهشی قدیمی TSUMMab_Subject<0) و
  *    TUITION_ADJUST_INC (تعدیل افزایشی TSUMMab_Subject>0).
  * هیچ نوع مجازِ دیتابیسی نباید برای تراز نامرئی بماند.
@@ -49,6 +50,12 @@ export const CREDIT_LEDGER_TYPES = [
   'LOAN',
   'CREDIT',
   'TUITION_BATES',      // بیتس قدیمی = تخفیف/اعتبار (کاهش بدهی)
+  // زیرنوع‌های تفکیک‌شدهٔ بیتس سما (Fix_Bates / Units_Bates / Mab_Bates).
+  // تا پیش از این، هر سه در یک ردیفِ TUITION_BATES ادغام می‌شدند و کارنامه
+  // نمی‌توانست نشان دهد تخفیفِ دقیقاً بابتِ کدام قلم بوده است.
+  'TUITION_BATES_FIXED',    // بیتسِ شهریهٔ ثابت سما
+  'TUITION_BATES_VARIABLE', // بیتسِ شهریهٔ متغیر سما
+  'TUITION_BATES_AMOUNT',   // بیتسِ مبلغی سما (Mab_Bates)
   'TUITION_ADJUST_INC', // تعدیل افزایشی قدیمی: TSUMMab_Subject>0 تخفیف است (مطابق فرمول TermAcc)
 ] as const;
 

@@ -102,11 +102,105 @@ export function isPaymentType(type: string | null): boolean {
  */
 export const LEDGER_DISCOUNT_TYPES: ReadonlySet<string> = new Set([
   'TUITION_BATES',
+  'TUITION_BATES_FIXED',
+  'TUITION_BATES_VARIABLE',
+  'TUITION_BATES_AMOUNT',
   'DISCOUNT_FIXED',
   'DISCOUNT_VARIABLE',
   'SUBJECT_DEDUCTIVE',
   'TUITION_ADJUST_INC',
 ]);
+
+// ══════════════════════════════════════════════════════════════════════
+//  تفکیکِ تخفیف — «از چه نوعی و چقدر»
+//
+//  سما چند قلمِ تخفیفِ جدا داشت (Fix_Bates / Units_Bates / Mab_Bates در
+//  `TermAms`، به‌علاوهٔ `DISCOUNT_FIXED` / `DISCOUNT_VARIABLE` /
+//  `SUBJECT_DEDUCTIVE` / `TUITION_ADJUST_INC` در دفتر مالی). آفاق همه را در
+//  یک ستونِ تجمیعیِ «تخفیف» می‌ریخت؛ کارشناس مالی نمی‌توانست تطبیق بدهد
+//  که عدد از کجا آمده.
+//
+//  این ساختار، تفکیک را **بدون تغییرِ مانده** تولید می‌کند: مجموعِ
+//  اقلامِ تفکیک‌شده همیشه برابرِ همان `discounts`ِ سقف‌خورده است.
+// ══════════════════════════════════════════════════════════════════════
+
+/** یک قلمِ تخفیف در تفکیکِ کارنامه */
+export interface DiscountBreakdownItem {
+  /** کلیدِ پایدار و یکتا — برای مقایسه و تست (نه برای نمایش) */
+  key: string;
+  /** برچسبِ فارسیِ قلم */
+  label: string;
+  /** مبلغِ اعمال‌شده (ریال) — همیشه نامنفی */
+  amount: number;
+  /** منبع: دفتر مالیِ سما یا جدولِ تخفیف‌های آفاق */
+  source: 'LEDGER' | 'TABLE';
+}
+
+/**
+ * نگاشت نوعِ تراکنشِ دفتری → قلمِ تخفیف.
+ *
+ * کلیدِ قلم مستقل از نوعِ تراکنش است تا بتوان بیتسِ ادغام‌شدهٔ قدیمی
+ * (`TUITION_BATES`) و بیتسِ تفکیک‌شدهٔ جدید (سه زیرنوع) را در یک سطلِ
+ * منطقیِ واحد جمع کرد و در گزارشِ کل دوره ادغام کرد.
+ */
+export const DISCOUNT_BREAKDOWN_LEDGER: Readonly<
+  Record<string, { key: string; label: string }>
+> = {
+  TUITION_BATES: { key: 'BATES', label: 'تخفیف بیتس (سما)' },
+  // ⚠ سه زیرنوعِ بیتس کلیدِ **مستقل** دارند (نه یک کلیدِ مشترک): کاربر
+  //   می‌خواهد دقیقاً مثل سما، بیتسِ «ثابت» و «متغیر» و «مبلغی» جدا دیده
+  //   شوند. با کلیدِ مشترک، هر سه در یک قلم ادغام می‌شدند و کارنامه فقط
+  //   یک عددِ کلی نشان می‌داد (باگِ گزارش‌شده در کارنامهٔ نوع الف).
+  TUITION_BATES_FIXED: { key: 'BATES_FIXED', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)' },
+  TUITION_BATES_VARIABLE: { key: 'BATES_VARIABLE', label: 'تخفیف بیتسِ شهریهٔ متغیر (سما)' },
+  TUITION_BATES_AMOUNT: { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)' },
+  DISCOUNT_FIXED: { key: 'DISCOUNT_FIXED', label: 'تخفیف شهریهٔ ثابت (سما)' },
+  DISCOUNT_VARIABLE: { key: 'DISCOUNT_VARIABLE', label: 'تخفیف شهریهٔ متغیر (سما)' },
+  SUBJECT_DEDUCTIVE: { key: 'SUBJECT_DEDUCTIVE', label: 'کاهش مبلغ موضوعی (سما)' },
+  TUITION_ADJUST_INC: { key: 'TUITION_ADJUST_INC', label: 'تعدیل افزایشی شهریه (سما)' },
+};
+
+/**
+ * ترتیبِ کانونیِ اقلامِ تخفیف در کارنامه — همین ترتیب هم در خلاصهٔ ترم
+ * و هم در «جمع کل دوره» رعایت می‌شود تا دو سند با هم قابل مقایسه بمانند.
+ */
+export const DISCOUNT_BREAKDOWN_ORDER: readonly string[] = [
+  'BATES',
+  'BATES_FIXED',
+  'BATES_VARIABLE',
+  'BATES_AMOUNT',
+  'DISCOUNT_FIXED',
+  'DISCOUNT_VARIABLE',
+  'SUBJECT_DEDUCTIVE',
+  'TUITION_ADJUST_INC',
+];
+
+/**
+ * ادغامِ تفکیکِ تخفیفِ چند ترم (برای «جمع کل دوره»).
+ *
+ * اقلام هم‌کلید با هم جمع می‌شوند (مثلاً بیتسِ ادغام‌شده و بیتسِ
+ * تفکیک‌شده) و ترتیب خروجی کانونی است.
+ */
+export function mergeDiscountBreakdown(
+  lists: (DiscountBreakdownItem[] | null | undefined)[],
+): DiscountBreakdownItem[] {
+  const map = new Map<string, DiscountBreakdownItem>();
+  for (const list of lists || []) {
+    for (const it of list || []) {
+      if (!it) continue;
+      const cur = map.get(it.key);
+      if (cur) cur.amount += toNum(it.amount);
+      else map.set(it.key, { ...it, amount: toNum(it.amount) });
+    }
+  }
+  const rank = (k: string) => {
+    const i = DISCOUNT_BREAKDOWN_ORDER.indexOf(k);
+    return i === -1 ? DISCOUNT_BREAKDOWN_ORDER.length : i;
+  };
+  return Array.from(map.values())
+    .filter((it) => it.amount !== 0)
+    .sort((a, b) => rank(a.key) - rank(b.key) || a.label.localeCompare(b.label, 'fa'));
+}
 
 /** برچسبِ فارسیِ ردیف‌های تخفیفِ دفتری — نامِ خامِ دیتابیس گمراه‌کننده است. */
 export function ledgerCreditLabel(
@@ -128,6 +222,12 @@ export function ledgerCreditLabel(
       // «بیتس» در سما یعنی تخفیف درصدی/مبلغی (رتبهٔ علمی، ایثارگری، …)؛
       // برچسبِ قدیمی «بیتس شهریهٔ قدیمی» آن را شبیهِ بدهی می‌کرد.
       return `تخفیف بیتس (سما)${suffix}`;
+    case 'TUITION_BATES_FIXED':
+      return `تخفیف بیتسِ شهریهٔ ثابت (سما)${suffix}`;
+    case 'TUITION_BATES_VARIABLE':
+      return `تخفیف بیتسِ شهریهٔ متغیر (سما)${suffix}`;
+    case 'TUITION_BATES_AMOUNT':
+      return `تخفیف بیتسِ مبلغی (سما)${suffix}`;
     case 'TUITION_ADJUST_INC':
       return `تعدیل افزایشی شهریه (سما)${suffix}`;
     case 'DISCOUNT_FIXED':
@@ -286,6 +386,15 @@ export interface TermStatement {
   tuitionFixed?: number;
   tuitionVariable?: number;
   discounts: number;
+  /**
+   * تفکیکِ `discounts` به قلم‌های مستقل — «تخفیف بیتس (سما)»،
+   * «تخفیف شهریهٔ ثابت (سما)»، «تخفیف جدولی …» و …
+   *
+   * ⚠ جمعِ اقلام دقیقاً برابرِ `discounts` است (سقفِ شهریه روی همه با هم
+   * اعمال می‌شود) — پس تفکیک، مانده و خالص را **هیچ تغییری نمی‌دهد**؛ فقط
+   * می‌گوید آن عدد از چه قلم‌هایی آمده است.
+   */
+  discountBreakdown?: DiscountBreakdownItem[];
   sponsorships: number;
   /**
    * بخشی از `sponsorships` که از **واریزِ واقعیِ بنیاد/سازمان دولتی** آمده،
@@ -408,6 +517,16 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     let depositCharity = 0;
     let depositLoans = 0;
 
+    /**
+     * اقلامِ خامِ تخفیف — پیش از اعمالِ سقفِ شهریه.
+     *
+     * ترتیبِ اقلام عمدی است: اول دفتری (تخفیف‌های تاریخیِ سما که واقعاً
+     * اعمال شده‌اند) و بعد جدولی (تخفیف‌های ثبت‌شده در آفاق). سقفِ شهریه
+     * به همین ترتیب تخصیص می‌یابد تا تخفیفِ دفتری هرگز قربانیِ تخفیفِ
+     * جدولی نشود.
+     */
+    const rawDiscountItems: DiscountBreakdownItem[] = [];
+
     for (const txn of inTerm(input.ledger || [])) {
       const amount = toNum(txn.amount);
       const dateMs = toMs(txn.createdAt);
@@ -432,6 +551,15 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
         if (isLedgerDiscount || isLedgerSponsor) {
           if (isLedgerSponsor) ledgerSponsorships += amount;
           else ledgerDiscounts += amount;
+          const meta = DISCOUNT_BREAKDOWN_LEDGER[creditType];
+          if (isLedgerDiscount) {
+            rawDiscountItems.push({
+              key: meta?.key ?? creditType,
+              label: meta?.label ?? ledgerCreditLabel(creditType, txn.description, txn.legacyRem),
+              amount,
+              source: 'LEDGER',
+            });
+          }
           events.push({
             kind: isLedgerSponsor ? 'SPONSOR' : 'DISCOUNT',
             label: ledgerCreditLabel(creditType, txn.description, txn.legacyRem),
@@ -504,7 +632,15 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     for (const d of discountByTerm) {
       if ((d as { termId?: number | null }).termId !== undefined &&
           ((d as { termId?: number | null }).termId ?? NO_TERM) !== termId) continue;
-      discounts += toNum(d.amount);
+      const amount = toNum(d.amount);
+      discounts += amount;
+      const title = String(d.title || '').trim() || 'تخفیف شهریه';
+      rawDiscountItems.push({
+        key: `TABLE:${title}`,
+        label: title,
+        amount,
+        source: 'TABLE',
+      });
       events.push({
         kind: 'DISCOUNT',
         label: d.title || 'تخفیف شهریه',
@@ -560,7 +696,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       loans += amount;
       events.push({
         kind: 'LOAN',
-        label: l.lender ? `وام — ${l.lender}` : 'وام',
+        label: l.lender ? `مساعده — ${l.lender}` : 'مساعده',
         amount,
         dateMs: toMs((l as { createdAt?: string | Date | null }).createdAt),
         sign: 1
@@ -571,7 +707,23 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
     // خالصِ قابل‌پرداخت منفی (طلبِ کاذب به نفع دانشجو) ساخته نمی‌شود.
     // تخفیفِ دفتری (مثل بیتسِ سما) و تخفیفِ جدول تخفیف‌ها هر دو از بدهی کم
     // می‌کنند؛ سقف مشترک تا «خالص» منفی نشود.
-    const cappedDiscounts = Math.min(discounts + ledgerDiscounts, charges);
+    //
+    // ⚠ تفکیکِ تخفیف با سقفِ **ترتیبی** ساخته می‌شود: اول دفتری (تخفیفِ
+    // تاریخیِ سما که واقعاً اعمال شده) و بعد جدولی، تا سقفِ باقی‌مانده
+    // به همان ترتیب تخصیص یابد. نتیجه: مجموعِ اقلام دقیقاً برابرِ
+    // min(مجموع تخفیف‌ها، شهریه) است — همان عددِ قبلی — پس مانده و خالص
+    // هیچ تغییری نمی‌کنند و فقط «منشأ» عدد تفکیک می‌شود.
+    const discountItems: DiscountBreakdownItem[] = [];
+    let discountRoom = charges;
+    for (const raw of rawDiscountItems) {
+      if (discountRoom <= 0) break;
+      const wanted = Math.max(0, raw.amount);
+      if (wanted === 0) continue;
+      const applied = Math.min(wanted, discountRoom);
+      discountRoom -= applied;
+      discountItems.push({ ...raw, amount: applied });
+    }
+    const cappedDiscounts = discountItems.reduce((a, b) => a + b.amount, 0);
     const cappedTableSponsorships = Math.min(
       sponsorships + ledgerSponsorships,
       Math.max(0, charges - cappedDiscounts),
@@ -602,6 +754,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       tuitionFixed,
       tuitionVariable,
       discounts: cappedDiscounts,
+      discountBreakdown: mergeDiscountBreakdown([discountItems]),
       sponsorships: cappedSponsorships,
       sponsorshipsFromDeposits: depositSponsorships,
       charityCoverage: depositCharity,
@@ -623,6 +776,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
 export function transcriptTotals(statements: TermStatement[]): {
   charges: number;
   discounts: number;
+  discountBreakdown: DiscountBreakdownItem[];
   sponsorships: number;
   sponsorshipsFromDeposits: number;
   charityCoverage: number;
@@ -639,6 +793,10 @@ export function transcriptTotals(statements: TermStatement[]): {
   return {
     charges: sum('charges'),
     discounts: sum('discounts'),
+    // تفکیکِ کل دوره — ادغامِ تفکیکِ تک‌تکِ ترم‌ها (اقلام هم‌کلید جمع می‌شوند)
+    discountBreakdown: mergeDiscountBreakdown(
+      (statements || []).map((s) => s.discountBreakdown || []),
+    ),
     sponsorships: sum('sponsorships'),
     sponsorshipsFromDeposits: sum('sponsorshipsFromDeposits'),
     charityCoverage: sum('charityCoverage'),

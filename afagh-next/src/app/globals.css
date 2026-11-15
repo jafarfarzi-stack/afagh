@@ -674,6 +674,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   .tr-fin-root .tr-fin-totals h3 { font-size: 8pt !important; padding: 0.5mm 2mm !important; }
   .tr-fin-root .tr-breakdown > h3 { font-size: 8pt !important; padding: 0.5mm 2mm !important; }
 
+  /* ── بلوک امضا/مهر (tfoot) — فشرده‌سازیِ چاپی ──
+     ⚠ اندازه‌گیریِ چاپِ واقعی: صفحهٔ اول با ~۹۱mm فضای باقی‌مانده تمام می‌شد
+     در حالی که کارتِ ترمِ بعدی ~۹۶mm بود (کمبودِ ۵mm) — یعنی یک کارتِ کامل
+     بی‌دلیل به صفحهٔ بعد می‌رفت. تنها مصرف‌کنندهٔ آن ۲۲mm، همین بلوکِ امضاست
+     که در هر صفحه تکرار و ارتفاعش رزرو می‌شود. با ~۱۵mm: صفحهٔ اول دو کارت
+     می‌گیرد و سه بلوکِ تکراری هم کوتاه‌تر می‌شوند. */
+  .tr-fin-root tfoot .tr-signatures > div {
+    padding: 0.8mm 1.4mm 0.6mm !important;
+    font-size: 6.2pt !important;
+  }
+  .tr-fin-root tfoot .tr-signatures p {
+    margin-bottom: 5mm !important;
+    font-size: 6.4pt !important;
+    line-height: 1.1 !important;
+  }
+  .tr-fin-root tfoot .tr-signatures .border-t { padding-top: 0.4mm !important; font-size: 5.8pt !important; }
+
   /* گرید ترمها در چاپ **تکستونه (یک کارت تمامعرض)**:
      جدول دروس اکنون ۱۱ ستون دارد (کد/نام/نظری/عملی/نوع آموزشی/نوع انتخاب/نمره/وضع/نوع انتخاب شهریه/نوع مالی/شهریه)
      و سربرگ ترم شش قلم (نیمسال/وضع/کد ثابت/اولیه/کد متغیر/اولیه) دارد؛ دو کارتِ ~96mm خوانا نیست.

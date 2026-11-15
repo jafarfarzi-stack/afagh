@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * درج تخفیفِ «بیتس» قدیمی در دفتر مالی — نوع TUITION_BATES
+ * درج تخفیفِ «بیتس» قدیمی در دفتر مالی — سه زیرنوع TUITION_BATES_*
  *
  * راستی‌آزمایی (verify-legacy-rial.mjs) نشان داد تفاوت ریالیِ باقی‌مانده دقیقاً
  * برابر ستون‌های Fix_Bates + Units_Bates + Mab_Bates در TermAms است:
  *   delta = our − expected = −bates
  * یعنی سمت ما (فقط Fix_Price + Units_Price) به ازای هر (دانشجو، ترّم)
- * به اندازهٔ bates کمتر شارژ شده. با درج یک ردیف TUITION_BATES به مقدار
- * +bates، تراز ریالی صفر می‌شود.
+ * به اندازهٔ bates کمتر شارژ شده. با درج سه ردیف
+ * TUITION_BATES_FIXED / TUITION_BATES_VARIABLE / TUITION_BATES_AMOUNT
+ * به جمعِ +bates، تراز ریالی صفر می‌شود و کارنامه می‌تواند منشأ تخفیف
+ * را تفکیک نشان بدهد (مطابق migration 0137).
  *
  * قاعدهٔ قدیمی: TermAcc = TermPays − (fix+units+bates) + adjust
  *   → تراز موردانتظار ما = (fix+units+bates) − پرداخت‌ها
@@ -71,7 +73,15 @@ const toOurTerm = (legacy) => { const s = String(legacy ?? '').trim(); if (/^\d{
     const stno = col(r, tams.header, 'StnO', 'Stno');
     const sid = stuById.get(stno);
     const tid = termById.get(toOurTerm(col(r, tams.header, 'TermCode')));
-    const bates = num(col(r, tams.header, 'Fix_Bates')) + num(col(r, tams.header, 'Units_Bates')) + num(col(r, tams.header, 'Mab_Bates'));
+    // ⭐ سه زیرنوعِ سما جدا شمرده می‌شوند تا کارنامه بتواند منشأ تخفیف را
+    //    نشان بدهد (Fix_Bates / Units_Bates / Mab_Bates). جمعشان = همان bates
+    //    قبلی است ⇒ مانده تغییر نمی‌کند.
+    const parts = [
+      { type: 'TUITION_BATES_FIXED', amount: num(col(r, tams.header, 'Fix_Bates')), label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)' },
+      { type: 'TUITION_BATES_VARIABLE', amount: num(col(r, tams.header, 'Units_Bates')), label: 'تخفیف بیتسِ شهریهٔ متغیر (سما)' },
+      { type: 'TUITION_BATES_AMOUNT', amount: num(col(r, tams.header, 'Mab_Bates')), label: 'تخفیف بیتسِ مبلغی (سما)' },
+    ].filter((x) => x.amount > 0);
+    const bates = parts.reduce((a, x) => a + x.amount, 0);
     const amsId = col(r, tams.header, 'TermAmsId');
     if (!sid) { stat.skipNoStudent++; continue; }
     if (!tid) { stat.skipNoTerm++; continue; }
@@ -79,20 +89,28 @@ const toOurTerm = (legacy) => { const s = String(legacy ?? '').trim(); if (/^\d{
     const ref = Number(amsId);
     const refSafe = Number.isSafeInteger(ref) && ref >= 0 && ref <= 2000000000 ? ref : null;
     if (refSafe === null) stat.badRef++;
-    planned.push({ sid, tid, bates, refSafe, amsId });
+    planned.push({ sid, tid, bates, refSafe, amsId, parts });
   }
 
   // idempotency: قبلاً درج‌شده‌ها را حذف کن (همان dedoku با referenceId+type)
-  // یک کوئری واحد برای کل نوع (نه به‌ازای هر ref)
+  // یک کوئری واحد برای همهٔ زیرنوع‌ها
   const have = new Set();
   {
-    const rows = await q(`SELECT DISTINCT "referenceId" FROM student_ledger WHERE "transactionType"='TUITION_BATES' AND "referenceId" IS NOT NULL AND "universityId"=$1`, [UNI]);
+    const rows = await q(
+      `SELECT DISTINCT "referenceId" FROM student_ledger
+        WHERE "transactionType" = ANY($2) AND "referenceId" IS NOT NULL AND "universityId" = $1`,
+      [UNI, ['TUITION_BATES', 'TUITION_BATES_FIXED', 'TUITION_BATES_VARIABLE', 'TUITION_BATES_AMOUNT']],
+    );
     for (const x of rows) have.add(Number(x.referenceId));
   }
   // + بررسی ایمنی per-(student,term) برای ردیف‌های بدون ref معتبر
   const existingKeys = new Set();
   if (planned.some(p => p.refSafe === null)) {
-    const ex = await q(`SELECT "studentId","termId" FROM student_ledger WHERE "transactionType"='TUITION_BATES' AND "universityId"=$1`, [UNI]);
+    const ex = await q(
+      `SELECT "studentId","termId" FROM student_ledger
+        WHERE "transactionType" = ANY($2) AND "universityId" = $1`,
+      [UNI, ['TUITION_BATES', 'TUITION_BATES_FIXED', 'TUITION_BATES_VARIABLE', 'TUITION_BATES_AMOUNT']],
+    );
     for (const e of ex) existingKeys.add(`${e.studentId}|${e.termId}`);
   }
 
@@ -117,12 +135,17 @@ const toOurTerm = (legacy) => { const s = String(legacy ?? '').trim(); if (/^\d{
       } else {
         if (existingKeys.has(`${p.sid}|${p.tid}`)) { stat.dup++; continue; }
       }
-      await tx.query(
-        `INSERT INTO student_ledger ("studentId","termId","transactionType",amount,description,"referenceId","universityId")
-         VALUES ($1,$2,'TUITION_BATES',$3,$4,$5,$6)`,
-        [p.sid, p.tid, p.bates, `تخفیف بیتس (سما) (TermAms id=${p.amsId})`, p.refSafe, UNI],
-      );
-      stat.insert++;
+      // ⭐ یک ردیف به ازای هر زیرنوع سما (ثابت/متغیر/مبلغی) — جمعشان همان
+      //    bates قبلی است ⇒ تراز ریالی مثل قبل صفر می‌شود، اما حالا
+      //    کارنامه می‌تواند منشأ تخفیف را تفکیک نشان بدهد.
+      for (const part of p.parts) {
+        await tx.query(
+          `INSERT INTO student_ledger ("studentId","termId","transactionType",amount,description,"referenceId","universityId")
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [p.sid, p.tid, part.type, part.amount, `${part.label} (TermAms id=${p.amsId})`, p.refSafe, UNI],
+        );
+        stat.insert++;
+      }
       stat.sum += p.bates;
     }
     await tx.query('COMMIT');

@@ -1,0 +1,22 @@
+-- ══════════════════════════════════════════════════════════════════
+-- 0139 — پهن‌کردنِ student_ledger."transactionType"
+--
+-- چرا؟
+--   0137 سه زیرنوعِ بیتس را به CHECK اضافه کرد، اما ستون در دیتابیسِ
+--   تولید همچنان varchar(20) بود. بلندترین نامِ مجاز،
+--   «TUITION_BATES_VARIABLE» با ۲۲ کاراکتر است ⇒ هر تلاش برای درجِ آن با
+--   خطای «value too long for type character varying(20)» شکست می‌خورد
+--   (اسکریپت split-tuition-bates.mjs به همین دلیل rollback کرد).
+--
+--   schema.ts از قبل length: 25 اعلام کرده بود، ولی چون پروداکشن دقیقاً
+--   drizzle/*.sql را اجرا می‌کند (نه push)، این اختلاف هرگز اعمال نشده بود.
+--
+--   به‌جای ۲۵، به ۳۲ می‌بریم تا برای نام‌های آیندهٔ واژگان جا بماند.
+--   در PostgreSQL افزایشِ طولِ varchar یک تغییرِ metadata است و جدول
+--   بازنویسی نمی‌شود ⇒ عملیات ارزان و بدون قفلِ طولانی.
+--
+-- منبع حقیقتِ واژگان: src/lib/ledger-balance.ts
+-- ══════════════════════════════════════════════════════════════════
+
+--> statement-breakpoint
+ALTER TABLE "student_ledger" ALTER COLUMN "transactionType" TYPE varchar(32);

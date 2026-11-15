@@ -28,4 +28,5 @@ export * from './term-charges';
 export * from './sponsorships';
 export * from './formulas';
 export * from './statement';
+export * from './term-summary';
 export * from './cheque-reminders';

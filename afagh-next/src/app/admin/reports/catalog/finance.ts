@@ -95,7 +95,7 @@ const LEDGER_FIELDS: ReportField[] = [
   { key: 'nationalCode', title: 'کد ملی', sql: `u."nationalCode"`, type: 'text', filterable: true, ops: ['eq', 'like'] },
   { key: 'major', title: 'رشته', sql: `m.name`, type: 'text', filterable: true, ops: ['like'], groupable: true },
   { key: 'degree', title: 'مقطع', sql: `d.title`, type: 'text', filterable: true, ops: ['like'], groupable: true },
-  { key: 'entryYear', title: 'سال ورود', sql: `s."entryYear"`, type: 'number', filterable: true, ops: ['eq', 'gte', 'lte', 'between'], groupable: true },
+  { key: 'entryYear', title: 'سال ورود', sql: `s."entryYear"`, type: 'number', format: 'YEAR', filterable: true, ops: ['eq', 'gte', 'lte', 'between'], groupable: true },
   { key: 'termCode', title: 'نیمسال', sql: `t."termCode"`, type: 'text', filterable: true, ops: ['eq', 'in'], ref: 'terms', groupable: true },
   { key: 'finTermCode', title: 'نیمسال مالی', sql: `ft."termCode"`, type: 'text', filterable: true, ops: ['eq', 'in'], ref: 'financialTerms', groupable: true },
   {
@@ -126,7 +126,7 @@ const BALANCE_FIELDS: ReportField[] = [
   { key: 'nationalCode', title: 'کد ملی', sql: `u."nationalCode"`, type: 'text', filterable: true, ops: ['eq', 'like'] },
   { key: 'major', title: 'رشته', sql: `m.name`, type: 'text', filterable: true, ops: ['like'], groupable: true },
   { key: 'degree', title: 'مقطع', sql: `d.title`, type: 'text', filterable: true, ops: ['like'], groupable: true },
-  { key: 'entryYear', title: 'سال ورود', sql: `s."entryYear"`, type: 'number', filterable: true, ops: ['eq', 'gte', 'lte', 'between'], groupable: true },
+  { key: 'entryYear', title: 'سال ورود', sql: `s."entryYear"`, type: 'number', format: 'YEAR', filterable: true, ops: ['eq', 'gte', 'lte', 'between'], groupable: true },
   { key: 'charge', title: 'بدهی شهریه', sql: `COALESCE(sl."charge", 0)::bigint`, type: 'money', format: 'MONEY', hint: 'جمعِ اقلامِ بدهی‌ساز' },
   { key: 'discount', title: 'تخفیف', sql: `COALESCE(sl."discount", 0)::bigint`, type: 'money', format: 'MONEY', hint: 'جمعِ اقلامِ اعتباری' },
   { key: 'paid', title: 'پرداختی', sql: `COALESCE(sl."paid", 0)::bigint`, type: 'money', format: 'MONEY', hint: 'جمعِ پرداخت/وام/حمایت' },

@@ -357,7 +357,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     };
   };
 
-  const finCols = (extra: { key: string; title: string; format?: 'MONEY' | 'NUMBER' | 'DATE' }[]) => [
+  const finCols = (extra: { key: string; title: string; format?: 'MONEY' | 'NUMBER' | 'DATE' | 'YEAR' }[]) => [
     ...extra,
     { key: 'fixed', title: 'شهریه ثابت', format: 'MONEY' as const },
     { key: 'variable', title: 'شهریه متغیر', format: 'MONEY' as const },
@@ -393,7 +393,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'code', title: 'کد دانشجو' },
         { key: 'faculty', title: 'دانشکده' },
         { key: 'degree', title: 'مقطع' },
-        { key: 'y', title: 'سال ورودی', format: 'NUMBER' },
+        { key: 'y', title: 'سال ورودی', format: 'YEAR' },
         { key: 'units', title: 'تعداد واحد ثبت‌شده', format: 'NUMBER' },
       ]),
       from, [...studentWhere(f), uniCond], cols,
@@ -448,7 +448,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       finCols([
         { key: 'faculty', title: 'دانشکده' },
         { key: 'term', title: 'ترم' },
-        { key: 'y', title: 'سال ورودی', format: 'NUMBER' },
+        { key: 'y', title: 'سال ورودی', format: 'YEAR' },
         { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' },
       ]),
       from, [...studentWhere(f), uniCond], cols,
@@ -477,7 +477,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'degree', title: 'مقطع' },
         { key: 'faculty', title: 'دانشکده' },
         { key: 'major', title: 'رشته' },
-        { key: 'y', title: 'سال ورودی', format: 'NUMBER' },
+        { key: 'y', title: 'سال ورودی', format: 'YEAR' },
         { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' },
       ]),
       from, [...studentWhere(f), uniCond], cols,

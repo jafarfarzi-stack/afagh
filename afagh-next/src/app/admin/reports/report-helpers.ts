@@ -55,7 +55,7 @@ export type ReportColumn = {
    * قالب نمایش/خروجی سلول — در `@/lib/report-format` تفسیر می‌شود تا هیچ تاریخ
    * میلادی یا مبلغ بدون جداکننده به کاربر نرسد.
    */
-  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER';
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
 };
 export type ReportResult = {
   columns: ReportColumn[];
@@ -218,6 +218,14 @@ export const ALL_REPORT_KINDS: string[] = [
   'total-payments', 'student-payments', 'term-payments', 'accounting-voucher', 'term-financial',
   // گزارش‌های مدیریتی تجمیعی شهریه (دانشکده/مقطع/رشته/ورودی)
   'tuition-overview', 'tuition-faculty-detail', 'faculty-financial', 'major-financial',
+  // گزارش‌های مالیِ کلان (r-finance-statements) — سود و زیان، ترازنامه،
+  // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، کالا، هزینه، تخصیص، درآمد سلسله‌مراتبی
+  'sales-report', 'income-statement', 'costing-report', 'budget-variance',
+  'balance-sheet', 'cash-flow',
+  'contractor-report', 'contractor-settlement',
+  'insurance-report', 'legal-report', 'vat-report',
+  'general-ledger', 'daily-journal', 'inventory-report', 'company-expenses',
+  'allocation-report', 'revenue-hierarchy',
 ];
 
 /** گیت ماتریس دسترسی برای هر گزارش: ADMIN آزاد، بقیه نیازمند reports:<kind> */

@@ -63,7 +63,11 @@ console.log('\n── نوع الف: محتوای ستونها از دیتابی
 ok(A.includes('educationalTypeLabel(c)'), 'نوع درس آموزشی: ماهیت درس / استنتاج از واحد نظری-عملی');
 ok(A.includes('c.selectionType'), 'نوع انتخاب درس: از پرچمهای enrollments');
 ok(A.includes('priceCode(c.gradeStatusCode)'), 'وضع: کد وضعیت نمرهٔ سما');
-ok(A.includes('tuitionSelectionLabel(c)'), 'نوع انتخاب شهریه: ضریب نیمسال ورود');
+/* «نوع انتخاب شهریه» = TuitionTypeId سما (روزانه/شبانه/غیرانتفاعی…) از
+   students.tuitionType. پیش‌تر از tuition_coefficients خوانده می‌شد که در
+   تولید خالی است و ستون همیشه «—» چاپ می‌شد. */
+ok(A.includes('tuitionSelectionLabel(c, student.courseType)'), 'نوع انتخاب شهریه: نوع شهریهٔ دانشجو (TuitionTypeId)');
+ok(A.includes('courseTypeFa(studentType)'), 'نوع انتخاب شهریه: نگاشت کد به برچسب، نه کد خام');
 ok(A.includes('courseTypeLabel(c)') && A.includes('fa(c.maliType)'), 'نوع درس مالی: برچسب + کد سما');
 ok(A.includes('fa(c.amount)'), 'شهریه: مبلغ تخصیصیافته از دفتر کل');
 ok(A.includes('tr-mali-code') && /tr-mali-code[^>]*>[^<]*\({fa\(/.test(A), 'نوع الف: کد داخل پرانتز');
@@ -113,8 +117,9 @@ for (const [name, src] of [['ادمین', ADMIN], ['دانشجو', STU], ['صو�
 console.log('\n── نوع انتخاب شهریه: ضریب پیشفرض ۱ (بدون تغییر) ──');
 ok(TC.includes('coeffByTerm.get(termId) || 1'), 'نبود ردیف ضریب = ۱، همان قرارداد موتور شهریه');
 ok(!TC.includes('coeffByTerm.get(termId) ?? null'), 'دیگر ضریب تهی به کارنامه فرستاده نمیشود');
-ok(A.includes('c.tuitionCoefficient ?? 1'), 'لایهٔ نما هم در نبود داده ضریب ۱ را چاپ میکند');
-ok(A.includes('ضریب ${fa(v)} نیمسال ورود'), 'متن سند قدیمی: ضریب … نیمسال ورود');
+ok(A.includes('courseTypeFa(studentType)'), 'نخست از نوع شهریهٔ مهاجرتشدهٔ دانشجو (سما) خوانده میشود');
+ok(A.includes("Number(c.tuitionCoefficient) > 0"), 'جایگزینِ ثانویه: ضریب فقط وقتی معتبر است چاپ میشود');
+ok(A.includes('ضریب ${fa(c.tuitionCoefficient)} نیمسال ورود'), 'متن جایگزین: ضریب … نیمسال ورود');
 
 console.log('\n── نوع ب: قرارداد قدیمی ۸ستونه دستنخورده ──');
 ok(B.includes('نوع درس مالی'), 'نوع ب: سرستون «نوع درس مالی»');

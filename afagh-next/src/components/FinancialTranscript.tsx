@@ -1,8 +1,10 @@
 ﻿import type { ReactNode } from 'react';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import { normalizeTermCode } from '@/lib/scheduling-core';
-import { PAY_TYPE_LABELS } from '@/lib/finance-rules/statement';
+import { PAY_TYPE_LABELS, type DiscountBreakdownItem } from '@/lib/finance-rules/statement';
+import { buildTermSummary, visibleSummaryRows } from '@/lib/finance-rules/term-summary';
 import { courseTypeLabelOf } from '@/lib/mali-types';
+import { courseTypeFa } from '@/lib/student-labels';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -18,6 +20,13 @@ import { courseTypeLabelOf } from '@/lib/mali-types';
  */
 
 const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-IR');
+
+/**
+ * سالِ شمسی (۱۴۰۳، ۱۴۰۵…) — «شناسه» است نه «کمیت»؛ نباید جداکنندهٔ هزارگان بگیرد.
+ * `toLocaleString` سال ۱۴۰۳ را «۱٬۴۰۳» می‌نویسد که در سربرگ کارنامه غلط است.
+ */
+const faYear = (n: number | null | undefined): string =>
+  n ? String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '—';
 
 /**
  * برچسبِ «نوع درس» برای ستون کارنامه (جایگزینِ «نرخ واحد» — درخواست کاربر):
@@ -42,14 +51,20 @@ const educationalTypeLabel = (c: TranscriptCourseView): string => {
 };
 
 /**
- * «نوع انتخاب شهریه»: ضریب همان نیمسال از tuition_coefficients
- * (ضریب نیمسال ورود). ضریب تعریفنشده = ۱ «بدون تغییر» — همان قرارداد موتور
- * شهریه — پس در حالت عادی این ستون هرگز خط تیره نمیشود. فقط مقدار نامعتبر
- * (صفر/منفی/NaN) به «—» میانجامد تا عدد اشتباهی چاپ نشود.
+ * «نوع انتخاب شهریه» — همان `TuitionTypeId` کارنامهٔ سما (روزانه/شبانه/
+ * غیرانتفاعی/آموزش عالی آزاد/…) که در `students.tuitionType` مهاجرت شده است.
+ *
+ * ⚠ پیش‌تر این ستون از `tuition_coefficients.variableCoefficient` خوانده
+ * می‌شد؛ آن جدول در تولید **هیچ ردیفی** ندارد، پس ستون همیشه «—» بود
+ * (شکایتِ «در سیستم قدیمی پر است، در سیستم ما خط تیره»). ضریب فقط
+ * جایگزینِ ثانویه است.
  */
-const tuitionSelectionLabel = (c: TranscriptCourseView): string => {
-  const v = Number(c.tuitionCoefficient ?? 1);
-  return Number.isFinite(v) && v > 0 ? `ضریب ${fa(v)} نیمسال ورود` : '—';
+const tuitionSelectionLabel = (c: TranscriptCourseView, studentType?: string | null): string => {
+  const label = courseTypeFa(studentType);
+  if (label !== '—') return label;
+  return c.tuitionCoefficient != null && Number(c.tuitionCoefficient) > 0
+    ? `ضریب ${fa(c.tuitionCoefficient)} نیمسال ورود`
+    : '—';
 };
 
 /** کدهای سربرگ ترم: عدد از دیتابیس، ارقام فارسی، تهی = «—» (هیچ کُدی سختکد نیست). */
@@ -144,6 +159,12 @@ export interface TranscriptTermView {
   tuitionFixed?: number;
   tuitionVariable?: number;
   discounts: number;
+  /**
+   * تفکیکِ تخفیف به قلم‌های مستقل («تخفیف بیتس (سما)»، «تخفیف شهریهٔ ثابت
+   * (سما)»، …). جمعش دقیقاً برابرِ `discounts` است؛ تفکیک فقط منشأ عدد را
+   * نشان می‌دهد و مانده را تغییر نمی‌دهد.
+   */
+  discountBreakdown?: DiscountBreakdownItem[];
   sponsorships: number;
   /** بخشی از پوشش که از واریزِ واقعیِ بنیاد/سازمان دولتی آمده است */
   sponsorshipsFromDeposits?: number;
@@ -183,6 +204,8 @@ export interface TranscriptTermView {
 export interface TranscriptTotalsView {
   charges: number;
   discounts: number;
+  /** تفکیکِ تخفیفِ کل دوره — جمعِ تفکیکِ تک‌تکِ ترم‌ها */
+  discountBreakdown?: DiscountBreakdownItem[];
   sponsorships: number;
   sponsorshipsFromDeposits?: number;
   charityCoverage?: number;
@@ -252,12 +275,12 @@ const EVENT_LABEL: Record<string, string> = {
   CHARITY: 'پوشش خیرین',
   PAYMENT: 'پرداخت',
   CHEQUE: 'چک',
-  LOAN: 'وام',
+  LOAN: 'مساعده',
   CLEARANCE: 'تسویه',
 };
 
 /** نیمسال ورود (students.entryTerm): ۱=مهر، ۲=بهمن، ۳=تابستان */
-const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+const TERM_FA: Record<number, string> = { 1: 'مهرماه', 2: 'بهمن‌ماه', 3: 'تابستان' };
 
 /**
  * عنوان کامل ترم — همان عبارت‌بندی کارنامهٔ تحصیلی:
@@ -476,7 +499,9 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">کد ملی</td>
               <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.nationalCode || '—')}</td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">شمارهٔ دانشجویی</td>
-              <td className="border border-slate-300 px-1.5 py-1 font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
+              {/* بدون `dir="ltr"` و `font-mono`: این دو باعث می‌شدند این خانه
+                  چپ‌چین و با فونتِ متفاوت از بقیهٔ سربرگ دیده شود (درخواست کاربر). */}
+              <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.studentCode || '—')}</td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">مقطع</td>
@@ -492,8 +517,8 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نیمسال ورود</td>
               <td className="border border-slate-300 px-1.5 py-1">
                 {student.entryTerm
-                  ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
-                  : (student.entryYear ? fa(student.entryYear) : '—')}
+                  ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + faYear(student.entryYear) : ''}`
+                  : (student.entryYear ? faYear(student.entryYear) : '—')}
               </td>
             </tr>
             <tr>
@@ -502,7 +527,7 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">سهمیه</td>
               <td className="border border-slate-300 px-1.5 py-1">{quotaLabel(student.quotaType)}</td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نوع دوره</td>
-              <td className="border border-slate-300 px-1.5 py-1">{student.courseType || '—'}</td>
+              <td className="border border-slate-300 px-1.5 py-1">{courseTypeFa(student.courseType)}</td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ ورود</td>
@@ -530,84 +555,27 @@ export default function FinancialTranscript({
             ) : null}
           </tbody>
           </table>
-          {/* عکس — چسبیده به سمت چپ جدول مشخصات */}
-          <div className="flex w-[17mm] shrink-0 items-start justify-center border border-slate-400">
+          {/* عکس — چسبیده به سمت چپ جدول مشخصات.
+              ⚠ نسبت ۳×۴ با `object-cover` قفل شده است: اگر `object-fit` در چاپ
+              از دست برود، مرورگر `fill` می‌زند و چهره به‌شدت کشیده می‌شود.
+              به همین دلیل هم کلاس و هم `style` درون‌خطی ست شده‌اند. */}
+          <div className="flex h-[22mm] w-[17mm] shrink-0 items-center justify-center overflow-hidden border border-slate-400">
             {student.photoUrl ? (
-              <img src={student.photoUrl} alt="عکس دانشجو" className="h-[22mm] w-[17mm] object-cover" />
+              <img
+                src={student.photoUrl}
+                alt="عکس دانشجو"
+                className="h-full w-full object-cover"
+                style={{ objectFit: 'cover', objectPosition: '50% 30%' }}
+              />
             ) : (
-              <div className="flex h-[22mm] w-[17mm] items-center justify-center text-[9px] text-slate-400">عکس</div>
+              <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-400">عکس</div>
             )}
           </div>
         </div>
 
         {leadBlock}
 
-        {/* ── جمع کل دوره ── */}
-        <div className="tr-breakdown break-inside-avoid rounded-lg border border-slate-700">
-          <h3 className="border-b border-slate-700 bg-indigo-900 px-3 py-1.5 text-[12px] font-black text-white">
-            {scopeLabel || 'جمع کل دوره'}
-          </h3>
-          <table className="tr-fin-totals w-full border-collapse text-center text-2xs rt">
-            <thead>
-              <tr className="bg-slate-100 text-slate-700">
-                <th className="border border-slate-300 px-1 py-1.5">جمع شهریه (ریال)</th>
-                <th className="border border-slate-300 px-1 py-1.5">تخفیف‌ها</th>
-                <th className="border border-slate-300 px-1 py-1.5">پوشش بنیاد / خیرین</th>
-                <th className="border border-slate-300 px-1 py-1.5">پرداخت / چک وصولی / وام</th>
-                <th className="border border-slate-300 px-1 py-1.5">ماندهٔ نهایی</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="font-bold">
-                <td className="border border-slate-300 px-1 py-1.5">
-                  {fa(totals.charges)}
-                  {/* تفکیکِ شهریه در همان خانه — کارشناس مالی بدون بازکردن ترم‌ها
-                      می‌بیند چه سهمی ثابت و چه سهمی متغیر است. */}
-                  {(sumFixed > 0 || sumVariable > 0) && (
-                    <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
-                      ثابت {fa(sumFixed)} · متغیر {fa(sumVariable)}
-                    </span>
-                  )}
-                </td>
-                <td className="border border-slate-300 px-1 py-1.5 text-violet-700">{fa(totals.discounts)}</td>
-                <td className="border border-slate-300 px-1 py-1.5 text-indigo-700">
-                  {fa(totals.sponsorships)}
-                  {/* تفکیک: چه بخشی از پوشش از واریزِ واقعیِ بنیاد آمده است.
-                      بدون این خط، کارشناس مالی نمی‌فهمد پوشش «سندِ واریز» دارد
-                      یا فقط تخفیفِ دفتری است. */}
-                  {(totals.sponsorshipsFromDeposits ?? 0) > 0 && (
-                    <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
-                      از واریز بنیاد {fa(totals.sponsorshipsFromDeposits ?? 0)}
-                    </span>
-                  )}
-                  {(totals.charityCoverage ?? 0) > 0 && (
-                    <span className="mt-0.5 block text-[9px] font-medium text-teal-700">
-                      از خیرین {fa(totals.charityCoverage ?? 0)}
-                    </span>
-                  )}
-                </td>
-                <td className="border border-slate-300 px-1 py-1.5 text-emerald-700">{fa(paidTotal)}</td>
-                <td className={`border border-slate-300 px-1 py-1.5 text-[13px] font-black ${totals.balance > 0 ? 'text-rose-700' : totals.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
-                  {fa(Math.abs(totals.balance))}
-                </td>
-              </tr>
-              <tr>
-                <td colSpan={5} className="border border-slate-300 bg-slate-50 px-2 py-1.5 text-2xs font-bold text-slate-700">
-                  {totals.balance > 0
-                    ? `ماندهٔ بدهی دانشجو: ${fa(totals.balance)} ریال`
-                    : totals.balance < 0
-                      ? `بستانکاری دانشجو: ${fa(Math.abs(totals.balance))} ریال`
-                      : 'حساب تسویه است'}
-                  {totals.chequesPending > 0 && (
-                    <span className="text-amber-700"> — ⚠️ {fa(totals.chequesPending)} ریال چک وصول‌نشده در مانده لحاظ نشده است</span>
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* ── عنوان بخش ترم‌ها (همراه با جدول مشخصات/جمع در همان ردیف) ── */}
+        {/* ── عنوان بخش ترم‌ها ── */}
         <h3 className="tr-courses-title border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">ریز ترم‌به‌ترم</h3>
         {terms.length === 0 ? (
           <p className="rounded-lg border border-slate-300 bg-slate-50 py-6 text-center text-slate-500">هیچ تراکنش مالی برای این دانشجو ثبت نشده است.</p>
@@ -700,7 +668,7 @@ export default function FinancialTranscript({
                                     <td className="px-1 py-0.5 text-center">{c.selectionType || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{c.grade != null ? fa(c.grade) : '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{priceCode(c.gradeStatusCode)}</td>
-                                    <td className="px-1 py-0.5 text-center">{tuitionSelectionLabel(c)}</td>
+                                    <td className="px-1 py-0.5 text-center">{tuitionSelectionLabel(c, student.courseType)}</td>
                                     <td className="px-1 py-0.5 text-center">
                                       {courseTypeLabel(c)}
                                       {c.maliType != null ? <span className="tr-mali-code ms-1 font-mono font-bold text-slate-700">({fa(c.maliType)})</span> : null}
@@ -748,7 +716,10 @@ export default function FinancialTranscript({
                                       می‌شوند ولی فیش و سند و پرداخت‌کننده دارند و
                                       باید دیده شوند. هر رویدادی که این اقلام را
                                       داشته باشد، نمایش داده می‌شود. */}
-                                  {(e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName || e.legacyRem) && (
+                                  {/* ⚠ `e.legacyRem` عمداً در شرطِ نمایش نیست: در نوع الف
+                                      «یادداشت اصل» چاپ نمی‌شود، پس نباید باعثِ
+                                      رندرِ یک خطِ خالی شود. */}
+                                  {(e.receiptNo || e.payerName || e.accountNo || e.cardNo || e.voucherNo || e.payTypeCode != null || e.recorderName) && (
                                     <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0 text-[8px] leading-tight text-slate-500">
                                       {e.receiptNo && <Meta k="فیش" v={faDigits(e.receiptNo)} mono />}
                                       {e.payerName && (
@@ -762,14 +733,11 @@ export default function FinancialTranscript({
                                       {e.payTypeCode != null && <Meta k="نوع" v={String(PAY_TYPE_LABELS[e.payTypeCode] ?? e.payTypeCode)} />}
                                       {e.voucherNo && <Meta k="سند" v={faDigits(e.voucherNo)} mono />}
                                       {isFinance && e.recorderName && <Meta k="ثبت" v={e.recorderName} />}
-                                      {isFinance && e.legacyRem && (
-                                        <span
-                                          className="block w-full truncate text-[7px] text-slate-400"
-                                          title={e.legacyRem}
-                                        >
-                                          یادداشت اصل: {e.legacyRem}
-                                        </span>
-                                      )}
+                                      {/* ⚠ «یادداشت اصل» (legacyRem) در **نوع الف چاپ نمی‌شود**
+                                          (درخواست کاربر: بدهی/یادداشتِ واردشده از سیستم قدیم
+                                          نباید در سندِ رسمیِ کارتی دیده شود). در **نوع ب**
+                                          همچنان نمایش داده می‌شود — آنجا سندِ کارشناسِ
+                                          مالی است و ردیابیِ مستندات لازم است. */}
                                     </span>
                                   )}
                                 </span>
@@ -871,6 +839,24 @@ export default function FinancialTranscript({
               </td>
             </tr>
           )}
+
+          {/* ── ردیفِ پایانی: «جمع کل دوره» ──
+              در سندِ سما این بلوک آخرین بخشِ سند است (درخواست کاربر)، پس
+              اینجا — بعد از ریزِ ترم‌ها و بعد از چک‌ها/وام‌ها — می‌آید و
+              قبل از پاصفحهٔ امضا می‌نشیند. */}
+          <tr className="tr-doc-row">
+            <td className="tr-doc-cell">
+              <div className="px-4 pb-3">
+                <TotalsBlock
+                  totals={totals}
+                  sumFixed={sumFixed}
+                  sumVariable={sumVariable}
+                  paidTotal={paidTotal}
+                  scopeLabel={scopeLabel}
+                />
+              </div>
+            </td>
+          </tr>
         </tbody>
         <tfoot>
           <tr>
@@ -899,41 +885,139 @@ export default function FinancialTranscript({
 }
 
 /**
+ * بلوک «جمع کل دوره».
+ *
+ * ⚠ در سندِ سما این بلوک **آخرین** بخشِ سند است (نه ابتدای آن) — درخواستِ
+ * صریحِ کاربر: جمعِ کل باید در پایانِ کارنامه بیاید تا خواننده بعد از دیدنِ
+ * ریزِ ترم‌ها به عددِ نهایی برسد. به همین دلیل از بدنهٔ اصلی بیرون کشیده
+ * شده تا بتوان آن را دقیقاً در انتهای سند رندر کرد.
+ */
+function TotalsBlock({
+  totals,
+  sumFixed,
+  sumVariable,
+  paidTotal,
+  scopeLabel,
+}: {
+  totals: TranscriptTotalsView;
+  sumFixed: number;
+  sumVariable: number;
+  paidTotal: number;
+  scopeLabel?: string;
+}) {
+  const breakdown = (totals.discountBreakdown || []).filter((d) => d && d.amount !== 0);
+  return (
+    <div className="tr-breakdown break-inside-avoid rounded-lg border border-slate-700">
+      <h3 className="border-b border-slate-700 bg-indigo-900 px-3 py-1.5 text-[12px] font-black text-white">
+        {scopeLabel || 'جمع کل دوره'}
+      </h3>
+      <table className="tr-fin-totals w-full border-collapse text-center text-2xs rt">
+        <thead>
+          <tr className="bg-slate-100 text-slate-700">
+            <th className="border border-slate-300 px-1 py-1.5">جمع شهریه (ریال)</th>
+            <th className="border border-slate-300 px-1 py-1.5">تخفیف‌ها</th>
+            <th className="border border-slate-300 px-1 py-1.5">پوشش بنیاد / خیرین</th>
+            <th className="border border-slate-300 px-1 py-1.5">پرداخت / چک وصولی / وام</th>
+            <th className="border border-slate-300 px-1 py-1.5">ماندهٔ نهایی</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="font-bold">
+            <td className="border border-slate-300 px-1 py-1.5">
+              {fa(totals.charges)}
+              {/* تفکیکِ شهریه در همان خانه — کارشناس مالی بدون بازکردن ترم‌ها
+                  می‌بیند چه سهمی ثابت و چه سهمی متغیر است. */}
+              {(sumFixed > 0 || sumVariable > 0) && (
+                <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
+                  ثابت {fa(sumFixed)} · متغیر {fa(sumVariable)}
+                </span>
+              )}
+            </td>
+            <td className="border border-slate-300 px-1 py-1.5 text-violet-700">
+              {fa(totals.discounts)}
+              {/* تفکیکِ تخفیف — «از چه نوعی و چقدر». بدون این خط، کارشناس مالی
+                  فقط یک عدد می‌بیند و نمی‌تواند آن را با سما تطبیق بدهد. */}
+              {breakdown.length > 0 && (
+                <span className="mt-0.5 block space-y-0.5 text-[8px] font-medium text-slate-500">
+                  {breakdown.map((d) => (
+                    <span key={d.key} className="block">
+                      └ {d.label}: {fa(d.amount)}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </td>
+            <td className="border border-slate-300 px-1 py-1.5 text-indigo-700">
+              {fa(totals.sponsorships)}
+              {/* تفکیک: چه بخشی از پوشش از واریزِ واقعیِ بنیاد آمده است.
+                  بدون این خط، کارشناس مالی نمی‌فهمد پوشش «سندِ واریز» دارد
+                  یا فقط تخفیفِ دفتری است. */}
+              {(totals.sponsorshipsFromDeposits ?? 0) > 0 && (
+                <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
+                  از واریز بنیاد {fa(totals.sponsorshipsFromDeposits ?? 0)}
+                </span>
+              )}
+              {(totals.charityCoverage ?? 0) > 0 && (
+                <span className="mt-0.5 block text-[9px] font-medium text-teal-700">
+                  از خیرین {fa(totals.charityCoverage ?? 0)}
+                </span>
+              )}
+            </td>
+            <td className="border border-slate-300 px-1 py-1.5 text-emerald-700">{fa(paidTotal)}</td>
+            <td className={`border border-slate-300 px-1 py-1.5 text-[13px] font-black ${totals.balance > 0 ? 'text-rose-700' : totals.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
+              {fa(Math.abs(totals.balance))}
+            </td>
+          </tr>
+          <tr>
+            <td colSpan={5} className="border border-slate-300 bg-slate-50 px-2 py-1.5 text-2xs font-bold text-slate-700">
+              {totals.balance > 0
+                ? `ماندهٔ بدهی دانشجو: ${fa(totals.balance)} ریال`
+                : totals.balance < 0
+                  ? `بستانکاری دانشجو: ${fa(Math.abs(totals.balance))} ریال`
+                  : 'حساب تسویه است'}
+              {totals.chequesPending > 0 && (
+                <span className="text-amber-700"> — ⚠️ {fa(totals.chequesPending)} ریال چک وصول‌نشده در مانده لحاظ نشده است</span>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
  * خلاصهٔ ترم — سه قلم در هر سطر (به‌جای جدول ۸ تا ۱۰ ردیفی عمودی).
  * سه ردیف سه‌ستونه + یک ردیف «ماندهٔ ترم» در پایین؛ حدود ۵ ردیف کاغذ کمتر برای هر ترم.
+ *
+ * ⚠ ردیف‌ها از `buildTermSummary` (ماژولِ کانونیِ مشترک) می‌آیند تا
+ * چیدمانِ کارتی (نوع الف) و چیدمانِ تخت (نوع ب) **دقیقاً یک ردیف‌ها** را
+ * نشان بدهند — درخواستِ «یکسان‌سازی ردیف‌های پایینِ هر ترم».
  */
 function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBalance?: number }) {
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
+
+  const { rows: rawRows, discountLines } = buildTermSummary(t, priorBalance);
+  const rows = visibleSummaryRows(rawRows);
+
   /**
-   * پوششِ خیرین از «پوشش بنیاد» جدا چاپ می‌شود (درخواست کاربر: صندوق خیریه
-   * بنیاد نیست و نباید زیر همان عنوان بیاید). جمعِ این دو همان
-   * `t.sponsorships` است، پس خواننده می‌تواند هر دو را با هم ببیند.
+   * تفکیکِ تخفیف به‌صورتِ ردیف‌های فرزندِ زیرِ قلمِ «تخفیف» می‌آید — دقیقاً
+   * همان چیزی که سما زیرِ قلمِ تخفیف می‌نوشت. اگر فقط یک قلم باشد، اصلاح
+   * نیازی به شکستن نیست و همان قلمِ «تخفیف» کافی است.
    */
-  const charity = t.charityCoverage ?? 0;
-  const sponsorOnly = Math.max(0, t.sponsorships - charity);
-  const items: Cell[] = [
-    { label: 'شهریه (بدهی)', value: fa(t.charges) },
-    /**
-     * تفکیکِ شهریه — همان دو قلمی که سما زیر هر ترم می‌نویسد.
-     * پیش‌تر فقط جمعِ «شهریه (بدهی)» دیده می‌شد و کارشناس مالی نمی‌توانست
-     * بفهمد چه سهمی ثابت و چه سهمی متغیر (واحد×نرخ) است.
-     */
-    ...(t.tuitionFixed ? [{ label: 'شهریهٔ ثابت', value: fa(t.tuitionFixed) }] : []),
-    ...(t.tuitionVariable ? [{ label: 'شهریهٔ متغیر', value: fa(t.tuitionVariable) }] : []),
-    { label: 'تخفیف', value: fa(t.discounts), cls: 'text-violet-700' },
-    { label: 'پوشش بنیاد', value: fa(sponsorOnly), cls: 'text-indigo-700' },
-    ...(charity ? [{ label: 'پوشش خیرین', value: fa(charity), cls: 'text-teal-700' }] : []),
-    { label: 'خالص', value: fa(t.netPayable), bold: true },
-    { label: 'پرداخت', value: fa(t.payments), cls: 'text-emerald-700' },
-    { label: 'چک وصول‌شده', value: fa(t.chequesCleared), cls: 'text-emerald-700' },
-  ];
-  if (t.chequesPending > 0) items.push({ label: 'چک در انتظار', value: fa(t.chequesPending), cls: 'text-amber-700' });
-  if (t.chequesBounced > 0) items.push({ label: 'چک برگشتی', value: fa(t.chequesBounced), cls: 'text-rose-700' });
-  items.push({ label: 'وام', value: fa(t.loans), cls: 'text-sky-700' });
+  const items: Cell[] = [];
+  for (const r of rows) {
+    items.push({ label: r.label, value: fa(r.value), cls: r.cls, bold: r.bold });
+    if (r.key === 'discounts') {
+      for (const d of discountLines) {
+        items.push({ label: `└ ${d.label}`, value: fa(d.value), cls: 'text-violet-500' });
+      }
+    }
+  }
   // پرکردن ردیف آخر تا شبکهٔ سه‌ستونه به‌هم نریزد
   while (items.length % 3 !== 0) items.push({ label: '', value: '' });
-  const rows: Cell[][] = [];
-  for (let i = 0; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
+  const grid: Cell[][] = [];
+  for (let i = 0; i < items.length; i += 3) grid.push(items.slice(i, i + 3));
 
   return (
     <table className="tr-fin-sum w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
@@ -943,7 +1027,7 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
         ))}
       </colgroup>
       <tbody>
-        {rows.map((r, ri) => (
+        {grid.map((r, ri) => (
           <tr key={ri} className="border-t border-slate-200">
             {r.map((c, ci) => (
               <td key={ci} className="tr-sum-cell px-1 py-0.5 align-top">
@@ -956,14 +1040,11 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
             ))}
           </tr>
         ))}
-        {priorBalance !== 0 && (
-          <tr className="border-t border-slate-200 bg-slate-100/60">
-            <td colSpan={2} className="px-1 py-0.5 font-bold text-slate-600">ماندهٔ قبلی (انتقالی)</td>
-            <td className="px-1 py-0.5 text-left font-bold text-slate-700">
-              {fa(Math.abs(priorBalance))}{priorBalance > 0 ? ' بدهکار' : ' بستانکار'}
-            </td>
-          </tr>
-        )}
+        {/* ⚠ ردیفِ «ماندهٔ قبلی (انتقالی)» اینجا **تکرار نمی‌شود**:
+            `buildTermSummary` خودش آن را (فقط وقتی ≠۰ باشد) به `rows`
+            اضافه می‌کند. پیش‌تر همین بلوک دوباره چاپش می‌کرد و عددِ
+            انتقالی در یک کارت دو بار دیده می‌شد — همان «بدهی ورودی از
+            سیستم قبل» تکراری که کاربر گزارش داد. */}
         <tr className="border-t border-slate-400 bg-slate-200/60">
           <td colSpan={2} className="px-1 py-0.5 font-black text-slate-800">ماندهٔ ترم</td>
           <td className={`px-1 py-0.5 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>

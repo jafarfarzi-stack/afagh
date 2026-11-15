@@ -996,3 +996,76 @@ DROP POLICY IF EXISTS comprehensive_exams_self_read ON "comprehensive_exams";
 CREATE POLICY comprehensive_exams_self_read ON "comprehensive_exams" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students"
     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+
+-- ── پایهٔ گزارش‌های مالیِ کلان (مهاجرت 0138) ──
+-- این جدول‌ها دادهٔ سازمانیِ دانشگاه هستند (بودجه، پیمانکار، هزینه، کالا،
+-- مالیات، پروندهٔ حقوقی) و هیچ‌کدام ربطی به دانشجوی خاص ندارند ⇒
+-- سیاستِ «خودخوانِ دانشجو» برایشان معنا ندارد. دسترسی از مسیرِ نقشِ
+-- مالی/ادمین انجام می‌شود (BYPASSRLS) و RLS اینجا fail-closed است:
+-- بدون نقشِ مجاز، هیچ ردیفی برنمی‌گردد.
+ALTER TABLE "financial_budgets" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_contractors" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_contracts" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_contract_invoices" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_expenses" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "financial_vat_entries" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "inventory_items" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "inventory_movements" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "legal_cases" ENABLE ROW LEVEL SECURITY;
+
+-- سیاستِ نقش‌محور: فقط نقش‌های مالی/ادمین می‌توانند این داده را ببینند.
+-- (نقش‌ها از جدول user_roles خوانده می‌شوند؛ user_roles خودش RLS دارد و
+--  فقط نقش‌های کاربرِ جاری را برمی‌گرداند ⇒ بدون نشتِ اطلاعات.)
+DROP POLICY IF EXISTS fin_base_finance_read ON "financial_budgets";
+CREATE POLICY fin_base_finance_read ON "financial_budgets" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_contractors_read ON "financial_contractors";
+CREATE POLICY fin_base_contractors_read ON "financial_contractors" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_contracts_read ON "financial_contracts";
+CREATE POLICY fin_base_contracts_read ON "financial_contracts" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_contract_inv_read ON "financial_contract_invoices";
+CREATE POLICY fin_base_contract_inv_read ON "financial_contract_invoices" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_expenses_read ON "financial_expenses";
+CREATE POLICY fin_base_expenses_read ON "financial_expenses" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_vat_read ON "financial_vat_entries";
+CREATE POLICY fin_base_vat_read ON "financial_vat_entries" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_inventory_read ON "inventory_items";
+CREATE POLICY fin_base_inventory_read ON "inventory_items" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_inventory_moves_read ON "inventory_movements";
+CREATE POLICY fin_base_inventory_moves_read ON "inventory_movements" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE','CASHIER')));
+
+DROP POLICY IF EXISTS fin_base_legal_read ON "legal_cases";
+CREATE POLICY fin_base_legal_read ON "legal_cases" FOR SELECT TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
