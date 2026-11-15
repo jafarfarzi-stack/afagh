@@ -94,7 +94,7 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
         { key: 'name', title: 'نام' },
         { key: 'major', title: 'رشته' },
         { key: 'degree', title: 'مقطع' },
-        { key: 'y', title: 'سال ورود' },
+        { key: 'y', title: 'سال ورود', format: 'YEAR' as const },
         { key: 'et', title: 'نیمسال ورود' },
         { key: 'gpa', title: gpaLabel },
         { key: 'units', title: 'واحد محاسبه‌شده' },
@@ -220,7 +220,7 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
         [
           { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
           { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-          { key: 'graduateDate', title: 'تاریخ فراغت', format: 'DATE' }, { key: 'eduEndYear', title: 'سال پایان تحصیل' },
+          { key: 'graduateDate', title: 'تاریخ فراغت', format: 'DATE' }, { key: 'eduEndYear', title: 'سال پایان تحصیل', format: 'YEAR' as const },
           { key: 'avg', title: 'معدل کل' },
         ],
         STU_FROM,

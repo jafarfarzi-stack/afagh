@@ -55,7 +55,7 @@ export type ReportColumn = {
    * قالب نمایش/خروجی سلول — در `@/lib/report-format` تفسیر می‌شود تا هیچ تاریخ
    * میلادی یا مبلغ بدون جداکننده به کاربر نرسد.
    */
-  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER';
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
 };
 export type ReportResult = {
   columns: ReportColumn[];

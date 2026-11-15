@@ -78,7 +78,7 @@ export interface ReportField {
   agg?: AggKind[];
   type?: ReportFieldType;
   /** قالب نمایش (تاریخ شمسی / مبلغ / عدد) — در report-format تفسیر می‌شود */
-  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER';
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
   /** قابل فیلتر بودن */
   filterable?: boolean;
   /** عملگرهای مجاز برای این فیلد (پیش‌فرض: بر اساس type) */
@@ -106,7 +106,7 @@ export type OptionRef =
 /** پیکربندیِ ذخیره‌شدهٔ یک گزارش */
 export interface SavedReportConfig {
   /** ستون‌های انتخاب‌شده به‌همراه عنوان/قالبِ اختیاری */
-  columns: { field: string; alias?: string; format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER'; agg?: AggKind }[];
+  columns: { field: string; alias?: string; format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR'; agg?: AggKind }[];
   /** شرط‌ها */
   filters: { field: string; op: FilterOp; value?: string | string[] }[];
   /** کلیدِ فیلدهایی که کاربر خواسته گروه‌بندی کند */
@@ -131,7 +131,7 @@ export type SourceMeta = {
     key: string;
     title: string;
     type?: ReportFieldType;
-    format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER';
+    format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
     filterable?: boolean;
     ops?: FilterOp[];
     groupable?: boolean;

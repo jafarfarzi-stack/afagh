@@ -147,9 +147,13 @@ export const DISCOUNT_BREAKDOWN_LEDGER: Readonly<
   Record<string, { key: string; label: string }>
 > = {
   TUITION_BATES: { key: 'BATES', label: 'تخفیف بیتس (سما)' },
-  TUITION_BATES_FIXED: { key: 'BATES', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)' },
-  TUITION_BATES_VARIABLE: { key: 'BATES', label: 'تخفیف بیتسِ شهریهٔ متغیر (سما)' },
-  TUITION_BATES_AMOUNT: { key: 'BATES', label: 'تخفیف بیتسِ مبلغی (سما)' },
+  // ⚠ سه زیرنوعِ بیتس کلیدِ **مستقل** دارند (نه یک کلیدِ مشترک): کاربر
+  //   می‌خواهد دقیقاً مثل سما، بیتسِ «ثابت» و «متغیر» و «مبلغی» جدا دیده
+  //   شوند. با کلیدِ مشترک، هر سه در یک قلم ادغام می‌شدند و کارنامه فقط
+  //   یک عددِ کلی نشان می‌داد (باگِ گزارش‌شده در کارنامهٔ نوع الف).
+  TUITION_BATES_FIXED: { key: 'BATES_FIXED', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)' },
+  TUITION_BATES_VARIABLE: { key: 'BATES_VARIABLE', label: 'تخفیف بیتسِ شهریهٔ متغیر (سما)' },
+  TUITION_BATES_AMOUNT: { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)' },
   DISCOUNT_FIXED: { key: 'DISCOUNT_FIXED', label: 'تخفیف شهریهٔ ثابت (سما)' },
   DISCOUNT_VARIABLE: { key: 'DISCOUNT_VARIABLE', label: 'تخفیف شهریهٔ متغیر (سما)' },
   SUBJECT_DEDUCTIVE: { key: 'SUBJECT_DEDUCTIVE', label: 'کاهش مبلغ موضوعی (سما)' },
@@ -162,6 +166,9 @@ export const DISCOUNT_BREAKDOWN_LEDGER: Readonly<
  */
 export const DISCOUNT_BREAKDOWN_ORDER: readonly string[] = [
   'BATES',
+  'BATES_FIXED',
+  'BATES_VARIABLE',
+  'BATES_AMOUNT',
   'DISCOUNT_FIXED',
   'DISCOUNT_VARIABLE',
   'SUBJECT_DEDUCTIVE',
@@ -689,7 +696,7 @@ export function buildTranscript(input: TranscriptInput): TermStatement[] {
       loans += amount;
       events.push({
         kind: 'LOAN',
-        label: l.lender ? `وام — ${l.lender}` : 'وام',
+        label: l.lender ? `مساعده — ${l.lender}` : 'مساعده',
         amount,
         dateMs: toMs((l as { createdAt?: string | Date | null }).createdAt),
         sign: 1

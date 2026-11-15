@@ -63,7 +63,11 @@ console.log('\n── نوع الف: محتوای ستونها از دیتابی
 ok(A.includes('educationalTypeLabel(c)'), 'نوع درس آموزشی: ماهیت درس / استنتاج از واحد نظری-عملی');
 ok(A.includes('c.selectionType'), 'نوع انتخاب درس: از پرچمهای enrollments');
 ok(A.includes('priceCode(c.gradeStatusCode)'), 'وضع: کد وضعیت نمرهٔ سما');
-ok(A.includes('tuitionSelectionLabel(c)'), 'نوع انتخاب شهریه: ضریب نیمسال ورود');
+/* «نوع انتخاب شهریه» = TuitionTypeId سما (روزانه/شبانه/غیرانتفاعی…) از
+   students.tuitionType. پیش‌تر از tuition_coefficients خوانده می‌شد که در
+   تولید خالی است و ستون همیشه «—» چاپ می‌شد. */
+ok(A.includes('tuitionSelectionLabel(c, student.courseType)'), 'نوع انتخاب شهریه: نوع شهریهٔ دانشجو (TuitionTypeId)');
+ok(A.includes('courseTypeFa(studentType)'), 'نوع انتخاب شهریه: نگاشت کد به برچسب، نه کد خام');
 ok(A.includes('courseTypeLabel(c)') && A.includes('fa(c.maliType)'), 'نوع درس مالی: برچسب + کد سما');
 ok(A.includes('fa(c.amount)'), 'شهریه: مبلغ تخصیصیافته از دفتر کل');
 ok(A.includes('tr-mali-code') && /tr-mali-code[^>]*>[^<]*\({fa\(/.test(A), 'نوع الف: کد داخل پرانتز');

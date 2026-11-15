@@ -29,7 +29,7 @@ export function jalaliSmart(value: unknown, withTime = false): string {
   return faDigits(`${date} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
 }
 
-export type ReportCellFormat = 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | undefined;
+export type ReportCellFormat = 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR' | undefined;
 
 /** قالب‌بندی یک سلول گزارش بر پایهٔ `format` ستون */
 export function formatReportCell(value: unknown, format?: string): string {
@@ -39,6 +39,9 @@ export function formatReportCell(value: unknown, format?: string): string {
     case 'DATETIME': return jalaliSmart(value, true);
     case 'MONEY': return `${faNum(Math.round(Number(value) || 0).toLocaleString('en-US'))} ریال`;
     case 'NUMBER': return faNum(Number(value).toLocaleString('en-US'));
+    /* سال (۱۴۰۳، ۱۴۰۵…) — «شناسه» است نه «کمیت»؛ جداکنندهٔ هزارگان نباید بگیرد.
+       قبلاً همین ستون‌ها با NUMBER رندر می‌شدند و «۱۴۰۳» به «۱٬۴۰۳» تبدیل می‌شد. */
+    case 'YEAR': return faNum(String(value).trim());
     default: return String(value);
   }
 }

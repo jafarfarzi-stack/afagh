@@ -1,5 +1,5 @@
 import { toNum } from './numbers';
-import type { DiscountBreakdownItem } from './statement';
+import { DISCOUNT_BREAKDOWN_ORDER, type DiscountBreakdownItem } from './statement';
 
 // ══════════════════════════════════════════════════════════════════════
 //  ردیف‌های پایینِ هر نیمسال — تعریفِ واحدِ کانونی
@@ -76,7 +76,7 @@ export interface TermSummaryInput {
  *   ۱) شهریه (بدهی)   ۲) شهریهٔ ثابت   ۳) شهریهٔ متغیر
  *   ۴) تخفیف (+ تفکیک) ۵) پوشش بنیاد   ۶) پوشش خیرین
  *   ۷) خالص            ۸) پرداخت        ۹) چک وصول‌شده
- *  ۱۰) چک در انتظار   ۱۱) چک برگشتی   ۱۲) وام
+ *  ۱۰) چک در انتظار   ۱۱) چک برگشتی   ۱۲) مساعده (وام)
  *  ۱۳) ماندهٔ قبلی (انتقالی)            ۱۴) ماندهٔ ترم
  *
  * @param priorBalance ماندهٔ انتقالی از ترم‌های قبل (۰ = ندارد)
@@ -134,7 +134,12 @@ export function buildTermSummary(
       cls: 'text-rose-700',
       onlyIfPositive: true,
     },
-    { key: 'loans', label: 'وام', value: toNum(t.loans), cls: 'text-sky-700' },
+    /* «مساعده» — همان برچسبی که کارنامهٔ قدیمِ سما می‌زد و کارشناس مالی
+       با آن آشناست. پیش‌تر «وام» بود و کاربر آن را به‌عنوان ردیفِ گمشده
+       گزارش کرد («تو کارنامه قدیم بندی هم به عنوان مساعده داشتیم»).
+       منبعش تغییر نکرده: `loans` در موتور = واریزهای وام تحصیلی + جدول وام.
+       ردیف عمداً همیشه چاپ می‌شود (حتی صفر)، مثل سند قدیم. */
+    { key: 'loans', label: 'مساعده', value: toNum(t.loans), cls: 'text-sky-700' },
   ];
 
   // ماندهٔ قبلی (انتقالی) — فقط وقتی واقعاً چیزی منتقل شده
@@ -150,12 +155,34 @@ export function buildTermSummary(
   // ماندهٔ ترم — همیشه چاپ می‌شود (قلمِ پایانیِ هر ترم)
   rows.push({ key: 'balance', label: 'ماندهٔ ترم', value: toNum(t.balance), bold: true });
 
-  // تفکیکِ تخفیف — فقط وقتی بیش از یک قلم داشته باشد ارزشِ نمایش دارد
+  // تفکیکِ تخفیف:
+  //   • بیش از یک قلم  → ردیف‌های فرزند زیرِ «تخفیف» چاپ می‌شوند
+  //   • دقیقاً یک قلم  → ردیفِ فرزند تکراری است، پس **منبع** در خودِ
+  //     برچسبِ «تخفیف» می‌آید: «تخفیف — بیتسِ مبلغی (سما)». این‌طور حتی
+  //     وقتی فقط یک نوع تخفیف داریم، کارشناس می‌داند بابتِ چیست
+  //     (شکایتِ «تخفیف‌ها تفکیک نشده‌اند»).
   const raw = (t.discountBreakdown || []).filter((d) => d && toNum(d.amount) !== 0);
+  // ترتیبِ کانونی (نه ترتیبِ درج در دفتر): دو چاپ و «جمع کل دوره» هم‌ترتیب
+  // می‌شوند و کارشناس می‌تواند سطرها را با هم تطبیق بدهد.
+  const orderOf = (k: string) => {
+    const i = DISCOUNT_BREAKDOWN_ORDER.indexOf(k);
+    return i === -1 ? DISCOUNT_BREAKDOWN_ORDER.length : i;
+  };
+  const sorted = [...raw].sort((a, b) => orderOf(a.key) - orderOf(b.key));
+
   const discountLines: TermDiscountLine[] =
-    raw.length > 1
-      ? raw.map((d) => ({ key: d.key, label: d.label, value: toNum(d.amount) }))
+    sorted.length > 1
+      ? sorted.map((d) => ({ key: d.key, label: d.label, value: toNum(d.amount) }))
       : [];
+
+  if (sorted.length === 1) {
+    const row = rows.find((r) => r.key === 'discounts');
+    if (row) {
+      // پیشوندِ «تخفیف» تکراری نشود: «تخفیف — بیتسِ مبلغی (سما)»
+      const short = String(sorted[0].label || '').replace(/^تخفیف\s+/, '').trim();
+      if (short) row.label = `تخفیف — ${short}`;
+    }
+  }
 
   return { rows, discountLines };
 }

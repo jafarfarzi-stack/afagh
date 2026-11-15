@@ -4,6 +4,7 @@ import { normalizeTermCode } from '@/lib/scheduling-core';
 import { PAY_TYPE_LABELS, type DiscountBreakdownItem } from '@/lib/finance-rules/statement';
 import { buildTermSummary, visibleSummaryRows } from '@/lib/finance-rules/term-summary';
 import { courseTypeLabelOf } from '@/lib/mali-types';
+import { courseTypeFa } from '@/lib/student-labels';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -36,6 +37,13 @@ import { courseTypeLabelOf } from '@/lib/mali-types';
  */
 
 const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-IR');
+
+/**
+ * سالِ شمسی (۱۴۰۳، ۱۴۰۵…) — «شناسه» است نه «کمیت»؛ نباید جداکنندهٔ هزارگان بگیرد.
+ * `toLocaleString` سال ۱۴۰۳ را «۱٬۴۰۳» می‌نویسد که در سربرگ کارنامه غلط است.
+ */
+const faYear = (n: number | null | undefined): string =>
+  n ? String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '—';
 
 /**
  * تاریخ شمسی خوانا؛ تهی → خط تیره.
@@ -230,12 +238,12 @@ const EVENT_LABEL: Record<string, string> = {
   CHARITY: 'پوشش خیرین',
   PAYMENT: 'پرداخت',
   CHEQUE: 'چک',
-  LOAN: 'وام',
+  LOAN: 'مساعده',
   CLEARANCE: 'تسویه',
 };
 
 /** نیمسال ورود (students.entryTerm): ۱=مهر، ۲=بهمن، ۳=تابستان */
-const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+const TERM_FA: Record<number, string> = { 1: 'مهرماه', 2: 'بهمن‌ماه', 3: 'تابستان' };
 
 /**
  * عنوان کامل ترم — همان عبارت‌بندی کارنامهٔ تحصیلی:
@@ -518,7 +526,7 @@ export default function FinancialTranscriptFlat({
                     </div>
                     <div className="flex gap-1">
                       <dt className="shrink-0 text-slate-500">نوع دوره:</dt>
-                      <dd className="truncate font-bold">{student.courseType || '—'}</dd>
+                      <dd className="truncate font-bold">{courseTypeFa(student.courseType)}</dd>
                     </div>
                     {student.originUniversityTitle ? (
                       <div className="flex gap-1">
@@ -530,8 +538,8 @@ export default function FinancialTranscriptFlat({
                       <dt className="shrink-0 text-slate-500">نیمسال ورود:</dt>
                       <dd className="truncate font-bold">
                         {student.entryTerm
-                          ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
-                          : (student.entryYear ? fa(student.entryYear) : '—')}
+                          ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + faYear(student.entryYear) : ''}`
+                          : (student.entryYear ? faYear(student.entryYear) : '—')}
                       </dd>
                     </div>
                     {student.admissionMethod ? (
@@ -583,11 +591,14 @@ export default function FinancialTranscriptFlat({
                 {/* ناحیهٔ ۴ (چپ‌ترین): عکس دانشجو — درست مثل کارنامهٔ رسمی دانشگاهی.
                     آرمِ دانشگاه از اینجا برداشته شد و به بالای سربرگ (نوارِ عنوان) منتقل شد. */}
                 <div className="tr-fin-head-col flex flex-col items-center justify-start px-2 py-1.5">
+                  {/* نسبت ۳×۴ با `object-cover` قفل شده (کلاس + style درون‌خطی)
+                      تا اگر قاعدهٔ `object-fit` در چاپ از دست برود، عکس کشیده نشود. */}
                   {student.photoUrl ? (
                     <img
                       src={student.photoUrl}
                       alt="عکس دانشجو"
                       className="h-[22mm] w-[17mm] shrink-0 border border-slate-500 object-cover"
+                      style={{ objectFit: 'cover', objectPosition: '50% 30%' }}
                     />
                   ) : (
                     <div className="flex h-[22mm] w-[17mm] shrink-0 items-center justify-center border border-dashed border-slate-400 text-[7pt] text-slate-400">

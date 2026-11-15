@@ -16,6 +16,8 @@ import {
   type LedgerTxn,
 } from '../src/lib/finance-rules/statement.ts';
 import { buildTermSummary, visibleSummaryRows } from '../src/lib/finance-rules/term-summary.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 let pass = 0;
 let fail = 0;
@@ -109,14 +111,30 @@ const st4 = buildTranscript({
   ],
 });
 const t4 = st4[0];
-eq('هر سه زیرنوع در یک سطلِ «بیتس» جمع می‌شوند', (t4.discountBreakdown ?? []).map((d) => d.key), ['BATES']);
-eq('مبلغِ سطلِ بیتس = جمعِ زیرنوع‌ها', (t4.discountBreakdown ?? []).reduce((a, x) => a + x.amount, 0), 90_000);
+// ⚠ درخواستِ کاربر: سه زیرنوعِ بیتس باید **جدا** دیده شوند (مثل سما)،
+//   نه در یک سطلِ مشترک. با کلیدِ مشترک، کارنامه فقط یک عددِ کلی می‌داد.
+eq(
+  'هر زیرنوعِ بیتس قلمِ مستقل است (به ترتیبِ کانونی)',
+  (t4.discountBreakdown ?? []).map((d) => d.key),
+  ['BATES_FIXED', 'BATES_VARIABLE', 'BATES_AMOUNT'],
+);
+eq(
+  'مبالغِ زیرنوع‌ها جدا حفظ می‌شوند',
+  (t4.discountBreakdown ?? []).map((d) => d.amount),
+  [40_000, 30_000, 20_000],
+);
+eq('جمعِ زیرنوع‌ها = تخفیفِ کل', (t4.discountBreakdown ?? []).reduce((a, x) => a + x.amount, 0), 90_000);
 eq('تخفیفِ کل = ۹۰ هزار', t4.discounts, 90_000);
 eq('برچسب‌های بیتس در نقشه هستند',
   [DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_FIXED?.label,
    DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_VARIABLE?.label,
    DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_AMOUNT?.label].every(Boolean),
   true);
+eq('کلیدهای سه زیرنوع از هم متفاوت‌اند',
+  new Set([DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_FIXED.key,
+           DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_VARIABLE.key,
+           DISCOUNT_BREAKDOWN_LEDGER.TUITION_BATES_AMOUNT.key]).size,
+  3);
 
 console.log('۵)ادغامِ تفکیکِ چند ترم (جمع کل دوره)');
 const merged = mergeDiscountBreakdown([
@@ -172,10 +190,72 @@ eq('نمایانگرِ ردیف‌ها، صفرها را حذف می‌کند',
   visibleSummaryRows(sNo.rows).some((r) => r.key === 'chequesBounced'), false);
 eq('خلاصهٔ خالی هم «ماندهٔ ترم» دارد', sNo.rows[sNo.rows.length - 1].key, 'balance');
 
+// ── یک قلم تخفیف: ردیف فرزند تکراری نمی‌سازیم، منبع را در برچسب می‌آوریم ──
+const sOne = buildTermSummary(
+  {
+    ...term,
+    discountBreakdown: [
+      { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
+    ],
+  },
+  0,
+);
+eq('یک قلم ⇒ ردیف فرزند ندارد', sOne.discountLines.length, 0);
+eq(
+  'یک قلم ⇒ منبع در برچسبِ «تخفیف» می‌آید',
+  sOne.rows.find((r) => r.key === 'discounts')?.label,
+  'تخفیف — بیتسِ مبلغی (سما)',
+);
+
+// ── دو قلم تخفیف: ردیف‌های فرزند، و برچسبِ مادر دست‌نخورده ──
+const sTwo = buildTermSummary(
+  {
+    ...term,
+    discountBreakdown: [
+      { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
+      { key: 'BATES_FIXED', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)', amount: 10_000, source: 'LEDGER' as const },
+    ],
+  },
+  0,
+);
+eq('دو قلم ⇒ دو ردیف فرزند', sTwo.discountLines.length, 2);
+eq(
+  'دو قلم ⇒ برچسبِ مادر ساده می‌ماند',
+  sTwo.rows.find((r) => r.key === 'discounts')?.label,
+  'تخفیف',
+);
+eq('ردیف‌های فرزند به ترتیبِ کانونی می‌آیند (نه ترتیبِ درج)',
+  sTwo.discountLines.map((d) => [d.key, d.value]),
+  [['BATES_FIXED', 10_000], ['BATES_AMOUNT', 70_000]]);
+
 console.log('۷)قانونِ قرارداد — همان تعریف برای هر دو چیدمان');
 const rowsA = visibleSummaryRows(buildTermSummary(term, 0).rows).map((r) => r.label);
 const rowsB = visibleSummaryRows(buildTermSummary(term, 0).rows).map((r) => r.label);
 eq('نوع الف و نوع ب یک ردیف می‌گیرند', rowsA, rowsB);
+
+console.log('۸) ردیفِ «ماندهٔ قبلی (انتقالی)» فقط یک بار');
+// باگ واقعی: `buildTermSummary` ردیفِ prior را می‌ساخت و کامپوننتِ نوع الف
+// دوباره همان را در یک <tr> جدا چاپ می‌کرد ⇒ عددِ انتقالی دو بار در یک کارت.
+const withPrior = buildTermSummary(term, 1_250_000);
+eq(
+  'در خروجیِ کانونی فقط یک ردیف prior هست',
+  withPrior.rows.filter((r) => r.key === 'prior').length,
+  1,
+);
+eq(
+  'برچسبِ آن «ماندهٔ قبلی (انتقالی)» است',
+  withPrior.rows.find((r) => r.key === 'prior')?.label,
+  'ماندهٔ قبلی (انتقالی)',
+);
+{
+  const comp = readFileSync(join(import.meta.dirname, '..', 'src/components/FinancialTranscript.tsx'), 'utf8');
+  // فقط رندرِ واقعی مهم است، نه کامنت‌ها: برچسب نباید داخل یک سلول بیاید.
+  eq(
+    'کامپوننتِ نوع الف خودش ردیفِ قبلی را دوباره چاپ نمی‌کند',
+    (comp.match(/>\s*ماندهٔ قبلی \(انتقالی\)\s*</g) || []).length,
+    0,
+  );
+}
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

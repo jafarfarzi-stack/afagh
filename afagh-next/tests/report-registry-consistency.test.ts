@@ -12,7 +12,7 @@
  * می‌دهد — و هیچ تستِ رفتاری این را نمی‌گیرد (چون به DB نیاز دارد).
  * این فایل همان شکاف را می‌بندد.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 let pass = 0;
@@ -126,6 +126,24 @@ const rls = read('src/db/pg-hardening.sql');
 for (const t of TABLES) {
   ok(`RLS برای «${t}»`, new RegExp(`ALTER TABLE "?${t}"? ENABLE ROW LEVEL SECURITY`, 'i').test(rls));
 }
+
+console.log('\n۸) ستون‌های «سال» با قالب YEAR (نه NUMBER)');
+// باگ واقعی: «سال ورودی» با قالب NUMBER رندر می‌شد و toLocaleString آن را
+// به «۱٬۴۰۳» تبدیل می‌کرد. سال شناسه است و نباید جداکنندهٔ هزارگان بگیرد.
+const reportFiles = readdirSync(join(root, 'src/app/admin/reports'))
+  .filter((f) => f.startsWith('r-') && f.endsWith('.ts'));
+let yearCols = 0;
+for (const f of reportFiles) {
+  const text = read(`src/app/admin/reports/${f}`);
+  // هر تعریفِ ستون که عنوانش با «سال» شروع می‌شود (نه «نیمسال»/«سالن»)
+  for (const m of text.matchAll(/\{\s*key:\s*'[^']*',\s*title:\s*'([^']*)'[^}]*\}/g)) {
+    if (!/^سال(\s|$)/.test(m[1])) continue;
+    yearCols++;
+    ok(`«${m[1]}» در ${f} قالب YEAR دارد`, /format:\s*'YEAR'/.test(m[0]), m[0].slice(0, 120));
+  }
+}
+ok('حداقل یک ستونِ سال پیدا شد', yearCols > 0, `count=${yearCols}`);
+ok('قالب YEAR در report-format.ts هست', /case 'YEAR':/.test(read('src/lib/report-format.ts')));
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

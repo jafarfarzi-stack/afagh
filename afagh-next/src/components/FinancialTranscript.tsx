@@ -4,6 +4,7 @@ import { normalizeTermCode } from '@/lib/scheduling-core';
 import { PAY_TYPE_LABELS, type DiscountBreakdownItem } from '@/lib/finance-rules/statement';
 import { buildTermSummary, visibleSummaryRows } from '@/lib/finance-rules/term-summary';
 import { courseTypeLabelOf } from '@/lib/mali-types';
+import { courseTypeFa } from '@/lib/student-labels';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -19,6 +20,13 @@ import { courseTypeLabelOf } from '@/lib/mali-types';
  */
 
 const fa = (n: number | null | undefined) => Number(n || 0).toLocaleString('fa-IR');
+
+/**
+ * سالِ شمسی (۱۴۰۳، ۱۴۰۵…) — «شناسه» است نه «کمیت»؛ نباید جداکنندهٔ هزارگان بگیرد.
+ * `toLocaleString` سال ۱۴۰۳ را «۱٬۴۰۳» می‌نویسد که در سربرگ کارنامه غلط است.
+ */
+const faYear = (n: number | null | undefined): string =>
+  n ? String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]) : '—';
 
 /**
  * برچسبِ «نوع درس» برای ستون کارنامه (جایگزینِ «نرخ واحد» — درخواست کاربر):
@@ -42,11 +50,22 @@ const educationalTypeLabel = (c: TranscriptCourseView): string => {
   return nature ? `${nature}${code}` : (code.trim() || '—');
 };
 
-/** «نوع انتخاب شهریه»: ضریب همان نیمسال از tuition_coefficients (ضریب نیمسال ورود). */
-const tuitionSelectionLabel = (c: TranscriptCourseView): string =>
-  c.tuitionCoefficient != null && Number(c.tuitionCoefficient) > 0
+/**
+ * «نوع انتخاب شهریه» — همان `TuitionTypeId` کارنامهٔ سما (روزانه/شبانه/
+ * غیرانتفاعی/آموزش عالی آزاد/…) که در `students.tuitionType` مهاجرت شده است.
+ *
+ * ⚠ پیش‌تر این ستون از `tuition_coefficients.variableCoefficient` خوانده
+ * می‌شد؛ آن جدول در تولید **هیچ ردیفی** ندارد، پس ستون همیشه «—» بود
+ * (شکایتِ «در سیستم قدیمی پر است، در سیستم ما خط تیره»). ضریب فقط
+ * جایگزینِ ثانویه است.
+ */
+const tuitionSelectionLabel = (c: TranscriptCourseView, studentType?: string | null): string => {
+  const label = courseTypeFa(studentType);
+  if (label !== '—') return label;
+  return c.tuitionCoefficient != null && Number(c.tuitionCoefficient) > 0
     ? `ضریب ${fa(c.tuitionCoefficient)} نیمسال ورود`
     : '—';
+};
 
 /** کدهای سربرگ ترم: عدد از دیتابیس، ارقام فارسی، تهی = «—» (هیچ کُدی سختکد نیست). */
 const priceCode = (v: string | number | null | undefined): string => {
@@ -256,12 +275,12 @@ const EVENT_LABEL: Record<string, string> = {
   CHARITY: 'پوشش خیرین',
   PAYMENT: 'پرداخت',
   CHEQUE: 'چک',
-  LOAN: 'وام',
+  LOAN: 'مساعده',
   CLEARANCE: 'تسویه',
 };
 
 /** نیمسال ورود (students.entryTerm): ۱=مهر، ۲=بهمن، ۳=تابستان */
-const TERM_FA: Record<number, string> = { 1: 'مهر', 2: 'بهمن', 3: 'تابستان' };
+const TERM_FA: Record<number, string> = { 1: 'مهرماه', 2: 'بهمن‌ماه', 3: 'تابستان' };
 
 /**
  * عنوان کامل ترم — همان عبارت‌بندی کارنامهٔ تحصیلی:
@@ -480,7 +499,9 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">کد ملی</td>
               <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.nationalCode || '—')}</td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">شمارهٔ دانشجویی</td>
-              <td className="border border-slate-300 px-1.5 py-1 font-mono" dir="ltr">{faDigits(student.studentCode || '—')}</td>
+              {/* بدون `dir="ltr"` و `font-mono`: این دو باعث می‌شدند این خانه
+                  چپ‌چین و با فونتِ متفاوت از بقیهٔ سربرگ دیده شود (درخواست کاربر). */}
+              <td className="border border-slate-300 px-1.5 py-1">{faDigits(student.studentCode || '—')}</td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">مقطع</td>
@@ -496,8 +517,8 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نیمسال ورود</td>
               <td className="border border-slate-300 px-1.5 py-1">
                 {student.entryTerm
-                  ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + fa(student.entryYear) : ''}`
-                  : (student.entryYear ? fa(student.entryYear) : '—')}
+                  ? `${TERM_FA[student.entryTerm] ?? `نیمسال ${fa(student.entryTerm)}`}${student.entryYear ? ' ' + faYear(student.entryYear) : ''}`
+                  : (student.entryYear ? faYear(student.entryYear) : '—')}
               </td>
             </tr>
             <tr>
@@ -506,7 +527,7 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">سهمیه</td>
               <td className="border border-slate-300 px-1.5 py-1">{quotaLabel(student.quotaType)}</td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نوع دوره</td>
-              <td className="border border-slate-300 px-1.5 py-1">{student.courseType || '—'}</td>
+              <td className="border border-slate-300 px-1.5 py-1">{courseTypeFa(student.courseType)}</td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ ورود</td>
@@ -534,12 +555,20 @@ export default function FinancialTranscript({
             ) : null}
           </tbody>
           </table>
-          {/* عکس — چسبیده به سمت چپ جدول مشخصات */}
-          <div className="flex w-[17mm] shrink-0 items-start justify-center border border-slate-400">
+          {/* عکس — چسبیده به سمت چپ جدول مشخصات.
+              ⚠ نسبت ۳×۴ با `object-cover` قفل شده است: اگر `object-fit` در چاپ
+              از دست برود، مرورگر `fill` می‌زند و چهره به‌شدت کشیده می‌شود.
+              به همین دلیل هم کلاس و هم `style` درون‌خطی ست شده‌اند. */}
+          <div className="flex h-[22mm] w-[17mm] shrink-0 items-center justify-center overflow-hidden border border-slate-400">
             {student.photoUrl ? (
-              <img src={student.photoUrl} alt="عکس دانشجو" className="h-[22mm] w-[17mm] object-cover" />
+              <img
+                src={student.photoUrl}
+                alt="عکس دانشجو"
+                className="h-full w-full object-cover"
+                style={{ objectFit: 'cover', objectPosition: '50% 30%' }}
+              />
             ) : (
-              <div className="flex h-[22mm] w-[17mm] items-center justify-center text-[9px] text-slate-400">عکس</div>
+              <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-400">عکس</div>
             )}
           </div>
         </div>
@@ -639,7 +668,7 @@ export default function FinancialTranscript({
                                     <td className="px-1 py-0.5 text-center">{c.selectionType || '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono">{c.grade != null ? fa(c.grade) : '—'}</td>
                                     <td className="px-1 py-0.5 text-center font-mono" dir="ltr">{priceCode(c.gradeStatusCode)}</td>
-                                    <td className="px-1 py-0.5 text-center">{tuitionSelectionLabel(c)}</td>
+                                    <td className="px-1 py-0.5 text-center">{tuitionSelectionLabel(c, student.courseType)}</td>
                                     <td className="px-1 py-0.5 text-center">
                                       {courseTypeLabel(c)}
                                       {c.maliType != null ? <span className="tr-mali-code ms-1 font-mono font-bold text-slate-700">({fa(c.maliType)})</span> : null}
@@ -1011,14 +1040,11 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
             ))}
           </tr>
         ))}
-        {priorBalance !== 0 && (
-          <tr className="border-t border-slate-200 bg-slate-100/60">
-            <td colSpan={2} className="px-1 py-0.5 font-bold text-slate-600">ماندهٔ قبلی (انتقالی)</td>
-            <td className="px-1 py-0.5 text-left font-bold text-slate-700">
-              {fa(Math.abs(priorBalance))}{priorBalance > 0 ? ' بدهکار' : ' بستانکار'}
-            </td>
-          </tr>
-        )}
+        {/* ⚠ ردیفِ «ماندهٔ قبلی (انتقالی)» اینجا **تکرار نمی‌شود**:
+            `buildTermSummary` خودش آن را (فقط وقتی ≠۰ باشد) به `rows`
+            اضافه می‌کند. پیش‌تر همین بلوک دوباره چاپش می‌کرد و عددِ
+            انتقالی در یک کارت دو بار دیده می‌شد — همان «بدهی ورودی از
+            سیستم قبل» تکراری که کاربر گزارش داد. */}
         <tr className="border-t border-slate-400 bg-slate-200/60">
           <td colSpan={2} className="px-1 py-0.5 font-black text-slate-800">ماندهٔ ترم</td>
           <td className={`px-1 py-0.5 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
