@@ -99,6 +99,26 @@ const CARDS: Card[] = [
   { kind: 'tuition-faculty-detail', cat: 'finance', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
   { kind: 'faculty-financial', cat: 'finance', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
   { kind: 'major-financial', cat: 'finance', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
+  // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
+  // دسته‌هایی که در سیستم قدیم بود و در آفاق نبود: فروش، سود و زیان، ترازنامه،
+  // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، دفتر روزنامه، کالا، هزینه، تخصیص، درآمد.
+  { kind: 'sales-report', cat: 'finance', icon: '🧾', title: 'فروش مالی (خدمات آموزشی)' },
+  { kind: 'income-statement', cat: 'finance', icon: '📈', title: 'صورت سود و زیان' },
+  { kind: 'costing-report', cat: 'finance', icon: '🧮', title: 'بهای تمام‌شده و حاشیه' },
+  { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه' },
+  { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)' },
+  { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)' },
+  { kind: 'contractor-report', cat: 'finance', icon: '🏗️', title: 'پیمانکاران و قراردادها' },
+  { kind: 'contractor-settlement', cat: 'finance', icon: '🧾', title: 'ماه‌حساب پیمانکاران' },
+  { kind: 'insurance-report', cat: 'finance', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس' },
+  { kind: 'legal-report', cat: 'finance', icon: '⚖️', title: 'پرونده‌های حقوقی' },
+  { kind: 'vat-report', cat: 'finance', icon: '🏷️', title: 'مالیات بر ارزش افزوده' },
+  { kind: 'general-ledger', cat: 'finance', icon: '📚', title: 'ریز دفتر کل' },
+  { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'دفتر روزنامه (روزانه)' },
+  { kind: 'inventory-report', cat: 'finance', icon: '📦', title: 'موجودی کالا' },
+  { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت' },
+  { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک' },
+  { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'دولت و درآمد (سلسله‌مراتبی)' },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
   { kind: 'pending-requests', cat: 'research', icon: '⏳', title: 'درخواست‌های درانتظار' },

@@ -20,6 +20,15 @@ const DOCKS: { href: string; icon: string; title: string; desc: string; tone: st
   { href: '/admin/finance/reports?kind=tuition-faculty-detail', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', desc: 'تجمیع دانشکده و مقطع', tone: 'from-sky-500/15 to-sky-50/60 border-sky-300 hover:border-sky-500' },
   { href: '/admin/finance/reports?kind=faculty-financial', icon: '🏢', title: 'مالی دانشکده‌ها', desc: 'دانشکده × ترم × ورودی + تعداد دانشجو', tone: 'from-violet-500/15 to-violet-50/60 border-violet-300 hover:border-violet-500' },
   { href: '/admin/finance/reports?kind=major-financial', icon: '📚', title: 'مالی مقطع × رشته', desc: 'تفکیک مقطع، دانشکده، رشته و ورودی', tone: 'from-amber-500/15 to-amber-50/60 border-amber-300 hover:border-amber-500' },
+  // ── گزارش‌های مالیِ کلان (صورت‌های حسابداری) ──
+  { href: '/admin/finance/reports?kind=income-statement', icon: '📈', title: 'صورت سود و زیان', desc: 'درآمد آموزشی منهای حق‌التدریس و هزینه‌ها', tone: 'from-emerald-500/15 to-emerald-50/60 border-emerald-300 hover:border-emerald-500' },
+  { href: '/admin/finance/reports?kind=balance-sheet', icon: '⚖️', title: 'صورت وضعیت مالی', desc: 'ترازنامه: دارایی، بدهی و حقوق', tone: 'from-sky-500/15 to-sky-50/60 border-sky-300 hover:border-sky-500' },
+  { href: '/admin/finance/reports?kind=cash-flow', icon: '💧', title: 'جریان نقدی', desc: 'دریافت و پرداخت ماهانه و ماندهٔ نقد', tone: 'from-teal-500/15 to-teal-50/60 border-teal-300 hover:border-teal-500' },
+  { href: '/admin/finance/reports?kind=contractor-report', icon: '🏗️', title: 'پیمانکاران و قراردادها', desc: 'قراردادها، مبالغ و ماندهٔ پیمانکاران', tone: 'from-violet-500/15 to-violet-50/60 border-violet-300 hover:border-violet-500' },
+  { href: '/admin/finance/reports?kind=general-ledger', icon: '📚', title: 'ریز دفتر کل', desc: 'دفتر دوطرفه به تفکیک نوع تراکنش', tone: 'from-amber-500/15 to-amber-50/60 border-amber-300 hover:border-amber-500' },
+  { href: '/admin/finance/reports?kind=revenue-hierarchy', icon: '🏛️', title: 'دولت و درآمد', desc: 'درآمد سلسله‌مراتبی دانشکده/رشته', tone: 'from-indigo-500/15 to-indigo-50/60 border-indigo-300 hover:border-indigo-500' },
+  // ── ورودِ دادهٔ پایه — بدون این، گزارش‌های بالا خالی می‌مانند ──
+  { href: '/admin/finance/base-data', icon: '🗂️', title: 'دادهٔ پایهٔ مالی', desc: 'بودجه، پیمانکار، هزینه، VAT، انبار و پروندهٔ حقوقی', tone: 'from-fuchsia-500/15 to-fuchsia-50/60 border-fuchsia-300 hover:border-fuchsia-500' },
   { href: '/admin/finance/reports/student-statement', icon: '📄', title: 'صورت‌حساب / کارنامهٔ مالی', desc: 'سند رسمی ترم‌به‌ترم + چاپ PDF', tone: 'from-rose-500/15 to-rose-50/60 border-rose-300 hover:border-rose-500' },
   { href: '/admin/finance', icon: '🗂️', title: 'کارتابل مالی', desc: 'ماندهٔ همهٔ دانشجویان + فیلتر', tone: 'from-indigo-500/15 to-indigo-50/60 border-indigo-300 hover:border-indigo-500' },
   { href: '/admin/tuition', icon: '🧮', title: 'موتور شهریه', desc: 'تعرفه، ضریب و محاسبهٔ شهریه', tone: 'from-slate-500/15 to-slate-50/60 border-slate-300 hover:border-slate-500' },

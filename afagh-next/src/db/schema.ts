@@ -1722,7 +1722,8 @@ export const student_ledger = pgTable('student_ledger', {
   index('idx_student_ledger_student').on(t.studentId),
   // ۱۵ نوع معتبر — همراستا با 0073_ledger_types (منبع حقیقت: ledger-balance.ts)
   // ۱۷ نوع معتبر — همراستا با 0075_tuition_adjust (منبع حقیقت: ledger-balance.ts)
-  check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN','TUITION_CHARGE','CHARGE','CREDIT','POS_REFUND','TUITION_BATES','TUITION_ADJUST_DEC','TUITION_ADJUST_INC')`),
+  // ۲۰ نوع معتبر — همراستا با 0137_ledger_bates_breakdown (منبع حقیقت: ledger-balance.ts)
+  check('ck_student_ledger_txn_type', sql`"transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','PAYMENT','POS_PAYMENT','DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_ADDITIVE','SUBJECT_DEDUCTIVE','SPONSORSHIP','LOAN','TUITION_CHARGE','CHARGE','CREDIT','POS_REFUND','TUITION_BATES','TUITION_ADJUST_DEC','TUITION_ADJUST_INC','TUITION_BATES_FIXED','TUITION_BATES_VARIABLE','TUITION_BATES_AMOUNT')`),
   // 🔒 شارژ شهریهٔ هر ترم یکتاست (بک‌استاپِ chargeTermTuition اتمیک): جزئی روی
   // TUITION_CHARGE تا برگشتی‌ها (همان transactionType با referenceId) نشکنند.
   uniqueIndex('uq_student_ledger_tuition_charge').on(t.studentId, t.termId, t.transactionType).where(sql`"transactionType" = 'TUITION_CHARGE'`),
@@ -4000,4 +4001,210 @@ export const comprehensive_exams = pgTable('comprehensive_exams', {
 }, (t) => [
   uniqueIndex('uq_comprehensive_exam_attempt').on(t.studentId, t.attemptNo),
   index('idx_comprehensive_exam_student').on(t.studentId),
+]);
+
+// ══════════════════════════════════════════════════════════════════════
+//  پایهٔ گزارش‌های مالیِ کلان (مهاجرت ۰۱۳۸)
+//
+//  تا پیش از این، بخشِ مالیِ آفاق فقط «امور مالیِ دانشجو» (شهریه، تخفیف،
+//  پرداخت، چک، وام) را پوشش می‌داد و گزارش‌های کلانِ حسابداری — بودجه،
+//  پیمانکاری، هزینه‌های شرکت، موجودی کالا، مالیات ارزش افزوده و پرونده‌های
+//  حقوقی — هیچ داده‌ای نداشتند.
+//
+//  این جدول‌ها «دادهٔ پایه»ٔ آن گزارش‌ها هستند. همهٔ آن‌ها دانشگاه‌محور
+//  (universityId) و در گزارش‌ها با اسکوپِ fail-closed خوانده می‌شوند.
+// ══════════════════════════════════════════════════════════════════════
+
+/** بودجهٔ مصوب — مبنای «انحراف بودجه» (بودجه درآمدی یا هزینه‌ای) */
+export const financial_budgets = pgTable('financial_budgets', {
+  id: serial('id').primaryKey(),
+  /** کد نیمسال؛ NULL = بودجهٔ سالانه/کل دوره */
+  termCode: varchar('termCode', { length: 10 }),
+  /** گروهِ بودجه (مثلاً «آموزشی»، «اداری»، «پشتیبانی») */
+  category: varchar('category', { length: 80 }).notNull(),
+  /** عنوان قلم بودجه */
+  lineItem: varchar('lineItem', { length: 160 }).notNull(),
+  /** جهت: REVENUE (درآمد) یا EXPENSE (هزینه) */
+  direction: varchar('direction', { length: 12 }).notNull().default('EXPENSE'),
+  /** مبلغِ مصوب (ریال) */
+  amount: numeric('amount', { precision: 14, scale: 0 }).notNull().default('0'),
+  description: text('description'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+}, (t) => [
+  check('ck_fin_budgets_direction', sql`"direction" IN ('REVENUE','EXPENSE')`),
+  index('idx_fin_budgets_uni').on(t.universityId),
+  index('idx_fin_budgets_term').on(t.universityId, t.termCode),
+]);
+
+/** پیمانکار / تأمین‌کننده — طرفِ قراردادهای بیرونی دانشگاه */
+export const financial_contractors = pgTable('financial_contractors', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 160 }).notNull(),
+  /** شناسهٔ ملی/ economic — یکتا در سطح دانشگاه */
+  identifier: varchar('identifier', { length: 40 }),
+  /** نوع (پیمانکار، مشاور، تأمین‌کننده، …) */
+  category: varchar('category', { length: 60 }),
+  phone: varchar('phone', { length: 40 }),
+  address: text('address'),
+  email: varchar('email', { length: 120 }),
+  notes: text('notes'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  index('idx_fin_contractors_uni').on(t.universityId),
+]);
+
+/** قرارداد با پیمانکار */
+export const financial_contracts = pgTable('financial_contracts', {
+  id: serial('id').primaryKey(),
+  contractorId: integer('contractorId').notNull().references(() => financial_contractors.id),
+  contractNo: varchar('contractNo', { length: 60 }),
+  /** موضوع قرارداد */
+  subject: varchar('subject', { length: 240 }),
+  /** نیمسالِ مرتبط (NULL = قراردادِ سالانه) */
+  termId: integer('termId').references(() => academic_terms.id),
+  signedAt: date('signedAt'),
+  /** مبلغ قرارداد (ریال) */
+  amount: numeric('amount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** مجموعِ پرداخت‌شده (ریال) */
+  paidAmount: numeric('paidAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** DRAFT | ACTIVE | SETTLED | TERMINATED */
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
+  notes: text('notes'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+}, (t) => [
+  check('ck_fin_contracts_status', sql`"status" IN ('DRAFT','ACTIVE','SETTLED','TERMINATED')`),
+  index('idx_fin_contracts_uni').on(t.universityId),
+  index('idx_fin_contracts_contractor').on(t.contractorId),
+]);
+
+/** صورتحسابِ پیمانکار (مبنای «ماه‌حساب پیمانکاران») */
+export const financial_contract_invoices = pgTable('financial_contract_invoices', {
+  id: serial('id').primaryKey(),
+  contractId: integer('contractId').notNull().references(() => financial_contracts.id),
+  invoiceNo: varchar('invoiceNo', { length: 60 }),
+  invoiceDate: date('invoiceDate'),
+  description: text('description'),
+  /** مبلغ بدون مالیات ارزش افزوده (ریال) */
+  grossAmount: numeric('grossAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** مالیات بر ارزش افزوده (ریال) */
+  vatAmount: numeric('vatAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** پرداخت‌شده (ریال) */
+  paidAmount: numeric('paidAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  index('idx_fin_contract_inv_uni').on(t.universityId),
+  index('idx_fin_contract_inv_contract').on(t.contractId),
+]);
+
+/** هزینه‌های شرکت/عمومی — مبنای هزینهٔ سود و زیان و استخرِ تخصیص */
+export const financial_expenses = pgTable('financial_expenses', {
+  id: serial('id').primaryKey(),
+  /** گروه هزینه (اداری، تأسیسات، فناوری، پشتیبانی، …) */
+  category: varchar('category', { length: 80 }).notNull(),
+  /** شرح هزینه */
+  title: varchar('title', { length: 240 }).notNull(),
+  /** نیمسالِ مرتبط (NULL = سالانه) */
+  termId: integer('termId').references(() => academic_terms.id),
+  expenseDate: date('expenseDate'),
+  /** شمارهٔ سند/فاکتور */
+  documentNo: varchar('documentNo', { length: 60 }),
+  /** مبلغ بدون مالیات (ریال) */
+  netAmount: numeric('netAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** مالیات بر ارزش افزوده (ریال) */
+  vatAmount: numeric('vatAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** پرداخت‌شده (ریال) */
+  paidAmount: numeric('paidAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  description: text('description'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  index('idx_fin_expenses_uni').on(t.universityId),
+  index('idx_fin_expenses_term').on(t.universityId, t.termId),
+]);
+
+/** ردیف‌های مالیات بر ارزش افزوده (خروجیِ یکپارچهٔ فاکتورها و صورتحساب‌ها) */
+export const financial_vat_entries = pgTable('financial_vat_entries', {
+  id: serial('id').primaryKey(),
+  /** منبع سند: INVOICE (فاکتور فروش) | CONTRACT (صورتحساب پیمانکار) | EXPENSE */
+  source: varchar('source', { length: 30 }).notNull().default('INVOICE'),
+  documentNo: varchar('documentNo', { length: 60 }),
+  entryDate: date('entryDate'),
+  termId: integer('termId').references(() => academic_terms.id),
+  /** مبلغ مشمول (ریال) */
+  netAmount: numeric('netAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  /** نرخ مالیات (درصد) */
+  rate: numeric('rate', { precision: 5, scale: 2 }).notNull().default('0'),
+  /** مبلغ مالیات (ریال) */
+  vatAmount: numeric('vatAmount', { precision: 14, scale: 0 }).notNull().default('0'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  check('ck_fin_vat_source', sql`"source" IN ('INVOICE','CONTRACT','EXPENSE')`),
+  index('idx_fin_vat_uni').on(t.universityId),
+]);
+
+/** کالا/ملزومات — پایهٔ «موجودی کالا» */
+export const inventory_items = pgTable('inventory_items', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 40 }),
+  name: varchar('name', { length: 160 }).notNull(),
+  category: varchar('category', { length: 80 }),
+  /** واحد شمارش (عدد، کیلوگرم، بسته، …) */
+  unitName: varchar('unitName', { length: 30 }).default('عدد'),
+  /** بهای واحد (ریال) */
+  unitPrice: numeric('unitPrice', { precision: 14, scale: 0 }).notNull().default('0'),
+  notes: text('notes'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  index('idx_inventory_items_uni').on(t.universityId),
+]);
+
+/** گردشِ کالا (ورود/خروج) — موجودی از جمعِ همین جدول می‌آید */
+export const inventory_movements = pgTable('inventory_movements', {
+  id: serial('id').primaryKey(),
+  itemId: integer('itemId').notNull().references(() => inventory_items.id),
+  /** IN (ورود) | OUT (خروج) */
+  direction: varchar('direction', { length: 8 }).notNull().default('IN'),
+  quantity: numeric('quantity', { precision: 14, scale: 2 }).notNull().default('0'),
+  unitPrice: numeric('unitPrice', { precision: 14, scale: 0 }).notNull().default('0'),
+  movementDate: date('movementDate'),
+  description: text('description'),
+  /** مرجع سند (شمارهٔ فاکتور/سند) */
+  documentNo: varchar('documentNo', { length: 60 }),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  check('ck_inventory_moves_direction', sql`"direction" IN ('IN','OUT')`),
+  index('idx_inventory_moves_item').on(t.itemId),
+  index('idx_inventory_moves_uni').on(t.universityId),
+]);
+
+/** پرونده‌های حقوقی — مبنای «گزارش حقوقی» */
+export const legal_cases = pgTable('legal_cases', {
+  id: serial('id').primaryKey(),
+  caseNo: varchar('caseNo', { length: 60 }),
+  subject: varchar('subject', { length: 240 }).notNull(),
+  /** نوع پرونده (حقوقی، انضباطی، شکایت دانشجو، …) */
+  caseType: varchar('caseType', { length: 60 }),
+  /** طرف پرونده */
+  partyName: varchar('partyName', { length: 160 }),
+  /** OPEN | IN_PROGRESS | CLOSED | SUSPENDED */
+  status: varchar('status', { length: 20 }).notNull().default('OPEN'),
+  /** مبلغِ مورد دعوا (ریال) */
+  amount: numeric('amount', { precision: 14, scale: 0 }).notNull().default('0'),
+  openedAt: date('openedAt'),
+  closedAt: date('closedAt'),
+  description: text('description'),
+  universityId: integer('universityId').references((): AnyPgColumn => universities.id),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+}, (t) => [
+  check('ck_legal_cases_status', sql`"status" IN ('OPEN','IN_PROGRESS','CLOSED','SUSPENDED')`),
+  index('idx_legal_cases_uni').on(t.universityId),
 ]);
