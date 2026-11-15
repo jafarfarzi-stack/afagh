@@ -103,6 +103,24 @@ for (const t of batesTypes) {
 }
 ok('TUITION_BATES در CHECK باقی مانده (سازگاری با دادهٔ قدیم)', checkSql.includes(`'TUITION_BATES'`));
 
+// ── طولِ ستون در برابر بلندترین نامِ مجاز ──
+// این دقیقاً خطایی بود که در پروداکشن رخ داد: ستون varchar(20) بود اما
+// «TUITION_BATES_VARIABLE» ۲۲ کاراکتر است ⇒ درج با «value too long» شکست.
+console.log('\n۶-۲) طولِ ستون transactionType ≥ بلندترین نوعِ مجاز');
+const lenMatch = schema.match(/transactionType:\s*varchar\('transactionType',\s*\{\s*length:\s*(\d+)/);
+ok('طولِ ستون در schema.ts خوانده شد', !!lenMatch);
+const colLen = Number(lenMatch?.[1] ?? 0);
+const allowedTypes = [...checkSql.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+ok('فهرستِ نوع‌ها از CHECK خوانده شد', allowedTypes.length >= 20, `count=${allowedTypes.length}`);
+const longest = allowedTypes.reduce((a, b) => (b.length > a.length ? b : a), '');
+ok(
+  `بلندترین نوع («${longest}» = ${longest.length}) در ${colLen} جا می‌شود`,
+  longest.length <= colLen,
+  `ستون varchar(${colLen}) اما «${longest}» ${longest.length} کاراکتر است`,
+);
+// و هیچ نوعی از این فهرست نباید در schema.ts جا افتاده باشد
+for (const t of batesTypes) ok(`«${t}» در CHECK موجود است`, allowedTypes.includes(t));
+
 console.log('\n۷) RLS جداولِ جدید');
 const rls = read('src/db/pg-hardening.sql');
 for (const t of TABLES) {

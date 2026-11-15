@@ -1683,7 +1683,7 @@ export const student_ledger = pgTable('student_ledger', {
   studentId: integer('studentId').notNull().references(() => students.id),
   termId: integer('termId').references(() => academic_terms.id),
   financialTermId: integer('financialTermId').references(() => financial_terms.id),
-  transactionType: varchar('transactionType', { length: 25 }).notNull(),
+  transactionType: varchar('transactionType', { length: 32 }).notNull(),
   amount: numeric('amount', { precision: 12, scale: 0 }).notNull(),
   description: text('description'),
   referenceId: integer('referenceId'),
