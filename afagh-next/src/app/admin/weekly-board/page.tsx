@@ -828,7 +828,14 @@ export default async function WeeklyBoardPage({ searchParams }: {
         />
       ) : term && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
-          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } @page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
+          {/* ⚠ `@page` بی نام اینجا نباید بیاید: این بلاک بعد از <style> پوسترِ
+              سردر کلاسی (خطوط بالاتر) در DOM قرار میگیرد و در CSS آخرین قانون
+              `@page` برنده است. نتیجه حاشیهٔ ۸×۷mm روی برگ ۲۹۷mm پوستر میشد،
+              پوستر در ۲۸۳mm جا نمیگرفت و پانویس/برند به صفحهٔ دوم میرفت.
+              فقط برگِ نامدار `wb-a4` (مخصوص جدول هفتگی اساتید) تعریف میشود؛
+              `@page` در سطح بالا نوشته شد چون کروم گاهی `@page` داخل
+              `@media print` را نادیده میگیرد. */}
+          <style>{'@page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } @media print { .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
           <BoardHeader
             logoUrl={logoUrl}
             title={`برنامهٔ هفتگی کلاس‌ها — ${term.title}`}
@@ -871,7 +878,14 @@ export default async function WeeklyBoardPage({ searchParams }: {
 
       {term && personSearched && personInfo && (
         <div className="print-area prof-week-print rounded-2xl border border-slate-300 bg-white p-4 space-y-3" dir="rtl">
-          <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } @page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
+          {/* ⚠ `@page` بی نام اینجا نباید بیاید: این بلاک بعد از <style> پوسترِ
+              سردر کلاسی (خطوط بالاتر) در DOM قرار میگیرد و در CSS آخرین قانون
+              `@page` برنده است. نتیجه حاشیهٔ ۸×۷mm روی برگ ۲۹۷mm پوستر میشد،
+              پوستر در ۲۸۳mm جا نمیگرفت و پانویس/برند به صفحهٔ دوم میرفت.
+              فقط برگِ نامدار `wb-a4` (مخصوص جدول هفتگی اساتید) تعریف میشود؛
+              `@page` در سطح بالا نوشته شد چون کروم گاهی `@page` داخل
+              `@media print` را نادیده میگیرد. */}
+          <style>{'@page wb-a4 { size: A4 landscape; margin: 8mm 7mm; } @media print { .prof-week-print { page: wb-a4; position: static !important; } }'}</style>
           <BoardHeader
             logoUrl={logoUrl}
             title={`${personInfo.kind === 'prof' ? '👨‍🏫 برنامهٔ هفتگی استاد' : '🎓 برنامهٔ هفتگی دانشجو'} — ${personInfo.name}`}

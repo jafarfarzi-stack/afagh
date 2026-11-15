@@ -482,10 +482,18 @@ export default async function DoorSignPrint({
      برنده می‌شد و خروجی عمودی می‌ماند. با page: ds-a4 به‌همراه @page ds-a4
      انتخابِ کاغذ قطعی است و دیگر به ترتیب وابسته نیست.
      ارتفاع ۲۰۹mm (نه ۲۱۰) تا خطای گِردکردنِ زیرپیکسلی برگِ دوم نسازد. */
+  /* برگِ نامدار در سطح بالا (بیرون @media print) — کروم در بعضی نسخهها
+     قاعدهٔ @page داخل @media print را نادیده میگیرد. فقط خود پوستر از آن
+     استفاده میکند (page: ds-a4)، پس جدول هفتگی اساتید (page: wb-a4)
+     دستنخورده میماند. */
+  @page ds-a4 { size: 297mm 210mm; margin: 0; }
   @media print {
     @page { size: 297mm 210mm; margin: 0; }
-    @page ds-a4 { size: 297mm 210mm; margin: 0; }
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; height:auto !important; }
+    /* جهتِ ساختاری پوستر در چاپ قفل میشود. کارتها با right فیزیکی جایگذاری
+       شدهاند، ولی سرستونها/ستونها همچنان به RTL وابستهاند؛ اگر جهت در چاپ
+       عوض شود ترتیب روزها بههم میریزد. */
+    .ds-sheet, .ds-grid, .ds-grid-b, .ds-day, .ds-day-b { direction: rtl !important; }
     body:has(.ds-sheet) .wb-chrome { display:none !important; }
     body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
     body:has(.ds-sheet) .print-area { display:none !important; }
@@ -700,7 +708,10 @@ export default async function DoorSignPrint({
                         height: `${p.widthPercent}%`,
                         // محور زمان افقی با بافر: چپ‌بندی و عرض را از اسپنِ ۷–۲۰
                         // به اسپنِ بافر‌دار (۶:۳۰→۲۰:۳۰) بازنگاشت می‌کنیم
-                        insetInlineStart: `${remapX(p.topPercent)}%`,
+                        // ⚠ `right` فیزیکی، نه `inset-inline-start` منطقی: مبدأ
+                        // محور زمان لبهٔ راست است و خاصیت منطقی در چاپ (با تغییر
+                        // جهت/zoom) کارت را به ستون دیگری میفرستاد.
+                        right: `${remapX(p.topPercent)}%`,
                         width: `${p.heightPercent * (AXIS / TOTAL_FR)}%`,
                       }}
                     >
@@ -774,9 +785,10 @@ export default async function DoorSignPrint({
                     style={{
                       top: `${p.topPercent}%`,
                       height: `${p.heightPercent}%`,
-                      // در RTL، inline-start همان لبهٔ راست است؛ سانسِ زودتر
-                      // (col 0) سمت راست می‌نشیند که ترتیبِ خواندنِ فارسی است.
-                      insetInlineStart: `${p.leftPercent}%`,
+                      // `right` فیزیکی (نه inset-inline-start) تا جایگذاریِ
+                      // ستونهای همپوشان در چاپ هم دقیقاً مثل نمایشگر بماند؛
+                      // سانسِ زودتر (col 0) سمت راست مینشیند.
+                      right: `${p.leftPercent}%`,
                       width: `${p.widthPercent}%`,
                     }}
                   >
