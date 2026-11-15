@@ -65,13 +65,21 @@ const TABLES: Record<
 /** فقط ADMIN می‌تواند حذف کند (هم‌راستا با الگوی welfare) */
 const DELETE_ROLES = ['ADMIN'] as const;
 
+/** خطای کنترل‌جریانِ Next (redirect) — خطای واقعی نیست، نباید لاگ شود */
+function isNextRedirect(e: unknown): boolean {
+  const d = (e as { digest?: unknown } | null)?.digest;
+  return typeof d === 'string' && d.startsWith('NEXT_REDIRECT');
+}
+
 async function guard() {
   try {
     const role = await requireRole([...ALLOWED]);
     if (role instanceof NextResponse) return role;
     return null;
   } catch (e) {
-    log.warn('base-data auth error', { err: e });
+    // requireRole برای کاربرِ بی‌نشست redirect پرتاب می‌کند؛ در مسیرِ API
+    // همان ۴۰۱ JSON درست است، اما لاگ‌کردنِ stack آن فقط نویز تولید می‌کند.
+    if (!isNextRedirect(e)) log.warn('base-data auth error', { err: e });
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 }

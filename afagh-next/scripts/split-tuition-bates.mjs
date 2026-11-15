@@ -124,9 +124,19 @@ const SUBTYPES = [
     ).map((x) => Number(x.referenceId)),
   );
 
-  const stat = { candidates: 0, planned: 0, skipAlready: 0, skipNoSource: 0, skipNoRef: 0, deleted: 0, inserted: 0 };
+  const stat = {
+    candidates: 0,
+    planned: 0,
+    skipAlready: 0,
+    skipNoSource: 0,
+    skipNoRef: 0,
+    skipMismatch: 0,
+    deleted: 0,
+    inserted: 0,
+  };
   const plan = [];
   const unmatched = [];
+  const mismatched = [];
 
   for (const row of merged) {
     stat.candidates++;
@@ -140,7 +150,18 @@ const SUBTYPES = [
       unmatched.push({ id: row.id, ref, amount: row.amount });
       continue;
     }
-    plan.push({ id: row.id, ref, parts: parts.filter((p) => p.amount > 0) });
+    const usable = parts.filter((p) => p.amount > 0);
+    // 🔒 گاردِ مانده: اگر جمعِ اجزا با مبلغ ردیفِ ادغام‌شده برابر نباشد،
+    //    شکستنِ ردیف **ماندهٔ دانشجو را جابه‌جا می‌کند** ⇒ دست نمی‌زنیم.
+    //    (منبعِ اختلاف: تغییرِ بعدیِ TermAms یا اصلاحِ دستیِ دفتر)
+    const partsSum = usable.reduce((a, p) => a + p.amount, 0);
+    const mergedAmount = Number(row.amount ?? 0);
+    if (Math.abs(partsSum - mergedAmount) > 0.5) {
+      stat.skipMismatch++;
+      mismatched.push({ id: row.id, ref, merged: mergedAmount, partsSum, diff: partsSum - mergedAmount });
+      continue;
+    }
+    plan.push({ id: row.id, ref, parts: usable });
   }
 
   console.log(`== SPLIT TUITION_BATES (uni ${UNI}) ${APPLY ? '[APPLY]' : '[DRY]'} ==`);
@@ -148,6 +169,13 @@ const SUBTYPES = [
   console.log(`planned splits    : ${plan.length}`);
   console.log(`skip (already)    : ${stat.skipAlready}`);
   console.log(`skip (no source)  : ${stat.skipNoSource}`);
+  console.log(`skip (mismatch)   : ${stat.skipMismatch}`);
+  if (mismatched.length) {
+    console.log(`⚠ ردیف‌هایی که جمعِ اجزا با مبلغِ دفتر نمی‌خواند (دست‌نخورده می‌مانند): ${mismatched.length}`);
+    for (const x of mismatched.slice(0, 10)) {
+      console.log(`   id=${x.id} ref=${x.ref} merged=${x.merged} parts=${x.partsSum} diff=${x.diff}`);
+    }
+  }
   if (unmatched.length) {
     console.log(`⚠ ردیف‌های بدون معادل سما (دست‌نخورده می‌مانند): ${unmatched.length}`);
     for (const u of unmatched.slice(0, 10)) console.log(`   id=${u.id} ref=${u.ref} amount=${u.amount}`);
