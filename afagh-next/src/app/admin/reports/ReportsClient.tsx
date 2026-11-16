@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
+import { exportReport, fetchReportForPrint, runReport, type FilterOptions, type ReportResult } from './actions';
 import { LINK_CARDS } from './report-links';
 import { faIncludes } from '@/lib/persian-search';
 import { MAX_TERM_CODES, parseTermSelection } from '@/lib/term-selection';
@@ -190,6 +190,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [err, setErr] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
   const [showLinks, setShowLinks] = useState(false);
 
   // ── محدودسازی بر اساس مرکز (scope) + مجوزها ──
@@ -310,7 +311,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     setExporting(true);
     setErr('');
     try {
-      const { header, lines } = await exportReport(kind, { ...filters, page: 1 });
+      const { header, lines, total, truncated } = await exportReport(kind, { ...filters, page: 1 });
       // گارد تزریق فرمول CSV: مقادیر شروع‌شونده با = + - @ | تب/CR با ' خنثی می‌شوند
       const esc = (v: string) => {
         const s = /^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v;
@@ -324,6 +325,12 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       a.download = `report-${kind}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
+      setInfoMsg(
+        truncated
+          ? `فایل CSV ساخته شد: ${faNum(lines.length)} ردیف از ${faNum(total)} ردیف (سقف خروجی). برای دریافت کامل، بازه/فیلتر را محدود کنید.`
+          : `فایل CSV ساخته شد: ${faNum(lines.length)} ردیف.`,
+      );
+      setTimeout(() => setInfoMsg(''), 9000);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'خطای نامشخص در خروجی');
     } finally {
@@ -400,6 +407,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 universityTitle={opts.universityTitle}
                 universityLogoUrl={opts.universityLogoUrl}
                 signers={opts.signers}
+                fetchAll={() => fetchReportForPrint(kind, { ...filters })}
               />
             </>
           )}
@@ -807,6 +815,13 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
             />
           </div>
         </div>
+      )}
+
+      {/* پیام موفقیت خروجی/چاپ */}
+      {infoMsg && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 print:hidden">
+          {infoMsg}
+        </p>
       )}
 
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}

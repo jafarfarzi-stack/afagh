@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 import { faDigits, toJalali } from '@/lib/calendar';
 import {
@@ -83,6 +83,7 @@ export default function ReportPrint({
   universityLogoUrl,
   signers,
   reportDate,
+  fetchAll,
 }: {
   /** عنوان گزارش */
   title: string;
@@ -102,11 +103,51 @@ export default function ReportPrint({
   signers?: string[];
   /** تاریخ گزارش */
   reportDate?: string;
+  /**
+   * دریافت همهٔ ردیف‌های گزارش برای چاپ (نه فقط صفحهٔ جاری).
+   * اگر داده شود، هنگام کلیک «چاپ» اول داده کامل می‌آید و بعد سند چاپ
+   * می‌شود؛ در غیر این صورت همان `rows` (صفحهٔ جاری) چاپ می‌شود.
+   */
+  fetchAll?: () => Promise<{ rows: Record<string, unknown>[]; total: number; truncated: boolean }>;
 }) {
   const faDate = reportDate || todayJalaliTehran();
   const orientation: ReportPrintOrientation = columns.length >= 7 ? 'landscape' : 'portrait';
   const widths = useMemo(() => columnWeights(columns), [columns]);
   const signLabels = signers && signers.length ? signers : DEFAULT_SIGNERS;
+
+  /** ردیف‌های کاملِ چاپ (اگر با fetchAll آمده باشند) + وضعیت آماده‌سازی */
+  const [printRows, setPrintRows] = useState<Record<string, unknown>[] | null>(null);
+  const [printTotal, setPrintTotal] = useState<number | null>(null);
+  const [printTruncated, setPrintTruncated] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const displayRows = printRows ?? rows;
+
+  /**
+   * چاپ: اگر `fetchAll` هست، اول همهٔ ردیف‌ها را می‌گیریم و بعد سند را
+   * می‌سازیم. React پس از setState دوباره رندر می‌کند؛ دو frame صبر می‌کنیم
+   * تا الگوی چاپی با ردیف‌های تازه در DOM بنشیند.
+   */
+  const handlePrint = async () => {
+    if (!fetchAll || fetching) {
+      await printReportDocument(orientation);
+      return;
+    }
+    setFetching(true);
+    try {
+      const data = await fetchAll();
+      setPrintRows(data.rows);
+      setPrintTotal(data.total);
+      setPrintTruncated(data.truncated);
+      setFetching(false);
+      await new Promise<void>(r => requestAnimationFrame(() => r()));
+      await new Promise<void>(r => requestAnimationFrame(() => r()));
+      await printReportDocument(orientation);
+    } catch {
+      setFetching(false);
+      // حتی اگر واکشی کامل نشد، همان صفحهٔ جاری چاپ شود (بهتر از هیچ)
+      await printReportDocument(orientation);
+    }
+  };
 
   // مسیر پشتیبان: Ctrl+P / چاپ از منوی مرورگر هم همان سند ایزوله را بگیرد
   useEffect(() => {
@@ -125,11 +166,12 @@ export default function ReportPrint({
     <>
       <button
         type="button"
-        onClick={() => printReportDocument(orientation)}
+        onClick={handlePrint}
+        disabled={fetching}
         title="چاپ / ذخیرهٔ PDF — فقط سند گزارش، بدون منو و سربرگ مرورگر"
-        className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded print:hidden"
+        className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded print:hidden disabled:opacity-60"
       >
-        🖨️ چاپ گزارش
+        {fetching ? '⏳ آماده‌سازی همهٔ ردیف‌ها…' : '🖨️ چاپ گزارش'}
       </button>
 
       {/* الگوی چاپی: روی صفحه پنهان است؛ هنگام چاپ کلون شده به ریشهٔ body میرود.
@@ -155,7 +197,7 @@ export default function ReportPrint({
             {/* در RTL، نخستین فرزند سمت راست قرار میگیرد؛ پس ترتیب عمداً
                 «تعداد ردیفها» ← «تاریخ» است تا تاریخ در سمت چپ بیاید. */}
             <div className="rp-meta">
-              <span>تعداد ردیفها: {faNum(rows.length)}</span>
+              <span>تعداد ردیفها: {faNum(displayRows.length)}{printTruncated ? ` از ${faNum(printTotal ?? displayRows.length)} (سقف چاپ)` : ''}</span>
               {/* suppressHydrationWarning: تاریخِ «امروز» در سرور و کلاینت در
                   نیمهشب (به وقت تهران) میتواند یکی تیک بخورد؛ ناهماهنگیِ آبِ
                   کاری نباید هشدار React تولید کند. */}
@@ -175,7 +217,7 @@ export default function ReportPrint({
               </tr>
             </thead>
             <tbody data-rp-tbody>
-              {rows.map((row, i) => (
+              {displayRows.map((row, i) => (
                 <tr key={i}>
                   {columns.map(c => {
                     const formatted = fmtCell(row[c.key], c.format);

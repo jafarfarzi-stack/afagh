@@ -51,6 +51,8 @@ export type ReportFilters = {
   nationalCode?: string;
   miss?: string;
   page?: number;
+  /** اندازهٔ صفحه برای مسیر چاپ/خروجی — پیش‌فرض ۵۰ (فقط برای کاهش رفت‌وبرگشت) */
+  pageSize?: number;
   universityId?: number;
   /** فیلترهای سفارشی ماژول‌ها (مثل gradeStatus/samaCode/onlyStale) */
   [key: string]: string | number | boolean | undefined;
@@ -113,8 +115,7 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.facultyId) c.push(sql`m."facultyId" = ${f.facultyId}`);
   if (f.departmentId) c.push(sql`m."departmentId" = ${f.departmentId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
-  if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
-  /* ── لیستِ کدهای دانشجویی (چسباندن از Excel) ──
+  if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);  /* ── لیستِ کدهای دانشجویی (چسباندن از Excel) ──
      فقط دانشجویانِ همان فهرست. اگر متن داده شده ولی هیچ کد معتبری ندارد،
      `1=0` می‌گذاریم تا فیلترِ خراب به «همهٔ دانشجویان» تبدیل نشود. */
   if (typeof f.studentCodes === 'string' && f.studentCodes.trim()) {
@@ -185,6 +186,9 @@ export async function paged(
   having?: ReturnType<typeof sql>,
 ): Promise<ReportResult> {
   const page = Math.max(1, f.page || 1);
+  // اندازهٔ صفحه: پیش‌فرض PER؛ مسیر چاپ/CSV با pageSize بزرگ‌تر (تا ۱۰۰۰)
+  // تعداد رفت‌وبرگشت‌ها را کم می‌کند. رفتار صفحهٔ عادی دست‌نخورده می‌ماند.
+  const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
   const where = joinAnd(whereConds);
   const grp = groupBy ? sql`GROUP BY ${groupBy}` : sql``;
   const hav = having ? sql`HAVING ${having}` : sql``;
@@ -192,12 +196,12 @@ export async function paged(
     sql`SELECT COUNT(*)::int AS n FROM (SELECT 1 ${baseFrom} ${where} ${grp} ${hav}) t`,
   );
   const total = Number(cnt.rows[0]?.n ?? 0);
-  const totalPages = Math.max(1, Math.ceil(total / PER));
+  const totalPages = Math.max(1, Math.ceil(total / per));
   const safe = Math.min(page, totalPages);
   const data = await db.execute<Record<string, unknown>>(
-    sql`SELECT ${selectCols} ${baseFrom} ${where} ${grp} ${hav} ${orderBy} LIMIT ${PER} OFFSET ${(safe - 1) * PER}`,
+    sql`SELECT ${selectCols} ${baseFrom} ${where} ${grp} ${hav} ${orderBy} LIMIT ${per} OFFSET ${(safe - 1) * per}`,
   );
-  return { columns, rows: data.rows, total, page: safe, per: PER, totalPages };
+  return { columns, rows: data.rows, total, page: safe, per, totalPages };
 }
 
 export const STU_FROM = sql`FROM students s JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId" LEFT JOIN faculties fc ON fc.id = m."facultyId"`;

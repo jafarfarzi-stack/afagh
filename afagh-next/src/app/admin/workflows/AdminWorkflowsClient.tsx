@@ -33,6 +33,9 @@ interface ProcessItem {
   steps: ProcessStepDef[];
 }
 
+/** پیش‌نویسِ فرآیند در حالت ویرایش/ساخت — id تا پیش از ذخیره وجود ندارد */
+type ProcessDraft = Omit<ProcessItem, 'id'> & { id?: number };
+
 interface RequestInboxItem {
   id: number;
   trackingCode: string;
@@ -231,6 +234,129 @@ export default function AdminWorkflowsClient({
   };
 
   const selectedProcess = processesList.find(p => p.id === selectedProcessId) || processesList[0];
+
+  // ── طراح فرآیند: حالت مشاهده / ویرایش / ساخت فرآیند جدید ──
+  const [draft, setDraft] = useState<ProcessDraft | null>(null);
+  const [designerSaving, setDesignerSaving] = useState(false);
+
+  const blankStep = (order: number): ProcessStepDef => ({
+    stepOrder: order,
+    title: '',
+    stepType: 'USER',
+    roleCode: 'EDU_EXPERT',
+    slaHours: 48,
+    timeoutAction: 'ESCALATE',
+    timeoutEscalateToRole: 'VICE_CHANCELLOR',
+  });
+
+  const startCreate = () => {
+    setDraft({
+      code: '', title: '', category: 'آموزشی', description: '', feeAmount: 0,
+      formSchema: [], steps: [blankStep(1)],
+    });
+    setFeedbackMsg(null);
+  };
+
+  const startEdit = (p: ProcessItem) => {
+    setDraft(JSON.parse(JSON.stringify(p)) as ProcessDraft);
+    setFeedbackMsg(null);
+  };
+
+  const patchDraft = (patch: Partial<ProcessDraft>) =>
+    setDraft(d => (d ? { ...d, ...patch } : d));
+
+  const patchStep = (i: number, patch: Partial<ProcessStepDef>) =>
+    setDraft(d => (d ? { ...d, steps: d.steps.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) } : d));
+
+  const addStep = () =>
+    setDraft(d => (d ? { ...d, steps: [...d.steps, blankStep(d.steps.length + 1)] } : d));
+
+  const removeStep = (i: number) =>
+    setDraft(d => (d
+      ? { ...d, steps: d.steps.filter((_, idx) => idx !== i).map((s, idx) => ({ ...s, stepOrder: idx + 1 })) }
+      : d));
+
+  const moveStep = (i: number, dir: -1 | 1) =>
+    setDraft(d => {
+      if (!d) return d;
+      const j = i + dir;
+      if (j < 0 || j >= d.steps.length) return d;
+      const steps = [...d.steps];
+      [steps[i], steps[j]] = [steps[j], steps[i]];
+      return { ...d, steps: steps.map((s, idx) => ({ ...s, stepOrder: idx + 1 })) };
+    });
+
+  const addField = () =>
+    setDraft(d => (d
+      ? { ...d, formSchema: [...(d.formSchema || []), { key: `field${(d.formSchema?.length || 0) + 1}`, label: '', type: 'text', required: false }] }
+      : d));
+
+  const patchField = (i: number, patch: Record<string, unknown>) =>
+    setDraft(d => (d
+      ? { ...d, formSchema: (d.formSchema || []).map((f, idx) => (idx === i ? { ...f, ...patch } : f)) }
+      : d));
+
+  const removeField = (i: number) =>
+    setDraft(d => (d ? { ...d, formSchema: (d.formSchema || []).filter((_, idx) => idx !== i) } : d));
+
+  /** ذخیرهٔ فرآیند (جدید یا ویرایش) — دکمهٔ واقعی که قبلاً در UI نبود */
+  const saveDraft = async () => {
+    if (!draft) return;
+    const errors: string[] = [];
+    if (!draft.title.trim()) errors.push('عنوان فرآیند الزامی است.');
+    if (!draft.code.trim()) errors.push('کد یکتای فرآیند الزامی است.');
+    if (!draft.steps.length) errors.push('حداقل یک گام برای فرآیند لازم است.');
+    draft.steps.forEach((s, i) => {
+      if (!s.title.trim()) errors.push(`عنوان گام ${i + 1} خالی است.`);
+      if (!(Number(s.slaHours) > 0)) errors.push(`مهلت گام ${i + 1} باید بیشتر از صفر باشد.`);
+    });
+    if (errors.length) {
+      setFeedbackMsg({ text: errors.join(' '), type: 'error' });
+      return;
+    }
+
+    setDesignerSaving(true);
+    const steps = draft.steps.map((s, i) => ({ ...s, stepOrder: i + 1, slaHours: Number(s.slaHours) || 48 }));
+    const res = await adminSaveProcessDefinitionAction({
+      id: draft.id,
+      code: draft.code.trim(),
+      title: draft.title.trim(),
+      category: draft.category || 'عمومی',
+      description: draft.description || '',
+      feeAmount: Number(draft.feeAmount) || 0,
+      formSchema: draft.formSchema || [],
+      steps,
+    });
+    setDesignerSaving(false);
+
+    if (!res.ok) {
+      setFeedbackMsg({ text: res.error || 'ذخیرهٔ فرآیند انجام نشد.', type: 'error' });
+      return;
+    }
+
+    const savedId = res.processId ?? draft.id ?? 0;
+    const saved: ProcessItem = {
+      id: savedId,
+      code: draft.code.trim(),
+      title: draft.title.trim(),
+      category: draft.category || 'عمومی',
+      description: draft.description || '',
+      feeAmount: Number(draft.feeAmount) || 0,
+      formSchema: draft.formSchema || [],
+      steps,
+    };
+    setProcessesList(prev => {
+      const idx = prev.findIndex(p => p.id === savedId);
+      if (idx < 0) return [...prev, saved];
+      const copy = [...prev];
+      copy[idx] = saved;
+      return copy;
+    });
+    if (savedId) setSelectedProcessId(savedId);
+    setDraft(null);
+    setFeedbackMsg({ text: 'فرآیند و گام‌های آن با موفقیت ذخیره شد.', type: 'success' });
+    setTimeout(() => setFeedbackMsg(null), 5000);
+  };
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -522,7 +648,16 @@ export default function AdminWorkflowsClient({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* ستون لیست فرآیندها */}
             <div className="md:col-span-1 space-y-2">
-              <h3 className="text-xs font-black text-slate-800 mb-2">فرآیندهای آموزشی و اداری:</h3>
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <h3 className="text-xs font-black text-slate-800">فرآیندهای آموزشی و اداری:</h3>
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="px-2.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-2xs font-bold"
+                >
+                  ➕ فرایند جدید
+                </button>
+              </div>
               {processesList.map(proc => (
                 <div
                   key={proc.id}
@@ -548,6 +683,190 @@ export default function AdminWorkflowsClient({
 
             {/* ستون ویرایشگر فلوچارت و مراحل */}
             <div className="md:col-span-3 card p-6 bg-white border border-slate-200 rounded-2xl space-y-6 shadow-sm">
+              {draft ? (
+                <div className="space-y-5">
+                  {/* ── ویرایشگر فرآیند (جدید/ویرایش) ── */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                    <h2 className="text-base font-black text-slate-900">
+                      {draft.id ? '✏️ ویرایش فرآیند' : '➕ تعریف فرآیند جدید'}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={saveDraft}
+                        disabled={designerSaving}
+                        className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold disabled:opacity-50"
+                      >
+                        {designerSaving ? '⏳ در حال ذخیره…' : '💾 ذخیره فرآیند'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraft(null)}
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-700"
+                      >
+                        ↩ انصراف
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <label className="space-y-1">
+                      <span className="font-bold text-slate-700">کد یکتا *</span>
+                      <input
+                        value={draft.code}
+                        disabled={!!draft.id}
+                        onChange={e => patchDraft({ code: e.target.value })}
+                        placeholder="مثلاً VALID_TRANSCRIPT"
+                        className="w-full rounded-xl border border-slate-300 px-2.5 py-2 font-mono disabled:bg-slate-100"
+                        dir="ltr"
+                      />
+                      {draft.id && <span className="block text-3xs text-slate-500">کد پس از ساخت تغییر نمی‌کند.</span>}
+                    </label>
+                    <label className="space-y-1">
+                      <span className="font-bold text-slate-700">عنوان فرآیند *</span>
+                      <input
+                        value={draft.title}
+                        onChange={e => patchDraft({ title: e.target.value })}
+                        className="w-full rounded-xl border border-slate-300 px-2.5 py-2"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="font-bold text-slate-700">دسته</span>
+                      <input
+                        value={draft.category}
+                        onChange={e => patchDraft({ category: e.target.value })}
+                        placeholder="آموزشی / مالی / اداری"
+                        className="w-full rounded-xl border border-slate-300 px-2.5 py-2"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="font-bold text-slate-700">هزینه (ریال)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.feeAmount}
+                        onChange={e => patchDraft({ feeAmount: Number(e.target.value) })}
+                        className="w-full rounded-xl border border-slate-300 px-2.5 py-2 font-mono"
+                        dir="ltr"
+                      />
+                    </label>
+                    <label className="space-y-1 sm:col-span-2">
+                      <span className="font-bold text-slate-700">توضیح</span>
+                      <textarea
+                        value={draft.description}
+                        onChange={e => patchDraft({ description: e.target.value })}
+                        rows={2}
+                        className="w-full rounded-xl border border-slate-300 px-2.5 py-2"
+                      />
+                    </label>
+                  </div>
+
+                  {/* گام‌ها */}
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-slate-800">گام‌های گردش کار *</h3>
+                      <button type="button" onClick={addStep} className="px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-2xs font-bold">➕ افزودن گام</button>
+                    </div>
+                    {draft.steps.map((s, i) => (
+                      <div key={i} className="rounded-xl border-2 border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-slate-800">گام {i + 1}</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveStep(i, -1)} disabled={i === 0} className="px-2 py-0.5 rounded border border-slate-300 bg-white text-2xs disabled:opacity-40">↑</button>
+                            <button type="button" onClick={() => moveStep(i, 1)} disabled={i === draft.steps.length - 1} className="px-2 py-0.5 rounded border border-slate-300 bg-white text-2xs disabled:opacity-40">↓</button>
+                            <button type="button" onClick={() => removeStep(i)} className="px-2 py-0.5 rounded border border-rose-300 bg-white text-2xs font-bold text-rose-700">حذف</button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <label className="space-y-1">
+                            <span className="text-slate-600">عنوان گام *</span>
+                            <input value={s.title} onChange={e => patchStep(i, { title: e.target.value })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-600">نوع گام</span>
+                            <select value={s.stepType} onChange={e => patchStep(i, { stepType: e.target.value as ProcessStepDef['stepType'] })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5">
+                              <option value="USER">کاربر (USER)</option>
+                              <option value="AUTO_INTEGRATION">یکپارچه‌سازی خودکار</option>
+                              <option value="PARALLEL_GATEWAY">دروازه موازی</option>
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-600">نقش متولی</span>
+                            <select value={s.roleCode} onChange={e => patchStep(i, { roleCode: e.target.value })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5">
+                              {Object.entries(roleFa).map(([code, label]) => (
+                                <option key={code} value={code}>{label} ({code})</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-600">مهلت SLA (ساعت) *</span>
+                            <input type="number" min={1} value={s.slaHours} onChange={e => patchStep(i, { slaHours: Number(e.target.value) })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono" dir="ltr" />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-600">اقدام در صورت انقضا</span>
+                            <select value={s.timeoutAction} onChange={e => patchStep(i, { timeoutAction: e.target.value as ProcessStepDef['timeoutAction'] })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5">
+                              <option value="ESCALATE">ارجاع به مقام بالاتر</option>
+                              <option value="AUTO_APPROVE">تأیید خودکار</option>
+                              <option value="AUTO_REJECT">رد خودکار</option>
+                              <option value="NOTIFY">فقط اطلاع‌رسانی</option>
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-600">مقصد ارجاع خودکار</span>
+                            <select value={s.timeoutEscalateToRole || ''} onChange={e => patchStep(i, { timeoutEscalateToRole: e.target.value || undefined })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5">
+                              <option value="">—</option>
+                              {Object.entries(roleFa).map(([code, label]) => (
+                                <option key={code} value={code}>{label}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* فیلدهای فرم */}
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-slate-800">فیلدهای فرم پویا</h3>
+                      <button type="button" onClick={addField} className="px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-2xs font-bold">➕ افزودن فیلد</button>
+                    </div>
+                    {(draft.formSchema || []).map((f: any, i: number) => (
+                      <div key={i} className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs items-end">
+                        <label className="space-y-1">
+                          <span className="text-slate-600">کلید داده</span>
+                          <input value={f.key} onChange={e => patchField(i, { key: e.target.value })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono" dir="ltr" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-slate-600">برچسب</span>
+                          <input value={f.label} onChange={e => patchField(i, { label: e.target.value })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5" />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-slate-600">نوع</span>
+                          <select value={f.type || 'text'} onChange={e => patchField(i, { type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-2 py-1.5">
+                            <option value="text">متن</option>
+                            <option value="textarea">متن بلند</option>
+                            <option value="select">انتخابی</option>
+                            <option value="number">عدد</option>
+                            <option value="date">تاریخ</option>
+                          </select>
+                        </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="flex items-center gap-1">
+                            <input type="checkbox" checked={!!f.required} onChange={e => patchField(i, { required: e.target.checked })} />
+                            الزامی
+                          </label>
+                          <button type="button" onClick={() => removeField(i)} className="px-2 py-0.5 rounded border border-rose-300 bg-white text-2xs font-bold text-rose-700">حذف</button>
+                        </div>
+                      </div>
+                    ))}
+                    {(!draft.formSchema || draft.formSchema.length === 0) && (
+                      <p className="text-2xs text-slate-500">هیچ فیلدی تعریف نشده است — در صورت نیاز «افزودن فیلد» را بزنید.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="flex items-center justify-between border-b pb-4">
                 <div>
                   <h2 className="text-base font-black text-slate-900">
@@ -557,9 +876,18 @@ export default function AdminWorkflowsClient({
                     تعیین نقش‌های تاییدکننده، مهلت قانونی هر گام (SLA) و اقدام در صورت انقضا (Timeout Action)
                   </p>
                 </div>
-                <span className="text-xs font-bold px-3 py-1 rounded-xl bg-indigo-50 text-indigo-900 border border-indigo-200">
-                  کد یکتا: {selectedProcess.code}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-3 py-1 rounded-xl bg-indigo-50 text-indigo-900 border border-indigo-200">
+                    کد یکتا: {selectedProcess.code}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(selectedProcess)}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-2xs font-bold"
+                  >
+                    ✏️ ویرایش این فرآیند
+                  </button>
+                </div>
               </div>
 
               {/* نمایش خطی و بصری گام‌های گردش کار (Visual Flowchart) */}
@@ -630,6 +958,8 @@ export default function AdminWorkflowsClient({
                   ))}
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>

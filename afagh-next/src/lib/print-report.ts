@@ -113,6 +113,14 @@ function paginateReportPrint(root: HTMLElement, orientation: ReportPrintOrientat
   }
 
   // ── ۳) ساخت برگهها: سربرگ تکراری، سرستون تکراری، امضا و شماره در هر برگه
+  // اسکلت جدول یک‌بار ساخته می‌شود (thead + tbody خالی) تا کلونِ هر برگه
+  // شامل همهٔ ردیف‌ها نباشد؛ وگرنه با چند هزار ردیف مرورگر فریز می‌کند.
+  const tableShell = table.cloneNode(false) as HTMLTableElement;
+  if (table.tHead) tableShell.appendChild(table.tHead.cloneNode(true));
+  const tbodyShell = document.createElement('tbody');
+  tbodyShell.setAttribute('data-rp-tbody', '');
+  tableShell.appendChild(tbodyShell);
+
   const total = chunks.length;
   doc.textContent = '';
   chunks.forEach((chunk, idx) => {
@@ -125,8 +133,8 @@ function paginateReportPrint(root: HTMLElement, orientation: ReportPrintOrientat
     if (idx > 0) h.classList.add('rp-head-repeat'); // سربرگ فشرده در برگههای ادامه
     body.appendChild(h);
 
-    const t = table.cloneNode(true) as HTMLTableElement;
-    const tb = t.tBodies[0];
+    const t = tableShell.cloneNode(true) as HTMLTableElement;
+    const tb = t.querySelector('[data-rp-tbody]') as HTMLTableSectionElement | null;
     if (tb) {
       tb.textContent = '';
       chunk.forEach(i => {
@@ -188,8 +196,11 @@ export function cleanupReportPrint(): void {
  * ولی اینجا صریحاً پیش از `window.print()` آماده میکنیم تا حتی اگر مرورگر
  * رویداد `beforeprint` را نفرستاد، سند ایزوله و صفحهبندی شده باشد.
  */
-export function printReportDocument(orientation: ReportPrintOrientation = 'landscape'): void {
+export async function printReportDocument(orientation: ReportPrintOrientation = 'landscape'): Promise<void> {
   if (typeof document === 'undefined') return;
+  // اندازه‌گیریِ ارتفاع ردیف‌ها پیش از لود فونت، صفحه‌بندی را کم‌برآورد می‌کند
+  // و ردیف‌ها با overflow:hidden بریده می‌شوند؛ پس منتظر فونت‌ها می‌مانیم.
+  try { await document.fonts?.ready; } catch { /* بی‌فونت هم ادامه بده */ }
   prepareReportPrint(orientation);
   const done = () => {
     cleanupReportPrint();

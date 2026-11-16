@@ -189,6 +189,9 @@ async function runReportMultiTerm(
       summary: 'دانشگاه فعال شما مشخص نیست؛ اجرای گزارش ممکن نیست.',
     };
   }
+  // همان اندازهٔ صفحهٔ درخواستی (پیش‌فرض ۵۰؛ مسیر چاپ تا ۱۰۰۰) تا شمارهٔ
+  // صفحه‌ها و برشِ ادغام با `per` هماهنگ بمانند.
+  const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
   const base: ReportFilters = { ...f, universityId: uni.id, terms: undefined };
   const merged: Record<string, unknown>[] = [];
   let columns: ReportColumn[] = [];
@@ -207,14 +210,14 @@ async function runReportMultiTerm(
     for (const row of rows) merged.push({ ...row, __term: t });
   }
   const total = merged.length;
-  const totalPages = Math.max(1, Math.ceil(total / PER));
+  const totalPages = Math.max(1, Math.ceil(total / per));
   const page = Math.min(Math.max(1, Number(f.page) || 1), totalPages);
   return {
     columns: columns.length ? columns : [{ key: '__term', title: 'ترم' }],
-    rows: merged.slice((page - 1) * PER, page * PER),
+    rows: merged.slice((page - 1) * per, page * per),
     total,
     page,
-    per: PER,
+    per,
     totalPages,
     summary: `${terms.length.toLocaleString('fa-IR')} ترم (${terms.join('، ')}) — ${total.toLocaleString('fa-IR')} ردیف`,
   };
@@ -711,26 +714,69 @@ async function executeReport(kind: string, f: ReportFilters): Promise<ReportResu
   }
 }
 
-/** خروجی CSV — ورق‌زدن همه صفحات تا سقف ۵۰۰۰ ردیف */
-export async function exportReport(kind: string, f: ReportFilters): Promise<{ header: string[]; lines: string[][] }> {
+/** سقف ردیف‌های چاپ/خروجی — بالاتر از این، سند چاپی مرورگر را قفل می‌کند. */
+export const PRINT_MAX_ROWS = 10_000;
+/** اندازهٔ صفحهٔ داخلی برای «همهٔ ردیف‌ها» — کمتربودنش = رفت‌وبرگشت بیشتر. */
+const FETCH_PAGE_SIZE = 500;
+
+/**
+ * جمع‌آوری همهٔ ردیف‌های گزارش در یک مسیر مشترک (چاپ و CSV از همین می‌خورند).
+ * با `pageSize` بزرگ، برای ۵٬۰۰۰ ردیف به‌جای ۱۰۰ اجرای ۵۰ردیفی، ۱۰ اجرا لازم است.
+ */
+async function collectReportRows(kind: string, f: ReportFilters, maxRows: number) {
+  const first = await runReport(kind, { ...f, page: 1, pageSize: FETCH_PAGE_SIZE });
+  const all = [...first.rows];
+  const maxPages = Math.min(first.totalPages, Math.ceil(maxRows / FETCH_PAGE_SIZE));
+  for (let p = 2; p <= maxPages && all.length < maxRows; p += 1) {
+    const r = await runReport(kind, { ...f, page: p, pageSize: FETCH_PAGE_SIZE });
+    if (!r.rows.length) break;
+    all.push(...r.rows);
+  }
+  return {
+    columns: first.columns,
+    rows: all.slice(0, maxRows),
+    total: first.total,
+    truncated: first.total > Math.min(all.length, maxRows),
+  };
+}
+
+/**
+ * همهٔ ردیف‌های گزارش برای سند چاپی.
+ * ⚠ چرا این اکشن و نه خودِ CSV؟ خروجی CSV مقادیر **قالب‌بندی‌شده** (رشته)
+ * را برمی‌گرداند و `ReportPrint` برای مبلغ/تاریخ به مقدار خام و `format`
+ * ستون نیاز دارد؛ ضمناً CSV سقف و پیام بریدگی نداشت. اینجا ردیف خام
+ * با سقف ۱۰٬۰۰۰ و `truncated` برمی‌گردد و همان داده در کلاینت برای
+ * CSV هم قابل استفاده است.
+ */
+export async function fetchReportForPrint(kind: string, f: ReportFilters) {
+  await requireRole(ROLES);
+  await assertReportPermission(kind);
+  const uni = await getCurrentUniversity().catch(() => null);
+  if (!isRealUniversityId(uni?.id)) {
+    return { columns: [], rows: [], total: 0, truncated: false };
+  }
+  return collectReportRows(kind, { ...f, universityId: uni.id }, PRINT_MAX_ROWS);
+}
+
+/** خروجی CSV — از همان مسیر «همهٔ ردیف‌ها» (سقف ۱۰٬۰۰۰) استفاده می‌کند */
+export async function exportReport(
+  kind: string,
+  f: ReportFilters,
+): Promise<{ header: string[]; lines: string[][]; total: number; truncated: boolean }> {
   await requireRole(ROLES);
   await assertReportPermission(kind);
   const uni = await getCurrentUniversity().catch(() => null);
   // 🔒 همان گارد fail-closed مسیر جدول؛ وگرنه خروجی CSV می‌توانست دادهٔ
   //    همهٔ دانشگاه‌ها را برگرداند (در مسیر خروجی مقدار جانشین falsy می‌شد و
   //    شرط‌های دانشگاه کلاً حذف می‌شدند).
-  if (!isRealUniversityId(uni?.id)) return { header: [], lines: [] };
-  f = { ...f, universityId: uni.id };
-  const first = await runReport(kind, { ...f, page: 1 });
-  const all = [...first.rows];
-  for (let p = 2; p <= first.totalPages && all.length < 5000; p++) {
-    const r = await runReport(kind, { ...f, page: p });
-    all.push(...r.rows);
-  }
+  if (!isRealUniversityId(uni?.id)) return { header: [], lines: [], total: 0, truncated: false };
+  const data = await collectReportRows(kind, { ...f, universityId: uni.id }, PRINT_MAX_ROWS);
   // گارد تزریق فرمول سمت سرور (مصرف‌کنندهٔ دیگری لازم نیست دوباره پیاده کند)
   const esc = (v: string) => (/^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v);
   return {
-    header: first.columns.map(c => esc(c.title)),
-    lines: all.slice(0, 5000).map(row => first.columns.map(c => esc(formatReportCell(row[c.key], c.format)))),
+    header: data.columns.map(c => esc(c.title)),
+    lines: data.rows.map(row => data.columns.map(c => esc(formatReportCell(row[c.key], c.format)))),
+    total: data.total,
+    truncated: data.truncated,
   };
 }
