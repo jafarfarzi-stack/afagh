@@ -112,7 +112,8 @@ const CARDS: Card[] = [
   { kind: 'costing-report', cat: 'finance', icon: '🧮', title: 'بهای تمام‌شده و حاشیه' },
   { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه' },
   { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)' },
-  { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)' },
+  // cashFlowRows فیلتر ترم را پشتیبانی میکند — پس کارت آن هم needsTerm میگیرد
+  { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)', needsTerm: true },
   { kind: 'contractor-report', cat: 'finance-ops', icon: '🏗️', title: 'پیمانکاران و قراردادها' },
   { kind: 'contractor-settlement', cat: 'finance-ops', icon: '🧾', title: 'ماه‌حساب پیمانکاران' },
   { kind: 'insurance-report', cat: 'finance-ops', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس' },
@@ -123,7 +124,7 @@ const CARDS: Card[] = [
   { kind: 'inventory-report', cat: 'finance-ops', icon: '📦', title: 'موجودی کالا' },
   { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت' },
   { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک' },
-  { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'دولت و درآمد (سلسله‌مراتبی)' },
+  { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته' },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
   { kind: 'pending-requests', cat: 'research', icon: '⏳', title: 'درخواست‌های درانتظار' },

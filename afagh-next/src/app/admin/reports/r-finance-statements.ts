@@ -4,6 +4,8 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { escapeLikeChars } from '@/lib/persian-search';
+import { faDigits, toJalali } from '@/lib/calendar';
+import { faNum } from '@/lib/report-format';
 import {
   buildBalanceSheet,
   buildBudgetVariance,
@@ -25,7 +27,7 @@ import {
 //    F) گزارشات پیمانکاری
 //    G) بیمه · حقوقی · مالیات بر ارزش افزوده
 //    H) روزانه · موجودی کالا · هزینهٔ شرکت · تخصیص
-//    I) سهم · سلسله‌مراتبی · دولت و درآمد
+//    I) سهم · درآمد سلسله‌مراتبی
 //
 //  ⚠ قواعد مشترک:
 //  ▸ اسکوپ دانشگاه همیشه fail-closed است (بدون دانشگاه ⇒ صفر ردیف).
@@ -36,6 +38,57 @@ import {
 // ══════════════════════════════════════════════════════════════════════
 
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
+
+// ── برچسب فارسی «نوع» ردیفهای صورت مالی ──
+// پیشتر کد خام انگلیسی (HEAD/ITEM/TOTAL) در ستون «نوع» چاپ میشد؛ همیشه
+// معادل فارسی نشان داده شود و مقادیر انگلیسی به کاربر نرسد.
+const STATEMENT_KIND_FA: Record<'HEAD' | 'ITEM' | 'TOTAL', string> = {
+  HEAD: 'سرفصل',
+  ITEM: 'قلم',
+  TOTAL: 'جمع',
+};
+
+// ── واژگان فارسی وضعیتها و منبعها (مبنای CHECK constraintهای schema.ts) ──
+// هر مقدار ناشناخته عیناً خام برنمیگردد؛ «—» میگیرد تا انگلیسی لو نرود.
+const CONTRACT_STATUS_FA: Record<string, string> = {
+  DRAFT: 'پیش‌نویس',
+  ACTIVE: 'فعال',
+  SETTLED: 'تسویه‌شده',
+  TERMINATED: 'فسخ‌شده',
+};
+const PAYROLL_STATUS_FA: Record<string, string> = {
+  DRAFT: 'پیش‌نویس',
+  MID_TERM_PAID: 'میان‌ترم پرداخت‌شده',
+  DEPT_HEAD_APPROVED: 'تأییدشدهٔ مدیر گروه',
+  DEAN_APPROVED: 'تأییدشدهٔ مدیر دانشکده',
+  FINAL_SETTLED: 'تسویهٔ نهایی',
+  REJECTED: 'ردشده',
+};
+const LEGAL_STATUS_FA: Record<string, string> = {
+  OPEN: 'در جریان',
+  IN_PROGRESS: 'در دست پیگیری',
+  CLOSED: 'مختومه',
+  SUSPENDED: 'معلق',
+};
+const VAT_SOURCE_FA: Record<string, string> = {
+  INVOICE: 'فاکتور فروش',
+  CONTRACT: 'صورتحساب پیمانکار',
+  EXPENSE: 'هزینهٔ شرکت',
+};
+
+/** خواندن امن برچسب فارسی از یک Map واژگان — مقدار ناشناخته «—» میگیرد */
+const faEnum = (map: Record<string, string>, v: unknown): string =>
+  map[String(v ?? '')] ?? '—';
+
+/**
+ * مبلغ/شمار فارسی با جداکنندهٔ هزارگان — هم‌تراز با خروجی formatReportCell.
+ *
+ * چرا به‌جای `toLocaleString('fa-IR')`؟ خروجی آن به ICU محیط اجرا گره خورده
+ * و بین محیطها (سرور/بیلد) ناسازگار است؛ الگوی پروژه «عدد en-US + faNum»
+ * است که در همهٔ محیطها یکسان رندر میشود.
+ */
+const faAmount = (n: number): string =>
+  faNum(Math.round(Number(n) || 0).toLocaleString('en-US'));
 
 export const CARDS = [
   // ── B) فروش مالی ──
@@ -61,8 +114,8 @@ export const CARDS = [
   { kind: 'inventory-report', icon: '📦', title: 'موجودی کالا' },
   { kind: 'company-expenses', icon: '💸', title: 'هزینه‌های شرکت' },
   { kind: 'allocation-report', icon: '🔀', title: 'تخصیص هزینه‌های مشترک' },
-  // ── I) سهم / سلسله‌مراتبی / دولت و درآمد ──
-  { kind: 'revenue-hierarchy', icon: '🏛️', title: 'دولت و درآمد (سلسله‌مراتبی)' },
+  // ── I) سهم / درآمد به تفکیک سلسله‌مراتب ──
+  { kind: 'revenue-hierarchy', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته' },
 ];
 
 // ── واژگان نوع تراکنش (کانونی — ledger-balance.ts) ──
@@ -141,7 +194,8 @@ function statement(
     rows: rows.map((r) => ({
       label: r.label,
       value: r.value,
-      kind: r.kind ?? 'ITEM',
+      // «نوع» همیشه فارسی است — کد خام (HEAD/ITEM/TOTAL) به خروجی نمیرود
+      kind: STATEMENT_KIND_FA[r.kind ?? 'ITEM'] ?? STATEMENT_KIND_FA.ITEM,
       note: r.note ?? '',
     })),
     total: rows.length,
@@ -203,6 +257,11 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       cols,
       sql`ORDER BY at."sortOrder" NULLS LAST, fc.name, m.name`,
       f,
+      // GROUP BY فروش: گروه‌بندی با کلیدهای اصلی (at/fc/m) — وابستگی تابعیِ PK
+      // اجازهٔ SELECTِ COALESCEها و ORDER BY روی ستونهای خام را میدهد. نبودِ
+      // این پارامتر خطای «column "at.termCode" must appear in the GROUP BY»
+      // و بنر سرخ React #441 در مرورگر میداد.
+      sql`at."id", fc."id", m."id"`,
     );
     r.rows = r.rows.map((x) => {
       const gross = R(x.gross);
@@ -271,7 +330,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       { label: sumRev - sumCost >= 0 ? 'سود خالص دوره' : 'زیان خالص دوره', value: sumRev - sumCost, kind: 'TOTAL', note: '' },
     );
 
-    return statement('صورت سود و زیان', rows as never, `درآمد: ${sumRev.toLocaleString('fa-IR')} — هزینه: ${sumCost.toLocaleString('fa-IR')} ریال`);
+    return statement('صورت سود و زیان', rows as never, `درآمد: ${faAmount(sumRev)} — هزینه: ${faAmount(sumCost)} ریال`);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -300,9 +359,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { label: 'هزینهٔ تخصیص‌یافته (سربار)', value: c.allocatedCost, kind: 'ITEM', note: '' },
         { label: 'بهای تمام‌شده', value: c.totalCost, kind: 'TOTAL', note: '' },
         { label: 'حاشیهٔ ناخالص', value: c.grossMargin, kind: 'TOTAL', note: c.grossMarginPercent === null ? '' : `${c.grossMarginPercent.toFixed(1)}٪` },
-        { label: 'بهای هر واحد (ریال)', value: Math.round(c.costPerUnit ?? 0), kind: 'ITEM', note: `${c.units.toLocaleString('fa-IR')} واحد` },
+        { label: 'بهای هر واحد (ریال)', value: Math.round(c.costPerUnit ?? 0), kind: 'ITEM', note: `${faAmount(c.units)} واحد` },
         { label: 'درآمد هر واحد (ریال)', value: Math.round(c.revenuePerUnit ?? 0), kind: 'ITEM', note: '' },
-        { label: 'بهای هر دانشجو (ریال)', value: Math.round(c.costPerStudent ?? 0), kind: 'ITEM', note: `${c.students.toLocaleString('fa-IR')} دانشجو` },
+        { label: 'بهای هر دانشجو (ریال)', value: Math.round(c.costPerStudent ?? 0), kind: 'ITEM', note: `${faAmount(c.students)} دانشجو` },
       );
     }
     return statement('بهای تمام‌شده و حاشیه', rows as never, 'بهای تمام‌شده = حق‌التدریس + هزینهٔ تخصیص‌یافته');
@@ -349,7 +408,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         label: `${d.category} — ${d.line}`,
         value: v.variance,
         kind: 'ITEM',
-        note: `بودجه ${v.budget.toLocaleString('fa-IR')} · واقعی ${v.actual.toLocaleString('fa-IR')} · ${
+        note: `بودجه ${faAmount(v.budget)} · واقعی ${faAmount(v.actual)} · ${
           v.variancePercent === null ? '—' : `${v.variancePercent.toFixed(1)}٪`
         } · ${
           v.status === 'UNDER' ? 'کمتر از بودجه' : v.status === 'OVER' ? 'بیشتر از بودجه' : 'مطابق بودجه'
@@ -380,7 +439,6 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       { label: 'جمع دارایی‌ها', value: bs.assets.total, kind: 'TOTAL', note: '' },
       { label: '── بدهی‌ها ──', value: 0, kind: 'HEAD', note: '' },
       { label: 'بستانکاری دانشجویان', value: bs.liabilities.studentPayables, kind: 'ITEM', note: '' },
-      { label: 'پیش‌دریافت بابتِ نیمسال‌های آینده', value: bs.liabilities.deferredRevenue, kind: 'ITEM', note: '' },
       { label: 'تعهداتِ حق‌التدریسِ پرداخت‌نشده', value: bs.liabilities.payrollPayable, kind: 'ITEM', note: '' },
       { label: 'بدهی به پیمانکاران/تأمین‌کنندگان', value: bs.liabilities.supplierPayable, kind: 'ITEM', note: '' },
       { label: 'جمع بدهی‌ها', value: bs.liabilities.total, kind: 'TOTAL', note: '' },
@@ -389,6 +447,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       { label: 'جمع حقوق و سرمایه', value: bs.equity.total, kind: 'TOTAL', note: '' },
       { label: 'اختلاف تراز (دارایی − بدهی − حقوق)', value: bs.difference, kind: 'TOTAL', note: bs.isBalanced ? 'تراز است' : 'نیازمند بررسی' },
     ];
+    // «پیش‌دریافت بابتِ نیمسال‌های آینده» حذف شد: مقدارش همیشه صفرِ هاردکد
+    // بود (پایگاه داده مفهوم deferred را ثبت نمیکند) و ردیفِ همیشه‌صفر فقط
+    // ترازنامه را شلوغ میکرد. جمع بدهی‌ها در lib با deferredRevenue=0 دقیق میماند.
     return statement('صورت وضعیت مالی', rows as never, `تا پایان ${b.period}`);
   }
 
@@ -438,6 +499,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY c."signedAt" DESC NULLS LAST, pc.name`,
       f,
     );
+    // وضعیتِ خام انگلیسی (DRAFT/ACTIVE/SETTLED/TERMINATED) فارسی میشود
+    r.rows = r.rows.map((x) => ({ ...x, status: faEnum(CONTRACT_STATUS_FA, x.status) }));
     r.summary = 'مانده = مبلغ قرارداد − پرداخت‌شده';
     return r;
   }
@@ -499,13 +562,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       [
         sql`ps."universityId" = ${uni}`,
         ...(f.term ? [sql`at."termCode" = ${f.term}`] : []),
-        ...(f.facultyId ? [] : []),
       ],
       sql`at."termCode" AS term, u."firstName" || ' ' || u."lastName" AS staff,
         ps."grossAmount" AS gross, ps.deductions, ps."netAmount" AS net, ps.status`,
       sql`ORDER BY at."sortOrder" NULLS LAST, staff`,
       f,
     );
+    // وضعیتِ خام انگلیسی (DRAFT/MID_TERM_PAID/…) فارسی میشود
+    r.rows = r.rows.map((x) => ({ ...x, status: faEnum(PAYROLL_STATUS_FA, x.status) }));
     r.summary = 'کسورات = بیمهٔ پیش‌پرداخت و کسوراتِ قانونیِ حق‌التدریس';
     return r;
   }
@@ -528,7 +592,6 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`FROM legal_cases lc`,
       [
         sql`lc."universityId" = ${uni}`,
-        ...(f.term ? [] : []),
         ...(f.q ? [sql`lc.subject ILIKE ${'%' + escapeLikeChars(String(f.q)) + '%'} ESCAPE '\\'`] : []),
       ],
       sql`lc."caseNo", lc.subject, lc."caseType" AS type, lc."partyName" AS party,
@@ -536,6 +599,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY lc."openedAt" DESC NULLS LAST`,
       f,
     );
+    // وضعیتِ خام انگلیسی (OPEN/IN_PROGRESS/CLOSED/SUSPENDED) فارسی میشود؛
+    // «نوع» (caseType) متنِ آزاد است و ممکن است از قبل فارسی باشد — دست نمیخورد.
+    r.rows = r.rows.map((x) => ({ ...x, status: faEnum(LEGAL_STATUS_FA, x.status) }));
     r.summary = 'پرونده‌های حقوقیِ در جریان و مختومه';
     return r;
   }
@@ -567,6 +633,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY v."entryDate" DESC NULLS LAST`,
       f,
     );
+    // منبعِ خام انگلیسی (INVOICE/CONTRACT/EXPENSE) فارسی میشود
+    r.rows = r.rows.map((x) => ({ ...x, source: faEnum(VAT_SOURCE_FA, x.source) }));
     r.summary = 'مالیات بر ارزش افزودهٔ اسناد (فاکتورها و صورتحساب پیمانکاران)';
     return r;
   }
@@ -593,7 +661,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`sl."transactionType", CASE WHEN ${isCharge} THEN 'بدهکار (بدهی دانشجو)' ELSE 'بستانکار (کاهش بدهی)' END`,
     );
     r.rows = r.rows.map((x) => ({ ...x, type: LEDGER_TYPE_FA[String(x.type)] ?? String(x.type) }));
-    r.summary = 'جمع دو طرف باید برابر باشد (دفتر دوطرفه)';
+    // برچسب جمعِ پیشتر ناخوانا بود («جمع دو طرف باید برابر باشد (دفتر دوطرفه)»)
+    // و شبهه ایجاد میکرد که ستون «تعداد» هم در جمع مبلغ نقش دارد؛ متنِ صریح:
+    r.summary = 'جمعِ ستون «مبلغ» در دو طرف باید برابر باشد (ترازِ دفتر دوطرفه) — ستون «تعداد» فقط شمارش ردیفهاست، نه مبلغ.';
     return r;
   }
 
@@ -603,12 +673,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   if (kind === 'daily-journal') {
     const r = await runPaged(
       [
-        { key: 'day', title: 'تاریخ' },
+        // تاریخ بدون format، خامِ میلادی (2026-11-21) چاپ میشد؛ DATE ⇒ jalaliSmart
+        { key: 'day', title: 'تاریخ', format: 'DATE' },
         { key: 'type', title: 'نوع تراکنش' },
         { key: 'count', title: 'تعداد', format: 'NUMBER' },
         { key: 'debit', title: 'بدهکار', format: 'MONEY' },
         { key: 'credit', title: 'بستانکار', format: 'MONEY' },
-        { key: 'net', title: 'خالص', format: 'MONEY' },
+        // «خالص» نام گمراه‌کننده بود؛ این ستون جمعِ گردش (بدهکار + بستانکار) است
+        { key: 'net', title: 'جمع گردش', format: 'MONEY' },
       ],
       sql`FROM student_ledger sl`,
       ledgerConds(f),
@@ -705,13 +777,13 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       const items = weights.get(p.key) ?? [];
       if (!items.length) continue;
       const shares = allocate(amount, items);
-      rows.push({ label: `── ${p.label} ──`, value: 0, kind: 'HEAD', note: `استخر هزینه: ${amount.toLocaleString('fa-IR')} ریال` });
+      rows.push({ label: `── ${p.label} ──`, value: 0, kind: 'HEAD', note: `استخر هزینه: ${faAmount(amount)} ریال` });
       for (const s of shares) {
         rows.push({
           label: s.unit,
           value: s.share,
           kind: 'ITEM',
-          note: `وزن ${s.weight.toLocaleString('fa-IR')} · ${s.percent.toFixed(1)}٪`,
+          note: `وزن ${faAmount(s.weight)} · ${s.percent.toFixed(1)}٪`,
         });
       }
       const total = shares.reduce((a, x) => a + x.share, 0);
@@ -729,7 +801,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  I) دولت و درآمد (سلسله‌مراتبی)
+  //  I) درآمد به تفکیک سلسله‌مراتب
   // ══════════════════════════════════════════════════════════════════
   if (kind === 'revenue-hierarchy') {
     const r = await runPaged(
@@ -768,7 +840,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY level, name, at."sortOrder" NULLS LAST`,
       f,
       sql`CASE WHEN fc.id IS NULL THEN 'بدون دانشکده' ELSE 'دانشکده' END,
-        COALESCE(fc.name, m.name, d.title, '—'), COALESCE(at."termCode", '—')`,
+        COALESCE(fc.name, m.name, d.title, '—'), COALESCE(at."termCode", '—'), at."id"`,
     );
     const totalNet = r.rows.reduce((a, x) => a + (R(x.gross) - R(x.discount)), 0);
     r.rows = r.rows.map((x) => {
@@ -799,10 +871,10 @@ const LEDGER_TYPE_FA: Record<string, string> = {
   SUBJECT_DEDUCTIVE: 'کاهش موضوعی',
   TUITION_ADJUST_DEC: 'تعدیل کاهشی',
   TUITION_ADJUST_INC: 'تعدیل افزایشی',
-  TUITION_BATES: 'تخفیف (سما)',
-  TUITION_BATES_FIXED: 'بیتس شهریهٔ ثابت',
-  TUITION_BATES_VARIABLE: 'بیتس شهریهٔ متغیر',
-  TUITION_BATES_AMOUNT: 'بیتس مبلغی',
+  TUITION_BATES: 'تخفیف سما',
+  TUITION_BATES_FIXED: 'تخفیف شهریهٔ ثابت',
+  TUITION_BATES_VARIABLE: 'تخفیف شهریهٔ متغیر',
+  TUITION_BATES_AMOUNT: 'تخفیف مبلغی',
   DISCOUNT_FIXED: 'تخفیف ثابت',
   DISCOUNT_VARIABLE: 'تخفیف متغیر',
   SPONSORSHIP: 'پوشش بنیاد',
@@ -1005,7 +1077,7 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     : sql``;
 
   const data = await db.execute<{
-    recv: string; loans: string; payables: string; deferred: string;
+    recv: string; loans: string; payables: string;
   }>(sql`
     WITH led AS (
       SELECT sl."studentId", sl."termId", sl."transactionType", sl.amount,
@@ -1037,12 +1109,13 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     SELECT
       COALESCE(SUM(GREATEST(chg - dsc - spo - pay - ln, 0)), 0)::text AS recv,
       COALESCE(SUM(GREATEST(ln - pay, 0)), 0)::text AS loans,
-      COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln), 0)), 0)::text AS payables,
-      0::text AS deferred
+      COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln), 0)), 0)::text AS payables
     FROM per_student
   `).catch(() => ({ rows: [] as never[] }));
 
-  const r = data.rows[0] as { recv: string; loans: string; payables: string; deferred: string } | undefined;
+  // «deferred» (پیش‌دریافت نیمسالهای آینده) حذف شد: همیشه 0::text هاردکد بود
+  // و پایگاه داده مفهومِ آن را ثبت نمیکند؛ lib برای سازگاریِ قرارداد همان ۰ را میگیرد.
+  const r = data.rows[0] as { recv: string; loans: string; payables: string } | undefined;
 
   // تعهداتِ حق‌التدریسِ پرداخت‌نشده
   const payroll = await db.execute<{ payable: string }>(sql`
@@ -1053,11 +1126,15 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
       ${f.term ? sql`AND c."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
   `).catch(() => ({ rows: [] as never[] }));
 
-  // بدهی به پیمانکاران (صورتحساب − پرداخت)
+  // بدهی به پیمانکاران (صورتحساب − پرداخت) — هم‌ترازِ فیلتر ترمِ بقیهٔ اجزای
+  // ترازنامه: با پیوند به قرارداد، فقط صورتحسابهای همان نیمسال شمرده میشود
+  // (الگوی همان فیلترِ تعهداتِ حق‌التدریس).
   const supplier = await db.execute<{ payable: string }>(sql`
     SELECT COALESCE(SUM(GREATEST(i."grossAmount" + COALESCE(i."vatAmount", 0) - COALESCE(i."paidAmount", 0), 0)), 0)::text AS payable
     FROM financial_contract_invoices i
+    JOIN financial_contracts c ON c.id = i."contractId"
     WHERE i."universityId" = ${uni}
+      ${f.term ? sql`AND c."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
   `).catch(() => ({ rows: [] as never[] }));
 
   // سود/زیان انباشته = درآمد − هزینه تا همین تاریخ
@@ -1076,11 +1153,36 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     studentReceivables: R(r?.recv),
     studentLoansReceivable: R(r?.loans),
     studentPayables: R(r?.payables),
-    deferredRevenue: R(r?.deferred),
+    deferredRevenue: 0,
     payrollPayable: R(payroll.rows[0]?.payable),
     supplierPayable: R(supplier.rows[0]?.payable),
     retainedSurplus: revenue - cost,
   };
+}
+
+/** برچسب فارسی ماههای شمسی — برای سربرگِ ماههای صورت جریان نقدی */
+const JALALI_MONTH_FA = [
+  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
+] as const;
+
+/**
+ * برچسب شمسیِ ماه از کلیدِ میلادیِ 'YYYY-MM' — مثلاً «فروردین ۱۴۰۴».
+ *
+ * چرا کلیدِ گروه‌بندی میلادی میماند و فقط نمایش شمسی میشود؟ هر دو کوئریِ
+ * (دریافتهای دانشجو و پرداختِ حق‌التدریس) با **همان** کلیدِ 'YYYY-MM'
+ * گروه‌بندی/ JOIN میشوند، پس ترازِ دریافت/پرداختِ هر ماه حفظ میشود؛ تبدیل
+ * جلالی فقط در آخرین مرحله و فقط برای نمایش انجام میشود. ترتیب ماهها هم
+ * دستنخورده میماند چون تبدیل یکبهیک و صعودی است.
+ *
+ * روزِ ۱۵ عمدی است: همیشه میانهٔ ماه میلادی است و ماهِ جلالیِ متناظر را
+ * بدون خطای مرزِ سال قطعی میکند.
+ */
+function jalaliMonthLabel(gregKey: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(gregKey);
+  if (!m) return gregKey;
+  const { jy, jm } = toJalali(Number(m[1]), Number(m[2]), 15);
+  return `${JALALI_MONTH_FA[jm - 1] ?? ''} ${faDigits(jy)}`;
 }
 
 /** ردیف‌های صورت جریان نقدی — به تفکیک ماه */
@@ -1101,6 +1203,9 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
     GROUP BY 1 ORDER BY 1 DESC
   `).catch(() => ({ rows: [] as never[] }));
 
+  // پرداختِ حق‌التدریس — عمداً با همان کلیدِ 'YYYY-MM'ِ کوئریِ دریافتها
+  // گروه‌بندی میشود تا joinِ دریافت/پرداختِ هر ماه دقیق بماند؛ برچسب شمسی
+  // فقط در jalaliMonthLabel() (لایهٔ نمایش) ساخته میشود.
   const pay = await db.execute<{ month: string; amount: string }>(sql`
     SELECT TO_CHAR(m.month, 'YYYY-MM') AS month, COALESCE(SUM(m.amount), 0)::text AS amount
     FROM (
@@ -1113,11 +1218,14 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
   const payMap = new Map(pay.rows.map((x) => [x.month, R(x.amount)]));
   const rows: ReportResult['rows'] = [];
   let cumulative = 0;
+  // کلیدِ هر دو منبع داده 'YYYY-MM' میلادی است (join امن) — فقط برچسبِ نمایشی
+  // شمسی میشود. ترتیب: قدیم به جدید تا «ماندهٔ انباشته» درست جمع بخورد.
   const months = data.rows.map((x) => x.month).filter(Boolean);
   for (const m of [...months].reverse()) {
     const d = data.rows.find((x) => x.month === m)!;
+    const faMonth = jalaliMonthLabel(m);
     const cf = buildCashFlow({
-      period: m,
+      period: faMonth,
       tuitionReceipts: R(d.tuition),
       sponsorshipReceipts: R(d.sponsor),
       otherReceipts: R(d.other),
@@ -1126,7 +1234,7 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
     });
     cumulative += cf.netMovement;
     rows.push(
-      { label: `── ${m} ──`, value: 0, kind: 'HEAD', note: '' },
+      { label: `── ${faMonth} ──`, value: 0, kind: 'HEAD', note: '' },
       { label: 'دریافت از شهریه', value: cf.receipts.tuition, kind: 'ITEM', note: '' },
       { label: 'دریافت از بنیاد/خیرین', value: cf.receipts.sponsorship, kind: 'ITEM', note: '' },
       { label: 'سایر دریافت‌ها', value: cf.receipts.other, kind: 'ITEM', note: '' },

@@ -3,6 +3,15 @@ import { paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
+import { faNum } from '@/lib/report-format';
+
+/**
+ * عدد فارسی با جداکنندهٔ هزارگان — هم‌تراز با خروجی formatReportCell.
+ * به‌جای `toLocaleString('fa-IR')` که به ICU محیط اجرا گره خورده و بین
+ * سرور/بیلد ناسازگار است؛ «عدد en-US + faNum» در همهٔ محیطها یکسان است.
+ */
+const faAmount = (n: number): string =>
+  faNum(Math.round(Number(n) || 0).toLocaleString('en-US'));
 
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
@@ -84,7 +93,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       ],
       from, conds, cols, sql`ORDER BY tr.priority, tr.id`, f,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} قاعده تعرفه`;
+    r.summary = `${faAmount(r.total)} قاعده تعرفه`;
     return r;
   }
 
@@ -110,14 +119,15 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       [
         { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
         { key: 'major', title: 'رشته' }, { key: 'degree', title: 'مقطع' },
-        { key: 'y', title: 'ورودی' }, { key: 'charge', title: 'بدهی شهریه', format: 'MONEY' },
+        { key: 'y', title: 'ورودی', format: 'YEAR' },
+        { key: 'charge', title: 'بدهی شهریه', format: 'MONEY' },
         { key: 'discount', title: 'تخفیف', format: 'MONEY' }, { key: 'paid', title: 'پرداختی', format: 'MONEY' },
-        { key: 'balance', title: 'مانده بدهی', format: 'MONEY' }, { key: 'txns', title: 'تراکنش' },
+        { key: 'balance', title: 'مانده بدهی', format: 'MONEY' }, { key: 'txns', title: 'تراکنش', format: 'NUMBER' },
       ],
       from, studentWhere(f), cols, sql`ORDER BY balance DESC`, f,
       sql`s.id, s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear"`,
     );
-   r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو${f.term ? ` — ترم ${f.term}` : ' — همه ترم‌ها'} (مانده = بدهی − تخفیف − پرداختی)`;
+   r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — ترم ${f.term}` : ' — همه ترم‌ها'} (مانده = بدهی − تخفیف − پرداختی)`;
     return r;
   }
 
@@ -157,7 +167,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`s.id, s."studentCode", u."firstName", u."lastName", m.name, d.title`,
     );
     const totalPaid = r.rows.reduce((a, x) => a + Number(x.paid ?? 0), 0);
-    r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو — جمع پرداختی: ${totalPaid.toLocaleString('fa-IR')} ریال`;
+    r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال`;
     return r;
   }
 
@@ -202,7 +212,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       return { ...x, paytype: DEPOSIT_FA[k] ?? TXN_FA[k] ?? (k || '—') };
     });
     const sum = r.rows.reduce((a, x) => a + Number(x.amount ?? 0), 0);
-    r.summary = `${r.total.toLocaleString('fa-IR')} فیش پرداخت — جمع صفحهٔ جاری: ${sum.toLocaleString('fa-IR')} ریال`;
+    r.summary = `${faAmount(r.total)} فیش پرداخت — جمع صفحهٔ جاری: ${faAmount(sum)} ریال`;
     return r;
   }
 
@@ -230,7 +240,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'code', title: 'شماره دانشجو' },
         { key: 'name', title: 'نام و نام خانوادگی' },
         { key: 'major', title: 'رشته' },
-        { key: 'units', title: 'واحد' },
+        { key: 'units', title: 'واحد', format: 'NUMBER' },
         { key: 'paid', title: 'پرداختی', format: 'MONEY' },
         { key: 'tuition', title: 'شهریه', format: 'MONEY' },
         { key: 'discount', title: 'تخفیف/معافیت', format: 'MONEY' },
@@ -239,7 +249,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       from, [...studentWhere(f), uniCond], cols, sql`ORDER BY s."studentCode"`, f,
       sql`s.id, s."studentCode", u."firstName", u."lastName", m.name`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو${f.term ? ` — نیمسال ${f.term}` : ''} (پرداختی / شهریه / تخفیف / مانده)`;
+    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ''} (پرداختی / شهریه / تخفیف / مانده)`;
     return r;
   }
 
@@ -266,14 +276,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'vdate', title: 'تاریخ', format: 'DATE' },
         { key: 'debit', title: 'مبلغ جزء بدهکار', format: 'MONEY' },
         { key: 'credit', title: 'مبلغ جزء بستانکار', format: 'MONEY' },
-        { key: 'lines', title: 'تعداد ردیف' },
+        { key: 'lines', title: 'تعداد ردیف', format: 'NUMBER' },
       ],
       from, conds, cols, sql`ORDER BY COALESCE(MAX(sl."depositDate"), MAX(sl."createdAt")) DESC NULLS LAST, COALESCE(sl."voucherNo", '—')`, f,
       sql`COALESCE(sl."voucherNo", '—')`,
     );
     const debit = r.rows.reduce((a, x) => a + Number(x.debit ?? 0), 0);
     const credit = r.rows.reduce((a, x) => a + Number(x.credit ?? 0), 0);
-    r.summary = `${r.total.toLocaleString('fa-IR')} سند — جمع بدهکار ${debit.toLocaleString('fa-IR')} / جمع بستانکار ${credit.toLocaleString('fa-IR')} ریال`;
+    r.summary = `${faAmount(r.total)} سند — جمع بدهکار ${faAmount(debit)} / جمع بستانکار ${faAmount(credit)} ریال`;
     return r;
   }
 
@@ -307,7 +317,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       from, [...studentWhere(f), uniCond], cols, sql`ORDER BY COALESCE(t."termCode", '—') DESC, s."studentCode"`, f,
       sql`t."termCode", s.id, s."studentCode", u."firstName", u."lastName", m.name`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} ردیف مالی${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
+    r.summary = `${faAmount(r.total)} ردیف مالی${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
     return r;
   }
 
@@ -366,7 +376,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     { key: 'disctotal', title: 'جمع تخفیفات', format: 'MONEY' as const },
     { key: 'advanceamt', title: 'مبالغ مساعده', format: 'MONEY' as const },
     { key: 'charge', title: 'جمع بدهکار', format: 'MONEY' as const },
-    { key: 'paid', title: 'پرداختی این نیمسال', format: 'MONEY' as const },
+    { key: 'paid', title: f.term ? 'پرداختی این نیمسال' : 'پرداختی همهٔ نیمسال‌ها', format: 'MONEY' as const },
     { key: 'debtor', title: 'بدهکار', format: 'MONEY' as const },
     { key: 'creditor', title: 'بستانکار', format: 'MONEY' as const },
     { key: 'balance', title: 'مانده کل', format: 'MONEY' as const },
@@ -400,7 +410,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY fc.name NULLS LAST, s."entryYear", s."studentCode"`, f,
       sql`s.id, s."studentCode", fc.name, d.title, s."entryYear"`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} دانشجو${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
+    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
     return r;
   }
 
@@ -426,7 +436,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(fc.name, '—'), COALESCE(d.title, '—')`, f,
       sql`fc.name, d.title`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} ردیف (دانشکده × مقطع)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (دانشکده × مقطع)${f.term ? ` — نیمسال ${f.term}` : ''}`;
     return r;
   }
 
@@ -455,7 +465,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(fc.name, '—'), s."entryYear"`, f,
       sql`fc.name, s."entryYear", t."termCode"`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} ردیف (دانشکده × ورودی × ترم)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (دانشکده × ورودی × ترم)${f.term ? ` — نیمسال ${f.term}` : ''}`;
     return r;
   }
 
@@ -484,7 +494,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(d.title, '—'), COALESCE(fc.name, '—'), COALESCE(m.name, '—'), s."entryYear"`, f,
       sql`d.title, fc.name, m.name, s."entryYear"`,
     );
-    r.summary = `${r.total.toLocaleString('fa-IR')} ردیف (مقطع × رشته × ورودی)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (مقطع × رشته × ورودی)${f.term ? ` — نیمسال ${f.term}` : ''}`;
     return r;
   }
 

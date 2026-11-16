@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo } from 'react';
 import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
+import { faDigits, toJalali } from '@/lib/calendar';
 import {
   cleanupReportPrint,
   prepareReportPrint,
@@ -46,6 +47,32 @@ function columnWeights(columns: ReportColumn[]): number[] {
 
 const DEFAULT_SIGNERS = ['تهیهکنندهٔ گزارش', 'تأیید حسابدار', 'مدیر مالی'];
 
+/**
+ * تاریخِ امروزِ شمسی با ساعتِ رسمیِ تهران (Asia/Tehran).
+ *
+ * چرا `toLocaleDateString('fa-IR')` را کنار گذاشتیم؟ خروجی آن به ICUِ محیطِ
+ * اجرا (سرورِ SSR یا مرورگر) گره خورده است؛ در برخی محیطها سال/ماهِ تقویم
+ * فارسی را اشتباه میدهد — موردِ گزارششده: «۱۴۰۵/۱۲/۲۶» بهجای «۱۴۰۵/۰۸/۲۵».
+ * اینجا اجزای میلادیِ امروز را با timeZone صریحِ تهران میگیریم و با الگوریتم
+ * جلالیِ خودِ پروژه (lib/calendar — مرجعِ حقیقتِ تقویم، مستقل از ICU) تبدیل
+ * میکنیم؛ پس خروجی در سرور و کلاینت یکسان و همیشه درست است.
+ *
+ * Intl با locale «en-US» حتی در بیلدهای small-icu هم timeZone را میفهمد و
+ * فقط اجزای عددی میخواهیم، پس وابستگی به ICU فارسی باقی نمیماند.
+ */
+function todayJalaliTehran(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date());
+  const part = (type: string): number =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const { jy, jm, jd } = toJalali(part('year'), part('month'), part('day'));
+  return faDigits(`${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`);
+}
+
 export default function ReportPrint({
   title,
   subtitle,
@@ -76,11 +103,7 @@ export default function ReportPrint({
   /** تاریخ گزارش */
   reportDate?: string;
 }) {
-  const faDate = reportDate || new Date().toLocaleDateString('fa-IR', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  });
+  const faDate = reportDate || todayJalaliTehran();
   const orientation: ReportPrintOrientation = columns.length >= 7 ? 'landscape' : 'portrait';
   const widths = useMemo(() => columnWeights(columns), [columns]);
   const signLabels = signers && signers.length ? signers : DEFAULT_SIGNERS;
@@ -133,7 +156,10 @@ export default function ReportPrint({
                 «تعداد ردیفها» ← «تاریخ» است تا تاریخ در سمت چپ بیاید. */}
             <div className="rp-meta">
               <span>تعداد ردیفها: {faNum(rows.length)}</span>
-              <span>تاریخ تهیۀ گزارش: {faDate}</span>
+              {/* suppressHydrationWarning: تاریخِ «امروز» در سرور و کلاینت در
+                  نیمهشب (به وقت تهران) میتواند یکی تیک بخورد؛ ناهماهنگیِ آبِ
+                  کاری نباید هشدار React تولید کند. */}
+              <span suppressHydrationWarning>تاریخ تهیۀ گزارش: {faDate}</span>
             </div>
           </div>
 
