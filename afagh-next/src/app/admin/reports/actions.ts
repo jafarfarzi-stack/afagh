@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES } from '@/lib/ledger-balance';
+import { parseTermSelection } from '@/lib/term-selection';
 import { calculateOfficialGpaBreakdown } from '@/lib/regulations-engine';
 import { formatReportCell } from '@/lib/report-format';
 import { getReportPrintBrand } from '@/lib/report-print-brand';
@@ -152,7 +153,8 @@ export async function allowedReportKinds(kinds: string[]): Promise<string[] | nu
 /** فهرست ترمهای فیلتر «چند ترم» (ویرگول/فاصله جداکننده؛ تکرارها حذف شوند). */
 function parseTermList(f: ReportFilters): string[] {
   const raw = typeof f.terms === 'string' ? f.terms : '';
-  return Array.from(new Set(raw.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)));
+  // همان تجزیه‌گرِ کلاینت: بازه («14031-14035») و ارقام فارسی هم پذیرفته می‌شود
+  return parseTermSelection(raw).codes;
 }
 
 /** سقف ردیفهای گردآوریشده برای هر ترم، تا اجرای چندترمهای بیتوقف نشود. */

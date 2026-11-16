@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { STUDENT_STATUS_FA } from '@/lib/student-labels';
 import { escapeLikeChars, toEnDigits } from '@/lib/persian-search';
+import { parseCodeList } from '@/lib/code-list';
 import { isRealUniversityId } from '@/lib/university-scope';
 
 export const PER = 50;
@@ -19,6 +20,13 @@ export type ReportFilters = {
    * با ستون «ترم» ادغام میکند. یکترم/همهترمها همچنان از `term` میگذرند.
    */
   terms?: string;
+  /**
+   * فهرست کدهای دانشجویی (ویرگول/فاصله/خط جدید/بازه) — «فقط همین‌ها را بیاور».
+   * کاربر فهرست را از Excel می‌چسباند؛ تجزیه در `@/lib/code-list` انجام می‌شود.
+   * خالی = بدون فیلتر. اگر متنی بدهید که هیچ کد معتبری ندارد، عمداً «هیچ ردیفی»
+   * برمی‌گردد (fail-closed) تا فیلترِ خراب به‌معنای «همه» تفسیر نشود.
+   */
+  studentCodes?: string;
   degreeId?: number;
   facultyId?: number;
   majorId?: number;
@@ -106,6 +114,17 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   if (f.departmentId) c.push(sql`m."departmentId" = ${f.departmentId}`);
   if (f.majorId) c.push(sql`${a}."majorId" = ${f.majorId}`);
   if (f.entryYear) c.push(sql`${a}."entryYear" = ${f.entryYear}`);
+  /* ── لیستِ کدهای دانشجویی (چسباندن از Excel) ──
+     فقط دانشجویانِ همان فهرست. اگر متن داده شده ولی هیچ کد معتبری ندارد،
+     `1=0` می‌گذاریم تا فیلترِ خراب به «همهٔ دانشجویان» تبدیل نشود. */
+  if (typeof f.studentCodes === 'string' && f.studentCodes.trim()) {
+    const picked = parseCodeList(f.studentCodes, { minDigits: 4, maxDigits: 14 }).codes;
+    if (!picked.length) {
+      c.push(sql`1 = 0`);
+    } else {
+      c.push(sql`${a}."studentCode" IN (${sql.join(picked.map((code) => sql`${code}`), sql`, `)})`);
+    }
+  }
   if (f.entryYearFrom) c.push(sql`${a}."entryYear" >= ${Number(f.entryYearFrom)}`);
   if (f.entryYearTo) c.push(sql`${a}."entryYear" <= ${Number(f.entryYearTo)}`);
   if (f.entryTerm) c.push(sql`${a}."entryTerm" = ${Number(f.entryTerm)}`);

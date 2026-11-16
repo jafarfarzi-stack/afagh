@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { exportReport, runReport, type FilterOptions, type ReportResult } from './actions';
 import { LINK_CARDS } from './report-links';
 import { faIncludes } from '@/lib/persian-search';
+import { MAX_TERM_CODES, parseTermSelection } from '@/lib/term-selection';
+import { CODE_LIST_LIMIT, parseCodeList } from '@/lib/code-list';
 import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 import ReportPrint from '@/components/ui/ReportPrint';
 
@@ -162,6 +164,9 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   /** حالت فیلتر ترم: یک ترم / چند ترم / همهٔ ترمها (بدون فیلتر) */
   const [termMode, setTermMode] = useState<'one' | 'many' | 'all'>(initialTermCodes.length > 1 ? 'many' : 'one');
   const [manyTerms, setManyTerms] = useState<string[]>(initialTermCodes.length > 1 ? initialTermCodes : []);
+  /** ورودیِ آزادِ «چند ترم» — بازه یا فهرستِ ویرگولی (مثل «14031-14035,14044») */
+  const [termInput, setTermInput] = useState('');
+  const [termMsg, setTermMsg] = useState('');
   const [degreeId, setDegreeId] = useState(0);
   const [facultyId, setFacultyId] = useState(0);
   const [departmentId, setDepartmentId] = useState(0);
@@ -174,6 +179,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [status, setStatus] = useState('ALL');
   /** دامنه: all = کل دوره، term = فقط نیمسالِ انتخاب‌شده */
   const [scopeMode, setScopeMode] = useState<'all' | 'term'>('all');
+  /** لیست کد دانشجو: متنِ خام کاربر + کدهای نرمال‌شده‌ی اعمال‌شده */
+  const [studentList, setStudentList] = useState('');
+  const [studentCodes, setStudentCodes] = useState('');
+  const [studentMsg, setStudentMsg] = useState('');
+  const [studentListOpen, setStudentListOpen] = useState(false);
   const [universityId, setUniversityId] = useState(initialUniversityId ?? 0);
   const [extra, setExtra] = useState<Record<string, string>>(initialExtra ?? {});
   const [res, setRes] = useState<ReportResult | null>(null);
@@ -215,7 +225,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   // «چند ترم» = فهرست کدها در f.terms، سرور آنها را جدا اجرا و ادغام میکند.
   const effectiveTerm = termMode === 'all' ? '' : termMode === 'many' ? (manyTerms[0] ?? '') : term;
   const multiTerms = termMode === 'many' ? manyTerms.join(',') : undefined;
-  const filters = { term: effectiveTerm, terms: multiTerms, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, status, scope: scopeMode, ...extra };
+  const filters = { term: effectiveTerm, terms: multiTerms, studentCodes, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, status, scope: scopeMode, ...extra };
 
   const run = async (page = 1, kindOverride?: string) => {
     const k = kindOverride ?? kind;
@@ -251,6 +261,49 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     setKind(k);
     setRes(null);
     setErr('');
+  };
+
+  /**
+   * اعمالِ ورودیِ آزادِ «چند ترم» — بازه («14031-14035»)، ویرگولی
+   * («14031,14033») یا ترکیبی؛ ارقام فارسی و «تا» هم پشتیبانی می‌شوند.
+   * فقط ترم‌های موجودِ همین دانشگاه اضافه می‌شوند تا تایپِ اشتباه، گزارش را
+   * بی‌صدا صفر نکند.
+   */
+  const applyTermInput = () => {
+    if (!termInput.trim()) { setTermMsg(''); return; }
+    const parsed = parseTermSelection(termInput, opts.terms.map(t => t.code));
+    const merged = [...new Set([...manyTerms, ...parsed.codes])]
+      .sort((a, b) => Number(a) - Number(b))
+      .slice(0, MAX_TERM_CODES);
+    setManyTerms(merged);
+    const parts: string[] = [];
+    if (parsed.codes.length) parts.push(`${faNum(parsed.codes.length)} ترم اضافه شد`);
+    if (parsed.unknown.length) parts.push(`در این دانشگاه نیست: ${parsed.unknown.map(faNum).join('، ')}`);
+    if (parsed.invalid.length) parts.push(`نامعتبر: ${parsed.invalid.slice(0, 5).join('، ')}`);
+    if (merged.length >= MAX_TERM_CODES) parts.push(`سقف ${faNum(MAX_TERM_CODES)} ترم`);
+    setTermMsg(parts.join(' — ') || 'ترمی پیدا نشد');
+    if (parsed.codes.length) setTermInput('');
+  };
+
+  /**
+   * اعمالِ «لیست کد دانشجو» — فهرستی که کاربر از Excel می‌چسباند.
+   * تا وقتی «اعمال» نزند، فیلترِ قبلی معتبر می‌ماند (تا تایپِ نیمه‌کاره،
+   * گزارش را عوض نکند).
+   */
+  const applyStudentList = () => {
+    if (!studentList.trim()) {
+      setStudentCodes('');
+      setStudentMsg('فیلتر لیست برداشته شد');
+      return;
+    }
+    const parsed = parseCodeList(studentList, { minDigits: 4, maxDigits: 14 });
+    setStudentCodes(parsed.codes.join(','));
+    const parts: string[] = [];
+    if (parsed.codes.length) parts.push(`${faNum(parsed.codes.length)} کد اعمال شد`);
+    else parts.push('هیچ کد معتبری نبود — گزارش خالی می‌شود');
+    if (parsed.invalid.length) parts.push(`نامعتبر: ${parsed.invalid.slice(0, 5).join('، ')}`);
+    if (parsed.truncated) parts.push(`فقط ${faNum(CODE_LIST_LIMIT)} کد اول`);
+    setStudentMsg(parts.join(' — '));
   };
 
   const doExport = async () => {
@@ -338,6 +391,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         : `ترم ${faNum(term)}`
                     : null,
                   scopeMode === 'term' ? 'فقط همین نیمسال' : 'کل دوره',
+                  studentCodes ? `فیلتر لیست (${faNum(studentCodes.split(',').length)} دانشجو)` : null,
                   `${faNum(res.total)} رکورد`,
                 ].filter(Boolean).join('  •  ')}
                 columns={res.columns}
@@ -408,20 +462,58 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                   </select>
                 )}
                 {termMode === 'many' && (
-                  <div className="w-full flex flex-wrap items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-2 max-h-28 overflow-y-auto">
-                    <button type="button" onClick={() => setManyTerms(opts.terms.map(t => t.code))} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">انتخاب همه</button>
-                    <button type="button" onClick={() => setManyTerms([])} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">پاک کردن</button>
-                    {opts.terms.map(t => (
-                      <label key={t.code} className="flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-2xs" dir="ltr">
-                        <input
-                          type="checkbox"
-                          checked={manyTerms.includes(t.code)}
-                          onChange={e => setManyTerms(prev => e.target.checked ? [...prev, t.code] : prev.filter(x => x !== t.code))}
-                        />
-                        {t.title || t.code} ({t.code})
-                      </label>
-                    ))}
-                    <span className="font-extrabold text-indigo-700 text-2xs">{faNum(manyTerms.length)} ترم انتخاب شد</span>
+                  <div className="w-full space-y-1.5 rounded border border-slate-200 bg-slate-50 p-2">
+                    {/* تایپِ بازه/فهرست — راهِ سریعِ انتخاب ده‌ها ترم */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <input
+                        value={termInput}
+                        onChange={e => { setTermInput(e.target.value); setTermMsg(''); }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyTermInput(); } }}
+                        placeholder="تایپ: 14031-14035 یا 14031,14033 یا «۱۴۰۳۱ تا ۱۴۰۳۵»"
+                        className="min-w-64 flex-1 bg-white border border-slate-300 rounded px-2 py-1 font-mono text-xs"
+                        dir="ltr"
+                      />
+                      <button type="button" onClick={applyTermInput} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-2xs">افزودن</button>
+                      <button type="button" onClick={() => setManyTerms(opts.terms.map(t => t.code))} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">انتخاب همه</button>
+                      <button type="button" onClick={() => { setManyTerms([]); setTermMsg(''); }} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">پاک کردن</button>
+                    </div>
+                    {termMsg && <p className="text-2xs font-bold text-indigo-700">{termMsg}</p>}
+                    {/* ترم‌های انتخاب‌شده — هر کدام با یک کلیک حذف می‌شود */}
+                    <div className="flex max-h-24 flex-wrap items-center gap-1 overflow-y-auto">
+                      {manyTerms.length === 0 ? (
+                        <span className="text-2xs text-slate-500">هنوز ترمی انتخاب نشده است — تایپ کنید یا از فهرست پایین بزنید.</span>
+                      ) : manyTerms.map(code => {
+                        const t = opts.terms.find(x => x.code === code);
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => setManyTerms(prev => prev.filter(x => x !== code))}
+                            title="حذف از فهرست"
+                            className="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-2xs hover:border-rose-400 hover:text-rose-700"
+                            dir="ltr"
+                          >
+                            {code}{t?.title ? ` · ${t.title}` : ''} ×
+                          </button>
+                        );
+                      })}
+                      <span className="font-extrabold text-indigo-700 text-2xs">{faNum(manyTerms.length)} ترم انتخاب شد</span>
+                    </div>
+                    <details className="rounded border border-slate-200 bg-white px-2 py-1">
+                      <summary className="cursor-pointer text-2xs font-bold text-slate-600">انتخاب از فهرست ترم‌ها</summary>
+                      <div className="mt-1 flex max-h-40 flex-wrap items-center gap-1.5 overflow-y-auto">
+                        {opts.terms.map(t => (
+                          <label key={t.code} className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded font-mono text-2xs" dir="ltr">
+                            <input
+                              type="checkbox"
+                              checked={manyTerms.includes(t.code)}
+                              onChange={e => setManyTerms(prev => e.target.checked ? [...prev, t.code] : prev.filter(x => x !== t.code))}
+                            />
+                            {t.title || t.code} ({t.code})
+                          </label>
+                        ))}
+                      </div>
+                    </details>
                   </div>
                 )}
               </div>
@@ -622,6 +714,70 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                   <option value="term">فقط همین نیمسال</option>
                 </select>
               </label>
+            )}
+            {showStudentFilters && (
+              <div className="w-full rounded-lg border border-slate-200 bg-slate-50/70 p-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setStudentListOpen(v => !v)}
+                    className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs hover:border-indigo-300"
+                  >
+                    {studentListOpen ? '▾' : '▸'} 📋 فیلترِ لیست دانشجویان
+                    {studentCodes ? ` (${faNum(studentCodes.split(',').length)} کد)` : ''}
+                  </button>
+                  {studentCodes && (
+                    <span className="rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-2xs font-bold text-emerald-800">
+                      فقط این {faNum(studentCodes.split(',').length)} دانشجو
+                    </span>
+                  )}
+                  {studentCodes && (
+                    <button
+                      type="button"
+                      onClick={() => { setStudentList(''); setStudentCodes(''); setStudentMsg('فیلتر لیست برداشته شد'); }}
+                      className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs hover:border-rose-300"
+                    >
+                      برداشتن فیلتر
+                    </button>
+                  )}
+                  {studentMsg && <span className="text-2xs font-bold text-indigo-700">{studentMsg}</span>}
+                </div>
+                {studentListOpen && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <textarea
+                      value={studentList}
+                      onChange={e => { setStudentList(e.target.value); setStudentMsg(''); }}
+                      onKeyDown={e => {
+                        // Enter + Ctrl/Cmd = اعمال (Enter تنها برای خط جدید در لیست)
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyStudentList(); }
+                      }}
+                      rows={2}
+                      placeholder="کدهای دانشجو را بچسبانید: 4021370010، 4021370011 یا بازه: 4021370010-4021370015 (Ctrl+Enter = اعمال)"
+                      className="w-full bg-white border border-slate-300 rounded px-2 py-1 font-mono text-xs"
+                      dir="ltr"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={applyStudentList}
+                        className="px-3 py-1 bg-indigo-700 hover:bg-indigo-800 text-white rounded font-bold text-2xs"
+                      >
+                        ✔ اعمال لیست
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setStudentList(''); setStudentCodes(''); setStudentMsg(''); }}
+                        className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs"
+                      >
+                        پاک کردن
+                      </button>
+                      <span className="text-2xs text-slate-500">
+                        جداکننده: ویرگول، فاصله یا خط جدید — بازهٔ کد هم مجاز است (حداکثر {faNum(CODE_LIST_LIMIT)} کد).
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {kind === 'incomplete' && (
               <label className="flex items-center gap-1">
