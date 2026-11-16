@@ -715,7 +715,7 @@ async function executeReport(kind: string, f: ReportFilters): Promise<ReportResu
 }
 
 /** سقف ردیف‌های چاپ/خروجی — بالاتر از این، سند چاپی مرورگر را قفل می‌کند. */
-export const PRINT_MAX_ROWS = 10_000;
+const PRINT_MAX_ROWS = 10_000;
 /** اندازهٔ صفحهٔ داخلی برای «همهٔ ردیف‌ها» — کمتربودنش = رفت‌وبرگشت بیشتر. */
 const FETCH_PAGE_SIZE = 500;
 
