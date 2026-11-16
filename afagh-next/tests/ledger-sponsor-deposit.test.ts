@@ -266,16 +266,16 @@ console.log('\n── دلیل تخفیف در برچسب ──');
 
 t('دلیل تخفیف به برچسب بیتس می‌چسبد', () => {
   eq(
-    ledgerCreditLabel('TUITION_BATES', 'تخفیف بیتس (سما)', 'رياست'),
-    'تخفیف بیتس (سما) — رياست',
+    ledgerCreditLabel('TUITION_BATES', 'تخفیف (سما)', 'رياست'),
+    'تخفیف (سما) — رياست',
   );
 });
 
 t('بدون دلیل، برچسب دست‌نخورده می‌ماند', () => {
-  eq(ledgerCreditLabel('TUITION_BATES', null, null), 'تخفیف بیتس (سما)');
-  eq(ledgerCreditLabel('TUITION_BATES', null, ''), 'تخفیف بیتس (سما)');
+  eq(ledgerCreditLabel('TUITION_BATES', null, null), 'تخفیف (سما)');
+  eq(ledgerCreditLabel('TUITION_BATES', null, ''), 'تخفیف (سما)');
   // «0» در سما یعنی «دلیلی ثبت نشده» — نباید چاپ شود
-  eq(ledgerCreditLabel('TUITION_BATES', null, '0'), 'تخفیف بیتس (سما)');
+  eq(ledgerCreditLabel('TUITION_BATES', null, '0'), 'تخفیف (سما)');
 });
 
 t('دلیل در رویداد تخفیف کارنامه دیده می‌شود', () => {
@@ -288,7 +288,7 @@ t('دلیل در رویداد تخفیف کارنامه دیده می‌شود',
   });
   const ev = s.events.find((e) => e.kind === 'DISCOUNT');
   if (!ev) throw new Error('رویداد تخفیف پیدا نشد');
-  eq(ev.label, 'تخفیف بیتس (سما) — ايثارگري');
+  eq(ev.label, 'تخفیف (سما) — ايثارگري');
 });
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} موفق، ${fail} ناموفق\n`);

@@ -29,7 +29,7 @@ export const LEDGER_TYPES: { value: string; label: string }[] = [
   { value: 'SPONSORSHIP', label: 'سازمانِ حامی' },
   { value: 'LOAN', label: 'وام' },
   { value: 'CREDIT', label: 'بستانکاری' },
-  { value: 'TUITION_BATES', label: 'بیتسِ قدیمی (اعتبار)' },
+  { value: 'TUITION_BATES', label: 'تخفیفِ قدیمی (اعتبار)' },
   { value: 'TUITION_ADJUST_INC', label: 'تعدیل افزایشی شهریه' },
 ];
 

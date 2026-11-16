@@ -146,14 +146,14 @@ export interface DiscountBreakdownItem {
 export const DISCOUNT_BREAKDOWN_LEDGER: Readonly<
   Record<string, { key: string; label: string }>
 > = {
-  TUITION_BATES: { key: 'BATES', label: 'تخفیف بیتس (سما)' },
+  TUITION_BATES: { key: 'BATES', label: 'تخفیف (سما)' },
   // ⚠ سه زیرنوعِ بیتس کلیدِ **مستقل** دارند (نه یک کلیدِ مشترک): کاربر
   //   می‌خواهد دقیقاً مثل سما، بیتسِ «ثابت» و «متغیر» و «مبلغی» جدا دیده
   //   شوند. با کلیدِ مشترک، هر سه در یک قلم ادغام می‌شدند و کارنامه فقط
   //   یک عددِ کلی نشان می‌داد (باگِ گزارش‌شده در کارنامهٔ نوع الف).
-  TUITION_BATES_FIXED: { key: 'BATES_FIXED', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)' },
-  TUITION_BATES_VARIABLE: { key: 'BATES_VARIABLE', label: 'تخفیف بیتسِ شهریهٔ متغیر (سما)' },
-  TUITION_BATES_AMOUNT: { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)' },
+  TUITION_BATES_FIXED: { key: 'BATES_FIXED', label: 'تخفیف ثابت (سما)' },
+  TUITION_BATES_VARIABLE: { key: 'BATES_VARIABLE', label: 'تخفیف متغیر (سما)' },
+  TUITION_BATES_AMOUNT: { key: 'BATES_AMOUNT', label: 'تخفیف مبلغی (سما)' },
   DISCOUNT_FIXED: { key: 'DISCOUNT_FIXED', label: 'تخفیف شهریهٔ ثابت (سما)' },
   DISCOUNT_VARIABLE: { key: 'DISCOUNT_VARIABLE', label: 'تخفیف شهریهٔ متغیر (سما)' },
   SUBJECT_DEDUCTIVE: { key: 'SUBJECT_DEDUCTIVE', label: 'کاهش مبلغ موضوعی (سما)' },
@@ -221,7 +221,7 @@ export function ledgerCreditLabel(
     case 'TUITION_BATES':
       // «بیتس» در سما یعنی تخفیف درصدی/مبلغی (رتبهٔ علمی، ایثارگری، …)؛
       // برچسبِ قدیمی «بیتس شهریهٔ قدیمی» آن را شبیهِ بدهی می‌کرد.
-      return `تخفیف بیتس (سما)${suffix}`;
+      return `تخفیف (سما)${suffix}`;
     case 'TUITION_BATES_FIXED':
       return `تخفیف بیتسِ شهریهٔ ثابت (سما)${suffix}`;
     case 'TUITION_BATES_VARIABLE':

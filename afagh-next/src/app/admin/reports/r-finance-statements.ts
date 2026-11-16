@@ -799,7 +799,7 @@ const LEDGER_TYPE_FA: Record<string, string> = {
   SUBJECT_DEDUCTIVE: 'کاهش موضوعی',
   TUITION_ADJUST_DEC: 'تعدیل کاهشی',
   TUITION_ADJUST_INC: 'تعدیل افزایشی',
-  TUITION_BATES: 'تخفیف بیتس (سما)',
+  TUITION_BATES: 'تخفیف (سما)',
   TUITION_BATES_FIXED: 'بیتس شهریهٔ ثابت',
   TUITION_BATES_VARIABLE: 'بیتس شهریهٔ متغیر',
   TUITION_BATES_AMOUNT: 'بیتس مبلغی',

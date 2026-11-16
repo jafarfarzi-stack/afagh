@@ -37,7 +37,7 @@ const ledger = (type: string, amount: number, description: string | null = null)
 console.log('\n── برچسب و واژگان ──');
 
 t('بیتس برچسب «تخفیف» می‌گیرد، نه «شهریهٔ قدیمی»', () => {
-  eq(ledgerCreditLabel('TUITION_BATES', 'بیتس شهریهٔ قدیمی (TermAms id=143222)'), 'تخفیف بیتس (سما)');
+  eq(ledgerCreditLabel('TUITION_BATES', 'بیتس شهریهٔ قدیمی (TermAms id=143222)'), 'تخفیف (سما)');
 });
 
 t('انواع تخفیفِ دفتری در فهرست قفل‌شده‌اند', () => {
@@ -62,7 +62,7 @@ const TERM = {
 
 t('بیتس رویداد تخفیف می‌سازد و «پرداخت» را بالا نمی‌برد', () => {
   const [s] = buildTranscript(TERM);
-  const bates = s.events.filter((e) => e.label.includes('بیتس'));
+  const bates = s.events.filter((e) => e.label.includes('تخفیف'));
   eq(bates.length, 1, 'رویداد بیتس:');
   eq(bates[0].kind, 'DISCOUNT');
   eq(bates[0].sign, 1);
