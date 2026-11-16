@@ -1034,7 +1034,7 @@ export default function FinancialTranscriptFlat({
                               <span className="mt-0.5 block space-y-0.5 text-[6.4pt] font-medium text-slate-500">
                                 {totalsBreakdown.map((d) => (
                                   <span key={d.key} className="block">
-                                    └ {d.label}: {fa(d.amount)}
+                                    {d.label}: {fa(d.amount)}
                                   </span>
                                 ))}
                               </span>

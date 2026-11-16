@@ -941,7 +941,7 @@ function TotalsBlock({
                 <span className="mt-0.5 block space-y-0.5 text-[8px] font-medium text-slate-500">
                   {breakdown.map((d) => (
                     <span key={d.key} className="block">
-                      └ {d.label}: {fa(d.amount)}
+                      {d.label}: {fa(d.amount)}
                     </span>
                   ))}
                 </span>
