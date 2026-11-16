@@ -140,5 +140,83 @@ ok(
   'FinancialTranscriptFlat: آرم از ناحیهٔ ۴ (کنار عکس دانشجو) حذف شده است'
 );
 
+// ── ۷) پوستر سردر: قواعد @page باید «سطح بالا» بمانند (علتِ ۲صفحهایشدن) ──
+// کروم هنگام ساختِ پیشنمایشِ چاپ، قواعدِ @page را فقط در سطحِ بالای stylesheet
+// میخواند؛ @pageِ داخلِ @media print نادیده گرفته میشود و حاشیهٔ سراسری برنده
+// میشود. این بخش قفل میکند که هر دو قاعده (بی نام + ds-a4) بیرونِ بلوکِ چاپند،
+// برگ A4 افقی با حاشیهٔ صفر است و ارتفاعِ چاپی پوستر ۲۰۸mm باقی مانده است.
+const doorSignTsx = readFileSync(
+  path.join(ROOT, 'src', 'app', 'admin', 'weekly-board', 'door-sign-print.tsx'),
+  'utf8',
+);
+const cssLiteral = /const css = `([\s\S]*?)`;/.exec(doorSignTsx)?.[1] ?? '';
+ok(cssLiteral.length > 0, 'door-sign-print.tsx: رشتهٔ CSS پوستر پیدا شد');
+
+// کامنتهای CSS حاوی توضیحِ باگِ قدیمی («@page داخل @media print»)اند؛
+// بدون حذفشان نگهبان مثبت کاذب میداد.
+const doorCss = cssLiteral.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** عمقِ آکولادِ هر کاراکتر — برای تشخیصِ «سطح بالا» بودنِ قاعده */
+const depthAt: number[] = [];
+let cssDepth = 0;
+for (let i = 0; i < doorCss.length; i += 1) {
+  depthAt[i] = cssDepth;
+  if (doorCss[i] === '{') cssDepth += 1;
+  else if (doorCss[i] === '}') cssDepth = Math.max(0, cssDepth - 1);
+}
+/** متنِ داخلِ بلوکی که از آکولادِ `open` شروع میشود */
+const blockAfter = (open: number): string => {
+  let d = 0;
+  for (let i = open; i < doorCss.length; i += 1) {
+    if (doorCss[i] === '{') d += 1;
+    else if (doorCss[i] === '}') {
+      d -= 1;
+      if (d === 0) return doorCss.slice(open + 1, i);
+    }
+  }
+  return '';
+};
+
+const pageRules = [...doorCss.matchAll(/@page\s*([A-Za-z][\w-]*)?\s*\{/g)].map((m) => {
+  const open = m.index + m[0].lastIndexOf('{');
+  return {
+    name: m[1] ?? '',
+    topLevel: depthAt[m.index] === 0,
+    body: blockAfter(open),
+    index: m.index,
+  };
+});
+const unnamedPage = pageRules.find((r) => r.name === '');
+const namedPage = pageRules.find((r) => r.name === 'ds-a4');
+const a4Landscape = /size:\s*297mm\s+210mm/;
+const zeroMargin = /margin:\s*0\b/;
+
+ok(!!unnamedPage && unnamedPage.topLevel, 'door-sign-print: @page بی نام در سطح بالاست');
+ok(!!namedPage && namedPage.topLevel, 'door-sign-print: @page ds-a4 در سطح بالاست');
+ok(!!unnamedPage && a4Landscape.test(unnamedPage.body) && zeroMargin.test(unnamedPage.body),
+  'door-sign-print: @page بی نام = A4 افقی (297×210mm) با حاشیهٔ صفر');
+ok(!!namedPage && a4Landscape.test(namedPage.body) && zeroMargin.test(namedPage.body),
+  'door-sign-print: @page ds-a4 = A4 افقی (297×210mm) با حاشیهٔ صفر');
+
+const printBlocks = [...doorCss.matchAll(/@media\s+print\s*\{/g)].map((m) => ({
+  body: blockAfter(m.index + m[0].lastIndexOf('{')),
+  index: m.index,
+}));
+ok(printBlocks.length >= 1, 'door-sign-print: بلوک @media print پیدا شد');
+const printBody = printBlocks.map((b) => b.body).join('\n');
+ok(!/@page\b/.test(printBody), 'door-sign-print: هیچ @pageای داخل @media print نمانده است');
+ok(!!unnamedPage && !!namedPage && printBlocks.length > 0
+  && unnamedPage.index < printBlocks[0].index && namedPage.index < printBlocks[0].index,
+  'door-sign-print: هر دو @page قبل از بلوکِ چاپ قرار دارند');
+ok(/page:\s*ds-a4\b/.test(printBody), 'door-sign-print: پوستر در چاپ page: ds-a4 را قفل میکند');
+
+const printSheetRules = [...printBody.matchAll(/\.ds-sheet\s*\{([^}]*)\}/g)].map((m) => m[1]);
+ok(printSheetRules.some((b) => /height:\s*208mm\b/.test(b)),
+  'door-sign-print: .ds-sheet در چاپ ارتفاع ۲۰۸mm دارد');
+ok(!/height:\s*209mm\b/.test(doorCss),
+  'door-sign-print: ارتفاعِ قدیمی ۲۰۹mm جایی نمانده است');
+ok(/body:has\(\.ds-sheet\)[\s\S]{0,200}?min-height:\s*0\s*!important/.test(printBody),
+  'door-sign-print: resetِ چاپ شاملِ خودِ body:has(.ds-sheet) است');
+
 console.log(`\nprint-media-guard: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

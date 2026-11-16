@@ -15,7 +15,7 @@ import {
   DISCOUNT_BREAKDOWN_LEDGER,
   type LedgerTxn,
 } from '../src/lib/finance-rules/statement.ts';
-import { buildTermSummary, visibleSummaryRows } from '../src/lib/finance-rules/term-summary.ts';
+import { buildTermSummary, visibleSummaryRows, fixedSummaryGrid } from '../src/lib/finance-rules/term-summary.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -253,6 +253,35 @@ eq(
     0,
   );
 }
+
+
+console.log('۸)شبکهٔ خلاصه — الگوی ثابت حتی وقتی تخفیف موجود نیست');
+const gridEmpty = fixedSummaryGrid(buildTermSummary({ ...term, discountBreakdown: [] }, 0));
+const gridFull = fixedSummaryGrid(buildTermSummary({
+  ...term,
+  discountBreakdown: [
+    { key: 'BATES_FIXED', label: 'تخفیف ثابت (سما)', amount: 10_000, source: 'LEDGER' as const },
+    { key: 'BATES_AMOUNT', label: 'تخفیف مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
+  ],
+}, 0));
+eq('تعداد و ترتیب ردیفها مستقل از نوع تخفیف است',
+  gridEmpty.map((c) => c.label), gridFull.map((c) => c.label));
+eq('ردیف ثابتِ تخفیف ثابت وقتی نباشد صفر است',
+  gridEmpty.find((c) => c.label === 'تخفیف ثابت (سما)')?.value, 0);
+eq('ردیف ثابتِ تخفیف ثابت وقتی باشد مبلغ دارد',
+  gridFull.find((c) => c.label === 'تخفیف ثابت (سما)')?.value, 10_000);
+eq('ردیف تخفیف متغیر همیشه هست (حتی صفر)',
+  gridEmpty.some((c) => c.label === 'تخفیف متغیر (سما)'), true);
+eq('سایر تخفیفها در ردیفِ ثابتِ خود جمع میشوند',
+  fixedSummaryGrid(buildTermSummary({ ...term, discountBreakdown: [
+    { key: 'TUITION_ADJUST_INC', label: 'تعدیل افزایشی (سما)', amount: 7_000, source: 'LEDGER' as const },
+  ] }, 0)).find((c) => c.label === 'سایر تخفیفها (سما)')?.value, 7_000);
+eq('ماندهٔ قبلیِ صفر ردیفِ اضافه نمисازد',
+  gridEmpty.filter((c) => c.label.includes('قبلی')).length, 0);
+eq('ماندهٔ قبلیِ غیرصفر ردیف میشود',
+  fixedSummaryGrid(buildTermSummary(term, 50_000)).some((c) => c.label.includes('قبلی')), true);
+eq('ماندهٔ ترم دقیقاً یک بار چاپ میشود',
+  gridFull.filter((c) => c.label === 'ماندهٔ ترم').length, 1);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

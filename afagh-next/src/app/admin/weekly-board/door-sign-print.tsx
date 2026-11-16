@@ -481,14 +481,23 @@ export default async function DoorSignPrint({
      بارگذاریِ استایل وابسته است — روی برخی مرورگرها/کش‌ها همان سراسری
      برنده می‌شد و خروجی عمودی می‌ماند. با page: ds-a4 به‌همراه @page ds-a4
      انتخابِ کاغذ قطعی است و دیگر به ترتیب وابسته نیست.
-     ارتفاع ۲۰۹mm (نه ۲۱۰) تا خطای گِردکردنِ زیرپیکسلی برگِ دوم نسازد. */
-  /* برگِ نامدار در سطح بالا (بیرون @media print) — کروم در بعضی نسخهها
-     قاعدهٔ @page داخل @media print را نادیده میگیرد. فقط خود پوستر از آن
-     استفاده میکند (page: ds-a4)، پس جدول هفتگی اساتید (page: wb-a4)
-     دستنخورده میماند. */
+     ارتفاع ۲۰۸mm (نه ۲۱۰) تا خطای گِردکردنِ زیرپیکسلی برگِ دوم نسازد. */
+
+  /* ⚠ علتِ برگشتِ سرریز: @pageِ «بی نام» داخل @media print مانده بود.
+     کروم هنگام ساختِ پیشنمایشِ چاپ قواعدِ @page را فقط در سطحِ بالا میخواند؛
+     قاعدهٔ داخل @media نادیده میشود و @pageِ سراسریِ globals.css
+     (A4 portrait + حاشیهٔ ۱۰×۸mm) یا حاشیهٔ پیشفرضِ چاپگر برنده میشود.
+     آن حاشیه ارتفاعِ قابلچاپ را از ۲۱۰mm به ~۱۹۰mm میرساند، پوسترِ ۲۰۹mm
+     سرریز میکند و آخرین فرزندِ .ds-sheet (خطِ برند) تنها چیزی است که روی
+     برگٔ دوم میافتد — همان چیزی که در اسکرینشات دیده میشود.
+     کامیت 4ddded94 فقط @page ds-a4 (نامدار) را بیرون آورده بود؛ چون
+     پیشنمایشِ کروم از «صفحهٔ پیشفرض» برای حاشیه استفاده میکند، کافی نبود.
+     هر دو قاعده در سطحِ بالا قرار میگیرند: بی نام برای حاشیه/اندازٔ برگ،
+     نامدار برای قفلکردنِ page: ds-a4 روی پوستر. جدول هفتگی اساتید (wb-a4)
+     در شاخهٔ دیگری رندر میشود و تحت تأثیر قرار نمیگیرد. */
+  @page { size: 297mm 210mm; margin: 0; }
   @page ds-a4 { size: 297mm 210mm; margin: 0; }
   @media print {
-    @page { size: 297mm 210mm; margin: 0; }
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; height:auto !important; }
     /* جهتِ ساختاری پوستر در چاپ قفل میشود. کارتها با right فیزیکی جایگذاری
        شدهاند، ولی سرستونها/ستونها همچنان به RTL وابستهاند؛ اگر جهت در چاپ
@@ -498,10 +507,13 @@ export default async function DoorSignPrint({
     body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
     body:has(.ds-sheet) .print-area { display:none !important; }
     /* پوستهٔ پنل (min-h-screen) در چاپ ارتفاعِ یک صفحهٔ کامل می‌گیرد و پوسترِ
-       ۲۰۹mm را به لبه می‌چسباند؛ یک پیکسل بیشتر = برگِ دومِ خالی. */
+       ۲۰۸mm را به لبه می‌چسباند؛ یک پیکسل بیشتر = برگِ دومِ خالی. */
+    /* ⚠ سلکتور قبلی فقط فرزندانِ body را میگرفت و خودِ
+       <body class="min-h-screen"> دستنخورده میماند (۱۰۰vh در چاپ). */
+    body:has(.ds-sheet),
     body:has(.ds-sheet) > div,
     body:has(.ds-sheet) .min-h-screen { min-height:0 !important; }
-    .ds-sheet { page: ds-a4; zoom:1 !important; width:297mm; height:209mm;
+    .ds-sheet { page: ds-a4; zoom:1 !important; width:297mm; height:208mm;
       margin:0 !important; border-radius:0 !important; box-shadow:none !important;
       overflow:hidden; break-inside:avoid; page-break-inside:avoid;
       break-after:avoid; page-break-after:avoid; }

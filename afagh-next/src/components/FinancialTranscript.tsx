@@ -2,7 +2,7 @@
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import { normalizeTermCode } from '@/lib/scheduling-core';
 import { PAY_TYPE_LABELS, type DiscountBreakdownItem } from '@/lib/finance-rules/statement';
-import { buildTermSummary, visibleSummaryRows } from '@/lib/finance-rules/term-summary';
+import { buildTermSummary, fixedSummaryGrid } from '@/lib/finance-rules/term-summary';
 import { courseTypeLabelOf } from '@/lib/mali-types';
 import { courseTypeFa } from '@/lib/student-labels';
 
@@ -997,18 +997,20 @@ function TotalsBlock({
 function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBalance?: number }) {
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
 
-  const { rows: rawRows } = buildTermSummary(t, priorBalance);
-  const rows = visibleSummaryRows(rawRows);
-
   /**
-   * تفکیکِ تخفیف به‌صورتِ **ردیف‌های مستقل** از خودِ `buildTermSummary`
-   * می‌آید (هر نوع یک ردیف، مثل جدولِ سما) — نه فرزندِ «└» و نه «تخفیف — X».
+   * شبکهٔ خلاصه الگوی ثابت دارد (درخواست کاربر): عنوانها و ترتیب ردیفها
+   * در تمام ترمها یکسان است؛ هر ردیف یا مبلغِ خودش را میگیرد یا صفر.
+   * سه نوع تخفیفِ سما ردیفِ اختصاصی دارد — ردیف بر اساسِ موجود بودنِ نوع
+   * اضافه/حذف نمیشود (همان چیزی که جدول را نامرتب مینمود).
    */
-  const items: Cell[] = [];
-  for (const r of rows) {
-    items.push({ label: r.label, value: fa(r.value), cls: r.cls, bold: r.bold });
-  }
-  // پرکردن ردیف آخر تا شبکهٔ سه‌ستونه به‌هم نریزد
+  const summary = buildTermSummary(t, priorBalance);
+  const items: Cell[] = fixedSummaryGrid(summary).map((c) => ({
+    label: c.label,
+    value: fa(c.value),
+    cls: c.cls,
+    bold: c.bold,
+  }));
+  // پرکردن ردیف آخر تا شبکهٔ سهستونه بههم نریزد
   while (items.length % 3 !== 0) items.push({ label: '', value: '' });
   const grid: Cell[][] = [];
   for (let i = 0; i < items.length; i += 3) grid.push(items.slice(i, i + 3));
@@ -1034,17 +1036,6 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
             ))}
           </tr>
         ))}
-        {/* ⚠ ردیفِ «ماندهٔ قبلی (انتقالی)» اینجا **تکرار نمی‌شود**:
-            `buildTermSummary` خودش آن را (فقط وقتی ≠۰ باشد) به `rows`
-            اضافه می‌کند. پیش‌تر همین بلوک دوباره چاپش می‌کرد و عددِ
-            انتقالی در یک کارت دو بار دیده می‌شد — همان «بدهی ورودی از
-            سیستم قبل» تکراری که کاربر گزارش داد. */}
-        <tr className="border-t border-slate-400 bg-slate-200/60">
-          <td colSpan={2} className="px-1 py-0.5 font-black text-slate-800">ماندهٔ ترم</td>
-          <td className={`px-1 py-0.5 text-left font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
-            {fa(Math.abs(t.balance))}
-          </td>
-        </tr>
       </tbody>
     </table>
   );

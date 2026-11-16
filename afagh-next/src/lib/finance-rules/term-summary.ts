@@ -182,7 +182,7 @@ export function buildTermSummary(
  * فیلترِ ردیف‌های قابلِ نمایش — شرطِ «فقط اگر مثبت/نامساوی صفر».
  *
  * جدا بودنش از ساختِ ردیف‌ها باعث می‌شود هر دو چیدمان دقیقاً یک فیلتر
- * داشته باشند (وگرنه یکی «چک در انتظار» را چاپ می‌کرد و دیگری نه).
+ * داشته باشند (وگرنه یکی «چک در انتظار» را چاپ میکرد و دیگری نه).
  */
 export function visibleSummaryRows(rows: TermSummaryRow[]): TermSummaryRow[] {
   return (rows || []).filter((r) => {
@@ -190,4 +190,55 @@ export function visibleSummaryRows(rows: TermSummaryRow[]): TermSummaryRow[] {
     if (r.onlyIfNonZero && r.value === 0) return false;
     return true;
   });
+}
+
+/** سلولِ شبکهٔ خلاصه — ردیفِ ثابت، حتی اگر مبلغ صفر باشد */
+export interface FixedSummaryCell {
+  label: string;
+  value: number;
+  cls?: string;
+  bold?: boolean;
+}
+
+const FIXED_DISCOUNT_KEYS = new Set(['BATES_FIXED', 'BATES_VARIABLE', 'BATES_AMOUNT']);
+
+/**
+ * الگوی ثابتِ شبکهٔ خلاصه (درخواست کاربر: «ردیفها را ثابت کن اگر داشت مبلغ
+ * پر کنه نداشت ۰ … بر اساس نوع تخفیف موجود نزنه»).
+ *
+ * پیشتر ردیفها بسته به نوعِ تخفیفِ همان ترم عوض میشدند و جدول نامرتب دیده
+ * میشد. حالا ترتیب و عنوانها یکسان است و فقط اعداد عوض میشوند. تخفیفهای
+ * سهگانهٔ سما ردیفِ اختصاصی دارند؛ سایر اقلام تخفیف در «سایر تخفیفها»جمع
+ * میشوند تا هیچ مبلغی گم نشود. «ماندهٔ قبلی» طبق درخواستِ پیشین فقط وقتی
+ * واقعاً غیرصفر است اضافه میشود.
+ */
+export function fixedSummaryGrid(summary: TermSummary): FixedSummaryCell[] {
+  const byKey = new Map(summary.rows.map((r) => [r.key, r]));
+  const valueOf = (key: string) => byKey.get(key)?.value ?? 0;
+  const otherDiscounts = summary.rows
+    .filter((r) => r.key.startsWith('discount:') && !FIXED_DISCOUNT_KEYS.has(r.key.slice(9)))
+    .reduce((sum, r) => sum + r.value, 0);
+  // ردیفِ جمعیِ قدیمی وقتی هیچ تفکیکی نبود — از گم شدن مبلغ جلوگیری میکند
+  const plainDiscount = byKey.get('discounts')?.value ?? 0;
+
+  const cells: FixedSummaryCell[] = [
+    { label: 'شهریه (بدهی)', value: valueOf('charges') },
+    { label: 'شهریهٔ ثابت', value: valueOf('tuitionFixed') },
+    { label: 'شهریهٔ متغیر', value: valueOf('tuitionVariable') },
+    { label: 'تخفیف ثابت (سما)', value: valueOf('discount:BATES_FIXED'), cls: 'text-violet-700' },
+    { label: 'تخفیف متغیر (سما)', value: valueOf('discount:BATES_VARIABLE'), cls: 'text-violet-700' },
+    { label: 'تخفیف مبلغی (سما)', value: valueOf('discount:BATES_AMOUNT'), cls: 'text-violet-700' },
+    { label: 'سایر تخفیفها (سما)', value: otherDiscounts + plainDiscount, cls: 'text-violet-700' },
+    { label: 'پوشش بنیاد', value: valueOf('sponsor'), cls: 'text-indigo-700' },
+    { label: 'پوشش خیرین', value: valueOf('charity'), cls: 'text-teal-700' },
+    { label: 'خالص', value: valueOf('net'), bold: true },
+    { label: 'پرداخت', value: valueOf('payments'), cls: 'text-emerald-700' },
+    { label: 'چک وصولشده', value: valueOf('chequesCleared'), cls: 'text-emerald-700' },
+    { label: 'چک در انتظار', value: valueOf('chequesPending'), cls: 'text-amber-700' },
+    { label: 'چک برگشتی', value: valueOf('chequesBounced'), cls: 'text-rose-700' },
+    { label: 'مساعده', value: valueOf('loans'), cls: 'text-sky-700' },
+  ];
+  if (valueOf('prior') !== 0) cells.push({ label: 'ماندهٔ قبلی (انتقالی)', value: valueOf('prior') });
+  cells.push({ label: 'ماندهٔ ترم', value: valueOf('balance'), bold: true });
+  return cells;
 }
