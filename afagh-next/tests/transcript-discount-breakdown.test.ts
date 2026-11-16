@@ -154,8 +154,8 @@ const term = {
   tuitionVariable: 600_000,
   discounts: 240_000,
   discountBreakdown: [
-    { key: 'BATES', label: 'تخفیف بیتس (سما)', amount: 120_000, source: 'LEDGER' as const },
-    { key: 'DISCOUNT_FIXED', label: 'تخفیف شهریهٔ ثابت (سما)', amount: 120_000, source: 'LEDGER' as const },
+    { key: 'BATES', label: 'تخفیف (سما)', amount: 120_000, source: 'LEDGER' as const },
+    { key: 'DISCOUNT_FIXED', label: 'تخفیف ثابت (سما)', amount: 120_000, source: 'LEDGER' as const },
   ],
   sponsorships: 80_000,
   charityCoverage: 30_000,
@@ -172,12 +172,16 @@ const s = buildTermSummary(term, 50_000);
 // «فیلترِ نمایش» جدا انجام می‌شود ⇒ همهٔ دو چیدمان دقیقاً یک فیلتر دارند.
 eq('ترتیبِ ردیف‌ها کانونی است (کامل، مستقل از داده)',
   s.rows.map((r) => r.key),
-  ['charges', 'tuitionFixed', 'tuitionVariable', 'discounts', 'sponsor', 'charity',
+  ['charges', 'tuitionFixed', 'tuitionVariable', 'discount:BATES', 'discount:DISCOUNT_FIXED', 'sponsor', 'charity',
    'net', 'payments', 'chequesCleared', 'chequesPending', 'chequesBounced', 'loans', 'prior', 'balance'],
 );
 eq('پوششِ خیرین از بنیاد جدا شد', s.rows.find((r) => r.key === 'sponsor')?.value, 50_000);
 eq('خیرین جدا نشمرده می‌شود', s.rows.find((r) => r.key === 'charity')?.value, 30_000);
-eq('تفکیکِ تخفیف دو قلم دارد ⇒ نمایش داده می‌شود', s.discountLines.length, 2);
+eq('هر قلمِ تخفیف ردیفِ مستقل است — قلمِ جمعیِ «تخفیف» حذف می‌شود',
+  s.rows.some((r) => r.key === 'discounts'), false);
+eq('ردیف‌های تخفیف به ترتیبِ کانونی می‌آیند (نه ترتیبِ درج)',
+  s.rows.filter((r) => r.key.startsWith('discount:')).map((r) => [r.key, r.value]),
+  [['discount:BATES', 120_000], ['discount:DISCOUNT_FIXED', 120_000]]);
 eq('چکِ برگشتی صفر ⇒ در نمایش نمی‌آید',
   visibleSummaryRows(s.rows).some((r) => r.key === 'chequesBounced'), false);
 eq('چکِ در انتظارِ نام-zero ⇒ در نمایش می‌آید',
@@ -190,43 +194,36 @@ eq('نمایانگرِ ردیف‌ها، صفرها را حذف می‌کند',
   visibleSummaryRows(sNo.rows).some((r) => r.key === 'chequesBounced'), false);
 eq('خلاصهٔ خالی هم «ماندهٔ ترم» دارد', sNo.rows[sNo.rows.length - 1].key, 'balance');
 
-// ── یک قلم تخفیف: ردیف فرزند تکراری نمی‌سازیم، منبع را در برچسب می‌آوریم ──
+// ── یک قلم تخفیف: همان قلم، ردیفِ مستقل با برچسبِ خودش — بدون «تخفیف — X» ──
 const sOne = buildTermSummary(
   {
     ...term,
     discountBreakdown: [
-      { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
+      { key: 'BATES_AMOUNT', label: 'تخفیف مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
     ],
   },
   0,
 );
-eq('یک قلم ⇒ ردیف فرزند ندارد', sOne.discountLines.length, 0);
-eq(
-  'یک قلم ⇒ منبع در برچسبِ «تخفیف» می‌آید',
-  sOne.rows.find((r) => r.key === 'discounts')?.label,
-  'تخفیف — بیتسِ مبلغی (سما)',
-);
+eq('یک قلم ⇒ همان یک ردیفِ مستقل',
+  sOne.rows.filter((r) => r.key.startsWith('discount:')).map((r) => [r.key, r.label, r.value]),
+  [['discount:BATES_AMOUNT', 'تخفیف مبلغی (سما)', 70_000]]);
+eq('یک قلم ⇒ قلمِ جمعیِ «تخفیف» نیست', sOne.rows.some((r) => r.key === 'discounts'), false);
 
-// ── دو قلم تخفیف: ردیف‌های فرزند، و برچسبِ مادر دست‌نخورده ──
+// ── دو قلم تخفیف: دو ردیفِ مستقل به ترتیبِ کانونی ──
 const sTwo = buildTermSummary(
   {
     ...term,
     discountBreakdown: [
-      { key: 'BATES_AMOUNT', label: 'تخفیف بیتسِ مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
-      { key: 'BATES_FIXED', label: 'تخفیف بیتسِ شهریهٔ ثابت (سما)', amount: 10_000, source: 'LEDGER' as const },
+      { key: 'BATES_AMOUNT', label: 'تخفیف مبلغی (سما)', amount: 70_000, source: 'LEDGER' as const },
+      { key: 'BATES_FIXED', label: 'تخفیف ثابت (سما)', amount: 10_000, source: 'LEDGER' as const },
     ],
   },
   0,
 );
-eq('دو قلم ⇒ دو ردیف فرزند', sTwo.discountLines.length, 2);
-eq(
-  'دو قلم ⇒ برچسبِ مادر ساده می‌ماند',
-  sTwo.rows.find((r) => r.key === 'discounts')?.label,
-  'تخفیف',
-);
-eq('ردیف‌های فرزند به ترتیبِ کانونی می‌آیند (نه ترتیبِ درج)',
-  sTwo.discountLines.map((d) => [d.key, d.value]),
-  [['BATES_FIXED', 10_000], ['BATES_AMOUNT', 70_000]]);
+eq('دو قلم ⇒ دو ردیفِ مستقل (بدون فرزندِ └ و بدون «—»)',
+  sTwo.rows.filter((r) => r.key.startsWith('discount:')).map((r) => r.label),
+  ['تخفیف ثابت (سما)', 'تخفیف مبلغی (سما)']);
+eq('دو قلم ⇒ قلمِ جمعیِ «تخفیف» نیست', sTwo.rows.some((r) => r.key === 'discounts'), false);
 
 console.log('۷)قانونِ قرارداد — همان تعریف برای هر دو چیدمان');
 const rowsA = visibleSummaryRows(buildTermSummary(term, 0).rows).map((r) => r.label);

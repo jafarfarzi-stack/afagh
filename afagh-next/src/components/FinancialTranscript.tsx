@@ -997,22 +997,16 @@ function TotalsBlock({
 function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBalance?: number }) {
   type Cell = { label: string; value: string; cls?: string; bold?: boolean };
 
-  const { rows: rawRows, discountLines } = buildTermSummary(t, priorBalance);
+  const { rows: rawRows } = buildTermSummary(t, priorBalance);
   const rows = visibleSummaryRows(rawRows);
 
   /**
-   * تفکیکِ تخفیف به‌صورتِ ردیف‌های فرزندِ زیرِ قلمِ «تخفیف» می‌آید — دقیقاً
-   * همان چیزی که سما زیرِ قلمِ تخفیف می‌نوشت. اگر فقط یک قلم باشد، اصلاح
-   * نیازی به شکستن نیست و همان قلمِ «تخفیف» کافی است.
+   * تفکیکِ تخفیف به‌صورتِ **ردیف‌های مستقل** از خودِ `buildTermSummary`
+   * می‌آید (هر نوع یک ردیف، مثل جدولِ سما) — نه فرزندِ «└» و نه «تخفیف — X».
    */
   const items: Cell[] = [];
   for (const r of rows) {
     items.push({ label: r.label, value: fa(r.value), cls: r.cls, bold: r.bold });
-    if (r.key === 'discounts') {
-      for (const d of discountLines) {
-        items.push({ label: `└ ${d.label}`, value: fa(d.value), cls: 'text-violet-500' });
-      }
-    }
   }
   // پرکردن ردیف آخر تا شبکهٔ سه‌ستونه به‌هم نریزد
   while (items.length % 3 !== 0) items.push({ label: '', value: '' });

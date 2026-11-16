@@ -36,19 +36,10 @@ export interface TermSummaryRow {
   onlyIfNonZero?: boolean;
 }
 
-/** یک قلمِ تفکیکِ تخفیف — ساختارِ سبک برای رندر در هر دو چیدمان */
-export interface TermDiscountLine {
-  key: string;
-  label: string;
-  value: number;
-}
-
 /** خلاصهٔ کاملِ یک ترم */
 export interface TermSummary {
   /** ردیف‌های اصلی — به ترتیبِ کانونی */
   rows: TermSummaryRow[];
-  /** تفکیکِ تخفیف — اگر بیش از یک قلم داشته باشد */
-  discountLines: TermDiscountLine[];
 }
 
 /** حداقلِ ساختاریِ ترم که این ماژول لازم دارد */
@@ -155,12 +146,10 @@ export function buildTermSummary(
   // ماندهٔ ترم — همیشه چاپ می‌شود (قلمِ پایانیِ هر ترم)
   rows.push({ key: 'balance', label: 'ماندهٔ ترم', value: toNum(t.balance), bold: true });
 
-  // تفکیکِ تخفیف:
-  //   • بیش از یک قلم  → ردیف‌های فرزند زیرِ «تخفیف» چاپ می‌شوند
-  //   • دقیقاً یک قلم  → ردیفِ فرزند تکراری است، پس **منبع** در خودِ
-  //     برچسبِ «تخفیف» می‌آید: «تخفیف — بیتسِ مبلغی (سما)». این‌طور حتی
-  //     وقتی فقط یک نوع تخفیف داریم، کارشناس می‌داند بابتِ چیست
-  //     (شکایتِ «تخفیف‌ها تفکیک نشده‌اند»).
+  // تفکیکِ تخفیف — مثل جدولِ سما: **هر نوع، یک ردیفِ مستقل** (نه قلمِ جمعی،
+  //   نه فرزندِ «└»، نه «تخفیف — X»). درخواستِ کاربر: «جدول‌هاش ثابته» —
+  //   یعنی ترمِ تک‌تخفیفی و چندتخفیفی باید یک شکل باشند. وقتی هیچ قلمی
+  //   نیست، ردیفِ جمعیِ «تخفیف» با مقدار صفر چاپ می‌شود.
   const raw = (t.discountBreakdown || []).filter((d) => d && toNum(d.amount) !== 0);
   // ترتیبِ کانونی (نه ترتیبِ درج در دفتر): دو چاپ و «جمع کل دوره» هم‌ترتیب
   // می‌شوند و کارشناس می‌تواند سطرها را با هم تطبیق بدهد.
@@ -170,21 +159,23 @@ export function buildTermSummary(
   };
   const sorted = [...raw].sort((a, b) => orderOf(a.key) - orderOf(b.key));
 
-  const discountLines: TermDiscountLine[] =
-    sorted.length > 1
-      ? sorted.map((d) => ({ key: d.key, label: d.label, value: toNum(d.amount) }))
-      : [];
-
-  if (sorted.length === 1) {
-    const row = rows.find((r) => r.key === 'discounts');
-    if (row) {
-      // پیشوندِ «تخفیف» تکراری نشود: «تخفیف — بیتسِ مبلغی (سما)»
-      const short = String(sorted[0].label || '').replace(/^تخفیف\s+/, '').trim();
-      if (short) row.label = `تخفیف — ${short}`;
+  if (sorted.length > 0) {
+    const idx = rows.findIndex((r) => r.key === 'discounts');
+    if (idx !== -1) {
+      rows.splice(
+        idx,
+        1,
+        ...sorted.map((d) => ({
+          key: `discount:${d.key}`,
+          label: String(d.label || 'تخفیف').trim(),
+          value: toNum(d.amount),
+          cls: 'text-violet-700',
+        })),
+      );
     }
   }
 
-  return { rows, discountLines };
+  return { rows };
 }
 
 /**

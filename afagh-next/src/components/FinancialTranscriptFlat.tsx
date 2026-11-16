@@ -776,7 +776,6 @@ export default function FinancialTranscriptFlat({
                          * وقتی بیش از یک قلم باشد، در یک ردیفِ جدا زیرِ ردیفِ
                          * ترم چاپ می‌شود تا ستون‌های جدول جابه‌جا نشوند.
                          */
-                        const discountLines = termSummaries.get(t.termId)?.discountLines ?? [];
                         return (
                           <Fragment key={t.termId}>
                             <tr className="border-b border-slate-200">
@@ -802,18 +801,6 @@ export default function FinancialTranscriptFlat({
                               ) : null}
                             </td>
                             </tr>
-                            {discountLines.length > 0 && (
-                              <tr key={`${t.termId}-disc`} className="border-b border-slate-100 bg-slate-50/60">                                <td colSpan={12} className="border border-slate-200 px-1 py-0.5 text-[6.4pt] text-slate-600">
-                                  تفکیکِ تخفیفِ این نیمسال:{' '}
-                                  {discountLines.map((d, i) => (
-                                    <span key={d.key}>
-                                      {i > 0 ? ' · ' : ''}
-                                      {d.label}: <span className="font-mono">{fa(d.value)}</span>
-                                    </span>
-                                  ))}
-                                </td>
-                              </tr>
-                            )}
                           </Fragment>
                         );
                       })}
