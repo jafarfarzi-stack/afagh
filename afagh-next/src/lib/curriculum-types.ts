@@ -324,6 +324,14 @@ export interface CurriculumVersion {
   entryYearFrom: number;
   entryYearTo: number | null;        // NULL = به بعد
   entryTermId: number | null;        // نیمسال ورودی مربوطه (NULL = همه نیمسال‌ها)
+  /**
+   * نوع کاتالوگ — «عادی» یا «جبرانی» (ستون curriculum_versions.catalogKind).
+   * undefined/NULL معادل NORMAL است؛ نسخه‌های پیش از مهاجرت ۰۱۳۷ همه عادی‌اند.
+   * مدل کامل در src/lib/compensatory-catalog.ts.
+   */
+  catalogKind?: 'NORMAL' | 'COMPENSATORY';
+  /** ارجاع نسخهٔ عادی به نسخهٔ جبرانیِ متناظر (NULL = ندارد) */
+  compensatoryVersionId?: number | null;
   effectiveFrom: string | null;      // تاریخ مصوبه (شمسی varchar)
   effectiveTo: string | null;
   totalRequiredUnits: number;        // سقف واحد لازم برای فارغ‌التحصیلی

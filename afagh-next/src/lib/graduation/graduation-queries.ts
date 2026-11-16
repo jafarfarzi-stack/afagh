@@ -27,6 +27,7 @@ export async function loadAuditStudentRow(studentId: number) {
   const [row] = await db.select({
     id: students.id, studentCode: students.studentCode, majorId: students.majorId,
     entryYear: students.entryYear, degreeLevelId: students.degreeLevelId, regulationId: students.regulationId,
+    universityId: students.universityId,
     firstName: users.firstName, lastName: users.lastName,
     majorName: majors.name, degreeCode: degree_level_configs.code,
     passingGrade: degree_level_configs.defaultPassingGrade,
@@ -66,4 +67,19 @@ export async function loadCurriculumRequirementRows(versionId: number) {
   }).from(curriculum_courses)
     .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
     .where(eq(curriculum_courses.curriculumVersionId, versionId));
+}
+
+/**
+ * فهرست کد↔شناسه↔هم‌ارزهای همهٔ دروس دانشگاه — برای ساختن ایندکس هم‌ارزی.
+ *
+ * چرا اینجا: `equivalentCourseCodes` در جدول `courses` است و تا پیش از این
+ * هیچ‌کدام از موتورهای اجرایی آن را نمی‌خواندند؛ نتیجه این بود که درسِ
+ * پاس‌شده با کد هم‌ارز، «پاس‌نشده» شمرده می‌شد.
+ */
+export async function loadCourseEquivalenceRows(universityId: number) {
+  return db.select({
+    id: courses.id,
+    code: courses.code,
+    equivalentCourseCodes: courses.equivalentCourseCodes,
+  }).from(courses).where(eq(courses.universityId, universityId));
 }

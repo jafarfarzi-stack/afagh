@@ -1000,21 +1000,7 @@
       "idx": 142,
       "version": "7",
       "when": 1795900000000,
-      "tag": "0137_ledger_bates_breakdown",
-      "breakpoints": true
-    },
-    {
-      "idx": 143,
-      "version": "7",
-      "when": 1796000000000,
-      "tag": "0138_finance_base_tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 144,
-      "version": "7",
-      "when": 1796100000000,
-      "tag": "0139_widen_ledger_txn_type",
+      "tag": "0137_compensatory_catalog",
       "breakpoints": true
     }
   ]
