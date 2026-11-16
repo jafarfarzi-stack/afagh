@@ -12,7 +12,7 @@ const FINANCE = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'];
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
 
-/** ساخت URL صفحه‌بندی با حفظ فیلترهای فعلی (رشته/مقطع/ورودی/جستجو/بدهکار). */
+/** ساخت URL صفحه‌بندی با حفظ پارامترهای فیلتر فعلی (رشته/مقطع/ورودی/جستجو/بدهکار). */
 function buildFinanceHref(
   sp: { majorId?: string; degreeLevelId?: string; entryYear?: string; q?: string; debtors?: string },
   p: number,
@@ -126,19 +126,18 @@ export default async function FinanceWorklistPage(props: {
 
   const inputCls =
     'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500';
-  // ⚡ بدون `backdrop-blur`: هر دکمه پیشتر یک لایهٔ `backdrop-filter` روی گرادیان
-  //    سربرگ میساخت؛ با ۶ دکمه + سرستون چسبان جدول، هر کلیک/اسکرول یک رنگآمیزی
-  //    مجدد تمامصفحهای تحمیل میکرد. `bg-white/10` همان حس شیشهای را میدهد بیآنکه
-  //    لایهٔ کامپوزیت بسازد (همان قرارداد `globals.css` برای هدر و ناوبری).
-  const dockCls =
-    'rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20';
+  // تنها CTA سربرگ: بقیهٔ عملیات مالی قبلاً هم در `/admin/c/fin` (کاشیهای دستهٔ
+  // مالی) موجوداند و تکرارشان در اینجا فقط سربرگ را شلوغ میکرد. `prefetch=false`
+  // هم از رندر بیمورد RSC در پسزمینه جلوگیری میکند.
+  const toolsCtaCls =
+    'inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/25';
 
   return (
     <div className="space-y-4" dir="rtl">
       {/* ── سربرگ premium ── */}
       <div className="overflow-hidden rounded-2xl border border-emerald-900/20 bg-gradient-to-l from-emerald-700 via-teal-700 to-slate-900 p-5 text-white shadow-lg print:hidden">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-lg font-black sm:text-xl">🗂️ کارتابل کارشناس مالی</h1>
             <p className="mt-1 text-xs text-emerald-50/90">
               فهرست کامل دانشجویان با ماندهٔ مالی — فیلتر رشته، مقطع و ورودی؛ ورود مستقیم به کارنامهٔ مالی هر دانشجو
@@ -153,13 +152,10 @@ export default async function FinanceWorklistPage(props: {
               </span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link prefetch={false} href="/admin/finance/rules" className={dockCls}>⚙️ قواعد مالی</Link>
-            <Link prefetch={false} href="/admin/tuition" className={dockCls}>🧮 موتور شهریه</Link>
-            <Link prefetch={false} href="/admin/finance/student-formula" className={dockCls}>🎯 فرمول ویژه</Link>
-            <Link prefetch={false} href="/admin/finance/welfare" className={dockCls}>🤝 صندوق رفاه</Link>
-            <Link prefetch={false} href="/admin/finance/reports" className={dockCls}>📊 مرکز گزارش‌ها</Link>
-            <PrintButton />
+          <div className="flex shrink-0 items-center gap-2">
+            <Link prefetch={false} href="/admin/c/fin" className={toolsCtaCls}>
+              🧰 ابزارهای مالی
+            </Link>
           </div>
         </div>
       </div>
@@ -255,13 +251,18 @@ export default async function FinanceWorklistPage(props: {
         </div>
       </form>
 
-      {/* فهرست دانشجویان */}
+      {/* فهرست دانشجویان — تنها دکمهٔ باقیمانده (چاپ) در بالای جدول قرار میگیرد */}
       <div className="card">
-        <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-          <h2 className="font-bold text-slate-800">
-            فهرست دانشجویان ({fa(students.length)} از {fa(count)})
-          </h2>
-          <p className="text-2xs text-slate-500 print:hidden">برای کارنامهٔ مالی روی نام دانشجو کلیک کنید</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="min-w-0">
+            <h2 className="font-bold text-slate-800">
+              فهرست دانشجویان ({fa(students.length)} از {fa(count)})
+            </h2>
+            <p className="mt-0.5 text-2xs text-slate-500 print:hidden">
+              برای کارنامهٔ مالی روی نام دانشجو کلیک کنید
+            </p>
+          </div>
+          <PrintButton />
         </div>
 
         {students.length === 0 ? (

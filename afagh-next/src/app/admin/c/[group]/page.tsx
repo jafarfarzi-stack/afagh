@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth';
-import { groupedModules } from '@/lib/admin-modules';
+import { groupedModules, FINANCE_SUBGROUPS } from '@/lib/admin-modules';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -48,21 +48,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
       </div>
 
       {/* کاشی‌های ماژول — همان الگوی «آیکن + عنوان کوتاه» کارتابل استاد/دانشجو.
-          پیش‌تر هر کاشی یک پاراگراف توضیح داشت؛ در موبایل با ۳ ستون، کاشی‌ها
-          بسیار بلند و ناخوانا می‌شدند. توضیح حذف شد و عنوان تا ۳ خط جمع می‌شود.
-
-          ⚠ بازطراحی: پیش‌تر **کلِ کاشی** یک گرادیانِ رنگیِ مخصوصِ خودش داشت؛ با
-          ۴۰+ ماژول، صفحه به یک تابلوی رنگارنگ تبدیل می‌شد و سلسله‌مراتب نداشت.
-          حالا سطحِ کاشی خنثی است و رنگِ هر ماژول فقط در «نشانِ آیکن» می‌ماند —
-          هم‌خوان با کاشی‌های دسته در داشبورد و با هر دو حالت روشن/تیره.
-
-          prefetch خاموش است: هر کاشی یک صفحهٔ سنگینِ force-dynamic است. با
-          prefetch روشن، باز کردن یک دسته ۵ تا ۸ رندرِ کاملِ RSC با تمام
-          کوئری‌هایشان را همزمان به event-loop نود تحمیل می‌کرد — همان الگویی
-          که در HAR باعث ۱۶۲ درخواست `_rsc` روی یک بارگذاری شده بود.
-          ناوبری حالا فقط با کلیک و یک درخواست انجام می‌شود. */}
-      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3.5 lg:grid-cols-5">
-        {g.modules.map(m => (
+          برای دستهٔ مالی، کاشی‌ها بر اساس `subgroup` به سه بخشِ منطقی تقسیم
+          می‌شوند (کارتابل / قواعد / ابزارها) تا ۱۰ کاشی مالی درهم نباشند. */}
+      {(() => {
+        const renderCard = (m: (typeof g.modules)[number]) => (
           <Link
             key={m.href}
             href={m.href}
@@ -80,8 +69,36 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
               {m.title}
             </h3>
           </Link>
-        ))}
-      </div>
+        );
+
+        const gridCls = 'grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3.5 lg:grid-cols-5';
+
+        if (g.group.key !== 'fin') {
+          return <div className={gridCls}>{g.modules.map(renderCard)}</div>;
+        }
+
+        return (
+          <div className="space-y-5">
+            {FINANCE_SUBGROUPS.map((sg) => {
+              const mods = g.modules.filter((m) => (m.subgroup ?? 'tools') === sg.key);
+              if (mods.length === 0) return null;
+              return (
+                <section key={sg.key} className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span aria-hidden className="text-base leading-none">{sg.icon}</span>
+                      <h2 className="text-xs font-black text-slate-800 sm:text-sm">{sg.title}</h2>
+                      <span className="hidden truncate text-2xs font-bold text-slate-400 sm:inline">{sg.desc}</span>
+                    </div>
+                    <span className="ui-chip shrink-0">{mods.length}</span>
+                  </div>
+                  <div className={gridCls}>{mods.map(renderCard)}</div>
+                </section>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

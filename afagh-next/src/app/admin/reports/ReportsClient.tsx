@@ -7,10 +7,13 @@ import { faIncludes } from '@/lib/persian-search';
 import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 import ReportPrint from '@/components/ui/ReportPrint';
 
-/** ارقام لاتین → فارسی (بدون تبدیل عدد) */
-type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'research';
+/** دستهبندی کارتهای گزارش: مالی به سه گروه منطقی تقسیم شده است */
+type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-academic' | 'finance-ops' | 'research';
 
 type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
+
+/** تمام دستههای مالی — هم در فیلتر Scope و هم در فیلتر تبها استفاده میشود */
+const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-academic', 'finance-ops']);
 
 const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'students', label: '🧑‍🎓 دانشجویی و فهرست' },
@@ -18,7 +21,9 @@ const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'program', label: '🗓️ برنامه و نمره' },
   { key: 'exams', label: '📝 امتحانات' },
   { key: 'classes', label: '🏫 کلاس‌ها' },
-  { key: 'finance', label: '💰 مالی' },
+  { key: 'finance', label: '💰 پرداخت و حسابداری' },
+  { key: 'finance-academic', label: '🎓 شهریه و مالی تحصیلی' },
+  { key: 'finance-ops', label: '📦 انبار، قراردادها و پیمانکاران' },
   { key: 'research', label: '🎓 پژوهش و مکاتبات' },
 ];
 
@@ -35,7 +40,7 @@ const CARDS: Card[] = [
   { kind: 'entries', cat: 'students', icon: '📥', title: 'ورودی‌های جدید' },
   { kind: 'noshow', cat: 'students', icon: '🚫', title: 'عدم مراجعه‌ها' },
   { kind: 'transfers', cat: 'students', icon: '🔀', title: 'میهمان / انتقالی' },
-  { kind: 'tuition', cat: 'finance', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
+  { kind: 'tuition', cat: 'finance-academic', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
   { kind: 'payesh', cat: 'research', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', cat: 'research', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
   { kind: 'docs', cat: 'research', icon: '📎', title: 'مدارک دانشجویان' },
@@ -87,18 +92,18 @@ const CARDS: Card[] = [
   { kind: 'prof-sessions-unformed', cat: 'classes', icon: '⏳', title: 'جلسات تشکیل‌نشده', needsTerm: true, customs: [{ key: 'dateFrom', title: 'از تاریخ' }, { key: 'dateTo', title: 'تا تاریخ' }] },
   { kind: 'attendance-list', cat: 'classes', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
   // مالی
-  { kind: 'tuition-tariff', cat: 'finance', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
-  { kind: 'tuition-statement', cat: 'finance', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
+  { kind: 'tuition-tariff', cat: 'finance-academic', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
+  { kind: 'tuition-statement', cat: 'finance-academic', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
   // ── گزارش‌های پرداختی (هم‌ریخت با اسناد رسمی سما) ──
   { kind: 'total-payments', cat: 'finance', icon: '📊', title: 'گزارش کل پرداختی دانشجویان' },
   { kind: 'student-payments', cat: 'finance', icon: '🧾', title: 'گزارش پرداختی دانشجویان (تفصیلی)', needsTerm: true },
   { kind: 'term-payments', cat: 'finance', icon: '💳', title: 'گزارش مبلغ پرداختی نیمسال', needsTerm: true },
   { kind: 'accounting-voucher', cat: 'finance', icon: '📑', title: 'سند حسابداری (دفتر روزنامه)', needsTerm: true, customs: [{ key: 'voucherNo', title: 'شماره سند' }] },
-  { kind: 'term-financial', cat: 'finance', icon: '📈', title: 'گزارش مالی نیمسال (تجمیعی)', needsTerm: true },
-  { kind: 'tuition-overview', cat: 'finance', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
-  { kind: 'tuition-faculty-detail', cat: 'finance', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
-  { kind: 'faculty-financial', cat: 'finance', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
-  { kind: 'major-financial', cat: 'finance', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
+  { kind: 'term-financial', cat: 'finance-academic', icon: '📈', title: 'گزارش مالی نیمسال (تجمیعی)', needsTerm: true },
+  { kind: 'tuition-overview', cat: 'finance-academic', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
+  { kind: 'tuition-faculty-detail', cat: 'finance-academic', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
+  { kind: 'faculty-financial', cat: 'finance-academic', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
+  { kind: 'major-financial', cat: 'finance-academic', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
   // دسته‌هایی که در سیستم قدیم بود و در آفاق نبود: فروش، سود و زیان، ترازنامه،
   // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، دفتر روزنامه، کالا، هزینه، تخصیص، درآمد.
@@ -108,14 +113,14 @@ const CARDS: Card[] = [
   { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه' },
   { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)' },
   { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)' },
-  { kind: 'contractor-report', cat: 'finance', icon: '🏗️', title: 'پیمانکاران و قراردادها' },
-  { kind: 'contractor-settlement', cat: 'finance', icon: '🧾', title: 'ماه‌حساب پیمانکاران' },
-  { kind: 'insurance-report', cat: 'finance', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس' },
-  { kind: 'legal-report', cat: 'finance', icon: '⚖️', title: 'پرونده‌های حقوقی' },
+  { kind: 'contractor-report', cat: 'finance-ops', icon: '🏗️', title: 'پیمانکاران و قراردادها' },
+  { kind: 'contractor-settlement', cat: 'finance-ops', icon: '🧾', title: 'ماه‌حساب پیمانکاران' },
+  { kind: 'insurance-report', cat: 'finance-ops', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس' },
+  { kind: 'legal-report', cat: 'finance-ops', icon: '⚖️', title: 'پرونده‌های حقوقی' },
   { kind: 'vat-report', cat: 'finance', icon: '🏷️', title: 'مالیات بر ارزش افزوده' },
   { kind: 'general-ledger', cat: 'finance', icon: '📚', title: 'ریز دفتر کل' },
   { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'دفتر روزنامه (روزانه)' },
-  { kind: 'inventory-report', cat: 'finance', icon: '📦', title: 'موجودی کالا' },
+  { kind: 'inventory-report', cat: 'finance-ops', icon: '📦', title: 'موجودی کالا' },
   { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت' },
   { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک' },
   { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'دولت و درآمد (سلسله‌مراتبی)' },
@@ -137,9 +142,9 @@ const CARDS: Card[] = [
   { kind: 'grad-cert', cat: 'research', icon: '🎓', title: 'گواهی پایان تحصیلات' },
   { kind: 'military-defer', cat: 'research', icon: '🎖', title: 'معافیت تحصیلی' },
   { kind: 'finance-worklist', cat: 'finance', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
-  { kind: 'payroll-overview', cat: 'finance', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
-  { kind: 'bi-teaching-quality', cat: 'finance', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
-  { kind: 'bi-facilities', cat: 'finance', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
+  { kind: 'payroll-overview', cat: 'finance-academic', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
+  { kind: 'bi-teaching-quality', cat: 'finance-academic', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
+  { kind: 'bi-facilities', cat: 'finance-academic', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
   { kind: 'graduation-dossiers', cat: 'research', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
   { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات', needsTerm: true },
   { kind: 'third-attempt', cat: 'probation', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
@@ -178,7 +183,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
 
   // ── محدودسازی بر اساس مرکز (scope) + مجوزها ──
   const scopeFiltered = CARDS.filter(c =>
-    scope === 'finance' ? c.cat === 'finance' : scope === 'edu' ? c.cat !== 'finance' : true,
+    scope === 'finance' ? FINANCE_CATS.has(c.cat) : scope === 'edu' ? !FINANCE_CATS.has(c.cat) : true,
   );
   const visibleCards = allowedKinds ? scopeFiltered.filter(c => allowedKinds.includes(c.kind)) : scopeFiltered;
   const tabKeys = CATEGORIES.map(c => c.key).filter(k => visibleCards.some(c => c.cat === k));
@@ -283,7 +288,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       {tabKeys.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {CATEGORIES
-            .filter(c => (scope === 'finance' ? c.key === 'finance' : scope === 'edu' ? c.key !== 'finance' : true) && tabKeys.includes(c.key))
+            .filter(c => (scope === 'finance' ? FINANCE_CATS.has(c.key) : scope === 'edu' ? !FINANCE_CATS.has(c.key) : true) && tabKeys.includes(c.key))
             .map(c => (
               <button
                 key={c.key}
@@ -306,6 +311,45 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         placeholder={`🔍 جست‌وجو در گزارش‌ها (نام یا کد)… (${visibleCards.length} گزارش)`}
         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
       />
+
+      {/* نوار عملیات چسبان: اجرا / Excel / چاپ — درست بعد از تبها و جستوجو و قبل از فیلترها */}
+      {!card?.soon && (
+        <div className="sticky top-[6.5rem] z-20 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-white/95 px-3 py-2 shadow-md backdrop-blur print:hidden">
+          <span className="ml-1 hidden max-w-56 truncate text-2xs font-extrabold text-slate-600 sm:inline">
+            {card?.title ?? 'گزارش'}
+          </span>
+          <button onClick={() => run(1)} disabled={loading} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded disabled:opacity-50">
+            {loading ? '⏳ در حال اجرا...' : '▶ اجرای گزارش'}
+          </button>
+          {res && res.rows.length > 0 && (
+            <>
+              <button onClick={doExport} disabled={exporting} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded disabled:opacity-50 mr-auto">
+                {exporting ? '⏳...' : '📥 خروجی Excel (CSV)'}
+              </button>
+              <ReportPrint
+                title={card?.title ?? 'گزارش'}
+                subtitle={[
+                  card?.needsTerm
+                    ? termMode === 'all'
+                      ? 'همهٔ ترمها'
+                      : termMode === 'many'
+                        ? `ترمهای ${manyTerms.map(faNum).join('، ')}`
+                        : `ترم ${faNum(term)}`
+                    : null,
+                  scopeMode === 'term' ? 'فقط همین نیمسال' : 'کل دوره',
+                  `${faNum(res.total)} رکورد`,
+                ].filter(Boolean).join('  •  ')}
+                columns={res.columns}
+                rows={res.rows}
+                summary={res.summary}
+                universityTitle={opts.universityTitle}
+                universityLogoUrl={opts.universityLogoUrl}
+                signers={opts.signers}
+              />
+            </>
+          )}
+        </div>
+      )}
 
       {/* کارت‌های گزارش دستهٔ فعال */}
       {gridCards.length === 0 ? (
@@ -604,43 +648,13 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               placeholder="🔍 شماره/نام/کد ملی..."
               className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-48"
             />
-            <button onClick={() => run(1)} disabled={loading} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded disabled:opacity-50">
-              {loading ? '⏳ در حال اجرا...' : '▶ اجرای گزارش'}
-            </button>
-            {res && res.rows.length > 0 && (
-              <>
-                <button onClick={doExport} disabled={exporting} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded disabled:opacity-50 mr-auto">
-                  {exporting ? '⏳...' : '📥 خروجی Excel (CSV)'}
-                </button>
-                <ReportPrint
-                  title={card?.title ?? 'گزارش'}
-                  subtitle={[
-                    card?.needsTerm
-                      ? termMode === 'all'
-                        ? 'همهٔ ترمها'
-                        : termMode === 'many'
-                          ? `ترمهای ${manyTerms.map(faNum).join('، ')}`
-                          : `ترم ${faNum(term)}`
-                      : null,
-                    scopeMode === 'term' ? 'فقط همین نیمسال' : 'کل دوره',
-                    `${faNum(res.total)} رکورد`,
-                  ].filter(Boolean).join('  •  ')}
-                  columns={res.columns}
-                  rows={res.rows}
-                  summary={res.summary}
-                  universityTitle={opts.universityTitle}
-                  universityLogoUrl={opts.universityLogoUrl}
-                  signers={opts.signers}
-                />
-              </>
-            )}
           </div>
         </div>
       )}
 
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}
       {/* نتیجه */}
-      <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-4 print:hidden">
+      <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-[10rem] print:hidden">
         {err ? (
           <p className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
         ) : loading ? (

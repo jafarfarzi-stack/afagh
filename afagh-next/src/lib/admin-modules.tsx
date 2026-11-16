@@ -17,10 +17,25 @@ import Icon from '@/components/ui/Icon';
 export type ModuleGroupKey =
   | 'edu' | 'fin' | 'plan' | 'exam' | 'research' | 'reports' | 'archive' | 'settings';
 
+/** زیردستهٔ ماژولهای مالی — ترتیب نمایش کاشیها در `/admin/c/fin` */
+export type FinanceSubgroup = 'worklist' | 'rules' | 'tools';
+
+/** عنوان و توضیح زیردستههای مالی — تنها منبع نامگذاری آنها */
+export const FINANCE_SUBGROUPS: {
+  key: FinanceSubgroup;
+  title: string;
+  icon: React.ReactNode;
+  desc: string;
+}[] = [
+  { key: 'worklist', title: 'کارتابل و بررسیها', icon: <Icon emoji="🗂️" />, desc: 'دفتر مالی، کارتابل کارشناس و حقوق و دستمزد' },
+  { key: 'rules', title: 'قواعد و تنظیمات', icon: <Icon emoji="⚙️" />, desc: 'موتور شهریه، نوع درس مالی، پوشش فرمولها و دادهٔ پایه' },
+  { key: 'tools', title: 'ابزارها و گزارشها', icon: <Icon emoji="🧰" />, desc: 'POS، مرکز گزارشهای مالی و صورت حساب دانشجو' },
+];
+
 /** دسته‌های کلی فرانت‌اند — ترتیب نمایش در داشبورد */
 export const MODULE_GROUPS: { key: ModuleGroupKey; title: string; icon: React.ReactNode; desc: string }[] = [
   { key: 'edu', title: 'آموزش', icon: <Icon emoji="🎓" />, desc: 'دانشجویان، پذیرش، کاتالوگ، دروس و آیین‌نامه' },
-  { key: 'fin', title: 'مالی', icon: <Icon emoji="💰" />, desc: 'حقوق، شهریه، دفتر مالی و صندوق' },
+  { key: 'fin', title: 'مالی', icon: <Icon emoji="💰" />, desc: 'کارتابل و بررسیها، قواعد و تنظیمات، ابزارها و گزارشها' },
   { key: 'plan', title: 'برنامه‌ریزی درسی', icon: <Icon emoji="🗓️" />, desc: 'کارتابل مدیر گروه و فرآیندها' },
   { key: 'exam', title: 'امتحانات', icon: <Icon emoji="📝" />, desc: 'برنامه‌ریزی و مدیریت امتحانات' },
   { key: 'research', title: 'پژوهش و فارغ‌التحصیلی', icon: <Icon emoji="🔬" />, desc: 'دفاع، فارغ‌التحصیلی و مدارک' },
@@ -44,6 +59,8 @@ export interface AdminModule {
   iconBg: string;
   /** آیکون — React element (جایگزین اموجی) */
   icon: React.ReactNode;
+  /** زیردستهٔ اختیاری — فعلاً فقط ماژولهای مالی را مرتب میکند */
+  subgroup?: FinanceSubgroup;
   /** آیا در منوی افقی بالای صفحه هم نمایش داده شود؟ */
   inNav?: boolean;
   /** آیا به‌صورت کارت در شبکهٔ داشبورد نمایش داده شود؟ */
@@ -518,37 +535,14 @@ export const ADMIN_MODULES: AdminModule[] = [
     inNav: true,
     inGrid: true,
   },
-  {
-    href: '/admin/payroll',
-    icon: <Icon emoji="💼" />,
-    title: 'حقوق و دستمزد',
-    desc: 'حکم کارگزینی، فیش و تسویه مالی',
-    group: 'fin',
-    roles: ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'],
-    permissions: ['finance:view_ledger'],
-    accent: 'from-cyan-950 to-sky-950 border-cyan-700/50',
-    iconBg: 'bg-cyan-700/80 border-cyan-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-  {
-    href: '/admin/payroll/coverage',
-    icon: <Icon emoji="🗺️" />,
-    title: 'پوشش فرمول‌ها',
-    desc: 'کدام درس‌ها فرمول دارند، کدام ندارند و چرا',
-    group: 'fin',
-    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE'],
-    accent: 'from-teal-950 to-emerald-950 border-teal-700/50',
-    iconBg: 'bg-teal-700/80 border-teal-500/50',
-    inNav: true,
-    inGrid: true,
-  },
+  /* ── زیردستهٔ ۱: کارتابل و بررسیها ── */
   {
     href: '/admin/student-finance',
     icon: <Icon emoji="💳" />,
-    title: 'امور مالی دانشجویان',
-    desc: 'شهریه، دفتر مالی و بدهی دانشجویان',
+    title: 'دفتر مالی دانشجویان',
+    desc: 'تراکنشها، نوع واریز و ماندهٔ کلی دانشجویان',
     group: 'fin',
+    subgroup: 'worklist',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     permissions: ['finance:view_ledger'],
     accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
@@ -560,8 +554,9 @@ export const ADMIN_MODULES: AdminModule[] = [
     href: '/admin/finance',
     icon: <Icon emoji="🗂️" />,
     title: 'کارتابل کارشناس مالی',
-    desc: 'فهرست کامل دانشجویان، کارنامهٔ مالی، تخفیف، بنیاد، چک و وام',
+    desc: 'فهرست فیلترشدهٔ دانشجویان، کارنامهٔ مالی، تخفیف، بنیاد، چک و وام',
     group: 'fin',
+    subgroup: 'worklist',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     permissions: ['finance:view_ledger'],
     accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
@@ -570,11 +565,28 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/payroll',
+    icon: <Icon emoji="💼" />,
+    title: 'حقوق و دستمزد',
+    desc: 'حکم کارگزینی، فیش و تسویه مالی',
+    group: 'fin',
+    subgroup: 'worklist',
+    roles: ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
+    accent: 'from-cyan-950 to-sky-950 border-cyan-700/50',
+    iconBg: 'bg-cyan-700/80 border-cyan-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+
+  /* ── زیردستهٔ ۲: قواعد و تنظیمات ── */
+  {
     href: '/admin/tuition',
     icon: <Icon emoji="🧮" />,
     title: 'موتور شهریه',
     desc: 'قواعد شهریهٔ ثابت و متغیر بر اساس نوع ترم و نوع درس',
     group: 'fin',
+    subgroup: 'rules',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
     permissions: ['finance:view_ledger'],
     accent: 'from-cyan-900 to-sky-950 border-cyan-600/50',
@@ -588,6 +600,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'نوع درس مالی دروس',
     desc: 'تعیین «نوع درس مالی» سما برای هر درس — کلید محاسبهٔ شهریهٔ متغیر',
     group: 'fin',
+    subgroup: 'rules',
     roles: ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE'],
     permissions: ['finance:view_ledger'],
     accent: 'from-violet-900 to-purple-950 border-violet-600/50',
@@ -596,15 +609,72 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/payroll/coverage',
+    icon: <Icon emoji="🗺️" />,
+    title: 'پوشش فرمولها',
+    desc: 'کدام درسها فرمول دارند، کدام ندارند و چرا',
+    group: 'fin',
+    subgroup: 'rules',
+    roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-teal-950 to-emerald-950 border-teal-700/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/finance/base-data',
+    icon: <Icon emoji="🗂️" />,
+    title: 'دادهٔ پایهٔ مالی',
+    desc: 'بودجه، پیمانکار و قرارداد، هزینه، مالیات ارزش افزوده، انبار و پروندهٔ حقوقی',
+    group: 'fin',
+    subgroup: 'rules',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    permissions: ['finance:view_ledger'],
+    accent: 'from-fuchsia-900 to-purple-950 border-fuchsia-600/50',
+    iconBg: 'bg-fuchsia-700/80 border-fuchsia-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+
+  /* ── زیردستهٔ ۳: ابزارها و گزارشها ── */
+  {
     href: '/admin/finance/pos',
     icon: <Icon emoji="🏧" />,
-    title: 'ترمینال‌های POS (پرداخت حضوری)',
-    desc: 'ثبت پرداخت کارت‌خوان فیزیکی، ویدی، گزارش روزانه صندوق',
+    title: 'ترمینالهای POS (پرداخت حضوری)',
+    desc: 'ثبت پرداخت کارتخوان فیزیکی، ویدی، گزارش روزانه صندوق',
     group: 'fin',
+    subgroup: 'tools',
     roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
     permissions: ['finance:view_ledger'],
     accent: 'from-orange-900 to-amber-950 border-orange-600/50',
     iconBg: 'bg-orange-700/80 border-orange-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/finance/reports',
+    icon: <Icon emoji="📊" />,
+    title: 'مرکز گزارشهای مالی',
+    desc: 'شهریه، صورت حساب، کارتابل مالی، حقالتدریس و BI مالی',
+    group: 'fin',
+    subgroup: 'tools',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
+    permissions: ['reports:finance'],
+    accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
+    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/finance/reports/student-statement',
+    icon: <Icon emoji="📄" />,
+    title: 'صورت حساب مالی دانشجویان (۹ مشخصه)',
+    desc: 'شهریه ثابت/متغیر، تخفیف، موضوعی، بنیاد، پرداخت آنلاین/POS، وام، مانده',
+    group: 'fin',
+    subgroup: 'tools',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
+    accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
+    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
     inNav: true,
     inGrid: true,
   },
@@ -691,44 +761,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     roles: ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
     accent: 'from-teal-950 to-emerald-950 border-teal-700/50',
     iconBg: 'bg-teal-700/80 border-teal-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-  {
-    href: '/admin/finance/reports',
-    icon: <Icon emoji="📊" />,
-    title: 'گزارش‌های مالی',
-    desc: 'شهریه، صورت‌حساب، کارتابل مالی، حق‌التدریس و BI مالی',
-    group: 'fin',
-    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
-    permissions: ['reports:finance'],
-    accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
-    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-  {
-    href: '/admin/finance/reports/student-statement',
-    icon: <Icon emoji="📄" />,
-    title: 'صورت حساب مالی دانشجویان (۹ مشخصه)',
-    desc: 'شهریه ثابت/متغیر، تخفیف، موضوعی، بنیاد، پرداخت آنلاین/POS، وام، مانده',
-    group: 'fin',
-    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
-    accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
-    iconBg: 'bg-emerald-700/80 border-emerald-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-  {
-    href: '/admin/finance/base-data',
-    icon: <Icon emoji="🗂️" />,
-    title: 'دادهٔ پایهٔ مالی',
-    desc: 'بودجه، پیمانکار و قرارداد، هزینه، مالیات ارزش افزوده، انبار و پروندهٔ حقوقی',
-    group: 'fin',
-    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
-    permissions: ['finance:view_ledger'],
-    accent: 'from-fuchsia-900 to-purple-950 border-fuchsia-600/50',
-    iconBg: 'bg-fuchsia-700/80 border-fuchsia-500/50',
     inNav: true,
     inGrid: true,
   },
@@ -904,13 +936,29 @@ export function gridModules(roles: string[], permissions?: ReadonlySet<string> |
   return ADMIN_MODULES.filter(m => m.inGrid && canSeeModule(roles, m, permissions));
 }
 
+/**
+ * مرتبسازی پایدار کاشیهای مالی: کارتابل → قواعد → ابزارها.
+ * ترتیب داخل هر زیردسته همان ترتیب تعریف در `ADMIN_MODULES` است
+ * (مرتبساز آرایهٔ جاوااسکریپت پایدار است).
+ */
+export function financeModulesBySubgroup(modules: AdminModule[]): AdminModule[] {
+  const rank = new Map<FinanceSubgroup, number>(FINANCE_SUBGROUPS.map((s, i) => [s.key, i]));
+  return [...modules].sort((a, b) => {
+    const ra = a.subgroup ? (rank.get(a.subgroup) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+    const rb = b.subgroup ? (rank.get(b.subgroup) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+    return ra - rb;
+  });
+}
+
 /** ماژول‌های یک دسته برای کاربر — برای صفحهٔ کاشی‌های دسته */
 export function groupedModules(
   roles: string[],
   permissions?: ReadonlySet<string> | string[],
 ): { group: (typeof MODULE_GROUPS)[number]; modules: AdminModule[] }[] {
-  return MODULE_GROUPS.map(g => ({
-    group: g,
-    modules: ADMIN_MODULES.filter(m => m.inGrid && (m as { group?: ModuleGroupKey }).group === g.key && canSeeModule(roles, m, permissions)),
-  })).filter(g => g.modules.length > 0);
+  return MODULE_GROUPS.map(g => {
+    const modules = ADMIN_MODULES.filter(
+      m => m.inGrid && (m as { group?: ModuleGroupKey }).group === g.key && canSeeModule(roles, m, permissions),
+    );
+    return { group: g, modules: g.key === 'fin' ? financeModulesBySubgroup(modules) : modules };
+  }).filter(g => g.modules.length > 0);
 }
