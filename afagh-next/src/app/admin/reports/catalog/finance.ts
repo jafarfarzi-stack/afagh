@@ -11,6 +11,7 @@
  */
 
 import type { ReportSource, ReportField } from './types';
+import { DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES, ledgerTypesCsv } from '@/lib/ledger-balance';
 
 /** ۱۷ نوع تراکنش دفتر مالی (منبع حقیقت: ck_student_ledger_txn_type در schema.ts) */
 export const LEDGER_TYPES: { value: string; label: string }[] = [
@@ -54,10 +55,12 @@ export const PAYMENT_STATUSES: { value: string; label: string }[] = [
   { value: 'EXPIRED', label: 'منقضی' },
 ];
 
-// ── گروه‌های تراکنش (عین r-finance.ts) ──
-const CHARGE_TYPES = `('TUITION_FIXED','TUITION_VARIABLE','SUBJECT_ADDITIVE','TUITION_CHARGE','CHARGE','TUITION_ADJUST_DEC')`;
-const DISC_TYPES = `('DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_DEDUCTIVE','TUITION_BATES','TUITION_ADJUST_INC')`;
-const PAID_TYPES = `('PAYMENT','POS_PAYMENT','LOAN','SPONSORSHIP')`;
+// ── گروه‌های تراکنش (واژگان کانونی ledger-balance.ts) ──
+// تعریفِ محلیِ تازه ممنوع: CREDIT (پرداختیِ دادهٔ مهاجرت) و زیرنوع‌های
+// TUITION_BATES_* قبلاً جا می‌افتادند و «مانده» را اشتباه نشان می‌دادند.
+const CHARGE_TYPES = `(${ledgerTypesCsv(DEBT_LEDGER_TYPES)})`;
+const DISC_TYPES = `(${ledgerTypesCsv(DISCOUNT_LEDGER_TYPES)})`;
+const PAID_TYPES = `(${ledgerTypesCsv(PAID_LEDGER_TYPES)})`;
 
 /**
  * جمعِ دفترِ مالیِ یک دانشجو — به‌ازای هر دانشجو **یک** ردیف.

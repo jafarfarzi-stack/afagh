@@ -39,16 +39,26 @@ export const DEBT_LEDGER_TYPES = [
   'TUITION_ADJUST_DEC', // تعدیل کاهشی قدیمی: TSUMMab_Subject<0 به بدهی اضافه می‌شود (همان فرمول TermAcc)
 ] as const;
 
-/** انواع تراکنش دفتر مالی که «اعتبار» می‌سازند (کاهش مانده) */
-export const CREDIT_LEDGER_TYPES = [
+/**
+ * انواع تراکنش دفتر مالی که «پرداخت/دریافت» می‌سازند (کاهش بدهی).
+ *
+ * ‏`CREDIT` مهم است: مهاجرت از سیستم قدیم (زرینه/شمس/…) پرداختی‌ها را با
+ * نوعِ `CREDIT` ثبت کرده است. اگر این نوع در فهرستِ پرداخت نباشد، گزارش‌های
+ * پرداختی برای همان دانشجویان «۰ ریال» نشان می‌دهند.
+ */
+export const PAID_LEDGER_TYPES = [
   'PAYMENT',
   'POS_PAYMENT',
-  'DISCOUNT_FIXED',
-  'DISCOUNT_VARIABLE',
-  'SUBJECT_DEDUCTIVE',
   'SPONSORSHIP',
   'LOAN',
   'CREDIT',
+] as const;
+
+/** انواع تراکنش دفتر مالی که «تخفیف/اعتبار» می‌سازند (کاهش بدهی) */
+export const DISCOUNT_LEDGER_TYPES = [
+  'DISCOUNT_FIXED',
+  'DISCOUNT_VARIABLE',
+  'SUBJECT_DEDUCTIVE',
   'TUITION_BATES',      // بیتس قدیمی = تخفیف/اعتبار (کاهش بدهی)
   // زیرنوع‌های تفکیک‌شدهٔ بیتس سما (Fix_Bates / Units_Bates / Mab_Bates).
   // تا پیش از این، هر سه در یک ردیفِ TUITION_BATES ادغام می‌شدند و کارنامه
@@ -58,6 +68,24 @@ export const CREDIT_LEDGER_TYPES = [
   'TUITION_BATES_AMOUNT',   // بیتسِ مبلغی سما (Mab_Bates)
   'TUITION_ADJUST_INC', // تعدیل افزایشی قدیمی: TSUMMab_Subject>0 تخفیف است (مطابق فرمول TermAcc)
 ] as const;
+
+/**
+ * همهٔ انواعِ «اعتبار» (کاهش مانده) = پرداخت‌ها + تخفیف‌ها.
+ * هیچ‌یک از دو گروه نباید در فهرست جا بیفتد؛ برای همین مشتق می‌شود.
+ */
+export const CREDIT_LEDGER_TYPES = [
+  ...PAID_LEDGER_TYPES,
+  ...DISCOUNT_LEDGER_TYPES,
+] as const;
+
+/**
+ * فهرست آمادهٔ SQL: `'A','B'` — برای `IN (…)` در کوئری‌های متنی (sql.raw).
+ * ورودی همیشه از ثابت‌های همین فایل می‌آید، نه از کاربر؛ با این حال
+ * کوتیشن‌ها escape می‌شوند تا الگوی تزریق تکرار نشود.
+ */
+export function ledgerTypesCsv(types: readonly string[]): string {
+  return types.map((t) => `'${String(t).replace(/'/g, "''")}'`).join(',');
+}
 
 const DEBT_SET: ReadonlySet<string> = new Set(DEBT_LEDGER_TYPES);
 const CREDIT_SET: ReadonlySet<string> = new Set(CREDIT_LEDGER_TYPES);

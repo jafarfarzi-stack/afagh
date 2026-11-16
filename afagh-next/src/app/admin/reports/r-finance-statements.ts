@@ -7,6 +7,12 @@ import { escapeLikeChars } from '@/lib/persian-search';
 import { faDigits, toJalali } from '@/lib/calendar';
 import { faNum } from '@/lib/report-format';
 import {
+  DEBT_LEDGER_TYPES,
+  DISCOUNT_LEDGER_TYPES,
+  PAID_LEDGER_TYPES,
+  ledgerTypesCsv,
+} from '@/lib/ledger-balance';
+import {
   buildBalanceSheet,
   buildBudgetVariance,
   buildCashFlow,
@@ -119,18 +125,22 @@ export const CARDS = [
 ];
 
 // ── واژگان نوع تراکنش (کانونی — ledger-balance.ts) ──
-const CHARGE_TYPES = `'TUITION_FIXED','TUITION_VARIABLE','SUBJECT_ADDITIVE','TUITION_CHARGE','CHARGE','TUITION_ADJUST_DEC'`;
-const DISC_TYPES = `'DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_DEDUCTIVE','TUITION_BATES','TUITION_BATES_FIXED','TUITION_BATES_VARIABLE','TUITION_BATES_AMOUNT','TUITION_ADJUST_INC'`;
-const PAY_TYPES = `'PAYMENT','POS_PAYMENT'`;
-const SPON_TYPES = `'SPONSORSHIP'`;
-const LOAN_TYPES = `'LOAN'`;
-const CREDIT_TYPES = `'CREDIT'`;
+// فهرست‌ها مشتق می‌شوند تا هیچ نوعی (CREDIT، زیرنوع‌های بیتس، POS_REFUND) جا نیفتد.
+const CHARGE_TYPES = ledgerTypesCsv(DEBT_LEDGER_TYPES);
+const DISC_TYPES = ledgerTypesCsv(DISCOUNT_LEDGER_TYPES);
+const PAY_TYPES = ledgerTypesCsv(PAID_LEDGER_TYPES.filter((t) => t !== 'LOAN' && t !== 'SPONSORSHIP' && t !== 'CREDIT'));
+const SPON_TYPES = ledgerTypesCsv(['SPONSORSHIP']);
+const LOAN_TYPES = ledgerTypesCsv(['LOAN']);
+const CREDIT_TYPES = ledgerTypesCsv(['CREDIT']);
 
 const isCharge = sql.raw(`sl."transactionType" IN (${CHARGE_TYPES})`);
 const isDisc = sql.raw(`sl."transactionType" IN (${DISC_TYPES})`);
 const isPay = sql.raw(`sl."transactionType" IN (${PAY_TYPES})`);
 const isSpon = sql.raw(`sl."transactionType" IN (${SPON_TYPES})`);
 const isLoan = sql.raw(`sl."transactionType" IN (${LOAN_TYPES})`);
+const isCredit = sql.raw(`sl."transactionType" IN (${CREDIT_TYPES})`);
+/** دریافتِ واقعی = پرداخت/کارت‌خوان + بستانکاریِ دادهٔ مهاجرت */
+const isReceived = sql.raw(`sl."transactionType" IN (${PAY_TYPES},${CREDIT_TYPES})`);
 
 /**
  * عبارتِ «نوع تراکنش» برای یک نامِ مستعارِ دلخواه.
@@ -237,7 +247,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       COALESCE(SUM(sl.amount) FILTER (WHERE ${isCharge}), 0)::bigint AS gross,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${isDisc}), 0)::bigint AS discount,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${isSpon}), 0)::bigint AS sponsor,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isPay}), 0)::bigint AS received`;
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${isReceived}), 0)::bigint AS received`;
     const r = await runPaged(
       [
         { key: 'term', title: 'نیمسال' },
@@ -948,7 +958,7 @@ async function ledgerPeriods(uni: number, f: ReportFilters) {
       COALESCE(SUM(st.chg), 0)::text AS gross,
       COALESCE(SUM(st.dsc), 0)::text AS discount,
       COALESCE(SUM(st.spo), 0)::text AS sponsor,
-      COALESCE(SUM(st.oth), 0)::text AS other,
+      COALESCE(SUM(st.cr), 0)::text AS other,
       COALESCE(SUM(st.pay), 0)::text AS paid,
       COUNT(DISTINCT st."studentId")::text AS students
     FROM st
@@ -1107,9 +1117,9 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
       FROM st GROUP BY "studentId"
     )
     SELECT
-      COALESCE(SUM(GREATEST(chg - dsc - spo - pay - ln, 0)), 0)::text AS recv,
+      COALESCE(SUM(GREATEST(chg - dsc - spo - pay - ln - cr, 0)), 0)::text AS recv,
       COALESCE(SUM(GREATEST(ln - pay, 0)), 0)::text AS loans,
-      COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln), 0)), 0)::text AS payables
+      COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln - cr), 0)), 0)::text AS payables
     FROM per_student
   `).catch(() => ({ rows: [] as never[] }));
 
@@ -1194,9 +1204,9 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
     month: string; tuition: string; sponsor: string; other: string;
   }>(sql`
     SELECT TO_CHAR(COALESCE(sl."depositDate", sl."createdAt")::date, 'YYYY-MM') AS month,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isPay}), 0)::text AS tuition,
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${isReceived}), 0)::text AS tuition,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${isSpon}), 0)::text AS sponsor,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isLoan} OR sl."transactionType" = 'CREDIT'), 0)::text AS other
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${isLoan}), 0)::text AS other
     FROM student_ledger sl
     WHERE sl."universityId" = ${uni} ${termFilter}
       AND COALESCE(sl."depositDate", sl."createdAt") IS NOT NULL

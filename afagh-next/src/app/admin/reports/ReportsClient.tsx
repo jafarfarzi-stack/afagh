@@ -95,7 +95,7 @@ const CARDS: Card[] = [
   { kind: 'tuition-tariff', cat: 'finance-academic', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
   { kind: 'tuition-statement', cat: 'finance-academic', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
   // ── گزارش‌های پرداختی (هم‌ریخت با اسناد رسمی سما) ──
-  { kind: 'total-payments', cat: 'finance', icon: '📊', title: 'گزارش کل پرداختی دانشجویان' },
+  { kind: 'total-payments', cat: 'finance', icon: '📊', title: 'گزارش کل پرداختی دانشجویان', needsTerm: true },
   { kind: 'student-payments', cat: 'finance', icon: '🧾', title: 'گزارش پرداختی دانشجویان (تفصیلی)', needsTerm: true },
   { kind: 'term-payments', cat: 'finance', icon: '💳', title: 'گزارش مبلغ پرداختی نیمسال', needsTerm: true },
   { kind: 'accounting-voucher', cat: 'finance', icon: '📑', title: 'سند حسابداری (دفتر روزنامه)', needsTerm: true, customs: [{ key: 'voucherNo', title: 'شماره سند' }] },
@@ -107,24 +107,24 @@ const CARDS: Card[] = [
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
   // دسته‌هایی که در سیستم قدیم بود و در آفاق نبود: فروش، سود و زیان، ترازنامه،
   // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، دفتر روزنامه، کالا، هزینه، تخصیص، درآمد.
-  { kind: 'sales-report', cat: 'finance', icon: '🧾', title: 'فروش مالی (خدمات آموزشی)' },
-  { kind: 'income-statement', cat: 'finance', icon: '📈', title: 'صورت سود و زیان' },
-  { kind: 'costing-report', cat: 'finance', icon: '🧮', title: 'بهای تمام‌شده و حاشیه' },
-  { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه' },
-  { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)' },
+  { kind: 'sales-report', cat: 'finance', icon: '🧾', title: 'فروش مالی (خدمات آموزشی)', needsTerm: true },
+  { kind: 'income-statement', cat: 'finance', icon: '📈', title: 'صورت سود و زیان', needsTerm: true },
+  { kind: 'costing-report', cat: 'finance', icon: '🧮', title: 'بهای تمام‌شده و حاشیه', needsTerm: true },
+  { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه', needsTerm: true },
+  { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)', needsTerm: true },
   // cashFlowRows فیلتر ترم را پشتیبانی میکند — پس کارت آن هم needsTerm میگیرد
   { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)', needsTerm: true },
-  { kind: 'contractor-report', cat: 'finance-ops', icon: '🏗️', title: 'پیمانکاران و قراردادها' },
-  { kind: 'contractor-settlement', cat: 'finance-ops', icon: '🧾', title: 'ماه‌حساب پیمانکاران' },
-  { kind: 'insurance-report', cat: 'finance-ops', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس' },
+  { kind: 'contractor-report', cat: 'finance-ops', icon: '🏗️', title: 'پیمانکاران و قراردادها', needsTerm: true },
+  { kind: 'contractor-settlement', cat: 'finance-ops', icon: '🧾', title: 'ماه‌حساب پیمانکاران', needsTerm: true },
+  { kind: 'insurance-report', cat: 'finance-ops', icon: '🛡️', title: 'بیمه و کسورات حق‌التدریس', needsTerm: true },
   { kind: 'legal-report', cat: 'finance-ops', icon: '⚖️', title: 'پرونده‌های حقوقی' },
-  { kind: 'vat-report', cat: 'finance', icon: '🏷️', title: 'مالیات بر ارزش افزوده' },
-  { kind: 'general-ledger', cat: 'finance', icon: '📚', title: 'ریز دفتر کل' },
-  { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'دفتر روزنامه (روزانه)' },
+  { kind: 'vat-report', cat: 'finance', icon: '🏷️', title: 'مالیات بر ارزش افزوده', needsTerm: true },
+  { kind: 'general-ledger', cat: 'finance', icon: '📚', title: 'ریز دفتر کل', needsTerm: true },
+  { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'دفتر روزنامه (روزانه)', needsTerm: true },
   { kind: 'inventory-report', cat: 'finance-ops', icon: '📦', title: 'موجودی کالا' },
-  { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت' },
-  { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک' },
-  { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته' },
+  { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت', needsTerm: true },
+  { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک', needsTerm: true },
+  { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته', needsTerm: true },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
   { kind: 'pending-requests', cat: 'research', icon: '⏳', title: 'درخواست‌های درانتظار' },
@@ -404,7 +404,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </select>
                 {termMode === 'one' && (
                   <select value={term} onChange={e => setTerm(e.target.value)} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" dir="ltr">
-                    {opts.terms.map(t => <option key={t.code} value={t.code}>{t.code}</option>)}
+                    {opts.terms.map(t => <option key={t.code} value={t.code}>{t.title ? `${t.title} (${t.code})` : t.code}</option>)}
                   </select>
                 )}
                 {termMode === 'many' && (

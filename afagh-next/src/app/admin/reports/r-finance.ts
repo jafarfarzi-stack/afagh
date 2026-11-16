@@ -1,6 +1,8 @@
 import type { ReportFilters, ReportResult } from './report-helpers';
-import { paged, studentWhere } from './report-helpers';
+import { joinAnd, paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
+import { db } from '@/db';
+import { DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES } from '@/lib/ledger-balance';
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { faNum } from '@/lib/report-format';
@@ -15,11 +17,25 @@ const faAmount = (n: number): string =>
 
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
+/**
+ * شرطِ `IN` روی نوع تراکنش — فهرست‌ها از `ledger-balance.ts` (واژگان کانونی)
+ * می‌آیند. تعریفِ محلیِ تازه ممنوع است: همین تکرار بود که `CREDIT` (پرداختیِ
+ * دادهٔ مهاجرت) و زیرنوع‌های `TUITION_BATES_*` را از گزارش‌ها جا می‌انداخت و
+ * «کل پرداختی» را برای دانشجویانِ مؤسسه‌های منحله صفر نشان می‌داد.
+ */
+const inTypes = (types: readonly string[]) =>
+  sql`sl."transactionType" IN (${sql.join(types.map((t) => sql`${t}`), sql`, `)})`;
+
+const CHARGE = inTypes(DEBT_LEDGER_TYPES);
+const DISC = inTypes(DISCOUNT_LEDGER_TYPES);
+const PAID = inTypes(PAID_LEDGER_TYPES);
+
+
 export const CARDS = [
-  { kind: 'tuition-tariff', icon: '💰', title: 'تعرفه تحصیلی' },
+  { kind: 'tuition-tariff', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
   { kind: 'tuition-statement', icon: '🧾', title: 'صورت‌حساب شهریه دانشجو', needsTerm: true },
   // ── گزارش‌های پرداختی (هم‌ریخت با اسناد رسمی سما) ──
-  { kind: 'total-payments', icon: '📊', title: 'گزارش کل پرداختی دانشجویان' },
+  { kind: 'total-payments', icon: '📊', title: 'گزارش کل پرداختی دانشجویان', needsTerm: true },
   { kind: 'student-payments', icon: '🧾', title: 'گزارش پرداختی دانشجویان (تفصیلی)', needsTerm: true },
   { kind: 'term-payments', icon: '💳', title: 'گزارش مبلغ پرداختی نیمسال', needsTerm: true },
   { kind: 'accounting-voucher', icon: '📑', title: 'سند حسابداری (دفتر روزنامه)', needsTerm: true },
@@ -30,10 +46,6 @@ export const CARDS = [
   { kind: 'faculty-financial', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
   { kind: 'major-financial', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
 ];
-
-const CHARGE = sql`sl."transactionType" IN ('TUITION_FIXED','TUITION_VARIABLE','SUBJECT_ADDITIVE','TUITION_CHARGE','CHARGE','TUITION_ADJUST_DEC')`;
-const DISC = sql`sl."transactionType" IN ('DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_DEDUCTIVE','TUITION_BATES','TUITION_ADJUST_INC')`;
-const PAID = sql`sl."transactionType" IN ('PAYMENT','POS_PAYMENT','LOAN','SPONSORSHIP')`;
 
 /** برچسب فارسی نوع واریز — برای ستون «نوع پرداخت» */
 const DEPOSIT_FA: Record<string, string> = {
@@ -148,13 +160,20 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
       LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-      LEFT JOIN student_ledger sl ON sl."studentId" = s.id`;
+      LEFT JOIN student_ledger sl ON sl."studentId" = s.id
+      ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}`;
     const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
       m.name AS major, d.title AS degree,
       (COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)
         - COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)
         - COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0))::bigint AS balance,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0)::bigint AS paid`;
+    /**
+     * فقط دانشجویانی که در بازهٔ انتخابی ردیفِ دفتر مالی دارند.
+     * پیش‌تر همهٔ ۳۹٬۹۵۴ دانشجو (حتی آن‌ها که هیچ ردیف مالی نداشتند) با
+     * «۰ ریال» فهرست می‌شدند و گزارش بی‌معنا می‌شد.
+     */
+    const conds = [...studentWhere(f), uniCond, sql`sl.id IS NOT NULL`];
     const r = await paged(
       [
         { key: 'code', title: 'شماره دانشجو' },
@@ -163,11 +182,18 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'balance', title: 'مانده حساب', format: 'MONEY' },
         { key: 'paid', title: 'کل پرداختی', format: 'MONEY' },
       ],
-      from, [...studentWhere(f), uniCond], cols, sql`ORDER BY s."studentCode"`, f,
+      from, conds, cols, sql`ORDER BY paid DESC, s."studentCode"`, f,
       sql`s.id, s."studentCode", u."firstName", u."lastName", m.name, d.title`,
     );
-    const totalPaid = r.rows.reduce((a, x) => a + Number(x.paid ?? 0), 0);
-    r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال`;
+    // جمع کل باید روی **همهٔ** ردیف‌ها باشد؛ قبلاً فقط ۵۰ ردیفِ صفحهٔ جاری
+    // جمع می‌شد و «جمع پرداختی: ۰ ریال» می‌داد در حالی که گزارش پر از عدد بود.
+    const agg = await db.execute<{ paid: string }>(sql`
+      SELECT COALESCE(SUM(x.paid), 0)::bigint AS paid FROM (
+        SELECT COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0) AS paid
+        ${from} ${joinAnd(conds)} GROUP BY s.id
+      ) x`);
+    const totalPaid = Number(agg.rows[0]?.paid ?? 0);
+    r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ نیمسال‌ها'}`;
     return r;
   }
 
@@ -323,22 +349,22 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
 
   // ══════════════════════════════════════════════════════════════════
   //  گزارش‌های مدیریتی شهریه (تجمیعی دانشکده / مقطع / رشته / ورودی)
-  //  نگاشت ستون‌ها به واژگان دفتر کل:
+  //  نگاشت ستون‌ها به واژگان دفتر کل (ledger-balance.ts):
   //    شهریه ثابت   = TUITION_FIXED | TUITION_CHARGE | CHARGE
   //    شهریه متغیر  = TUITION_VARIABLE | SUBJECT_ADDITIVE
   //    تعدیل کاهشی  = TUITION_ADJUST_DEC   (به بدهی اضافه می‌شود)
   //    تخفیف متفرقه = DISCOUNT_FIXED | DISCOUNT_VARIABLE | SUBJECT_DEDUCTIVE | TUITION_ADJUST_INC
-  //    تخفیف پرداخت = TUITION_BATES       (بیتسِ ثبت‌شده هنگام پرداخت)
+  //    تخفیف پرداخت = TUITION_BATES + سه زیرنوعِ تفکیک‌شدهٔ آن
   //    مساعده       = LOAN
-  //    پرداختی ترم  = PAYMENT | POS_PAYMENT | SPONSORSHIP
+  //    پرداختی      = PAYMENT | POS_PAYMENT | SPONSORSHIP | CREDIT (پرداختیِ دادهٔ مهاجرت)
   // ══════════════════════════════════════════════════════════════════
-  const FIXED = sql`sl."transactionType" IN ('TUITION_FIXED','TUITION_CHARGE','CHARGE')`;
-  const VARIABLE = sql`sl."transactionType" IN ('TUITION_VARIABLE','SUBJECT_ADDITIVE')`;
-  const ADJ_DEC = sql`sl."transactionType" = 'TUITION_ADJUST_DEC'`;
-  const DISC_MISC = sql`sl."transactionType" IN ('DISCOUNT_FIXED','DISCOUNT_VARIABLE','SUBJECT_DEDUCTIVE','TUITION_ADJUST_INC')`;
-  const DISC_PAY = sql`sl."transactionType" = 'TUITION_BATES'`;
-  const ADVANCE = sql`sl."transactionType" = 'LOAN'`;
-  const PAY_ONLY = sql`sl."transactionType" IN ('PAYMENT','POS_PAYMENT','SPONSORSHIP')`;
+  const FIXED = inTypes(['TUITION_FIXED', 'TUITION_CHARGE', 'CHARGE']);
+  const VARIABLE = inTypes(['TUITION_VARIABLE', 'SUBJECT_ADDITIVE']);
+  const ADJ_DEC = inTypes(['TUITION_ADJUST_DEC']);
+  const DISC_MISC = inTypes(['DISCOUNT_FIXED', 'DISCOUNT_VARIABLE', 'SUBJECT_DEDUCTIVE', 'TUITION_ADJUST_INC']);
+  const DISC_PAY = inTypes(['TUITION_BATES', 'TUITION_BATES_FIXED', 'TUITION_BATES_VARIABLE', 'TUITION_BATES_AMOUNT']);
+  const ADVANCE = inTypes(['LOAN']);
+  const PAY_ONLY = inTypes(['PAYMENT', 'POS_PAYMENT', 'SPONSORSHIP', 'CREDIT']);
 
   const SUM = (cond: ReturnType<typeof sql>) =>
     sql`COALESCE(SUM(sl.amount) FILTER (WHERE ${cond}), 0)::bigint`;
@@ -354,7 +380,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     const paid = SUM(PAY_ONLY);
     const charge = sql`(${fixed} + ${variable} + ${adjDec})`;
     const disc = sql`(${discMisc} + ${discPay})`;
-    const balance = sql`(${charge} - ${disc} - ${paid})`;
+    const balance = sql`(${charge} - ${disc} - ${paid} - ${advance})`;
     return {
       cols: sql`${fixed} AS fixed, ${variable} AS variable, ${adjDec} AS adjdec,
         ${discMisc} AS discmisc, ${discPay} AS discpay, ${disc}::bigint AS disctotal,
