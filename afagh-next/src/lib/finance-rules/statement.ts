@@ -223,11 +223,11 @@ export function ledgerCreditLabel(
       // برچسبِ قدیمی «بیتس شهریهٔ قدیمی» آن را شبیهِ بدهی می‌کرد.
       return `تخفیف (سما)${suffix}`;
     case 'TUITION_BATES_FIXED':
-      return `تخفیف بیتسِ شهریهٔ ثابت (سما)${suffix}`;
+      return `تخفیف ثابت (سما)${suffix}`;
     case 'TUITION_BATES_VARIABLE':
-      return `تخفیف بیتسِ شهریهٔ متغیر (سما)${suffix}`;
+      return `تخفیف متغیر (سما)${suffix}`;
     case 'TUITION_BATES_AMOUNT':
-      return `تخفیف بیتسِ مبلغی (سما)${suffix}`;
+      return `تخفیف مبلغی (سما)${suffix}`;
     case 'TUITION_ADJUST_INC':
       return `تعدیل افزایشی شهریه (سما)${suffix}`;
     case 'DISCOUNT_FIXED':
