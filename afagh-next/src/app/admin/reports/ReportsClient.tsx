@@ -296,7 +296,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       setStudentMsg('فیلتر لیست برداشته شد');
       return;
     }
-    const parsed = parseCodeList(studentList, { minDigits: 4, maxDigits: 14 });
+    const parsed = parseCodeList(studentList, { minDigits: 4, maxDigits: 20 });
     setStudentCodes(parsed.codes.join(','));
     const parts: string[] = [];
     if (parsed.codes.length) parts.push(`${faNum(parsed.codes.length)} کد اعمال شد`);

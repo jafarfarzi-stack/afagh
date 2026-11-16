@@ -118,7 +118,7 @@ export function studentWhere(f: ReportFilters, alias = 's') {
      فقط دانشجویانِ همان فهرست. اگر متن داده شده ولی هیچ کد معتبری ندارد،
      `1=0` می‌گذاریم تا فیلترِ خراب به «همهٔ دانشجویان» تبدیل نشود. */
   if (typeof f.studentCodes === 'string' && f.studentCodes.trim()) {
-    const picked = parseCodeList(f.studentCodes, { minDigits: 4, maxDigits: 14 }).codes;
+    const picked = parseCodeList(f.studentCodes, { minDigits: 4, maxDigits: 20 }).codes;
     if (!picked.length) {
       c.push(sql`1 = 0`);
     } else {

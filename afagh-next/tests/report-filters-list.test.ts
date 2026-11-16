@@ -58,6 +58,14 @@ ok('بازهٔ کد دانشجو',
   parseCodeList('4021370010-4021370015').codes.length === 6 &&
   parseCodeList('4021370010-4021370015').usedRange);
 ok('بازهٔ معکوس', parseCodeList('4021370015-4021370013').codes.length === 3);
+ok('کد ۱۳ رقمی هم پذیرفته می‌شود', parseCodeList('4000000000001').codes[0] === '4000000000001');
+ok('کد ۷ رقمی هم پذیرفته می‌شود', parseCodeList('2392101').codes[0] === '2392101');
+ok('کدِ دارای خط‌تیره بازه حساب نمی‌شود',
+  JSON.stringify(parseCodeList('9211311005-2').codes) === '["9211311005-2"]');
+ok('بازه با «تا» بین دو کد',
+  JSON.stringify(parseCodeList('4021370010 تا 4021370012').codes) ===
+  '["4021370010","4021370011","4021370012"]');
+ok('بازهٔ دو سرِ ناهم‌طول نامعتبر است', parseCodeList('4021370010-40213').invalid.length === 1);
 ok('کد نامعتبر (کمتر از ۴ رقم) رد می‌شود', parseCodeList('12, 4021370010').codes.length === 1);
 ok('کد نامعتبر گزارش می‌شود', parseCodeList('12, abc').invalid.includes('12'));
 ok('تکرار حذف می‌شود', parseCodeList('4021370010,4021370010').codes.length === 1);
