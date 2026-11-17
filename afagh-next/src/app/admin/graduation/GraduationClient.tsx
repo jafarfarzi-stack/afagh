@@ -33,7 +33,8 @@ export type AlumniRow = {
   studentId: number; studentCode: string; fullName: string; createdAt: string | null;
 };
 export type Service = { code: string; title: string; hint: string; needsDestination: boolean; fee: number };
-type Dossier = NonNullable<Awaited<ReturnType<typeof dossierAction>>['dossier']>;
+type DossierActionResult = Awaited<ReturnType<typeof dossierAction>>;
+type Dossier = NonNullable<Extract<DossierActionResult, { ok: true }>['dossier']>;
 
 const faNum = (v: number | string | null | undefined) =>
   v === null || v === undefined || v === '' ? '—' : String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
