@@ -19,8 +19,10 @@ import {
   process_definitions,
   process_steps,
   schedules,
+  staff,
   student_requests,
   students,
+  users,
 } from '@/db/schema';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { assertServerActionOrigin } from '@/lib/security';
