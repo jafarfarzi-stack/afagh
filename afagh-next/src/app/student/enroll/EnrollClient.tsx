@@ -51,9 +51,10 @@ export type OfferingItem = {
   prereqMet?: boolean;
   classSchedules: ClassScheduleItem[];
   examSchedule: ExamScheduleItem | null;
-  tuitionFixed: number;
-  tuitionVariable: number;
-  tuitionPerUnit: number;
+  // توجه: `tuitionFixed` / `tuitionVariable` / `tuitionPerUnit` از این نوع حذف شدند
+  // چون هیچ‌جای این صفحه خوانده نمی‌شدند. ساخت آن‌ها در page.tsx است (فایلی که
+  // در این تغییر قابل ویرایش نیست)، بنابراین تا اصلاح آن فایل هنوز در payload
+  // می‌آیند؛ فقط قرارداد سمت کلاینت دیگر به آن‌ها وابسته نیست.
   tuitionTotal: number;
 };
 
@@ -64,6 +65,8 @@ export type CartItem = {
   title: string;
   units: number;
   group: number;
+  /** نام استاد — در عکس فوریِ برگشتی از اکشن‌های سبد پر می‌شود */
+  professor?: string;
   classSchedules: ClassScheduleItem[];
   examSchedule: ExamScheduleItem | null;
 };
@@ -75,6 +78,49 @@ const faNum = (n: any) => (n === null || n === undefined) ? '—' : String(n).re
 
 function checkTimeOverlap(s1: string, e1: string, s2: string, e2: string) {
   return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
+}
+
+/**
+ * نرمال‌سازی جست‌وجوی فارسی/عربی — هم‌رفتار با `normalizeFa`/`toEnDigits` در
+ * `src/lib/persian-search.ts` (ي→ی · ك→ک · ة→ه · ؤ→و · ئ→ی · أ/إ/آ→ا + حذف
+ * اعراب و نیم‌فاصله + ارقام فارسی/عربی → انگلیسی). به‌صورت محلی نوشته شده تا
+ * ماژول سروریِ persian-search (که drizzle-orm را import می‌کند) وارد باندل
+ * کلاینت نشود.
+ */
+function normalizeSearchText(input: string | null | undefined): string {
+  return String(input ?? '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ی')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/ـ/g, '')
+    .replace(/[\u200B-\u200F\uFEFF]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** آیا این ارائهٔ کاتالوگ با دروس سبد (غیر از گروه‌های هم‌درس) تداخل زمانی دارد؟ */
+function offeringBlocksCart(offering: OfferingItem, cart: CartItem[]): boolean {
+  for (const c of cart) {
+    // گروه‌های هم‌درس جایگزین یکدیگرند؛ «تغییر گروه» نباید در فیلتر ناپدید شود
+    if (c.courseId === offering.courseId) continue;
+    for (const cs of offering.classSchedules) {
+      for (const cc of c.classSchedules) {
+        if (cs.dayOfWeek === cc.dayOfWeek && checkTimeOverlap(cs.startTime, cs.endTime, cc.startTime, cc.endTime)) return true;
+      }
+    }
+    if (
+      offering.examSchedule && c.examSchedule &&
+      offering.examSchedule.examDate === c.examSchedule.examDate &&
+      checkTimeOverlap(offering.examSchedule.startTime, offering.examSchedule.endTime, c.examSchedule.startTime, c.examSchedule.endTime)
+    ) return true;
+  }
+  return false;
 }
 
 
@@ -195,7 +241,22 @@ export default function EnrollClient(props: {
   const [remain, setRemain] = useState(15 * 60);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const effectiveMaxUnits = props.regulationStatus?.effectiveMaxUnits ?? (props.term.isSummer ? 6 : 20);
+  /* ── سبدِ محلی ─────────────────────────────────────────────────────────
+     عملیات سبد (افزودن/حذف/تغییر گروه/خالی کردن) دیگر `router.refresh()`
+     نمی‌کند؛ اکشن خودش عکس فوریِ تازهٔ سبد را برمی‌گرداند و همین‌جا جایگزین
+     می‌شود. در خطا، سبدِ قبلی دست‌نخورده می‌ماند و پیام خطا نمایش داده می‌شود. */
+  const [cart, setCart] = useState<CartItem[]>(props.cart);
+  const [capOverride, setCapOverride] = useState<number | null>(null);
+  const [cartStartedAt, setCartStartedAt] = useState<number | null>(props.cartStartedAt);
+  /* با refresh (ثبت نهایی / چیدمان خودکار) props تازه می‌آید و وضعیت محلی هم‌گام می‌شود */
+  useEffect(() => {
+    setCart(props.cart);
+    setCartStartedAt(props.cartStartedAt);
+  }, [props.cart, props.cartStartedAt]);
+
+  // سقف واحد: مقدار محاسبه‌شدهٔ صفحه اولویت دارد؛ اگر صفحه نتوانسته بود
+  // آیین‌نامه را بخواند، سقفِ برگشتی از اکشن سبد (همان موتور) جای آن را می‌گیرد.
+  const effectiveMaxUnits = props.regulationStatus?.effectiveMaxUnits ?? capOverride ?? (props.term.isSummer ? 6 : 20);
   const minAllowedUnits = props.regulationStatus?.minAllowedUnits ?? 0;
   // یک منبع حقیقت برای «پنجره باز است؟» — همان مقداری که سرور محاسبه کرده
   const windowOpen = props.term.open;
@@ -203,19 +264,19 @@ export default function EnrollClient(props: {
 
   // ⏱ مهلت ۱۵ دقیقه‌ای سبد (§۲۲۴۳)
   useEffect(() => {
-    if (!props.cartStartedAt) {
+    if (!cartStartedAt) {
       setRemain(15 * 60);
       return;
     }
     const calc = () => {
-      const elapsed = Math.floor((Date.now() - props.cartStartedAt!) / 1000);
+      const elapsed = Math.floor((Date.now() - cartStartedAt) / 1000);
       const left = Math.max(0, 15 * 60 - elapsed);
       setRemain(left);
     };
     calc();
     const t = setInterval(calc, 1000);
     return () => clearInterval(t);
-  }, [props.cartStartedAt]);
+  }, [cartStartedAt]);
 
   // ظرفیت زنده از Redis (§۳۴۰۳) — بدون فشار به PostgreSQL
   useEffect(() => {
@@ -264,8 +325,8 @@ export default function EnrollClient(props: {
     return () => clearInterval(t);
   }, [queuePos, router]);
 
-  const expired = props.cart.length > 0 && remain <= 0;
-  const totalUnits = props.cart.reduce((s, c) => s + c.units, 0);
+  const expired = cart.length > 0 && remain <= 0;
+  const totalUnits = cart.reduce((s, c) => s + c.units, 0);
   // ── وضعیت واحدها بر پایهٔ سقف/کفِ آیین‌نامه (نه عدد ثابت ۲۰) ──
   const overMaxUnits = totalUnits > effectiveMaxUnits;
   const underMinUnits = minAllowedUnits > 0 && totalUnits > 0 && totalUnits < minAllowedUnits;
@@ -284,17 +345,19 @@ export default function EnrollClient(props: {
   const ss = String(remain % 60).padStart(2, '0');
 
   // بررسی تداخل‌های زمانی درون سبد انتخاب واحد دانشجو
+  // (منطق بدون تغییر است؛ فقط منبع سبد از props به وضعیت محلی منتقل شد تا
+  //  افزودن/حذف بدون refresh کل صفحه هم تداخل‌ها را به‌روز کند.)
   const cartConflicts = useMemo(() => {
     const conflicts: Record<number, { classConflicts: string[]; examConflicts: string[]; alternateGroup?: OfferingItem }> = {};
 
-    for (let i = 0; i < props.cart.length; i++) {
-      const itemA = props.cart[i];
+    for (let i = 0; i < cart.length; i++) {
+      const itemA = cart[i];
       const classConf: string[] = [];
       const examConf: string[] = [];
 
-      for (let j = 0; j < props.cart.length; j++) {
+      for (let j = 0; j < cart.length; j++) {
         if (i === j) continue;
-        const itemB = props.cart[j];
+        const itemB = cart[j];
 
         // تداخل کلاسی
         for (const cA of itemA.classSchedules) {
@@ -318,7 +381,7 @@ export default function EnrollClient(props: {
       if (classConf.length > 0 || examConf.length > 0) {
         const otherGroups = props.offerings.filter(o => o.courseId === itemA.courseId && o.id !== itemA.id);
         alternateGroup = otherGroups.find(alt => {
-          for (const other of props.cart) {
+          for (const other of cart) {
             if (other.id === itemA.id) continue;
             for (const ca of alt.classSchedules) {
               for (const cb of other.classSchedules) {
@@ -337,11 +400,43 @@ export default function EnrollClient(props: {
     }
 
     return conflicts;
-  }, [props.cart, props.offerings]);
+  }, [cart, props.offerings]);
 
   const hasAnyConflict = useMemo(() => {
     return Object.values(cartConflicts).some(c => c.classConflicts.length > 0 || c.examConflicts.length > 0);
   }, [cartConflicts]);
+
+  // ── جست‌وجو و فیلترهای کاتالوگ — تماماً کلاینتی (هیچ رفت‌وبرگشت سروری) ──
+  const [query, setQuery] = useState('');
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [onlyConflictFree, setOnlyConflictFree] = useState(false);
+  const filtersActive = query.trim() !== '' || onlyAvailable || onlyConflictFree;
+
+  const filteredOfferings = useMemo(() => {
+    const q = normalizeSearchText(query);
+    const cartOfferingIds = new Set(cart.map(c => c.id));
+    return props.offerings.filter(o => {
+      // ردیف‌های داخل سبد همیشه دیده شوند تا «حذف از سبد» در دسترس بماند
+      const inCart = cartOfferingIds.has(o.id);
+      if (q) {
+        const haystack = [o.title, o.code, o.professor].map(v => normalizeSearchText(v));
+        if (!haystack.some(h => h.includes(q))) return false;
+      }
+      if (onlyAvailable && !inCart) {
+        const lv = live[o.id];
+        const remaining = lv ? lv.remaining : o.capacity - o.enrolled;
+        if (remaining <= 0) return false;
+      }
+      if (onlyConflictFree && !inCart && offeringBlocksCart(o, cart)) return false;
+      return true;
+    });
+  }, [props.offerings, cart, query, onlyAvailable, onlyConflictFree, live]);
+
+  function resetCatalogFilters() {
+    setQuery('');
+    setOnlyAvailable(false);
+    setOnlyConflictFree(false);
+  }
 
   // عملیاتِ سبد: نتیجهٔ سرور (از جمله گیتِ پنجرهٔ انتخاب واحد) باید دیده شود —
   // پیش از این پیام موفقیت بی‌قید چاپ می‌شد، حتی وقتی سرور خطا برگردانده بود.
@@ -349,25 +444,48 @@ export default function EnrollClient(props: {
     return `⛔ ${e instanceof Error && e.message ? e.message : 'ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.'}`;
   }
 
+  /** جایگزینی سبد با عکس فوریِ برگشتی از اکشن — بدون refresh صفحه. */
+  function applyCartSnapshot(snapshot: { cart: CartItem[]; effectiveMaxUnits: number }) {
+    setCart(snapshot.cart);
+    setCapOverride(snapshot.effectiveMaxUnits);
+  }
+
   async function add(id: number) {
     if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
+    const title = props.offerings.find(o => o.id === id)?.title ?? 'درس انتخاب‌شده';
     setBusy(true);
     setMsg('');
     try {
       const r = await addToCartAction(id);
-      if (r && r.ok === false) setMsg(`⛔ ${r.error || 'افزودن به سبد ناموفق بود.'}`);
+      if (!r.ok) {
+        setMsg(`⛔ ${r.error || 'افزودن به سبد ناموفق بود.'}`);
+      } else {
+        applyCartSnapshot(r);
+        // سرور با هر افزودن، مهلت ۱۵ دقیقه‌ای سبد را تمدید می‌کند
+        setCartStartedAt(Date.now());
+        toast(`✅ «${title}» به سبد انتخاب واحد افزوده شد.`, 'success');
+      }
     } catch (e) {
       setMsg(failMsg(e));
     }
-    router.refresh();
     setBusy(false);
   }
 
   async function remove(id: number) {
+    const title = cart.find(c => c.id === id)?.title ?? 'درس انتخاب‌شده';
     setBusy(true);
     setMsg('');
-    await removeFromCartAction(id);
-    router.refresh();
+    try {
+      const r = await removeFromCartAction(id);
+      if (!r.ok) {
+        setMsg(`⛔ ${r.error || 'حذف از سبد ناموفق بود.'}`);
+      } else {
+        applyCartSnapshot(r);
+        toast(`🗑️ «${title}» از سبد حذف شد.`, 'success');
+      }
+    } catch (e) {
+      setMsg(failMsg(e));
+    }
     setBusy(false);
   }
 
@@ -380,6 +498,7 @@ export default function EnrollClient(props: {
     setMsg(res.ok
       ? '✅ درخواست ثبت شد؛ صندلی درس تا تصمیم مدیر گروه / کارشناس آموزش برای شما رزرو می‌ماند.'
       : `⛔ ${res.error || 'ثبت درخواست ناموفق بود.'}`);
+    // این جریان فهرست «درخواست‌های در انتظار تصمیم» را تغییر می‌دهد که در عکس فوری سبد نیست
     router.refresh();
   }
 
@@ -395,17 +514,22 @@ export default function EnrollClient(props: {
 
   async function switchGroup(newOfferingId: number) {
     if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
+    const target = props.offerings.find(o => o.id === newOfferingId);
     setBusy(true);
     setMsg('در حال جابجایی به گروه بدون تداخل...');
     try {
       const r = await addToCartAction(newOfferingId);
-      setMsg(r && r.ok === false
-        ? `⛔ ${r.error || 'جابجایی به گروه دیگر ناموفق بود.'}`
-        : '✅ درس به گروه بدون تداخل جابجا گردید.');
+      if (!r.ok) {
+        setMsg(`⛔ ${r.error || 'جابجایی به گروه دیگر ناموفق بود.'}`);
+      } else {
+        applyCartSnapshot(r);
+        setCartStartedAt(Date.now());
+        setMsg('✅ درس به گروه بدون تداخل جابجا گردید.');
+        if (target) toast(`🔄 «${target.title}» به گروه ${faNum(target.group)} منتقل شد.`, 'success');
+      }
     } catch (e) {
       setMsg(failMsg(e));
     }
-    router.refresh();
     setBusy(false);
   }
 
@@ -415,11 +539,15 @@ export default function EnrollClient(props: {
     setMsg('');
     try {
       const r = await clearCartAction();
-      setMsg(r && r.ok === false ? `⛔ ${r.error || 'خالی کردن سبد ناموفق بود.'}` : 'سبد انتخاب واحد کاملاً خالی گردید.');
+      if (!r.ok) {
+        setMsg(`⛔ ${r.error || 'خالی کردن سبد ناموفق بود.'}`);
+      } else {
+        applyCartSnapshot(r);
+        setMsg('سبد انتخاب واحد کاملاً خالی گردید.');
+      }
     } catch (e) {
       setMsg(failMsg(e));
     }
-    router.refresh();
     setBusy(false);
   }
 
@@ -762,7 +890,7 @@ export default function EnrollClient(props: {
       )}
 
       {/* مهلت تکمیل سبد */}
-      {props.cart.length > 0 && (
+      {cart.length > 0 && (
         <div
           className={`card !p-3 flex items-center justify-between rounded-xl border ${
             expired
@@ -827,14 +955,14 @@ export default function EnrollClient(props: {
               }`}
             >
               <span>{faNum(totalUnits)} واحد</span>
-              <span>({faNum(props.cart.length)} درس)</span>
+              <span>({faNum(cart.length)} درس)</span>
               <span>— سقف مجاز: {faNum(effectiveMaxUnits)} واحد</span>
               {minAllowedUnits > 0 && <span>· حداقل: {faNum(minAllowedUnits)} واحد</span>}
               <span className="font-black">· {unitStateLabel}</span>
             </span>
           </div>
 
-          {props.cart.length > 0 && (
+          {cart.length > 0 && (
             <button
               onClick={clearAll}
               disabled={busy}
@@ -846,7 +974,7 @@ export default function EnrollClient(props: {
           )}
         </div>
 
-        {props.cart.length === 0 ? (
+        {cart.length === 0 ? (
           <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-1">
             <p className="text-sm font-bold text-slate-600">سبد انتخاب واحد شما خالی است.</p>
             <p className="text-xs text-slate-400">
@@ -855,9 +983,12 @@ export default function EnrollClient(props: {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {props.cart.map((c, idx) => {
+            {cart.map((c, idx) => {
               const conf = cartConflicts[c.id];
               const isConflicted = conf && (conf.classConflicts.length > 0 || conf.examConflicts.length > 0);
+              // ارائهٔ متناظر در کاتالوگ — برای استاد (تا پیش از اولین عملیات سبد) و وضعیت ظرفیت
+              const cartOffering = props.offerings.find(o => o.id === c.id);
+              const professor = c.professor ?? cartOffering?.professor;
 
               return (
                 <div
@@ -887,10 +1018,16 @@ export default function EnrollClient(props: {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-white text-emerald-800 border border-emerald-300 text-xs font-bold mr-1">
                         {faNum(c.units)} واحد
                       </span>
+
+                      {/* استاد درس — از عکس فوریِ سبد یا کاتالوگ */}
+                      {professor && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 text-xs font-medium mr-1">
+                          استاد: {professor}
+                        </span>
+                      )}
                       {(() => {
-                        const off = props.offerings.find(o => o.id === c.id);
                         const lv = live[c.id];
-                        const isFull = off ? (lv ? lv.remaining <= 0 : off.enrolled >= off.capacity) : false;
+                        const isFull = cartOffering ? (lv ? lv.remaining <= 0 : cartOffering.enrolled >= cartOffering.capacity) : false;
                         return isFull ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold mr-1">
                             ⏳ اتاق انتظار — ظرفیت تکمیل
@@ -986,7 +1123,7 @@ export default function EnrollClient(props: {
           </div>
         )}
 
-        {props.cart.length > 0 && (
+        {cart.length > 0 && (
           <button
             className="btn-primary mt-3 w-full py-3 text-sm font-extrabold shadow-lg rounded-xl"
             disabled={busy || overMaxUnits || !windowOpen || queuePos !== null || processing}
@@ -997,7 +1134,7 @@ export default function EnrollClient(props: {
         )}
       </div>
 
-      <TempWeeklySchedule cart={props.cart} />
+      <TempWeeklySchedule cart={cart} />
 
       {conflictModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1131,6 +1268,64 @@ export default function EnrollClient(props: {
           <span className="text-xs text-slate-500 font-bold">تعداد کل گروه‌ها: {faNum(props.offerings.length)}</span>
         </div>
 
+        {/* ── جست‌وجو و فیلتر کاتالوگ — کاملاً کلاینتی، بدون هیچ درخواست سروری ── */}
+        {props.offerings.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+            <label className="block">
+              <span className="sr-only">جست‌وجو در فهرست دروس</span>
+              <input
+                type="search"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="جست‌وجو بر اساس نام درس، کد درس یا نام استاد…"
+                aria-label="جست‌وجو در فهرست دروس بر اساس نام درس یا کد درس یا نام استاد"
+                className="w-full min-h-10 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOnlyAvailable(v => !v)}
+                aria-pressed={onlyAvailable}
+                className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                  onlyAvailable
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span aria-hidden="true">✅</span>
+                <span>ظرفیت دارد</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnlyConflictFree(v => !v)}
+                aria-pressed={onlyConflictFree}
+                className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                  onlyConflictFree
+                    ? 'bg-indigo-700 border-indigo-700 text-white'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span aria-hidden="true">🧩</span>
+                <span>بدون تداخل با سبد</span>
+              </button>
+              <span className="text-2xs font-bold text-slate-600" role="status" aria-live="polite">
+                نمایش {faNum(filteredOfferings.length)} از {faNum(props.offerings.length)} گروه
+              </span>
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={resetCatalogFilters}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                >
+                  <span aria-hidden="true">✕</span>
+                  <span>پاک کردن جست‌وجو و فیلترها</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2.5">
           {props.offerings.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-16 px-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60">
@@ -1153,14 +1348,30 @@ export default function EnrollClient(props: {
                 </>
               )}
             </div>
-          ) : props.offerings.map(o => {
-            const inCart = props.cart.some(c => c.id === o.id);
+          ) : filteredOfferings.length === 0 ? (
+            <div role="status" aria-live="polite" className="flex flex-col items-center justify-center text-center py-12 px-4 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/60 space-y-2">
+              <div className="text-4xl">🔍</div>
+              <p className="font-extrabold text-slate-700 text-sm">درسی با این جست‌وجو یا فیلترها پیدا نشد.</p>
+              <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                عبارت جست‌وجو را کوتاه‌تر کنید یا فیلترهای «ظرفیت دارد» و «بدون تداخل با سبد» را بردارید تا همهٔ گروه‌های این نیمسال دیده شود.
+              </p>
+              <button
+                type="button"
+                onClick={resetCatalogFilters}
+                className="mt-1 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-indigo-700 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-800"
+              >
+                <span aria-hidden="true">↺</span>
+                <span>پاک کردن جست‌وجو و فیلترها</span>
+              </button>
+            </div>
+          ) : filteredOfferings.map(o => {
+            const inCart = cart.some(c => c.id === o.id);
             const lv = live[o.id];
             const remainingSeats = lv ? lv.remaining : o.capacity - o.enrolled;
             const full = remainingSeats <= 0;
 
             // آیا گروه دیگری از همین درس در سبد هست؟
-            const otherGroupInCart = props.cart.find(c => c.courseId === o.courseId && c.id !== o.id);
+            const otherGroupInCart = cart.find(c => c.courseId === o.courseId && c.id !== o.id);
 
             // درخواست باز بدون رعایت پیش‌نیاز برای همین گروه
             const openPrereqRequest = (props.bypassRequests ?? []).some(

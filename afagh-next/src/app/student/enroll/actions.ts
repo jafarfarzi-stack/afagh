@@ -33,6 +33,7 @@ import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curri
 import { listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { createBypassRequest, cancelBypassRequest } from '@/lib/bypass-requests';
 import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { toShamsi } from '@/lib/shamsi';
 
 /**
  * زمینهٔ انتخاب واحد.
@@ -77,7 +78,170 @@ function timeOverlap(s1: string, e1: string, s2: string, e2: string) {
   return s1.slice(0, 5) < e2.slice(0, 5) && s2.slice(0, 5) < e1.slice(0, 5);
 }
 
-export async function addToCartAction(offeringId: number) {
+// ────────────────────────────────────────────────────────────────────────────
+// عکس فوری سبد — پاسخ عملیات‌های سبد
+//
+// چرا: پیش از این هر «افزودن/حذف از سبد» با `router.refresh()` کل صفحهٔ انتخاب
+// واحد را از نو می‌ساخت (ده‌ها رفت‌وبرگشت سریالی دیتابیس و صدها کیلوبایت
+// payload RSC) فقط برای تغییر یک ردیف سبد. اکنون همان اکشن، سبدِ تازه را
+// می‌خواند و به کلاینت برمی‌گرداند؛ کلاینت فقط همین قطعهٔ کوچک را جایگزین
+// می‌کند. هیچ قاعدهٔ کسب‌وکاری اینجا تکرار یا تغییر نکرده است: سقف واحد از
+// همان موتور آیین‌نامه، و تداخل‌ها در کلاینت از روی همین ردیف‌ها محاسبه می‌شوند
+// (منطق موجود `cartConflicts` در EnrollClient بدون تغییر بازاستفاده می‌شود).
+// ────────────────────────────────────────────────────────────────────────────
+
+const CART_DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
+
+export type CartScheduleRow = {
+  dayOfWeek: number;
+  dayName: string;
+  startTime: string;
+  endTime: string;
+  room?: string;
+};
+
+export type CartExamRow = {
+  examDate: string;
+  startTime: string;
+  endTime: string;
+};
+
+/** یک ردیف سبد با همان شکلی که کارت سبد در کلاینت می‌خواند. */
+export type CartRow = {
+  /** = offeringId (کلید یکتای ردیف سبد) */
+  id: number;
+  courseId: number;
+  code: string;
+  title: string;
+  units: number;
+  group: number;
+  professor: string;
+  classSchedules: CartScheduleRow[];
+  examSchedule: CartExamRow | null;
+};
+
+export type CartSnapshot = {
+  cart: CartRow[];
+  totalUnits: number;
+  effectiveMaxUnits: number;
+};
+
+/**
+ * پاسخ مشترک عملیات‌های سبد: در موفقیت، سبدِ تازه؛ در خطا فقط پیام.
+ * فیلدهای `{ ok, error }` قبلی حفظ شده‌اند تا فراخوانی‌های موجود کامپایل شوند.
+ */
+export type CartActionResult = ({ ok: true } & CartSnapshot) | { ok: false; error: string };
+
+/** سقف واحد مؤثر — همان موتور آیین‌نامه؛ در صورت خطا، پیش‌فرضِ هم‌خوان با کلاینت. */
+async function effectiveMaxUnitsOf(studentId: number, termId: number | null, isSummer: boolean): Promise<number> {
+  try {
+    const reg = await evaluateStudentRegulationStatus(studentId, termId);
+    const cap = Number(reg?.effectiveMaxUnits);
+    if (Number.isFinite(cap) && cap > 0) return cap;
+  } catch {
+    /* موتور آیین‌نامه در دسترس نبود → سقف پیش‌فرض */
+  }
+  return isSummer ? 6 : 20;
+}
+
+/** خواندن سبدِ فعلی دانشجو از دیتابیس به شکل آمادهٔ نمایش در کلاینت. */
+async function loadCartSnapshot(
+  studentId: number,
+  termId: number | null,
+  isSummer: boolean,
+): Promise<CartSnapshot> {
+  const [cartRows, cap] = await Promise.all([
+    db
+      .select({ offeringId: cart_items.offeringId })
+      .from(cart_items)
+      .where(eq(cart_items.studentId, studentId))
+      .orderBy(cart_items.createdAt),
+    effectiveMaxUnitsOf(studentId, termId, isSummer),
+  ]);
+
+  const ids = cartRows.map(r => r.offeringId);
+  if (ids.length === 0) return { cart: [], totalUnits: 0, effectiveMaxUnits: cap };
+
+  const [offeringRows, schedRows] = await Promise.all([
+    db
+      .select({
+        id: course_offerings.id,
+        courseId: course_offerings.courseId,
+        group: course_offerings.groupNumber,
+        code: courses.code,
+        title: courses.title,
+        units: courses.units,
+        professorFirstName: users.firstName,
+        professorLastName: users.lastName,
+      })
+      .from(course_offerings)
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .leftJoin(staff, eq(staff.id, course_offerings.professorId))
+      .leftJoin(users, eq(users.id, staff.userId))
+      .where(inArray(course_offerings.id, ids)),
+    db
+      .select({
+        offeringId: schedules.offeringId,
+        scheduleType: schedules.scheduleType,
+        dayOfWeek: schedules.dayOfWeek,
+        examDate: schedules.examDate,
+        startTime: schedules.startTime,
+        endTime: schedules.endTime,
+        roomName: classrooms.name,
+      })
+      .from(schedules)
+      .leftJoin(classrooms, eq(classrooms.id, schedules.roomId))
+      .where(inArray(schedules.offeringId, ids)),
+  ]);
+
+  const schedMap = new Map<
+    number,
+    { classes: CartScheduleRow[]; exam?: CartExamRow }
+  >();
+  for (const s of schedRows) {
+    if (!schedMap.has(s.offeringId)) schedMap.set(s.offeringId, { classes: [] });
+    const entry = schedMap.get(s.offeringId)!;
+    if (s.scheduleType === 'CLASS' && s.dayOfWeek != null) {
+      entry.classes.push({
+        dayOfWeek: s.dayOfWeek,
+        dayName: CART_DAY_NAMES[s.dayOfWeek] || `روز ${s.dayOfWeek}`,
+        startTime: String(s.startTime).slice(0, 5),
+        endTime: String(s.endTime).slice(0, 5),
+        room: s.roomName || undefined,
+      });
+    } else if (s.scheduleType === 'EXAM' && s.examDate) {
+      entry.exam = {
+        examDate: toShamsi(String(s.examDate)),
+        startTime: String(s.startTime).slice(0, 5),
+        endTime: String(s.endTime).slice(0, 5),
+      };
+    }
+  }
+
+  const offMap = new Map(offeringRows.map(o => [o.id, o]));
+  const cart: CartRow[] = [];
+  for (const row of cartRows) {
+    const o = offMap.get(row.offeringId);
+    if (!o) continue;
+    const s = schedMap.get(o.id);
+    cart.push({
+      id: o.id,
+      courseId: o.courseId,
+      code: o.code,
+      title: o.title,
+      units: Number(o.units),
+      group: o.group,
+      professor: `${o.professorFirstName || ''} ${o.professorLastName || ''}`.trim() || 'نامشخص',
+      classSchedules: s?.classes ?? [],
+      examSchedule: s?.exam ?? null,
+    });
+  }
+
+  const totalUnits = cart.reduce((sum, c) => sum + c.units, 0);
+  return { cart, totalUnits, effectiveMaxUnits: cap };
+}
+
+export async function addToCartAction(offeringId: number): Promise<CartActionResult> {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
   const { user, me, term, myUni } = await ctx();
@@ -125,28 +289,29 @@ export async function addToCartAction(offeringId: number) {
       })
   );
 
-  return { ok: true };
+  // سبدِ تازه (بدون refresh کل صفحه) — جایگزینی گروه هم همان‌جا اعمال شده است
+  return { ok: true, ...(await loadCartSnapshot(me.id, term.id, term.isSummer === 1)) };
 }
 
-export async function removeFromCartAction(offeringId: number) {
+export async function removeFromCartAction(offeringId: number): Promise<CartActionResult> {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const { user, me } = await ctx();
+  const { me, term } = await ctx();
   await db.transaction(tx =>
     tx.delete(cart_items).where(and(eq(cart_items.studentId, me.id), eq(cart_items.offeringId, offeringId)))
   );
-  return { ok: true };
+  return { ok: true, ...(await loadCartSnapshot(me.id, term?.id ?? null, term?.isSummer === 1)) };
 }
 
 /** خالی کردن کامل سبد انتخاب واحد (حذف همه) */
-export async function clearCartAction() {
+export async function clearCartAction(): Promise<CartActionResult> {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { ok: false, error: og.error };
-  const { user, me } = await ctx();
+  const { me, term } = await ctx();
   await db.transaction(tx =>
     tx.delete(cart_items).where(eq(cart_items.studentId, me.id))
   );
-  return { ok: true };
+  return { ok: true, ...(await loadCartSnapshot(me.id, term?.id ?? null, term?.isSummer === 1)) };
 }
 
 /** چیدمان هوشمند و خودکار دروس ترم بر اساس چارت، ظرفیت و کنترل عدم تداخل زمانی و امتحانی */
