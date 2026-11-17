@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
@@ -208,6 +208,7 @@ export default async function AdminStudentsPage({
       facultyName: faculties.name,
       majorName: majors.name,
       majorCode: majors.majorCode,
+      majorId: students.majorId,
       degreeLevel: degree_level_configs.title,
       degreeCode: degree_level_configs.code,
       degreeLevelId: degree_level_configs.id,
@@ -291,6 +292,22 @@ export default async function AdminStudentsPage({
     .select({ id: degree_level_configs.id, title: degree_level_configs.title })
     .from(degree_level_configs)
     .orderBy(degree_level_configs.id);
+  // گزینه‌های «رشته» و «دانشکده/گروه» برای ویرایش پرونده و انتساب استاد
+  const majorOptions = await db
+    .select({ id: majors.id, name: majors.name })
+    .from(majors)
+    .where(currentUniversityId ? or(eq(majors.universityId, currentUniversityId), isNull(majors.universityId)) : undefined)
+    .orderBy(majors.name);
+  const facultyOptions = await db
+    .select({ id: faculties.id, name: faculties.name })
+    .from(faculties)
+    .where(currentUniversityId ? or(eq(faculties.universityId, currentUniversityId), isNull(faculties.universityId)) : undefined)
+    .orderBy(faculties.name);
+  const deptOptions = await db
+    .select({ id: departments.id, name: departments.name, facultyId: departments.facultyId })
+    .from(departments)
+    .where(currentUniversityId ? or(eq(departments.universityId, currentUniversityId), isNull(departments.universityId)) : undefined)
+    .orderBy(departments.name);
   // ── محل تولد/صدور از geo (سراسری) — عنوان‌های یکتا با کد وزارت غیرخالی ──
   let geoPlaces: { title: string; ministryCode: string | null }[] = [];
   try {
@@ -428,6 +445,7 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
           majorCode: s.majorCode || '—',
           degreeLevel: s.degreeLevel || '—',
           degreeLevelId: s.degreeLevelId ?? 0,
+          majorId: s.majorId ?? null,
           degreeCode: s.degreeCode || '—',
           regulationId: s.regulationId,
           regulationTitle: s.regulationTitle || '—',
@@ -435,6 +453,9 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
         }))}
         pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear, university: currentUniversity?.code ?? 'AFAGH' }}
         degrees={degrees}
+        majorOptions={majorOptions}
+        facultyOptions={facultyOptions}
+        deptOptions={deptOptions}
         geoPlaces={geoPlaces}
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={undefined}

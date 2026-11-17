@@ -52,6 +52,9 @@ export default function StudentsManagerClient(props: {
   staffList?: StaffItem[];
   pagination?: Pagination;
   degrees?: { id: number; title: string }[];
+  majorOptions?: { id: number; name: string }[];
+  facultyOptions?: { id: number; name: string }[];
+  deptOptions?: { id: number; name: string; facultyId: number | null }[];
   /** گزینه‌های محل تولد/صدور از geo (سراسری) — کد وزارت در سرور resolve می‌شود */
   geoPlaces?: { title: string; ministryCode: string | null }[];
   statusCounts?: { status: string; n: number }[];
@@ -833,6 +836,8 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
               positionLabel={`پروندهٔ ${faNum(selectedStuIdx + 1, 0)} از ${faNum(props.students.length, 0)}`}
               geoPlaces={(props.geoPlaces ?? []).map(g => g.title).filter(Boolean)}
               regulations={props.regulations ?? []}
+              degrees={props.degrees ?? []}
+              majors={props.majorOptions ?? []}
               uniCode={uniCodeOf(currentStudent.universityId)}
               onRegulationChange={handleRegulationChange}
               onToggleActive={() => void handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
@@ -1251,6 +1256,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             <StaffProfilePanel
               staff={currentStaff}
               draft={staffDraft}
+              deptOptions={props.deptOptions ?? []}
               onField={sf}
               editing={staffEditing}
               canEdit={canEditProfile}

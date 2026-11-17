@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
-import { and, desc, eq, inArray, isNull, notInArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { z } from 'zod';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
@@ -839,6 +839,16 @@ export async function saveUserRolesAction(userId: number, roleIds: number[]): Pr
 
 /** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */
 export type StudentProfilePatch = {
+  firstName?: string | null;
+  lastName?: string | null;
+  nationalCode?: string | null;
+  status?: string | null;
+  degreeLevelId?: number | null;
+  majorId?: number | null;
+  quotaType?: string | null;
+  acceptanceType?: string | null;
+  studyingMode?: string | null;
+  trainingMethod?: string | null;
   fatherName?: string | null;
   birthCertNo?: string | null;
   placeOfBirth?: string | null;
@@ -888,6 +898,16 @@ export type StudentProfilePatch = {
 
 /** Zod allow-list گیت اعتبارسنجی وصلهٔ پروندهٔ دانشجو (maxها هم‌گام با slicing داخل اکشن) */
 const studentProfilePatchSchema = z.object({
+  firstName: z.coerce.string().max(100).nullish(),
+  lastName: z.coerce.string().max(100).nullish(),
+  nationalCode: z.coerce.string().max(10).nullish(),
+  status: z.coerce.string().max(30).nullish(),
+  degreeLevelId: z.coerce.number().int().positive().nullish(),
+  majorId: z.coerce.number().int().positive().nullish(),
+  quotaType: z.coerce.string().max(50).nullish(),
+  acceptanceType: z.coerce.string().max(50).nullish(),
+  studyingMode: z.coerce.string().max(50).nullish(),
+  trainingMethod: z.coerce.string().max(50).nullish(),
   fatherName: z.coerce.string().max(100).nullish(),
   birthCertNo: z.coerce.string().max(20).nullish(),
   placeOfBirth: z.coerce.string().max(150).nullish(),
@@ -967,7 +987,6 @@ export async function updateStudentProfileAction(
     return isNaN(n) ? null : n;
   };
   try {
-    // ── سال/ترم ورود: سال ۱۳۰۰..۱۵۰۰، ترم ۱..۳ (می‌آید از کد ورود ۵ رقمی کلاینت) ──
     if ('entryYear' in patch || 'entryTerm' in patch) {
       const ey = patch.entryYear == null ? undefined : Number(patch.entryYear);
       const et = patch.entryTerm == null ? undefined : Number(patch.entryTerm);
@@ -979,7 +998,20 @@ export async function updateStudentProfileAction(
       }
     }
     const userSet: Record<string, unknown> = {};
+    // ── نام و کد ملی روی users هستند و کد ملی یکتاست؛ پیش از نوشتن چک شود ──
+    if ('nationalCode' in patch) {
+      const nc = clean((patch as Record<string, unknown>).nationalCode, 10);
+      if (nc !== undefined && nc !== null && !/^\d{10}$/.test(nc)) {
+        return { ok: false, error: 'کد ملی باید ۱۰ رقم باشد.' };
+      }
+      if (nc) {
+        const dup = await db.select({ id: users.id }).from(users)
+          .where(and(eq(users.nationalCode, nc), ne(users.id, row.userId))).limit(1);
+        if (dup.length) return { ok: false, error: 'این کد ملی برای کاربر دیگری ثبت شده است.' };
+      }
+    }
     const us = [
+      ['firstName', 100], ['lastName', 100], ['nationalCode', 10],
       ['fatherName', 100], ['birthCertNo', 20], ['placeOfBirth', 150], ['placeOfIssue', 150],
       ['gender', 10], ['mobile', 11], ['email', 150], ['postalCode', 10], ['address', 300],
       ['passportNumber', 20], ['nationality', 10],
@@ -1008,11 +1040,12 @@ export async function updateStudentProfileAction(
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType',
       'englishExamType', 'englishScore', 'documentDeficiency', 'entryDate',
+      'status', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
     ] as const;
     for (const k of ss) {
       if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], 300); if (v !== undefined) stuSet[k] = v; }
     }
-    const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters', 'entryYear', 'entryTerm'] as const;
+    const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters', 'entryYear', 'entryTerm', 'degreeLevelId', 'majorId'] as const;
     for (const k of ns) {
       if (k in patch) { const v = cleanNum((patch as Record<string, unknown>)[k]); if (v !== undefined) stuSet[k] = v; }
     }

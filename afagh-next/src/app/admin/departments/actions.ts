@@ -345,7 +345,7 @@ export async function setStaffDepartmentAction(fd: FormData): Promise<{ ok: bool
     if (!d) return { ok: false, error: 'گروه یافت نشد.' };
     facultyId = d.facultyId;
   }
-  await db.update(staff).set({ departmentId: deptId, ...(facultyId ? { facultyId } : {}) }).where(eq(staff.id, staffId));
+  await db.update(staff).set({ departmentId: deptId, facultyId: deptId ? facultyId : null }).where(eq(staff.id, staffId));
   revalidatePath('/admin/departments');
   revalidatePath('/admin/staff');
   return { ok: true };

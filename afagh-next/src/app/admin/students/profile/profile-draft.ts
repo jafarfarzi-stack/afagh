@@ -24,6 +24,7 @@ export type PatchResult = { patch: Record<string, string | number | null> } | { 
 
 /** کلیدهای متنی مجاز دانشجو (هم‌گام با studentProfilePatchSchema در actions.ts) */
 export const STUDENT_TEXT_KEYS = [
+  'firstName', 'lastName', 'nationalCode', 'status', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
   'fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'email', 'postalCode',
   'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo', 'homeTell',
   'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle', 'guardianPhone',
@@ -32,7 +33,7 @@ export const STUDENT_TEXT_KEYS = [
 ] as const satisfies readonly (keyof StudentItem)[];
 
 /** کلیدهای عددیِ همیشه‌عدد دانشجو (۰ پیش‌فرض) */
-export const STUDENT_NUM_KEYS = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'eqSemesters'] as const satisfies readonly (keyof StudentItem)[];
+export const STUDENT_NUM_KEYS = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'eqSemesters', 'degreeLevelId', 'majorId'] as const satisfies readonly (keyof StudentItem)[];
 
 /** کلیدهای متنی مجاز استاد (هم‌گام با staffProfilePatchSchema در actions.ts) */
 export const STAFF_TEXT_KEYS = [
@@ -115,6 +116,9 @@ export function studentPatchFromDraft(draft: ProfileDraft, initial: ProfileDraft
     const v = Number(draft[k] ?? 0);
     if (v !== Number(initial[k] ?? 0)) patch[k] = v;
   }
+  // صفر = «انتخاب نشده» برای کلیدهای خارجی (اسکیمای سرور فقط مثبت می‌پذیرد)
+  if (patch.degreeLevelId === 0) patch.degreeLevelId = null;
+  if (patch.majorId === 0) patch.majorId = null;
 
   const ur = draft.unitsRemaining === '' || draft.unitsRemaining == null ? null : Number(draft.unitsRemaining);
   const ur0 = initial.unitsRemaining === '' || initial.unitsRemaining == null ? null : Number(initial.unitsRemaining);

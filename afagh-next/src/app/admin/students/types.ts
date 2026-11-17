@@ -39,6 +39,7 @@ export type StudentItem = {
   facultyName?: string;
   degreeLevel: string;
   degreeLevelId: number;
+  majorId?: number | null;
   degreeCode: string;
   regulationTitle: string;
   fatherName?: string;
@@ -136,8 +137,10 @@ export type StaffItem = {
   staffType: string;
   role: string;
   departmentName?: string;
+  departmentId?: number | null;
   departmentCode?: string | null;
   facultyName?: string;
+  facultyId?: number | null;
   facultyCode?: string | null;
   fieldOfStudy?: string | null;
   fieldMain?: string | null;

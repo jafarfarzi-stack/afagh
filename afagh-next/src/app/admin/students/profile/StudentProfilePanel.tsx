@@ -22,7 +22,7 @@ import { Field, ReadOnlyField, SelectField, TextField, inputClass } from './Fiel
 import type { ProfileDraft } from './profile-draft';
 import { entryTermFromMonth, formatJalaliDateInput } from './profile-draft';
 import type { RegulationPick, StudentItem } from '../types';
-import { QUOTA_FA, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
+import { QUOTA_FA, STUDENT_STATUS_FA, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 import { dateToJalali, faNum } from '../transcript-utils';
 import { normalizeFa, toEnDigits } from '@/lib/persian-search';
 
@@ -165,6 +165,8 @@ export type StudentProfilePanelProps = {
   /** عناوین geo برای محل تولد/صدور (مقدار ذخیره‌شده همان عنوان است) */
   geoPlaces: string[];
   regulations: RegulationPick[];
+  degrees: { id: number; title: string }[];
+  majors: { id: number; name: string }[];
   /** کد دانشگاه جاری/مالک رکورد — برای استثناهای عنوان وضعیت سما */
   uniCode: string | null;
   onRegulationChange: (regulationId: number) => Promise<boolean>;
@@ -191,6 +193,8 @@ export default function StudentProfilePanel({
   positionLabel,
   geoPlaces,
   regulations,
+  degrees,
+  majors,
   uniCode,
   onRegulationChange,
   onToggleActive,
@@ -316,22 +320,53 @@ export default function StudentProfilePanel({
         {tab === 'identity' && (
           <div className="space-y-3">
             <section className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-              <ReadOnlyField label="نام و نام خانوادگی" value={`${student.lastName} - ${student.firstName}`} />
-              <ReadOnlyField label="کد ملی" value={student.nationalCode} mono dir="ltr" />
+              <TextField label="نام" value={String(profile.firstName ?? '')} onChange={bind('firstName')} />
+              <TextField label="نام خانوادگی" value={String(profile.lastName ?? '')} onChange={bind('lastName')} />
+              <TextField label="کد ملی" value={String(profile.nationalCode ?? '')} onChange={bind('nationalCode')} mono dir="ltr" hint="۱۰ رقم" />
               <ReadOnlyField
                 label="تاریخ تولد"
                 value={dateToJalali(student.birthDate)}
                 mono
                 hint={student.birthDate ? `میلادی: ${String(student.birthDate).slice(0, 10)}` : undefined}
               />
-              <ReadOnlyField label="وضعیت تحصیلی" value={statusLabel} />
-              <ReadOnlyField label="مقطع" value={student.degreeLevel} />
-              <ReadOnlyField label="کد و نام رشته" value={`${student.majorCode} — ${student.majorName}`} />
-              <ReadOnlyField label="دانشکده" value={student.facultyName} />
-              <ReadOnlyField label="سهمیهٔ نهایی" value={QUOTA_FA[student.quotaType] ?? student.quotaType} />
-              <ReadOnlyField label="نحوهٔ ورود" value={acceptTypeTitle(student.acceptanceType)} />
-              <ReadOnlyField label="نوع دوره" value={COURSE_TYPE_FA[student.studyingMode ?? ''] || student.studyingMode || ''} />
-              <ReadOnlyField label="شیوهٔ آموزشی" value={TRAINING_METHOD_FA[student.trainingMethod ?? ''] || student.trainingMethod || ''} />
+              <SelectField
+                label="وضعیت تحصیلی"
+                value={String(profile.status ?? '')}
+                onChange={editing ? (v) => onField('status', v) : undefined}
+                options={Object.entries(STUDENT_STATUS_FA).map(([value, label]) => ({ value, label }))}
+              />
+              <SelectField
+                label="مقطع"
+                value={String(profile.degreeLevelId ?? 0)}
+                onChange={editing ? (v) => onField('degreeLevelId', Number(v)) : undefined}
+                options={[{ value: '0', label: '—' }, ...degrees.map(d => ({ value: String(d.id), label: d.title }))]}
+              />
+              <SelectField
+                label="رشته"
+                value={String(profile.majorId ?? 0)}
+                onChange={editing ? (v) => onField('majorId', Number(v)) : undefined}
+                options={[{ value: '0', label: '—' }, ...majors.map(mm => ({ value: String(mm.id), label: mm.name }))]}
+              />
+              <ReadOnlyField label="دانشکده" value={student.facultyName} hint="از رشته تعیین می‌شود" />
+              <SelectField
+                label="سهمیهٔ نهایی"
+                value={String(profile.quotaType ?? '')}
+                onChange={editing ? (v) => onField('quotaType', v) : undefined}
+                options={Object.entries(QUOTA_FA).map(([value, label]) => ({ value, label }))}
+              />
+              <TextField label="نحوهٔ ورود (کد)" value={String(profile.acceptanceType ?? '')} onChange={bind('acceptanceType')} mono dir="ltr" />
+              <SelectField
+                label="نوع دوره"
+                value={String(profile.studyingMode ?? '')}
+                onChange={editing ? (v) => onField('studyingMode', v) : undefined}
+                options={Object.entries(COURSE_TYPE_FA).map(([value, label]) => ({ value, label }))}
+              />
+              <SelectField
+                label="شیوهٔ آموزشی"
+                value={String(profile.trainingMethod ?? '')}
+                onChange={editing ? (v) => onField('trainingMethod', v) : undefined}
+                options={Object.entries(TRAINING_METHOD_FA).map(([value, label]) => ({ value, label }))}
+              />
               {student.samaStatusCode && (
                 <ReadOnlyField label="وضعیت در سما" value={`کد ${student.samaStatusCode}`} mono />
               )}

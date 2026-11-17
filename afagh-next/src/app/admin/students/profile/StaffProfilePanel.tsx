@@ -17,11 +17,14 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import StickyIdentityHeader from './StickyIdentityHeader';
 import { ReadOnlyField, SelectField, TextField } from './Field';
 import type { ProfileDraft } from './profile-draft';
 import type { StaffItem } from '../types';
 import { faNum } from '../transcript-utils';
+import { setStaffDepartmentAction } from '@/app/admin/departments/actions';
 
 export type StaffProfilePanelProps = {
   staff: StaffItem;
@@ -42,6 +45,8 @@ export type StaffProfilePanelProps = {
   onOpenRoles: () => void;
   onToggleActive: () => void;
   onChangePassword: () => void;
+  /** گروه‌های آموزشیِ همین دانشگاه — برای انتساب مستقیم از پرونده */
+  deptOptions: { id: number; name: string; facultyId: number | null }[];
 };
 
 export default function StaffProfilePanel({
@@ -61,7 +66,39 @@ export default function StaffProfilePanel({
   onOpenRoles,
   onToggleActive,
   onChangePassword,
+  deptOptions,
 }: StaffProfilePanelProps) {
+  const router = useRouter();
+  const [deptPick, setDeptPick] = useState(String(staff.departmentId ?? ''));
+  const [deptSaving, setDeptSaving] = useState(false);
+  const [deptMsg, setDeptMsg] = useState('');
+  useEffect(() => {
+    setDeptPick(String(staff.departmentId ?? ''));
+    setDeptMsg('');
+  }, [staff.id, staff.departmentId]);
+
+  /** ذخیرهٔ انتساب گروه از همین پرونده — همان اکشنی که صفحهٔ گروه‌ها استفاده می‌کند */
+  const saveDepartment = async () => {
+    setDeptSaving(true);
+    setDeptMsg('');
+    try {
+      const fd = new FormData();
+      fd.set('staffId', String(staff.id));
+      fd.set('deptId', deptPick);
+      const res = await setStaffDepartmentAction(fd);
+      if (res.ok) {
+        setDeptMsg('گروه آموزشی ذخیره شد.');
+        router.refresh();
+      } else {
+        setDeptMsg(res.error || 'ذخیره نشد.');
+      }
+    } catch {
+      setDeptMsg('ذخیرهٔ گروه انجام نشد.');
+    } finally {
+      setDeptSaving(false);
+    }
+  };
+
   const bind = (key: string) => (editing ? (v: string) => onField(key, v) : undefined);
   const active = Number(draft.isActive ?? 1) !== 0;
   const married = String(draft.maritalStatus ?? '') !== 'مجرد';
@@ -111,23 +148,37 @@ export default function StaffProfilePanel({
               value={staff.facultyName && staff.facultyName !== '—'
                 ? `${staff.facultyName}${staff.facultyCode ? ` (کد ${staff.facultyCode})` : ''}`
                 : ''}
-              hint="از پروندهٔ سازمانی (سما) خوانده می‌شود"
+              hint="از گروه آموزشی انتخاب‌شده تعیین می‌شود"
             />
-            <ReadOnlyField
-              label="گروه آموزشی"
-              value={staff.departmentName && staff.departmentName !== '—'
-                ? `${staff.departmentName}${staff.departmentCode ? ` (کد ${staff.departmentCode})` : ''}`
-                : ''}
-              hint={(
-                <>
-                  تغییر گروه از{' '}
-                  <Link prefetch={false} href="/admin/departments" className="font-bold text-indigo-700 underline">
-                    صفحهٔ گروه‌های آموزشی
-                  </Link>
-                  {' '}انجام می‌شود.
-                </>
+            <div className="space-y-1">
+              <SelectField
+                label="گروه آموزشی"
+                value={deptPick}
+                onChange={editing ? v => { setDeptPick(v); setDeptMsg(''); } : undefined}
+                options={[
+                  { value: '', label: '— بدون گروه —' },
+                  ...deptOptions.map(d => ({ value: String(d.id), label: d.name })),
+                ]}
+              />
+              {editing && deptPick !== String(staff.departmentId ?? '') && (
+                <button
+                  type="button"
+                  onClick={saveDepartment}
+                  disabled={deptSaving}
+                  className="rounded-lg bg-indigo-700 px-2.5 py-1 text-2xs font-bold text-white disabled:opacity-60"
+                >
+                  {deptSaving ? '⏳ در حال ذخیره…' : '💾 ذخیرهٔ گروه آموزشی'}
+                </button>
               )}
-            />
+              {deptMsg && <p className="text-3xs font-bold text-indigo-700">{deptMsg}</p>}
+              <p className="text-3xs text-slate-500">
+                همین گروه، مبنای یافتن استاد در «برنامه‌ریزی» است؛ تغییر گروه از{' '}
+                <Link prefetch={false} href="/admin/departments" className="font-bold text-indigo-700 underline">
+                  صفحهٔ گروه‌های آموزشی
+                </Link>{' '}
+                هم ممکن است.
+              </p>
+            </div>
             <TextField label="رشته و گرایش تخصصی" value={String(draft.fieldOfStudy ?? '')} onChange={bind('fieldOfStudy')} />
             <ReadOnlyField label="رشتهٔ اصلی" value={staff.fieldMain} />
             <TextField label="آخرین دانشگاه دانش‌آموختگی" value={String(draft.lastDegreeUniversity ?? '')} onChange={bind('lastDegreeUniversity')} />
