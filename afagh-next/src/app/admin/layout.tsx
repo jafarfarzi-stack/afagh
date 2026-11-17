@@ -10,6 +10,7 @@ import AdminNav from './AdminNav';
 import SessionLock from '@/components/SessionLock';
 import PanelSwitcher from '@/components/PanelSwitcher';
 import { getSiblingAccounts } from '@/lib/account-switch';
+import { ROLE_LABELS } from '@/lib/panel-links';
 import UniversitySwitcher from './UniversitySwitcher';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getCurrentUniversity, listUniversities } from '@/lib/university-scope';
@@ -185,7 +186,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     <span className="hidden sm:inline">داشبورد مدیریت جامع {curUni.title}</span>
                   </p>
                 </Link>
-                <p className="truncate text-2xs sm:text-xs opacity-80">{user.name} · {user.roles.join('، ')}</p>
+                <p className="truncate text-2xs sm:text-xs opacity-80">
+                  {user.name} · {user.roles.map(r => ROLE_LABELS[r] ?? r).join('، ')}
+                </p>
               </div>
             </div>
           </div>
@@ -213,7 +216,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           شناور «منو» با کشو کار می‌کند. */}
       <div className="mx-auto flex w-full max-w-[2100px] items-start gap-4 p-3 pb-16 sm:p-5 lg:gap-6">
         <AdminNav roles={user.roles} permissions={permissionCodes} theme={th} />
-        <main id="main" className="min-w-0 flex-1 overflow-y-auto pb-4">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto pb-4 scroll-mt-[6rem]">
         {/* نوارِ بازگشت — **دو سطحی**: اگر زیرصفحهٔ یک کارتابل باشیم (مثل
             `/admin/finance/pos`) به همان کارتابل (`/admin/finance`) برمی‌گردد،
             نه به داشبورد کل؛ و میان‌بر داشبورد هم کنارش می‌ماند.

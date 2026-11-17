@@ -80,7 +80,8 @@ ok('هیچ فهرستِ تخفیفِ منسوخ (بدون زیرنوع‌های 
 
 console.log('\n۴) ستونِ ناموجود در سود و زیان');
 ok('ارجاع به st.oth حذف شده است', !/st\.oth/.test(statements));
-ok('سایر درآمد از ستونِ واقعیِ cr خوانده می‌شود', /COALESCE\(SUM\(st\.cr\)/.test(statements));
+ok('CREDIT به‌عنوان «سایر درآمد» شمرده نمی‌شود', /0::text AS other/.test(statements));
+ok('CREDIT به وصولی‌ها اضافه شده است', /COALESCE\(st\.pay, 0\) \+ COALESCE\(st\.cr, 0\)/.test(statements));
 
 console.log('\n۵) گزارشِ «کل پرداختی دانشجویان»');
 const totalPayments = finance.slice(

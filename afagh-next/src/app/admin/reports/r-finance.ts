@@ -204,7 +204,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
       ${termJoin}`;
-    const conds = [PAID, uniCond];
+    const conds = [...studentWhere(f), PAID, uniCond];
     if (f.q) {
       const like = `%${escapeLikeChars(String(f.q))}%`;
       conds.push(sql`(s."studentCode" ILIKE ${like} ESCAPE '\\'
@@ -284,6 +284,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     const from = sql`FROM student_ledger sl
       JOIN students s ON s.id = sl."studentId"
       LEFT JOIN users u ON u.id = s."userId"
+      LEFT JOIN majors m ON m.id = s."majorId"
       ${termJoin}`;
     const conds = [...studentWhere(f), uniCond];
     if (f.voucherNo) {
@@ -307,8 +308,19 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       from, conds, cols, sql`ORDER BY COALESCE(MAX(sl."depositDate"), MAX(sl."createdAt")) DESC NULLS LAST, COALESCE(sl."voucherNo", '—')`, f,
       sql`COALESCE(sl."voucherNo", '—')`,
     );
-    const debit = r.rows.reduce((a, x) => a + Number(x.debit ?? 0), 0);
-    const credit = r.rows.reduce((a, x) => a + Number(x.credit ?? 0), 0);
+    // جمع سند باید روی **همهٔ** اسناد باشد، نه ۵۰ سند صفحهٔ جاری؛ قبلاً
+    // «جمع بدهکار/بستانکار» فقط از ردیف‌های صفحه ساخته می‌شد.
+    const agg = await db.execute<{ debit: string; credit: string }>(sql`
+      SELECT COALESCE(SUM(x.debit), 0)::bigint AS debit,
+             COALESCE(SUM(x.credit), 0)::bigint AS credit
+      FROM (
+        SELECT COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0) AS debit,
+               COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC} OR ${PAID}), 0) AS credit
+        ${from} ${joinAnd(conds)}
+        GROUP BY COALESCE(sl."voucherNo", '—')
+      ) x`);
+    const debit = Number(agg.rows[0]?.debit ?? 0);
+    const credit = Number(agg.rows[0]?.credit ?? 0);
     r.summary = `${faAmount(r.total)} سند — جمع بدهکار ${faAmount(debit)} / جمع بستانکار ${faAmount(credit)} ریال`;
     return r;
   }
@@ -319,7 +331,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       JOIN students s ON s.id = sl."studentId"
       JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
-      LEFT JOIN academic_terms t ON t.id = sl."termId"
+      ${f.term ? sql`JOIN academic_terms t ON t.id = sl."termId"` : sql`LEFT JOIN academic_terms t ON t.id = sl."termId"`}
       ${f.term ? sql`AND t."termCode" = ${f.term}` : sql``}`;
     const cols = sql`COALESCE(t."termCode", '—') AS term, s."studentCode" AS code,
       u."firstName" || ' ' || u."lastName" AS name, m.name AS major,
@@ -365,6 +377,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   const DISC_PAY = inTypes(['TUITION_BATES', 'TUITION_BATES_FIXED', 'TUITION_BATES_VARIABLE', 'TUITION_BATES_AMOUNT']);
   const ADVANCE = inTypes(['LOAN']);
   const PAY_ONLY = inTypes(['PAYMENT', 'POS_PAYMENT', 'SPONSORSHIP', 'CREDIT']);
+  // برگشت وجه کارت‌خوان بدهی می‌سازد (هم‌راستا با DEBT_LEDGER_TYPES) و
+  // نبودش «ماندهٔ کل» را از تراز کانونی کمتر نشان می‌داد.
+  const REFUND = inTypes(['POS_REFUND']);
 
   const SUM = (cond: ReturnType<typeof sql>) =>
     sql`COALESCE(SUM(sl.amount) FILTER (WHERE ${cond}), 0)::bigint`;
@@ -378,7 +393,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     const discPay = SUM(DISC_PAY);
     const advance = SUM(ADVANCE);
     const paid = SUM(PAY_ONLY);
-    const charge = sql`(${fixed} + ${variable} + ${adjDec})`;
+    const refund = SUM(REFUND);
+    const charge = sql`(${fixed} + ${variable} + ${adjDec} + ${refund})`;
     const disc = sql`(${discMisc} + ${discPay})`;
     const balance = sql`(${charge} - ${disc} - ${paid} - ${advance})`;
     return {
@@ -475,7 +491,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       LEFT JOIN faculties fc ON fc.id = m."facultyId"
       LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
       LEFT JOIN student_ledger sl ON sl."studentId" = s.id
-      LEFT JOIN academic_terms t ON t.id = sl."termId"
+      ${f.term ? sql`JOIN academic_terms t ON t.id = sl."termId"` : sql`LEFT JOIN academic_terms t ON t.id = sl."termId"`}
       ${f.term ? sql`AND t."termCode" = ${f.term}` : sql``}`;
     const cols = sql`COALESCE(fc.name, '—') AS faculty, s."entryYear" AS y,
       COALESCE(t."termCode", '—') AS term,

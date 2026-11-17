@@ -392,7 +392,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
           CASE WHEN b.direction = 'REVENUE' THEN
             COALESCE((SELECT SUM(sl.amount) FROM student_ledger sl
               WHERE sl."universityId" = b."universityId"
-                AND sl."transactionType" IN (${CHARGE_TYPES})
+                AND ${isCharge}
                 AND (b."termCode" IS NULL OR sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = b."termCode" LIMIT 1))), 0)
           ELSE
             COALESCE((SELECT SUM(ps."grossAmount") FROM payroll_statements ps
@@ -945,8 +945,8 @@ async function ledgerPeriods(uni: number, f: ReportFilters) {
       SELECT "studentId", "termId",
         SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)}) AS chg,
         LEAST(
-          SUM(amount) FILTER (WHERE ${txType('led', DISC_TYPES)}),
-          SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)})
+          COALESCE(SUM(amount) FILTER (WHERE ${txType('led', DISC_TYPES)}), 0),
+          COALESCE(SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)}), 0)
         ) AS dsc,
         SUM(amount) FILTER (WHERE ${txType('led', SPON_TYPES)}) AS spo,
         SUM(amount) FILTER (WHERE ${txType('led', PAY_TYPES)}) AS pay,
@@ -958,14 +958,16 @@ async function ledgerPeriods(uni: number, f: ReportFilters) {
       COALESCE(SUM(st.chg), 0)::text AS gross,
       COALESCE(SUM(st.dsc), 0)::text AS discount,
       COALESCE(SUM(st.spo), 0)::text AS sponsor,
-      COALESCE(SUM(st.cr), 0)::text AS other,
-      COALESCE(SUM(st.pay), 0)::text AS paid,
+      -- CREDIT «پرداختیِ دادهٔ مهاجرت» است نه درآمد؛ قبلاً به‌عنوان «سایر
+      -- درآمد» جمع می‌شد و سود را کاذب بالا می‌برد. حالا به وصولی می‌رود.
+      0::text AS other,
+      COALESCE(SUM(COALESCE(st.pay, 0) + COALESCE(st.cr, 0)), 0)::text AS paid,
       COUNT(DISTINCT st."studentId")::text AS students
     FROM st
     LEFT JOIN academic_terms at ON at.id = st."termId"
     GROUP BY at."termCode", at.title, at."sortOrder"
     ORDER BY at."sortOrder" NULLS LAST, at."termCode"
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   if (!data.rows.length) {
     return [{ key: 'ALL', label: f.term ? `نیمسال ${f.term}` : 'کل دوره', gross: 0, discount: 0, sponsor: 0, other: 0, paid: 0, students: 0 }];
@@ -994,7 +996,7 @@ async function payrollByTerm(uni: number, f: ReportFilters) {
     WHERE ps."universityId" = ${uni}
       ${f.term ? sql`AND at."termCode" = ${f.term}` : sql``}
     GROUP BY c."termId", at."termCode"
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
   for (const r of data.rows) m.set(r.term ?? 'ALL', R(r.amount));
   return m;
 }
@@ -1010,7 +1012,7 @@ async function expenseByTerm(uni: number, f: ReportFilters) {
     WHERE e."universityId" = ${uni}
       ${f.term ? sql`AND at."termCode" = ${f.term}` : sql``}
     GROUP BY e."termId", at."termCode"
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
   for (const r of data.rows) m.set(r.term ?? 'ALL', R(r.amount));
   return m;
 }
@@ -1031,7 +1033,7 @@ async function allocationPoolByTerm(uni: number, f: ReportFilters) {
     ) x
     LEFT JOIN academic_terms at ON at.id = x."termId"
     GROUP BY x."termId", at."termCode"
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
   for (const r of data.rows) m.set(r.term ?? 'ALL', R(r.amount));
   return m;
 }
@@ -1052,7 +1054,7 @@ async function allocationWeightsByTerm(uni: number, f: ReportFilters) {
       ${f.term ? sql`AND at."termCode" = ${f.term}` : sql``}
     GROUP BY co."termId", at."termCode", fc.name
     ORDER BY at."sortOrder" NULLS LAST
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
   for (const r of data.rows) {
     const key = r.term ?? 'ALL';
     const arr = m.get(key) || [];
@@ -1074,7 +1076,7 @@ async function unitsByTerm(uni: number, f: ReportFilters) {
     WHERE co."universityId" = ${uni} AND co."isActive" = 1
       ${f.term ? sql`AND at."termCode" = ${f.term}` : sql``}
     GROUP BY co."termId", at."termCode"
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
   for (const r of data.rows) m.set(r.term ?? 'ALL', R(r.units));
   return m;
 }
@@ -1102,8 +1104,8 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
       SELECT "studentId", "termId",
         SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)}) AS chg,
         LEAST(
-          SUM(amount) FILTER (WHERE ${txType('led', DISC_TYPES)}),
-          SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)})
+          COALESCE(SUM(amount) FILTER (WHERE ${txType('led', DISC_TYPES)}), 0),
+          COALESCE(SUM(amount) FILTER (WHERE ${txType('led', CHARGE_TYPES)}), 0)
         ) AS dsc,
         SUM(amount) FILTER (WHERE ${txType('led', SPON_TYPES)}) AS spo,
         SUM(amount) FILTER (WHERE ${txType('led', PAY_TYPES)}) AS pay,
@@ -1121,7 +1123,7 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
       COALESCE(SUM(GREATEST(ln - pay, 0)), 0)::text AS loans,
       COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln - cr), 0)), 0)::text AS payables
     FROM per_student
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   // «deferred» (پیش‌دریافت نیمسالهای آینده) حذف شد: همیشه 0::text هاردکد بود
   // و پایگاه داده مفهومِ آن را ثبت نمیکند؛ lib برای سازگاریِ قرارداد همان ۰ را میگیرد.
@@ -1134,7 +1136,7 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     JOIN professor_term_contracts c ON c.id = ps."contractId"
     WHERE ps."universityId" = ${uni}
       ${f.term ? sql`AND c."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   // بدهی به پیمانکاران (صورتحساب − پرداخت) — هم‌ترازِ فیلتر ترمِ بقیهٔ اجزای
   // ترازنامه: با پیوند به قرارداد، فقط صورتحسابهای همان نیمسال شمرده میشود
@@ -1145,7 +1147,7 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     JOIN financial_contracts c ON c.id = i."contractId"
     WHERE i."universityId" = ${uni}
       ${f.term ? sql`AND c."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   // سود/زیان انباشته = درآمد − هزینه تا همین تاریخ
   const periods = await ledgerPeriods(uni, f);
@@ -1211,7 +1213,7 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
     WHERE sl."universityId" = ${uni} ${termFilter}
       AND COALESCE(sl."depositDate", sl."createdAt") IS NOT NULL
     GROUP BY 1 ORDER BY 1 DESC
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   // پرداختِ حق‌التدریس — عمداً با همان کلیدِ 'YYYY-MM'ِ کوئریِ دریافتها
   // گروه‌بندی میشود تا joinِ دریافت/پرداختِ هر ماه دقیق بماند؛ برچسب شمسی
@@ -1223,7 +1225,7 @@ async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult
       FROM payroll_statements ps WHERE ps."universityId" = ${uni}
     ) m
     WHERE m.month IS NOT NULL GROUP BY 1
-  `).catch(() => ({ rows: [] as never[] }));
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   const payMap = new Map(pay.rows.map((x) => [x.month, R(x.amount)]));
   const rows: ReportResult['rows'] = [];

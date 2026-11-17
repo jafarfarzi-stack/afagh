@@ -1750,20 +1750,9 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             </div>
           )}
 
-          {/* دکمه‌های عملیاتی پایین فرم ثبت‌نام دانشجو (F2 ذخیره / F4 ویرایش / انصراف / خروج) */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-300">
-            <div className="flex items-center gap-2">
-              <button onClick={() => showToast('✅ اطلاعات پرونده دانشجو با موفقیت ذخیره شد (F2)')} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow flex items-center gap-1">
-                <span>✔️</span> <span>F2 ذخیره</span>
-              </button>
-              <button onClick={() => showToast('حالت ویرایش فعال گردید (F4)')} className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 font-bold rounded flex items-center gap-1">
-                <span>✏️</span> <span>F4 ویرایش</span>
-              </button>
-              <button onClick={() => setToastMsg('')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 rounded flex items-center gap-1 text-slate-700">
-                <span>❌</span> <span>انصراف (Ctrl+Z)</span>
-              </button>
-            </div>
-          </div>
+          {/* دکمه‌های F2/F4/انصراف حذف شدند: هیچ‌کدام به عملیات واقعی وصل
+              نبودند و فقط توستِ موفقیت نشان می‌دادند. ذخیرهٔ هر کارت، دکمهٔ
+              واقعی خودش را دارد. */}
 
         </div>
       )}
@@ -2163,12 +2152,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
               <button onClick={handleSaveStaff} disabled={staffSaving} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded shadow flex items-center gap-1">
                 <span>✔️</span> <span>{staffSaving ? 'در حال ذخیره…' : 'F2 ذخیره'}</span>
               </button>
-              <button onClick={() => showToast('حالت ویرایش فعال شد (F4)')} className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 font-bold rounded flex items-center gap-1">
-                <span>✏️</span> <span>F4 ویرایش</span>
-              </button>
-              <button onClick={() => showToast('حذف رکورد انجام شد')} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded flex items-center gap-1 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900">
-                <span>🗑️</span> <span>حذف</span>
-              </button>
+              {/* دکمه‌های «F4 ویرایش» و «حذف» حذف شدند: عملیات واقعی نداشتند و فقط توست موفقیت می‌دادند. */}
             </div>
 
             <button onClick={() => setProfTab('list')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 rounded">

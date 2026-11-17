@@ -64,6 +64,25 @@ const FINANCE_KINDS = new Set([
   'tuition-faculty-detail',
   'faculty-financial',
   'major-financial',
+  // صورت‌های مالی کلان (r-finance-statements) — بدون این‌ها کارشناس مالی
+  // این ۱۷ گزارش را در فهرست نمی‌دید و اجرای آن‌ها «دسترسی داده نشده» می‌داد.
+  'sales-report',
+  'income-statement',
+  'costing-report',
+  'budget-variance',
+  'balance-sheet',
+  'cash-flow',
+  'contractor-report',
+  'contractor-settlement',
+  'insurance-report',
+  'legal-report',
+  'vat-report',
+  'general-ledger',
+  'daily-journal',
+  'inventory-report',
+  'company-expenses',
+  'allocation-report',
+  'revenue-hierarchy',
 ]);
 
 /** نگاشت kind → مرکز: فقط «مالی» جدا می‌شود؛ مابقی آموزشی‌اند */

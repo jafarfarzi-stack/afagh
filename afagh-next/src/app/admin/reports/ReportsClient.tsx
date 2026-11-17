@@ -187,6 +187,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [universityId, setUniversityId] = useState(initialUniversityId ?? 0);
   const [extra, setExtra] = useState<Record<string, string>>(initialExtra ?? {});
   const [res, setRes] = useState<ReportResult | null>(null);
+  /** اثر انگشتِ فیلترهایی که نتیجهٔ جاری با آن‌ها اجرا شده (برای هشدار کهنگی) */
+  const [ranKey, setRanKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [err, setErr] = useState('');
@@ -226,7 +228,15 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   // «چند ترم» = فهرست کدها در f.terms، سرور آنها را جدا اجرا و ادغام میکند.
   const effectiveTerm = termMode === 'all' ? '' : termMode === 'many' ? (manyTerms[0] ?? '') : term;
   const multiTerms = termMode === 'many' ? manyTerms.join(',') : undefined;
+  /**
+   * اثر انگشتِ فیلترها (بدون شمارهٔ صفحه) — برای تشخیص «نتیجهٔ کهنه»:
+   * اگر کاربر بعد از اجرا فیلتر را عوض کند، جدول قبلی می‌ماند و ممکن است
+   * آن را با فیلتر جدید اشتباه بگیرد و چاپ/خروجی بگیرد.
+   */
+  const filterKey = (o: Record<string, unknown>) =>
+    JSON.stringify(Object.entries(o).filter(([k]) => k !== 'page').sort(([a], [b]) => a.localeCompare(b)));
   const filters = { term: effectiveTerm, terms: multiTerms, studentCodes, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, status, scope: scopeMode, ...extra };
+  const staleResult = !!res && ranKey !== '' && ranKey !== filterKey(filters as Record<string, unknown>);
 
   const run = async (page = 1, kindOverride?: string) => {
     const k = kindOverride ?? kind;
@@ -237,7 +247,10 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     setLoading(true);
     setErr('');
     try {
-      setRes(await runReport(k, { ...filters, page }));
+      const used = { ...filters, page };
+      const result = await runReport(k, used);
+      setRes(result);
+      setRanKey(filterKey(used));
       setTimeout(() => {
         document.getElementById('report-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 50);
@@ -710,16 +723,17 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               </label>
             )}
             {showStudentFilters && (
-              <label className="flex items-center gap-1">
-                <span className="font-bold text-slate-600">دامنه:</span>
+              <label className="flex items-center gap-1" title="همه = همهٔ دانشجویان؛ فقط فعالان نیمسال = دانشجویانی که در ترم انتخابی ثبت‌نام یا ردیف مالی دارند">
+                <span className="font-bold text-slate-600">دانشجویان:</span>
                 <select
                   value={scopeMode}
+                  disabled={termMode !== 'one'}
                   onChange={e => setScopeMode(e.target.value === 'term' ? 'term' : 'all')}
-                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
-                  title="کل دوره = همهٔ دانشجویان؛ نیمسال = فقط دانشجویانِ فعال در ترم انتخاب‌شده"
+                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 disabled:opacity-50"
+                  title={termMode !== 'one' ? 'برای این فیلتر، ترم را روی «یک ترم» بگذارید' : undefined}
                 >
-                  <option value="all">کل دوره</option>
-                  <option value="term">فقط همین نیمسال</option>
+                  <option value="all">همه</option>
+                  <option value="term">فقط فعالان نیمسال</option>
                 </select>
               </label>
             )}
@@ -815,6 +829,13 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
             />
           </div>
         </div>
+      )}
+
+      {/* هشدار «نتیجهٔ کهنه»: فیلترها بعد از اجرا عوض شده‌اند */}
+      {staleResult && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 print:hidden">
+          نتیجهٔ نمایش‌داده‌شده مربوط به فیلترهای قبلی است. برای اعمال فیلترهای جدید، «▶ اجرای گزارش» را بزنید.
+        </p>
       )}
 
       {/* پیام موفقیت خروجی/چاپ */}
