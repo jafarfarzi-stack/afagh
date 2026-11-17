@@ -289,7 +289,7 @@ export default function BaseDataClient() {
             <tbody>
               {payload.rows.map((row) => (
                 <tr key={String(row.id)} className="border-b border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-2 py-1.5 text-slate-400">{faId(row.id)}</td>
+                  <td className="px-2 py-1.5 text-slate-400">{faId(String(row.id))}</td>
                   {spec.list.map((c) => (
                     <td key={c} className="whitespace-nowrap px-2 py-1.5 text-slate-800">
                       {cellText(spec, c, row, refs)}
