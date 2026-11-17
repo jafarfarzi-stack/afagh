@@ -131,18 +131,18 @@ export default function StatementsCartableTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">کد</th>
-                  <th className="p-2.5">نام استاد</th>
-                  <th className="p-2.5">مرتبه علمی</th>
-                  <th className="p-2.5">نوع قرارداد و موظفی</th>
-                  <th className="p-2.5 text-center">کل واحد معادل</th>
-                  <th className="p-2.5 text-center">واحد مازاد</th>
-                  <th className="p-2.5 text-center">ناخالص (ريال)</th>
-                  <th className="p-2.5 text-center">کسورات (ريال)</th>
-                  <th className="p-2.5 text-center">خالص دریافتی (ريال)</th>
-                  <th className="p-2.5 text-center">گلوگاه‌های تسویه</th>
-                  <th className="p-2.5 text-center">وضعیت تایید</th>
-                  <th className="p-2.5 text-left">عملیات</th>
+                  <th scope="col" className="p-2.5">کد</th>
+                  <th scope="col" className="p-2.5">نام استاد</th>
+                  <th scope="col" className="p-2.5">مرتبه علمی</th>
+                  <th scope="col" className="p-2.5">نوع قرارداد و موظفی</th>
+                  <th scope="col" className="p-2.5 text-center">کل واحد معادل</th>
+                  <th scope="col" className="p-2.5 text-center">واحد مازاد</th>
+                  <th scope="col" className="p-2.5 text-center">ناخالص (ريال)</th>
+                  <th scope="col" className="p-2.5 text-center">کسورات (ريال)</th>
+                  <th scope="col" className="p-2.5 text-center">خالص دریافتی (ريال)</th>
+                  <th scope="col" className="p-2.5 text-center">گلوگاه‌های تسویه</th>
+                  <th scope="col" className="p-2.5 text-center">وضعیت تایید</th>
+                  <th scope="col" className="p-2.5 text-left">عملیات</th>
                 </tr>
               </thead>
               <tbody>

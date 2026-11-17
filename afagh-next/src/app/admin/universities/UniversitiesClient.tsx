@@ -44,13 +44,13 @@ export default function UniversitiesClient({ universities, connections }: { univ
         <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-50 border-b text-slate-600">
-              <th className="px-2 py-2 text-right">کد</th>
-              <th className="px-2 py-2 text-right">عنوان</th>
-              <th className="px-2 py-2 text-right">ارم</th>
-              <th className="px-2 py-2 text-right">نوع</th>
-              <th className="px-2 py-2 text-right">کد ثمین</th>
-              <th className="px-2 py-2 text-right">اتصال ثمین</th>
-              <th className="px-2 py-2 text-right">عملیات</th>
+              <th scope="col" className="px-2 py-2 text-right">کد</th>
+              <th scope="col" className="px-2 py-2 text-right">عنوان</th>
+              <th scope="col" className="px-2 py-2 text-right">ارم</th>
+              <th scope="col" className="px-2 py-2 text-right">نوع</th>
+              <th scope="col" className="px-2 py-2 text-right">کد ثمین</th>
+              <th scope="col" className="px-2 py-2 text-right">اتصال ثمین</th>
+              <th scope="col" className="px-2 py-2 text-right">عملیات</th>
             </tr>
           </thead>
           <tbody>

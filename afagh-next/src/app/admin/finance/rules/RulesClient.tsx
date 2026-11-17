@@ -186,8 +186,8 @@ export default function RulesClient(props: {
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نوع</th>
-                    <th className="p-2">پیش‌فرض</th><th className="p-2">سقف</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">کد</th><th scope="col" className="p-2">عنوان</th><th scope="col" className="p-2">نوع</th>
+                    <th scope="col" className="p-2">پیش‌فرض</th><th scope="col" className="p-2">سقف</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -273,8 +273,8 @@ export default function RulesClient(props: {
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">تسویه</th>
-                    <th className="p-2">تماس</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">کد</th><th scope="col" className="p-2">عنوان</th><th scope="col" className="p-2">تسویه</th>
+                    <th scope="col" className="p-2">تماس</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,10 +380,10 @@ export default function RulesClient(props: {
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">اولویت</th><th className="p-2">عنوان</th><th className="p-2">مقطع</th>
-                    <th className="p-2">رشته</th><th className="p-2">ورودی</th><th className="p-2">ثابت</th>
-                    <th className="p-2">نظری</th><th className="p-2">عملی</th><th className="p-2">عمومی</th>
-                    <th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">اولویت</th><th scope="col" className="p-2">عنوان</th><th scope="col" className="p-2">مقطع</th>
+                    <th scope="col" className="p-2">رشته</th><th scope="col" className="p-2">ورودی</th><th scope="col" className="p-2">ثابت</th>
+                    <th scope="col" className="p-2">نظری</th><th scope="col" className="p-2">عملی</th><th scope="col" className="p-2">عمومی</th>
+                    <th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -487,9 +487,9 @@ export default function RulesClient(props: {
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نهاد</th>
-                    <th className="p-2">پیش‌فرض</th><th className="p-2">سقف</th><th className="p-2">اقساط</th>
-                    <th className="p-2">کارمزد</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">کد</th><th scope="col" className="p-2">عنوان</th><th scope="col" className="p-2">نهاد</th>
+                    <th scope="col" className="p-2">پیش‌فرض</th><th scope="col" className="p-2">سقف</th><th scope="col" className="p-2">اقساط</th>
+                    <th scope="col" className="p-2">کارمزد</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -659,8 +659,8 @@ function CoefficientTab(props: {
           <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                <th className="p-2">نیمسال</th><th className="p-2">ضریب متغیر</th><th className="p-2">ضریب ثابت</th>
-                <th className="p-2">یادداشت</th><th className="p-2">عملیات</th>
+                <th scope="col" className="p-2">نیمسال</th><th scope="col" className="p-2">ضریب متغیر</th><th scope="col" className="p-2">ضریب ثابت</th>
+                <th scope="col" className="p-2">یادداشت</th><th scope="col" className="p-2">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -793,9 +793,9 @@ function SubjectFeeTab(props: {
           <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                <th className="p-2">کد</th><th className="p-2">عنوان</th><th className="p-2">نوع</th>
-                <th className="p-2">مبلغ ثابت</th><th className="p-2">درصد متغیر</th><th className="p-2">اعمال روی</th>
-                <th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                <th scope="col" className="p-2">کد</th><th scope="col" className="p-2">عنوان</th><th scope="col" className="p-2">نوع</th>
+                <th scope="col" className="p-2">مبلغ ثابت</th><th scope="col" className="p-2">درصد متغیر</th><th scope="col" className="p-2">اعمال روی</th>
+                <th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
               </tr>
             </thead>
             <tbody>

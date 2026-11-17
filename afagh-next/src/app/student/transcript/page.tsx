@@ -571,12 +571,12 @@ export default async function StudentTranscriptPage({
                   <table className="w-full text-right text-2xs border-collapse rt">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-700 font-bold text-slate-800">
-                        <th className="p-1 border-l border-slate-300 text-center w-6">ردیف</th>
-                        <th className="p-1 border-l border-slate-300 text-center w-16">کد درس</th>
-                        <th className="p-1 border-l border-slate-300">نام درس</th>
-                        <th className="p-1 border-l border-slate-300 text-center w-12">واحد</th>
-                        <th className="p-1 border-l border-slate-300 text-center w-14">نمره</th>
-                        <th className="p-1 text-center w-24">نتیجه / وضعیت</th>
+                        <th scope="col" className="p-1 border-l border-slate-300 text-center w-6">ردیف</th>
+                        <th scope="col" className="p-1 border-l border-slate-300 text-center w-16">کد درس</th>
+                        <th scope="col" className="p-1 border-l border-slate-300">نام درس</th>
+                        <th scope="col" className="p-1 border-l border-slate-300 text-center w-12">واحد</th>
+                        <th scope="col" className="p-1 border-l border-slate-300 text-center w-14">نمره</th>
+                        <th scope="col" className="p-1 text-center w-24">نتیجه / وضعیت</th>
                       </tr>
                     </thead>
                     <tbody>

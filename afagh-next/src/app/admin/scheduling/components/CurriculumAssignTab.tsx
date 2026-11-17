@@ -61,16 +61,16 @@ export default function CurriculumAssignTab() {
               <table className="w-full border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-900 text-white text-center">
-                    <th className="p-3 border border-slate-800 w-12">ردیف</th>
-                    <th className="p-3 border border-slate-800">کد درس</th>
-                    <th className="p-3 border border-slate-800">عنوان درس چارت</th>
-                    <th className="p-3 border border-slate-800">نیمسال ورود</th>
-                    <th className="p-3 border border-slate-800">واحد</th>
-                    <th className="p-3 border border-slate-800">نوع درس</th>
-                    <th className="p-3 border border-slate-800">تعداد گروه‌ها</th>
-                    <th className="p-3 border border-slate-800">انتخاب استاد مدرس</th>
-                    <th className="p-3 border border-slate-800">وضعیت سقف تدریس استاد</th>
-                    <th className="p-3 border border-slate-800">تنظیم تاریخ امتحان (دو حالت)</th>
+                    <th scope="col" className="p-3 border border-slate-800 w-12">ردیف</th>
+                    <th scope="col" className="p-3 border border-slate-800">کد درس</th>
+                    <th scope="col" className="p-3 border border-slate-800">عنوان درس چارت</th>
+                    <th scope="col" className="p-3 border border-slate-800">نیمسال ورود</th>
+                    <th scope="col" className="p-3 border border-slate-800">واحد</th>
+                    <th scope="col" className="p-3 border border-slate-800">نوع درس</th>
+                    <th scope="col" className="p-3 border border-slate-800">تعداد گروه‌ها</th>
+                    <th scope="col" className="p-3 border border-slate-800">انتخاب استاد مدرس</th>
+                    <th scope="col" className="p-3 border border-slate-800">وضعیت سقف تدریس استاد</th>
+                    <th scope="col" className="p-3 border border-slate-800">تنظیم تاریخ امتحان (دو حالت)</th>
                   </tr>
                 </thead>
                 <tbody>

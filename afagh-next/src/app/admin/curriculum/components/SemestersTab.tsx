@@ -286,11 +286,11 @@ export default function SemestersTab() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
-                    <th className="border border-slate-400 px-1 py-0.5 text-center">نوع درس</th>
+                    <th scope="col" className="border border-slate-400 px-1 py-0.5 text-center">نوع درس</th>
                     {typeSummary.map(r => (
-                      <th key={r.role} className="border border-slate-400 px-1 py-0.5 text-center">{ROLE_LABELS[r.role] ?? r.role}</th>
+                      <th scope="col" key={r.role} className="border border-slate-400 px-1 py-0.5 text-center">{ROLE_LABELS[r.role] ?? r.role}</th>
                     ))}
-                    <th className="border border-slate-400 px-1 py-0.5 text-center">جمع</th>
+                    <th scope="col" className="border border-slate-400 px-1 py-0.5 text-center">جمع</th>
                   </tr>
                 </thead>
                 <tbody>

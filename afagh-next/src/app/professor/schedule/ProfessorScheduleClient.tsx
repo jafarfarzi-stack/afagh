@@ -324,16 +324,16 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th className="p-2.5 border border-slate-800 w-12">ردیف</th>
-                <th className="p-2.5 border border-slate-800">کد درس</th>
-                <th className="p-2.5 border border-slate-800">عنوان درس</th>
-                <th className="p-2.5 border border-slate-800">گروه</th>
-                <th className="p-2.5 border border-slate-800">واحد</th>
-                <th className="p-2.5 border border-slate-800">نوع درس</th>
-                <th className="p-2.5 border border-slate-800">روز و ساعت</th>
-                <th className="p-2.5 border border-slate-800">محل برگزاری (کلاس)</th>
-                <th className="p-2.5 border border-slate-800">ثبت‌نامی</th>
-                <th className="p-2.5 border border-slate-800">عملیات آموزشی</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-12">ردیف</th>
+                <th scope="col" className="p-2.5 border border-slate-800">کد درس</th>
+                <th scope="col" className="p-2.5 border border-slate-800">عنوان درس</th>
+                <th scope="col" className="p-2.5 border border-slate-800">گروه</th>
+                <th scope="col" className="p-2.5 border border-slate-800">واحد</th>
+                <th scope="col" className="p-2.5 border border-slate-800">نوع درس</th>
+                <th scope="col" className="p-2.5 border border-slate-800">روز و ساعت</th>
+                <th scope="col" className="p-2.5 border border-slate-800">محل برگزاری (کلاس)</th>
+                <th scope="col" className="p-2.5 border border-slate-800">ثبت‌نامی</th>
+                <th scope="col" className="p-2.5 border border-slate-800">عملیات آموزشی</th>
               </tr>
             </thead>
             <tbody>

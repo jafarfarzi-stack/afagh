@@ -296,15 +296,15 @@ export default function ProctorExamAttendanceClient({ sessions, staffName }: { s
             <table className="w-full text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center text-2xs">
-                  <th className="p-2.5">صندلی</th>
-                  <th className="p-2.5">دانشجو</th>
-                  <th className="p-2.5">شمارهٔ دانشجویی</th>
-                  <th className="p-2.5">کد ملی</th>
-                  <th className="p-2.5">رشته</th>
-                  <th className="p-2.5">درس</th>
-                  <th className="p-2.5">حاضر</th>
-                  <th className="p-2.5">مجوز تعهد</th>
-                  <th className="p-2.5">وضعیت</th>
+                  <th scope="col" className="p-2.5">صندلی</th>
+                  <th scope="col" className="p-2.5">دانشجو</th>
+                  <th scope="col" className="p-2.5">شمارهٔ دانشجویی</th>
+                  <th scope="col" className="p-2.5">کد ملی</th>
+                  <th scope="col" className="p-2.5">رشته</th>
+                  <th scope="col" className="p-2.5">درس</th>
+                  <th scope="col" className="p-2.5">حاضر</th>
+                  <th scope="col" className="p-2.5">مجوز تعهد</th>
+                  <th scope="col" className="p-2.5">وضعیت</th>
                 </tr>
               </thead>
               <tbody>

@@ -435,14 +435,14 @@ export default function ExamCardClient({ user, publicBaseUrl, examTicket, examTi
             <table className="w-full text-right text-xs border-collapse border border-slate-400 rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2 border border-slate-700 text-center w-10">ردیف</th>
-                  <th className="p-2 border border-slate-700 text-center w-20">کد درس</th>
-                  <th className="p-2 border border-slate-700">عنوان درس</th>
-                  <th className="p-2 border border-slate-700">استاد مدرس</th>
-                  <th className="p-2 border border-slate-700 text-center w-28">تاریخ امتحان</th>
-                  <th className="p-2 border border-slate-700 text-center w-32">ساعت و سانس</th>
-                  <th className="p-2 border border-slate-700">حوزه و سالن آزمون</th>
-                  <th className="p-2 border border-slate-700 text-center font-black w-28">شماره صندلی داوطلب</th>
+                  <th scope="col" className="p-2 border border-slate-700 text-center w-10">ردیف</th>
+                  <th scope="col" className="p-2 border border-slate-700 text-center w-20">کد درس</th>
+                  <th scope="col" className="p-2 border border-slate-700">عنوان درس</th>
+                  <th scope="col" className="p-2 border border-slate-700">استاد مدرس</th>
+                  <th scope="col" className="p-2 border border-slate-700 text-center w-28">تاریخ امتحان</th>
+                  <th scope="col" className="p-2 border border-slate-700 text-center w-32">ساعت و سانس</th>
+                  <th scope="col" className="p-2 border border-slate-700">حوزه و سالن آزمون</th>
+                  <th scope="col" className="p-2 border border-slate-700 text-center font-black w-28">شماره صندلی داوطلب</th>
                 </tr>
               </thead>
               <tbody>

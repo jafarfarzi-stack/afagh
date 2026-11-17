@@ -201,12 +201,12 @@ export default function WelfareClient() {
         <table className="w-full text-xs rt">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2 px-2 text-right">دانشجو</th>
-              <th className="py-2 px-2 text-right">پرداخت‌کننده</th>
-              <th className="py-2 px-2 text-right">مبلغ (ریال)</th>
-              <th className="py-2 px-2 text-right">اقساط</th>
-              <th className="py-2 px-2 text-right">وضعیت</th>
-              <th className="py-2 px-2 text-right">صندوق</th>
+              <th scope="col" className="py-2 px-2 text-right">دانشجو</th>
+              <th scope="col" className="py-2 px-2 text-right">پرداخت‌کننده</th>
+              <th scope="col" className="py-2 px-2 text-right">مبلغ (ریال)</th>
+              <th scope="col" className="py-2 px-2 text-right">اقساط</th>
+              <th scope="col" className="py-2 px-2 text-right">وضعیت</th>
+              <th scope="col" className="py-2 px-2 text-right">صندوق</th>
             </tr>
           </thead>
           <tbody>

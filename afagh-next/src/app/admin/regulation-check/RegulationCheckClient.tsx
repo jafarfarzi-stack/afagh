@@ -166,20 +166,20 @@ export default function RegulationCheckClient() {
           <table className="w-full text-2xs text-right rt">
             <thead className="bg-slate-100 border-b border-slate-300 font-bold">
               <tr>
-                <th className="p-2 w-8">
+                <th scope="col" className="p-2 w-8">
                   <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleAll} className="accent-indigo-600" />
                 </th>
-                <th className="p-2">کد دانشجویی</th>
-                <th className="p-2">نام</th>
-                <th className="p-2">ترم</th>
-                <th className="p-2">کد درس</th>
-                <th className="p-2">نام درس</th>
-                <th className="p-2 text-center">نمره</th>
-                <th className="p-2 text-center">کد اصلی سما</th>
-                <th className="p-2 text-center">کد فعلی</th>
-                <th className="p-2 text-center">کد صحیح</th>
-                <th className="p-2">عنوان صحیح</th>
-                <th className="p-2">آیین‌نامه</th>
+                <th scope="col" className="p-2">کد دانشجویی</th>
+                <th scope="col" className="p-2">نام</th>
+                <th scope="col" className="p-2">ترم</th>
+                <th scope="col" className="p-2">کد درس</th>
+                <th scope="col" className="p-2">نام درس</th>
+                <th scope="col" className="p-2 text-center">نمره</th>
+                <th scope="col" className="p-2 text-center">کد اصلی سما</th>
+                <th scope="col" className="p-2 text-center">کد فعلی</th>
+                <th scope="col" className="p-2 text-center">کد صحیح</th>
+                <th scope="col" className="p-2">عنوان صحیح</th>
+                <th scope="col" className="p-2">آیین‌نامه</th>
               </tr>
             </thead>
             <tbody>
@@ -261,10 +261,10 @@ export default function RegulationCheckClient() {
             <table className="w-full text-2xs text-right rt">
               <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                 <tr>
-                  <th className="p-2">کد دانشجویی</th>
-                  <th className="p-2">نام</th>
-                  <th className="p-2">تاریخ فراغت</th>
-                  <th className="p-2">آیین‌نامه</th>
+                  <th scope="col" className="p-2">کد دانشجویی</th>
+                  <th scope="col" className="p-2">نام</th>
+                  <th scope="col" className="p-2">تاریخ فراغت</th>
+                  <th scope="col" className="p-2">آیین‌نامه</th>
                 </tr>
               </thead>
               <tbody>

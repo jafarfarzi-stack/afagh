@@ -99,19 +99,19 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
         <table className="w-full border-collapse border border-slate-400 text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-white text-center">
-              <th className="p-2 border border-slate-700 w-12 font-bold">ردیف</th>
-              <th className="p-2 border border-slate-700 font-bold">شماره دانشجویی</th>
-              <th className="p-2 border border-slate-700 text-right font-bold">نام و نام خانوادگی دانشجو</th>
+              <th scope="col" className="p-2 border border-slate-700 w-12 font-bold">ردیف</th>
+              <th scope="col" className="p-2 border border-slate-700 font-bold">شماره دانشجویی</th>
+              <th scope="col" className="p-2 border border-slate-700 text-right font-bold">نام و نام خانوادگی دانشجو</th>
               {offering.isCoTaught ? (
                 <>
-                  <th className="p-2 border border-slate-700 font-bold">نمره تئوری ({faNum((offering.coTaughtDetails?.theoryWeightRatio || 0.6) * 100)}٪)</th>
-                  <th className="p-2 border border-slate-700 font-bold">نمره عملی ({faNum((offering.coTaughtDetails?.labWeightRatio || 0.4) * 100)}٪)</th>
+                  <th scope="col" className="p-2 border border-slate-700 font-bold">نمره تئوری ({faNum((offering.coTaughtDetails?.theoryWeightRatio || 0.6) * 100)}٪)</th>
+                  <th scope="col" className="p-2 border border-slate-700 font-bold">نمره عملی ({faNum((offering.coTaughtDetails?.labWeightRatio || 0.4) * 100)}٪)</th>
                 </>
               ) : (
-                <th className="p-2 border border-slate-700 font-bold">نمره مستمر و کلاسی</th>
+                <th scope="col" className="p-2 border border-slate-700 font-bold">نمره مستمر و کلاسی</th>
               )}
-              <th className="p-2 border border-slate-700 font-black text-amber-300">نمره نهایی (از ۲۰)</th>
-              <th className="p-2 border border-slate-700 font-bold">نتیجه ارزشیابی</th>
+              <th scope="col" className="p-2 border border-slate-700 font-black text-amber-300">نمره نهایی (از ۲۰)</th>
+              <th scope="col" className="p-2 border border-slate-700 font-bold">نتیجه ارزشیابی</th>
             </tr>
           </thead>
           <tbody>

@@ -53,10 +53,10 @@ export default function ProfVirtualClassesClient({ rows: initial }: { rows: Prof
         <table className="w-full text-xs rt border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white text-center">
-              <th className="p-2.5 border border-slate-800">درس / گروه</th>
-              <th className="p-2.5 border border-slate-800">دانشجو</th>
-              <th className="p-2.5 border border-slate-800">وضعیت کلاس آنلاین</th>
-              <th className="p-2.5 border border-slate-800">عملیات</th>
+              <th scope="col" className="p-2.5 border border-slate-800">درس / گروه</th>
+              <th scope="col" className="p-2.5 border border-slate-800">دانشجو</th>
+              <th scope="col" className="p-2.5 border border-slate-800">وضعیت کلاس آنلاین</th>
+              <th scope="col" className="p-2.5 border border-slate-800">عملیات</th>
             </tr>
           </thead>
           <tbody>

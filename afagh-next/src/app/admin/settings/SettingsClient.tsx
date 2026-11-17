@@ -241,9 +241,9 @@ function BackupRestorePanel({ flash }: { flash: (ok: boolean, text: string) => v
             ) : (
               <table className="w-full text-xs rt">
                 <thead><tr className="border-b border-slate-200">
-                  <th className="text-right py-2 px-2 font-bold">کلید</th>
-                  <th className="text-left py-2 px-2 font-bold">حجم</th>
-                  <th className="py-2 px-2"></th>
+                  <th scope="col" className="text-right py-2 px-2 font-bold">کلید</th>
+                  <th scope="col" className="text-left py-2 px-2 font-bold">حجم</th>
+                  <th scope="col" className="py-2 px-2"></th>
                 </tr></thead>
                 <tbody>
                   {minioList.map(o => (

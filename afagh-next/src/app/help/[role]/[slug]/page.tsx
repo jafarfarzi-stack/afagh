@@ -81,7 +81,7 @@ export default async function HelpTopicPage(props: { params: Promise<{ role: str
               <thead>
                 <tr className="bg-slate-100">
                   {tb.head.map((h, j) => (
-                    <th key={j} className="border border-slate-200 px-2 py-1.5 text-right font-black text-slate-700">{h}</th>
+                    <th scope="col" key={j} className="border border-slate-200 px-2 py-1.5 text-right font-black text-slate-700">{h}</th>
                   ))}
                 </tr>
               </thead>

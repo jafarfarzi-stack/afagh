@@ -167,11 +167,11 @@ export default async function SanjeshFieldsPage({
           <table className="w-full text-right text-xs">
             <thead className="sticky top-0 z-20 bg-slate-100 text-slate-600">
               <tr>
-                <th className="sticky right-0 z-30 w-14 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">ستون</th>
-                <th className="p-2 font-medium">عنوان سنجش</th>
-                <th className="w-16 p-2 font-medium">طول</th>
-                <th className="p-2 font-medium">نمونهٔ فیلد</th>
-                <th className="w-64 p-2 font-medium">فیلد مقصد آفاق</th>
+                <th scope="col" className="sticky right-0 z-30 w-14 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">ستون</th>
+                <th scope="col" className="p-2 font-medium">عنوان سنجش</th>
+                <th scope="col" className="w-16 p-2 font-medium">طول</th>
+                <th scope="col" className="p-2 font-medium">نمونهٔ فیلد</th>
+                <th scope="col" className="w-64 p-2 font-medium">فیلد مقصد آفاق</th>
               </tr>
             </thead>
             <tbody>

@@ -111,14 +111,14 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
             <table className="w-full text-right text-2xs rt">
               <thead className="bg-amber-100 border-b border-amber-300 font-bold">
                 <tr>
-                  <th className="p-2">#</th>
-                  <th className="p-2">درس</th>
-                  <th className="p-2">ترم</th>
-                  <th className="p-2">استاد درخواست‌کننده</th>
-                  <th className="p-2">دلیل</th>
-                  <th className="p-2">تاریخ</th>
-                  <th className="p-2">مرحله</th>
-                  <th className="p-2">بررسی</th>
+                  <th scope="col" className="p-2">#</th>
+                  <th scope="col" className="p-2">درس</th>
+                  <th scope="col" className="p-2">ترم</th>
+                  <th scope="col" className="p-2">استاد درخواست‌کننده</th>
+                  <th scope="col" className="p-2">دلیل</th>
+                  <th scope="col" className="p-2">تاریخ</th>
+                  <th scope="col" className="p-2">مرحله</th>
+                  <th scope="col" className="p-2">بررسی</th>
                 </tr>
               </thead>
               <tbody>
@@ -148,15 +148,15 @@ export default async function GradeAuditPage({ searchParams }: { searchParams: P
         <table className="w-full text-right text-2xs rt">
           <thead className="bg-slate-100 border-b border-slate-300 font-bold">
             <tr>
-              <th className="p-2">#</th>
-              <th className="p-2">تاریخ</th>
-              <th className="p-2">دانشجو</th>
-              <th className="p-2">درس</th>
-              <th className="p-2">ترم</th>
-              <th className="p-2">عملیات</th>
-              <th className="p-2 text-center">قبل → بعد</th>
-              <th className="p-2">اقدام‌کننده</th>
-              <th className="p-2">دلیل</th>
+              <th scope="col" className="p-2">#</th>
+              <th scope="col" className="p-2">تاریخ</th>
+              <th scope="col" className="p-2">دانشجو</th>
+              <th scope="col" className="p-2">درس</th>
+              <th scope="col" className="p-2">ترم</th>
+              <th scope="col" className="p-2">عملیات</th>
+              <th scope="col" className="p-2 text-center">قبل → بعد</th>
+              <th scope="col" className="p-2">اقدام‌کننده</th>
+              <th scope="col" className="p-2">دلیل</th>
             </tr>
           </thead>
           <tbody>

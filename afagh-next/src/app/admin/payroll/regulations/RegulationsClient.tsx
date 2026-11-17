@@ -113,11 +113,11 @@ export default function RegulationsClient(props: {
           <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
-                <th className="p-2 text-right">کد</th>
-                <th className="p-2 text-right">عنوان</th>
-                <th className="p-2">سال</th>
-                <th className="p-2">وضعیت</th>
-                <th className="p-2">عملیات</th>
+                <th scope="col" className="p-2 text-right">کد</th>
+                <th scope="col" className="p-2 text-right">عنوان</th>
+                <th scope="col" className="p-2">سال</th>
+                <th scope="col" className="p-2">وضعیت</th>
+                <th scope="col" className="p-2">عملیات</th>
               </tr>
             </thead>
             <tbody>

@@ -300,9 +300,9 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
           <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th className="p-3 border border-slate-800 w-28 font-extrabold">روز هفته</th>
+                <th scope="col" className="p-3 border border-slate-800 w-28 font-extrabold">روز هفته</th>
                 {slots.map(slot => (
-                  <th key={slot.id} className="p-3 border border-slate-800 font-extrabold">
+                  <th scope="col" key={slot.id} className="p-3 border border-slate-800 font-extrabold">
                     <div>{slot.label}</div>
                     <div className="text-3xs text-slate-300 font-normal mt-0.5">{slot.startTime} الی {slot.endTime}</div>
                   </th>

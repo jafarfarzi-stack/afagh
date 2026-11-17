@@ -327,15 +327,15 @@ export default function ScheduleClient({
           <table className="w-full text-right text-xs border-collapse rt">
             <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
               <tr>
-                <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
-                <th className="p-2 border-l border-slate-300 text-center w-20">کد درس</th>
-                <th className="p-2 border-l border-slate-300">نام درس</th>
-                <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
-                <th className="p-2 border-l border-slate-300 text-center w-14">واحد</th>
-                <th className="p-2 border-l border-slate-300">نوع درس</th>
-                <th className="p-2 border-l border-slate-300">استاد درس</th>
-                <th className="p-2 border-l border-slate-300">محل و زمان کلاس</th>
-                <th className="p-2 border-l border-slate-300 text-center">وضعیت</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-20">کد درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300">نام درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-14">واحد</th>
+                <th scope="col" className="p-2 border-l border-slate-300">نوع درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300">استاد درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300">محل و زمان کلاس</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center">وضعیت</th>
               </tr>
             </thead>
             <tbody>
@@ -405,13 +405,13 @@ export default function ScheduleClient({
           <table className="w-full text-right text-xs border-collapse rt">
             <thead className="bg-slate-100 text-slate-800 border-b border-slate-300">
               <tr>
-                <th className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
-                <th className="p-2 border-l border-slate-300 text-center w-28">تاریخ امتحان</th>
-                <th className="p-2 border-l border-slate-300 text-center w-28">ساعت آزمون</th>
-                <th className="p-2 border-l border-slate-300">عنوان درس</th>
-                <th className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
-                <th className="p-2 border-l border-slate-300">استاد درس</th>
-                <th className="p-2 border-l border-slate-300">سالن آزمون</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-12">ردیف</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-28">تاریخ امتحان</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-28">ساعت آزمون</th>
+                <th scope="col" className="p-2 border-l border-slate-300">عنوان درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300 text-center w-16">گروه</th>
+                <th scope="col" className="p-2 border-l border-slate-300">استاد درس</th>
+                <th scope="col" className="p-2 border-l border-slate-300">سالن آزمون</th>
               </tr>
             </thead>
             <tbody>

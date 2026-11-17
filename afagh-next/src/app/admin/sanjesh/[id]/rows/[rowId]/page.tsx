@@ -80,10 +80,10 @@ export default async function SanjeshRowDetailPage({
           <table className="w-full text-right text-xs">
             <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600">
               <tr>
-                <th className="sticky right-0 z-20 w-12 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">#</th>
-                <th className="p-2 font-medium">عنوان سنجش</th>
-                <th className="p-2 font-medium">فیلد مقصد</th>
-                <th className="p-2 font-medium">مقدار خام</th>
+                <th scope="col" className="sticky right-0 z-20 w-12 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">#</th>
+                <th scope="col" className="p-2 font-medium">عنوان سنجش</th>
+                <th scope="col" className="p-2 font-medium">فیلد مقصد</th>
+                <th scope="col" className="p-2 font-medium">مقدار خام</th>
               </tr>
             </thead>
             <tbody>

@@ -123,11 +123,11 @@ export default async function VerifyTranscriptPage({ params }: { params: Promise
             <table className="w-full text-xs rt">
               <thead>
                 <tr className="bg-slate-100 text-3xs text-slate-600">
-                  <th className="p-2 text-right">نیمسال</th>
-                  <th className="p-2">معدل ترم</th>
-                  <th className="p-2">واحد محاسبه‌شده</th>
-                  <th className="p-2">واحد گذرانده</th>
-                  <th className="p-2">وضعیت</th>
+                  <th scope="col" className="p-2 text-right">نیمسال</th>
+                  <th scope="col" className="p-2">معدل ترم</th>
+                  <th scope="col" className="p-2">واحد محاسبه‌شده</th>
+                  <th scope="col" className="p-2">واحد گذرانده</th>
+                  <th scope="col" className="p-2">وضعیت</th>
                 </tr>
               </thead>
               <tbody>

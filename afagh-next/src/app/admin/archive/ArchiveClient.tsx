@@ -76,8 +76,8 @@ export default function ArchiveClient(props: {
       <div className="card overflow-x-auto">
         <table className="w-full text-right text-sm rt">
           <thead><tr className="text-xs text-slate-500">
-            <th className="p-2">#</th><th className="p-2">شخص</th><th className="p-2">دسته/نوع</th>
-            <th className="p-2">فایل</th><th className="p-2">زمان</th><th className="p-2">وضعیت</th><th className="p-2">اقدام</th>
+            <th scope="col" className="p-2">#</th><th scope="col" className="p-2">شخص</th><th scope="col" className="p-2">دسته/نوع</th>
+            <th scope="col" className="p-2">فایل</th><th scope="col" className="p-2">زمان</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">اقدام</th>
           </tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={7} className="p-4 text-center text-slate-400">مدرکی نیست.</td></tr>}

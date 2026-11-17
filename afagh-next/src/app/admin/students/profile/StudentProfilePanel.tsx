@@ -16,13 +16,14 @@
 //    • «وضعیت نظام وظیفه» دقیقاً یک کنترل دارد (کنترل تکراری بخش «اضافی» حذف شد).
 // ═══════════════════════════════════════════════════════════════════════
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import StickyIdentityHeader from './StickyIdentityHeader';
 import { Field, ReadOnlyField, SelectField, TextField, inputClass } from './Field';
 import type { ProfileDraft } from './profile-draft';
 import { entryTermFromMonth, formatJalaliDateInput } from './profile-draft';
 import type { RegulationPick, StudentItem } from '../types';
-import { QUOTA_FA, STUDENT_STATUS_FA, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
+import Link from 'next/link';
+import { SAMA_STATUS_TITLE, QUOTA_FA, STUDENT_STATUS_FA, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 import { dateToJalali, faNum } from '../transcript-utils';
 import { normalizeFa, toEnDigits } from '@/lib/persian-search';
 
@@ -166,12 +167,16 @@ export type StudentProfilePanelProps = {
   geoPlaces: string[];
   regulations: RegulationPick[];
   degrees: { id: number; title: string }[];
-  majors: { id: number; name: string }[];
+  majors: { id: number; name: string; code?: string | null; facultyId?: number | null; degreeLevelId?: number | null }[];
+  faculties: { id: number; name: string }[];
+  acceptOptions: { code: string; title: string }[];
   /** کد دانشگاه جاری/مالک رکورد — برای استثناهای عنوان وضعیت سما */
   uniCode: string | null;
   onRegulationChange: (regulationId: number) => Promise<boolean>;
   onToggleActive: () => void;
   onChangePassword: () => void;
+  /** حذف کامل پرونده (فقط وقتی هیچ سابقهٔ درسی/مالی/ترمی ندارد) */
+  onDelete?: () => void;
 };
 
 export default function StudentProfilePanel({
@@ -195,10 +200,13 @@ export default function StudentProfilePanel({
   regulations,
   degrees,
   majors,
+  faculties,
+  acceptOptions,
   uniCode,
   onRegulationChange,
   onToggleActive,
   onChangePassword,
+  onDelete,
 }: StudentProfilePanelProps) {
   const [tab, setTab] = useState<CardTab>('identity');
 
@@ -230,26 +238,50 @@ export default function StudentProfilePanel({
   };
 
   const onEntryDate = (raw: string) => {
-    const text = formatJalaliDateInput(raw);
-    onField('entryDate', text);
-    const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(text);
-    if (!m) return;
-    const jy = Number(m[1]);
-    const jm = Number(m[2]);
-    if (jy < 1300 || jy > 1500) return;
-    const term = entryTermFromMonth(jm) ?? (draftTerm >= 1 && draftTerm <= 3 ? draftTerm : 1);
-    onField('entryYear', jy);
-    onField('entryTerm', term);
-    setEntryCodeText(`${jy}${term}`);
+    // تاریخ ورود مستقل است: تایپ دستیِ آن سال/ترم را بازنویسی نمی‌کند
+    onField('entryDate', formatJalaliDateInput(raw));
   };
 
   const bind = (key: string) => (editing ? (v: string) => onField(key, v) : undefined);
 
+  /** رشتهٔ انتخاب‌شده — مبنای نمایش خودکار دانشکده و همگام‌سازی مقطع */
+  const selectedMajor = majors.find(mm => String(mm.id) === String(profile.majorId ?? ''));
+  const majorFacultyName = selectedMajor?.facultyId
+    ? (faculties.find(f => f.id === selectedMajor.facultyId)?.name ?? student.facultyName)
+    : student.facultyName;
+  const onMajorChange = (v: string) => {
+    const id = Number(v);
+    onField('majorId', id);
+    // مقطع از خودِ جدول رشته‌ها می‌آید (رشته تعیین‌کنندهٔ مقطع است)
+    const mm = majors.find(x => x.id === id);
+    if (mm?.degreeLevelId) onField('degreeLevelId', mm.degreeLevelId);
+  };
+
   const entryYear = draftYear;
   const entryTerm = draftTerm;
-  const entryStart = entryYear >= 1300 && entryYear <= 1500 && entryTerm >= 1 && entryTerm <= 3
-    ? `${faNum(entryYear, 0)}/${entryTerm === 2 ? '۱۱' : '۰۷'}/۰۱`
-    : null;
+  /** تاریخ پیش‌فرضِ شروع ترم: مهر ۰۷/۰۱ · بهمن ۱۱/۰۱ · تابستان ۰۵/۰۱ */
+  const defaultEntryDate = (y: number, t: number): string =>
+    y >= 1300 && y <= 1500 && t >= 1 && t <= 3
+      ? `${y}/${t === 2 ? '11' : t === 3 ? '05' : '07'}/01`
+      : '';
+  const entryStart = defaultEntryDate(entryYear, entryTerm)?.replace(/\//g, '/') ?? null;
+
+  /**
+   * پیش‌فرضِ تاریخ از روی سال/ترم ساخته می‌شود (نه برعکس). اگر کاربر تاریخ
+   * را دستی عوض کرده باشد (مثلاً ۱۴۰۳/۰۵/۰۷)، با تغییر ترم پاک نمی‌شود؛
+   * فقط وقتی مقدار خالی است یا همان پیش‌فرض قبلی است، به پیش‌فرض تازه
+   * به‌روزرسانی می‌شود.
+   */
+  const lastDefaultDate = useRef('');
+  useEffect(() => {
+    if (!editing) return;
+    const next = defaultEntryDate(draftYear, draftTerm);
+    if (!next) return;
+    const cur = String(profile.entryDate ?? '').trim();
+    if (!cur || cur === lastDefaultDate.current) onField('entryDate', next);
+    lastDefaultDate.current = next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, draftYear, draftTerm]);
 
   const statusLabel = studentStatusFa(student.status, student.samaStatusCode, uniCode);
 
@@ -295,6 +327,16 @@ export default function StudentProfilePanel({
         onEdit={onEdit}
         onSave={onSave}
         onCancel={onCancel}
+        extraActions={canEditProfile && !editing && onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            title="حذف کامل پرونده؛ فقط اگر هیچ سابقهٔ درسی، مالی یا ترمی نداشته باشد"
+            className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-2xs font-bold text-rose-700 hover:bg-rose-100"
+          >
+            🗑️ حذف کامل
+          </button>
+        ) : undefined}
       />
 
       {/* تب‌های داخل پرونده — هر کارت یک گروه منطقی از فیلدهاست */}
@@ -323,17 +365,24 @@ export default function StudentProfilePanel({
               <TextField label="نام" value={String(profile.firstName ?? '')} onChange={bind('firstName')} />
               <TextField label="نام خانوادگی" value={String(profile.lastName ?? '')} onChange={bind('lastName')} />
               <TextField label="کد ملی" value={String(profile.nationalCode ?? '')} onChange={bind('nationalCode')} mono dir="ltr" hint="۱۰ رقم" />
-              <ReadOnlyField
-                label="تاریخ تولد"
-                value={dateToJalali(student.birthDate)}
+              <TextField
+                label="تاریخ تولد (شمسی)"
+                value={String(profile.birthDate ?? '')}
+                onChange={editing ? (v) => onField('birthDate', formatJalaliDateInput(v)) : undefined}
+                dir="ltr"
                 mono
-                hint={student.birthDate ? `میلادی: ${String(student.birthDate).slice(0, 10)}` : undefined}
+                placeholder="۱۳۸۵/۰۶/۲۲"
+                hint={student.birthDate ? `میلادی ذخیره‌شده: ${String(student.birthDate).slice(0, 10)}` : 'خالی = نامشخص'}
               />
               <SelectField
                 label="وضعیت تحصیلی"
-                value={String(profile.status ?? '')}
-                onChange={editing ? (v) => onField('status', v) : undefined}
-                options={Object.entries(STUDENT_STATUS_FA).map(([value, label]) => ({ value, label }))}
+                value={String(profile.samaStatusCode ?? '')}
+                onChange={editing ? (v) => onField('samaStatusCode', v) : undefined}
+                options={[
+                  { value: '', label: '—' },
+                  ...Object.entries(SAMA_STATUS_TITLE).map(([code, label]) => ({ value: code, label: `${label} (کد ${code})` })),
+                ]}
+                hint="همان عنوانی که کنار شمارهٔ دانشجویی دیده می‌شود؛ از کدینگ وضعیت سما"
               />
               <SelectField
                 label="مقطع"
@@ -342,19 +391,34 @@ export default function StudentProfilePanel({
                 options={[{ value: '0', label: '—' }, ...degrees.map(d => ({ value: String(d.id), label: d.title }))]}
               />
               <SelectField
-                label="رشته"
+                label="رشته (کد — نام)"
                 value={String(profile.majorId ?? 0)}
-                onChange={editing ? (v) => onField('majorId', Number(v)) : undefined}
-                options={[{ value: '0', label: '—' }, ...majors.map(mm => ({ value: String(mm.id), label: mm.name }))]}
+                onChange={editing ? onMajorChange : undefined}
+                options={[
+                  { value: '0', label: '—' },
+                  ...majors.map(mm => ({ value: String(mm.id), label: mm.code ? `${mm.code} — ${mm.name}` : mm.name })),
+                ]}
+                hint="با تغییر رشته، مقطع و دانشکده از جدول رشته‌ها به‌روز می‌شوند"
               />
-              <ReadOnlyField label="دانشکده" value={student.facultyName} hint="از رشته تعیین می‌شود" />
+              <ReadOnlyField label="دانشکده" value={majorFacultyName} hint="خودکار از رشتهٔ انتخاب‌شده" />
               <SelectField
                 label="سهمیهٔ نهایی"
                 value={String(profile.quotaType ?? '')}
                 onChange={editing ? (v) => onField('quotaType', v) : undefined}
                 options={Object.entries(QUOTA_FA).map(([value, label]) => ({ value, label }))}
               />
-              <TextField label="نحوهٔ ورود (کد)" value={String(profile.acceptanceType ?? '')} onChange={bind('acceptanceType')} mono dir="ltr" />
+              <SelectField
+                label="نحوهٔ ورود"
+                value={String(profile.acceptanceType ?? '')}
+                onChange={editing ? (v) => onField('acceptanceType', v) : undefined}
+                options={[
+                  { value: '', label: '—' },
+                  ...acceptOptions.map(o => ({ value: o.code, label: `${o.title} (${o.code})` })),
+                  ...(profile.acceptanceType && !acceptOptions.some(o => o.code === String(profile.acceptanceType))
+                    ? [{ value: String(profile.acceptanceType), label: `${profile.acceptanceType} — خارج از کدینگ` }]
+                    : []),
+                ]}
+              />
               <SelectField
                 label="نوع دوره"
                 value={String(profile.studyingMode ?? '')}
@@ -401,7 +465,7 @@ export default function StudentProfilePanel({
                 dir="ltr"
                 mono
                 placeholder="۱۴۰۳/۰۷/۰۱"
-                hint="با تغییر تاریخ، سال و ترم ورود هم به‌روز می‌شود (YYYY/MM/DD)"
+                hint="پیش‌فرض از روی ترم/سال ورود ساخته می‌شود؛ برای موارد استثنایی (مثل ۱۴۰۳/۰۵/۰۷) دستی قابل تغییر است"
               />
               <TextField label="نام پدر" value={String(profile.fatherName ?? '')} onChange={bind('fatherName')} />
               <SelectField label="جنسیت" value={String(profile.gender ?? '')} onChange={bind('gender')} options={GENDER_OPTIONS} />
@@ -549,6 +613,8 @@ export default function StudentProfilePanel({
                 <TextField label="تلفن ولی" value={String(profile.guardianPhone ?? '')} onChange={bind('guardianPhone')} dir="ltr" mono />
                 <TextField label="کد پستی" value={String(profile.postalCode ?? '')} onChange={bind('postalCode')} dir="ltr" mono maxLength={10} inputMode="numeric" />
                 <TextField label="ایمیل دانشجو" value={String(profile.email ?? '')} onChange={bind('email')} dir="ltr" mono type="email" />
+                <TextField label="نشانی محل سکونت" value={String(profile.address ?? '')} onChange={bind('address')} />
+                <TextField label="نشانی ولی/قیم" value={String(profile.guardianAddress ?? '')} onChange={bind('guardianAddress')} />
               </div>
             </section>
 
@@ -630,14 +696,13 @@ export default function StudentProfilePanel({
 
             <section className="rounded border border-slate-300 bg-slate-50 p-2.5">
               <h4 className="border-b border-slate-200 pb-1 font-bold text-slate-800">🎓 دانش‌آموختگان و تسویه‌ها</h4>
-              <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                {['📜 دانشنامهٔ رسمی', '📑 ریزنمرات رسمی', '📄 گواهی موقت پایان تحصیلات'].map(t => (
-                  <div key={t} className="rounded border border-slate-200 bg-white p-2">
-                    <p className="font-bold text-slate-800">{t}</p>
-                    <p className="mt-1 text-2xs text-slate-500">تاریخ صدور: —</p>
-                    <p className="text-2xs text-slate-500">شمارهٔ دبیرخانه: —</p>
-                  </div>
-                ))}
+              <div className="mt-2 rounded border border-slate-200 bg-white p-2.5 text-2xs leading-6 text-slate-600">
+                مدارک صادرشده (دانشنامه، ریزنمرات، گواهی موقت) شماره و تاریخ صدورشان در این فرم نگه‌داری
+                نمی‌شود؛ از{' '}
+                <Link prefetch={false} href="/admin/graduation" className="font-bold text-indigo-700 underline">
+                  ماژول فارغ‌التحصیلی و صدور مدارک
+                </Link>{' '}
+                خوانده می‌شود. تعداد گواهی سه‌ماههٔ صادرشده در فیلد بالای همین کارت نمایش داده می‌شود.
               </div>
               <p className="mt-2 text-2xs text-slate-500">
                 تسویه‌حساب‌ها و صدور مدارک در ماژول فارغ‌التحصیلان انجام می‌شود؛ در این فرم فیلدی برای ثبت آن وجود ندارد.

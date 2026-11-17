@@ -293,11 +293,11 @@ export default function SahamClient({ stats, lookups }: { stats: SahamStat[]; lo
         <table className="w-full text-right text-xs rt">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="p-2.5">دانشگاه / مؤسسه</th>
-              <th className="p-2.5">کد سهام</th>
-              <th className="p-2.5">تعداد ({kind === 'graduates' ? 'آموخته' : kind === 'instructors' ? 'آموزشگر' : 'دانشجو'})</th>
-              {FILL_ROWS.map((f) => <th key={f.key} className="p-2.5 whitespace-nowrap">{f.label}</th>)}
-              <th className="p-2.5">خروجی</th>
+              <th scope="col" className="p-2.5">دانشگاه / مؤسسه</th>
+              <th scope="col" className="p-2.5">کد سهام</th>
+              <th scope="col" className="p-2.5">تعداد ({kind === 'graduates' ? 'آموخته' : kind === 'instructors' ? 'آموزشگر' : 'دانشجو'})</th>
+              {FILL_ROWS.map((f) => <th scope="col" key={f.key} className="p-2.5 whitespace-nowrap">{f.label}</th>)}
+              <th scope="col" className="p-2.5">خروجی</th>
             </tr>
           </thead>
           <tbody>

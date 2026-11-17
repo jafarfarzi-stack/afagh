@@ -57,12 +57,12 @@ export default async function SamaSyncPage() {
             <table className="w-full text-right text-xs">
               <thead>
                 <tr className="text-slate-500">
-                  <th className="p-2">#</th>
-                  <th className="p-2">زمان</th>
-                  <th className="p-2">کاربر</th>
-                  <th className="p-2">ترم</th>
-                  <th className="p-2">افزوده</th>
-                  <th className="p-2">نمره</th>
+                  <th scope="col" className="p-2">#</th>
+                  <th scope="col" className="p-2">زمان</th>
+                  <th scope="col" className="p-2">کاربر</th>
+                  <th scope="col" className="p-2">ترم</th>
+                  <th scope="col" className="p-2">افزوده</th>
+                  <th scope="col" className="p-2">نمره</th>
                 </tr>
               </thead>
               <tbody>

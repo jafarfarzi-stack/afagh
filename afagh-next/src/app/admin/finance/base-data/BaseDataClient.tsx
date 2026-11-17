@@ -276,13 +276,13 @@ export default function BaseDataClient() {
           <table className="w-full text-2xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
-                <th className="px-2 py-2 text-right font-bold">#</th>
+                <th scope="col" className="px-2 py-2 text-right font-bold">#</th>
                 {spec.list.map((c) => (
-                  <th key={c} className="whitespace-nowrap px-2 py-2 text-right font-bold">
+                  <th scope="col" key={c} className="whitespace-nowrap px-2 py-2 text-right font-bold">
                     {spec.fields.find((f) => f.name === c)?.label ?? c}
                   </th>
                 ))}
-                <th className="px-2 py-2 text-center font-bold">عملیات</th>
+                <th scope="col" className="px-2 py-2 text-center font-bold">عملیات</th>
               </tr>
             </thead>
             <tbody>

@@ -477,13 +477,13 @@ export default function AdminWorkflowsClient({
             <table className="w-full text-right text-xs rt">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
-                  <th className="p-3">کد رهگیری</th>
-                  <th className="p-3">دانشجو</th>
-                  <th className="p-3">عنوان خدمت</th>
-                  <th className="p-3">مرحله فعلی و متولی</th>
-                  <th className="p-3">وضعیت SLA</th>
-                  <th className="p-3">وضعیت پرونده</th>
-                  <th className="p-3 text-left">اقدامات مدیریتی</th>
+                  <th scope="col" className="p-3">کد رهگیری</th>
+                  <th scope="col" className="p-3">دانشجو</th>
+                  <th scope="col" className="p-3">عنوان خدمت</th>
+                  <th scope="col" className="p-3">مرحله فعلی و متولی</th>
+                  <th scope="col" className="p-3">وضعیت SLA</th>
+                  <th scope="col" className="p-3">وضعیت پرونده</th>
+                  <th scope="col" className="p-3 text-left">اقدامات مدیریتی</th>
                 </tr>
               </thead>
               <tbody>
@@ -1088,13 +1088,13 @@ export default function AdminWorkflowsClient({
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
-                    <th className="p-2.5">فرآیند</th>
-                    <th className="p-2.5">گام اجرایی</th>
-                    <th className="p-2.5">نقش متولی</th>
-                    <th className="p-2.5">مهلت هدف (SLA)</th>
-                    <th className="p-2.5">میانگین زمان واقعی</th>
-                    <th className="p-2.5">تعداد در صف</th>
-                    <th className="p-2.5">وضعیت گلوگاه</th>
+                    <th scope="col" className="p-2.5">فرآیند</th>
+                    <th scope="col" className="p-2.5">گام اجرایی</th>
+                    <th scope="col" className="p-2.5">نقش متولی</th>
+                    <th scope="col" className="p-2.5">مهلت هدف (SLA)</th>
+                    <th scope="col" className="p-2.5">میانگین زمان واقعی</th>
+                    <th scope="col" className="p-2.5">تعداد در صف</th>
+                    <th scope="col" className="p-2.5">وضعیت گلوگاه</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1170,13 +1170,13 @@ export default function AdminWorkflowsClient({
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
-                    <th className="p-3">نام و مسئولیت</th>
-                    <th className="p-3 text-center">حجم خروجی (Throughput)</th>
-                    <th className="p-3 text-center">سرعت اقدام (MTTR)</th>
-                    <th className="p-3 text-center">پایبندی به مهلت (SLA %)</th>
-                    <th className="p-3 text-center">ارجاع خودکار (Escalations)</th>
-                    <th className="p-3 text-center">رضایت دانشجو (CSAT)</th>
-                    <th className="p-3 text-center">امتیاز بهره‌وری</th>
+                    <th scope="col" className="p-3">نام و مسئولیت</th>
+                    <th scope="col" className="p-3 text-center">حجم خروجی (Throughput)</th>
+                    <th scope="col" className="p-3 text-center">سرعت اقدام (MTTR)</th>
+                    <th scope="col" className="p-3 text-center">پایبندی به مهلت (SLA %)</th>
+                    <th scope="col" className="p-3 text-center">ارجاع خودکار (Escalations)</th>
+                    <th scope="col" className="p-3 text-center">رضایت دانشجو (CSAT)</th>
+                    <th scope="col" className="p-3 text-center">امتیاز بهره‌وری</th>
                   </tr>
                 </thead>
                 <tbody>

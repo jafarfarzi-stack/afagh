@@ -169,10 +169,10 @@ export default async function GrantsPage({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-right text-slate-500">
-                  <th className="p-2">نام</th>
-                  <th className="p-2">شمارهٔ دانشجویی</th>
-                  <th className="p-2">ورودی</th>
-                  <th className="p-2"></th>
+                  <th scope="col" className="p-2">نام</th>
+                  <th scope="col" className="p-2">شمارهٔ دانشجویی</th>
+                  <th scope="col" className="p-2">ورودی</th>
+                  <th scope="col" className="p-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -223,12 +223,12 @@ export default async function GrantsPage({
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b text-right text-slate-500">
-                      <th className="p-2">کد</th>
-                      <th className="p-2">درس</th>
-                      <th className="p-2">واحد</th>
-                      <th className="p-2">ترم چارت</th>
-                      <th className="p-2">وضعیت</th>
-                      <th className="p-2">عملیات</th>
+                      <th scope="col" className="p-2">کد</th>
+                      <th scope="col" className="p-2">درس</th>
+                      <th scope="col" className="p-2">واحد</th>
+                      <th scope="col" className="p-2">ترم چارت</th>
+                      <th scope="col" className="p-2">وضعیت</th>
+                      <th scope="col" className="p-2">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>

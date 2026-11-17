@@ -196,9 +196,9 @@ export default function StaffTable({
                 onFilter={v => t.setFilter(c.key, v)}
               />
             ))}
-            <th className="p-2">فعال/غیرفعال</th>
-            <th className="p-2">نقش مدیر گروه</th>
-            <th className="p-2">نقش‌ها</th>
+            <th scope="col" className="p-2">فعال/غیرفعال</th>
+            <th scope="col" className="p-2">نقش مدیر گروه</th>
+            <th scope="col" className="p-2">نقش‌ها</th>
           </tr>
         </thead>
         <tbody>

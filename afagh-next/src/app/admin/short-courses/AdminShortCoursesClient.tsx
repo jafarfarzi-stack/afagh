@@ -400,15 +400,15 @@ export default function AdminShortCoursesClient({
               <table className="w-full border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-900 text-white text-right">
-                    <th className="p-3">ردیف</th>
-                    <th className="p-3">نام و نام‌خانوادگی</th>
-                    <th className="p-3">کد ملی</th>
-                    <th className="p-3">شماره تماس</th>
-                    <th className="p-3">مبلغ پرداختی</th>
-                    <th className="p-3 text-center">جلسات حضور</th>
-                    <th className="p-3 text-center">نمره نهایی (از ۲۰)</th>
-                    <th className="p-3 text-center">وضعیت قبولی</th>
-                    <th className="p-3 text-left">صدور گواهینامه رسمی</th>
+                    <th scope="col" className="p-3">ردیف</th>
+                    <th scope="col" className="p-3">نام و نام‌خانوادگی</th>
+                    <th scope="col" className="p-3">کد ملی</th>
+                    <th scope="col" className="p-3">شماره تماس</th>
+                    <th scope="col" className="p-3">مبلغ پرداختی</th>
+                    <th scope="col" className="p-3 text-center">جلسات حضور</th>
+                    <th scope="col" className="p-3 text-center">نمره نهایی (از ۲۰)</th>
+                    <th scope="col" className="p-3 text-center">وضعیت قبولی</th>
+                    <th scope="col" className="p-3 text-left">صدور گواهینامه رسمی</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -182,7 +182,7 @@ export default function DepartmentsClient({
                   onFilter={v => tbl.setFilter(c.key, v)}
                 />
               ))}
-              <th className="p-2.5"></th>
+              <th scope="col" className="p-2.5"></th>
             </tr>
           </thead>
           <tbody>

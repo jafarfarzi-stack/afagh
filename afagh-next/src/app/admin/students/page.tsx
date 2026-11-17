@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, universities, user_roles, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, term_status_types, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -294,7 +294,13 @@ export default async function AdminStudentsPage({
     .orderBy(degree_level_configs.id);
   // گزینه‌های «رشته» و «دانشکده/گروه» برای ویرایش پرونده و انتساب استاد
   const majorOptions = await db
-    .select({ id: majors.id, name: majors.name })
+    .select({
+      id: majors.id,
+      name: majors.name,
+      code: majors.majorCode,
+      facultyId: majors.facultyId,
+      degreeLevelId: majors.degreeLevelId,
+    })
     .from(majors)
     .where(currentUniversityId ? or(eq(majors.universityId, currentUniversityId), isNull(majors.universityId)) : undefined)
     .orderBy(majors.name);
@@ -308,6 +314,11 @@ export default async function AdminStudentsPage({
     .from(departments)
     .where(currentUniversityId ? or(eq(departments.universityId, currentUniversityId), isNull(departments.universityId)) : undefined)
     .orderBy(departments.name);
+  // کدینگ وضعیت تحصیلی/ترم — منبع همان عنوانی که کنار شمارهٔ دانشجویی می‌آید
+  const termStatusOptions = await db
+    .select({ code: term_status_types.code, title: term_status_types.title })
+    .from(term_status_types)
+    .orderBy(term_status_types.code);
   // ── محل تولد/صدور از geo (سراسری) — عنوان‌های یکتا با کد وزارت غیرخالی ──
   let geoPlaces: { title: string; ministryCode: string | null }[] = [];
   try {
@@ -332,11 +343,13 @@ export default async function AdminStudentsPage({
     .from(legacy_code_maps)
     .where(sql`${legacy_code_maps.domain} IN ('ACCEPT_TYPE','PERIOD_TYPE','QUOTA')`);
   const codeLabels: { accept: Record<string, string>; acceptByTarget: Record<string, string>; period: Record<string, string>; quota: Record<string, string> } = { accept: {}, acceptByTarget: {}, period: {}, quota: {} };
+  const acceptOptions: { code: string; title: string }[] = [];
   for (const r of codeMaps) {
     if (!r.code || !r.title) continue;
     if (r.domain === 'ACCEPT_TYPE') {
       codeLabels.accept[r.code] = r.title;
       if (r.target) codeLabels.acceptByTarget[r.target] = r.title;
+      acceptOptions.push({ code: r.code, title: r.title });
     }
     else if (r.domain === 'PERIOD_TYPE') codeLabels.period[r.code] = r.title;
     else if (r.domain === 'QUOTA') codeLabels.quota[r.code] = r.title;
@@ -453,6 +466,8 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
         }))}
         pagination={{ total: Number(total), page: safePage, per: PER_PAGE, totalPages, q, status: statusFilter, degree: degreeFilter, sort: sortKey ? `${sortKey}:${sortDir}` : '', f_code: fCode, f_name: fName, f_nc: fNc, f_major: fMajor, f_year: fYear, university: currentUniversity?.code ?? 'AFAGH' }}
         degrees={degrees}
+        acceptOptions={acceptOptions}
+        termStatusOptions={termStatusOptions}
         majorOptions={majorOptions}
         facultyOptions={facultyOptions}
         deptOptions={deptOptions}

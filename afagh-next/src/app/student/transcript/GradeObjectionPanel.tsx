@@ -109,10 +109,10 @@ export default function GradeObjectionPanel({
             <table className="w-full text-right text-2xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                  <th className="p-1.5 text-center w-16">کد درس</th>
-                  <th className="p-1.5">نام درس</th>
-                  <th className="p-1.5 text-center w-14">نمره</th>
-                  <th className="p-1.5 text-center w-32">وضعیت / اعتراض</th>
+                  <th scope="col" className="p-1.5 text-center w-16">کد درس</th>
+                  <th scope="col" className="p-1.5">نام درس</th>
+                  <th scope="col" className="p-1.5 text-center w-14">نمره</th>
+                  <th scope="col" className="p-1.5 text-center w-32">وضعیت / اعتراض</th>
                 </tr>
               </thead>
               <tbody>

@@ -444,14 +444,14 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
           <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="sticky top-0 right-0 z-40 w-64 min-w-64 max-w-64 bg-slate-900 p-3 shadow-[-2px_0_0_0_#334155]">عنوان مجوز و شرح دسترسی</th>
-                <th className="sticky top-0 z-30 bg-slate-900 p-3">دسته‌بندی</th>
+                <th scope="col" className="sticky top-0 right-0 z-40 w-64 min-w-64 max-w-64 bg-slate-900 p-3 shadow-[-2px_0_0_0_#334155]">عنوان مجوز و شرح دسترسی</th>
+                <th scope="col" className="sticky top-0 z-30 bg-slate-900 p-3">دسته‌بندی</th>
                 {roles.map(r => {
                   const list = draft[r.id] ?? [];
                   const changed = dirtyRoleIds.includes(r.id);
                   const allOn = filteredPermissions.length > 0 && filteredPermissions.every(p => list.includes(p.code));
                   return (
-                    <th key={r.id} className={`sticky top-0 z-30 p-3 text-center min-w-[120px] ${changed ? 'bg-amber-700' : 'bg-slate-900'}`}>
+                    <th scope="col" key={r.id} className={`sticky top-0 z-30 p-3 text-center min-w-[120px] ${changed ? 'bg-amber-700' : 'bg-slate-900'}`}>
                       <div className="font-black">{r.title}</div>
                       <div className="text-3xs text-indigo-300 font-mono" dir="ltr">
                         {r.code}

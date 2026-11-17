@@ -188,12 +188,12 @@ export default function StudentPicker({
           <table className="w-full text-right text-xs rt">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-50/95 text-slate-600 backdrop-blur">
-                <th className="p-2.5 font-black">دانشجو</th>
-                <th className="p-2.5 font-black">رشته / مقطع</th>
-                <th className="p-2.5 font-black">ورودی</th>
-                <th className="p-2.5 font-black">مانده کل</th>
-                <th className="p-2.5 font-black">چک در انتظار</th>
-                <th className="p-2.5 font-black print:hidden">عملیات</th>
+                <th scope="col" className="p-2.5 font-black">دانشجو</th>
+                <th scope="col" className="p-2.5 font-black">رشته / مقطع</th>
+                <th scope="col" className="p-2.5 font-black">ورودی</th>
+                <th scope="col" className="p-2.5 font-black">مانده کل</th>
+                <th scope="col" className="p-2.5 font-black">چک در انتظار</th>
+                <th scope="col" className="p-2.5 font-black print:hidden">عملیات</th>
               </tr>
             </thead>
             <tbody>

@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { toEnDigits } from '@/lib/persian-search';
-import { jalaliMonthLength } from '@/lib/calendar';
+import { jalaliMonthLength, toGregorian, toJalali } from '@/lib/calendar';
 import type { StaffItem, StudentItem } from '../types';
 import { dateToJalali } from '../transcript-utils';
 
@@ -24,7 +24,8 @@ export type PatchResult = { patch: Record<string, string | number | null> } | { 
 
 /** کلیدهای متنی مجاز دانشجو (هم‌گام با studentProfilePatchSchema در actions.ts) */
 export const STUDENT_TEXT_KEYS = [
-  'firstName', 'lastName', 'nationalCode', 'status', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
+  'firstName', 'lastName', 'nationalCode', 'status', 'samaStatusCode', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
+  'address',
   'fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'email', 'postalCode',
   'advisorCode', 'documentStatus', 'scholarshipType', 'militaryStatus', 'militaryExemptionNo', 'homeTell',
   'studentCardStatus', 'archiveNo', 'parvandehNo', 'dormName', 'dormRoom', 'guardianJobTitle', 'guardianPhone',
@@ -92,6 +93,30 @@ export function entryTermFromMonth(jm: number): number | null {
   return null;
 }
 
+/** `YYYY-MM-DD` میلادی → متن شمسی `YYYY/MM/DD` (برای تاریخ تولد) */
+export function birthDateInput(iso?: string | null): string {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(iso ?? '').trim());
+  if (!m) return '';
+  const { jy, jm, jd } = toJalali(Number(m[1]), Number(m[2]), Number(m[3]));
+  return `${jy}/${String(jm).padStart(2, '0')}/${String(jd).padStart(2, '0')}`;
+}
+
+/** متن شمسی `YYYY/MM/DD` → `YYYY-MM-DD` میلادی (برای users.birthDate) */
+export function parseJalaliBirthDate(raw: string): { value: string | null } | { error: string } {
+  const t = toEnDigits(String(raw ?? '')).trim();
+  if (!t) return { value: null };
+  const m = /^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/.exec(t);
+  if (!m) return { error: 'تاریخ تولد باید به شکل YYYY/MM/DD باشد.' };
+  const jy = Number(m[1]);
+  const jm = Number(m[2]);
+  const jd = Number(m[3]);
+  if (jy < 1300 || jy > 1500) return { error: 'سال تاریخ تولد باید بین ۱۳۰۰ تا ۱۵۰۰ باشد.' };
+  if (jm < 1 || jm > 12) return { error: 'ماه تاریخ تولد نامعتبر است.' };
+  if (jd < 1 || jd > jalaliMonthLength(jy, jm)) return { error: 'روز تاریخ تولد برای این ماه نامعتبر است.' };
+  const { gy, gm, gd } = toGregorian(jy, jm, jd);
+  return { value: `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}` };
+}
+
 // ── دانشجو ──
 
 export function buildStudentDraft(s: StudentItem): ProfileDraft {
@@ -102,6 +127,7 @@ export function buildStudentDraft(s: StudentItem): ProfileDraft {
   d.entryYear = s.entryYear;
   d.entryTerm = s.entryTerm;
   d.entryDate = entryDateInput(s.entryDate);
+  d.birthDate = birthDateInput(s.birthDate);
   return d;
 }
 
@@ -129,6 +155,13 @@ export function studentPatchFromDraft(draft: ProfileDraft, initial: ProfileDraft
     const parsed = parseJalaliEntryDate(String(draft.entryDate ?? ''));
     if ('error' in parsed) return parsed;
     patch.entryDate = parsed.value ?? '';
+  }
+
+  // تاریخ تولد: متن شمسی → ISO میلادی برای users.birthDate
+  if (String(draft.birthDate ?? '').trim() !== String(initial.birthDate ?? '').trim()) {
+    const parsed = parseJalaliBirthDate(String(draft.birthDate ?? ''));
+    if ('error' in parsed) return parsed;
+    patch.birthDate = parsed.value ?? '';
   }
 
   const ey = Number(draft.entryYear ?? 0);

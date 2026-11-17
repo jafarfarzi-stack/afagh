@@ -51,14 +51,14 @@ export default function ElectronicDecreesTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">شماره حکم ابلاغیه</th>
-                  <th className="p-2.5">نام استاد</th>
-                  <th className="p-2.5">مرتبه و دانشکده</th>
-                  <th className="p-2.5">دروس مصوب تخصیص‌یافته</th>
-                  <th className="p-2.5 text-center">مجموع ساعات ترم</th>
-                  <th className="p-2.5 text-center">وضعیت امضای الکترونیک</th>
-                  <th className="p-2.5 text-center">شناسه امنیتی (Hash)</th>
-                  <th className="p-2.5 text-left">عملیات</th>
+                  <th scope="col" className="p-2.5">شماره حکم ابلاغیه</th>
+                  <th scope="col" className="p-2.5">نام استاد</th>
+                  <th scope="col" className="p-2.5">مرتبه و دانشکده</th>
+                  <th scope="col" className="p-2.5">دروس مصوب تخصیص‌یافته</th>
+                  <th scope="col" className="p-2.5 text-center">مجموع ساعات ترم</th>
+                  <th scope="col" className="p-2.5 text-center">وضعیت امضای الکترونیک</th>
+                  <th scope="col" className="p-2.5 text-center">شناسه امنیتی (Hash)</th>
+                  <th scope="col" className="p-2.5 text-left">عملیات</th>
                 </tr>
               </thead>
               <tbody>

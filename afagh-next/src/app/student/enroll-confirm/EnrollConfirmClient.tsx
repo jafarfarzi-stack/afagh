@@ -99,13 +99,13 @@ export default function EnrollConfirmClient(props: {
         <table className="w-full text-right text-xs rt">
           <thead>
             <tr className="border-y-2 border-slate-800 text-slate-600">
-              <th className="p-2">ردیف</th>
-              <th className="p-2">درس</th>
-              <th className="p-2">کد</th>
-              <th className="p-2 text-center">واحد</th>
-              <th className="p-2 text-center">گروه</th>
-              <th className="p-2">استاد</th>
-              <th className="p-2">وضعیت</th>
+              <th scope="col" className="p-2">ردیف</th>
+              <th scope="col" className="p-2">درس</th>
+              <th scope="col" className="p-2">کد</th>
+              <th scope="col" className="p-2 text-center">واحد</th>
+              <th scope="col" className="p-2 text-center">گروه</th>
+              <th scope="col" className="p-2">استاد</th>
+              <th scope="col" className="p-2">وضعیت</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">

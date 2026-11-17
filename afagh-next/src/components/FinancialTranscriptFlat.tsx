@@ -651,10 +651,10 @@ export default function FinancialTranscriptFlat({
                       </colgroup>
                       <thead>
                         <tr className="bg-slate-50">
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نام نیمسال</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وضع نیمسال</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبنای نرخ</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">کد گروه تعرفه</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نام نیمسال</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وضع نیمسال</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبنای نرخ</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">کد گروه تعرفه</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -688,15 +688,15 @@ export default function FinancialTranscriptFlat({
                       </colgroup>
                       <thead>
                         <tr className="bg-slate-100 text-slate-800">
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ردیف</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">کد درس</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 font-bold">عنوان درس</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نمره</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نوع درس مالی</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">واحد نظری</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">واحد عملی</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبلغ متغیر (ریال)</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ردیف</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">کد درس</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 font-bold">عنوان درس</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نمره</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نوع درس مالی</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">واحد نظری</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">واحد عملی</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبلغ متغیر (ریال)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -753,18 +753,18 @@ export default function FinancialTranscriptFlat({
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-100 text-slate-800">
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وضع نیمسال</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">شهریه (بدهی)</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ثابت</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">متغیر</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">تخفیف</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">پوشش</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">خالص</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">پرداخت</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">چک</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وام</th>
-                        <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ماندهٔ ترم</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وضع نیمسال</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">شهریه (بدهی)</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ثابت</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">متغیر</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">تخفیف</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">پوشش</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">خالص</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">پرداخت</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">چک</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">وام</th>
+                        <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ماندهٔ ترم</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -842,12 +842,12 @@ export default function FinancialTranscriptFlat({
                       </colgroup>
                       <thead>
                         <tr className="bg-slate-100 text-slate-800">
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ردیف</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">تاریخ</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نوع</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 font-bold">شرح</th>
-                          <th className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبلغ (ریال)</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">ردیف</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">تاریخ</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نیمسال</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">نوع</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 font-bold">شرح</th>
+                          <th scope="col" className="border border-slate-400 px-0.5 py-0.5 text-center font-bold">مبلغ (ریال)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -938,11 +938,11 @@ export default function FinancialTranscriptFlat({
                       <table className="tr-fin-table w-full border-collapse text-center text-[7.5pt]">
                         <thead>
                           <tr className="bg-slate-100 text-slate-800">
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">شمارهٔ چک</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">بانک</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">مبلغ (ریال)</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">سررسید</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">وضعیت</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">شمارهٔ چک</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">بانک</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">مبلغ (ریال)</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">سررسید</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">وضعیت</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -969,11 +969,11 @@ export default function FinancialTranscriptFlat({
                       <table className="tr-fin-table w-full border-collapse text-center text-[7.5pt]">
                         <thead>
                           <tr className="bg-slate-100 text-slate-800">
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">نوع وام</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">پرداخت‌کننده</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">مبلغ (ریال)</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">اقساط</th>
-                            <th className="border border-slate-400 px-1 py-0.5 font-bold">وضعیت</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">نوع وام</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">پرداخت‌کننده</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">مبلغ (ریال)</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">اقساط</th>
+                            <th scope="col" className="border border-slate-400 px-1 py-0.5 font-bold">وضعیت</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1008,11 +1008,11 @@ export default function FinancialTranscriptFlat({
                     <table className="tr-fin-totals w-full border-collapse text-center text-[8pt]">
                       <thead>
                         <tr className="bg-slate-50 text-slate-700">
-                          <th className="border border-slate-300 px-1 py-1 font-bold">جمع شهریه</th>
-                          <th className="border border-slate-300 px-1 py-1 font-bold">تخفیف‌ها</th>
-                          <th className="border border-slate-300 px-1 py-1 font-bold">پوشش بنیاد / خیرین</th>
-                          <th className="border border-slate-300 px-1 py-1 font-bold">پرداخت / چک وصولی / وام</th>
-                          <th className="border border-slate-300 px-1 py-1 font-bold">ماندهٔ نهایی</th>
+                          <th scope="col" className="border border-slate-300 px-1 py-1 font-bold">جمع شهریه</th>
+                          <th scope="col" className="border border-slate-300 px-1 py-1 font-bold">تخفیف‌ها</th>
+                          <th scope="col" className="border border-slate-300 px-1 py-1 font-bold">پوشش بنیاد / خیرین</th>
+                          <th scope="col" className="border border-slate-300 px-1 py-1 font-bold">پرداخت / چک وصولی / وام</th>
+                          <th scope="col" className="border border-slate-300 px-1 py-1 font-bold">ماندهٔ نهایی</th>
                         </tr>
                       </thead>
                       <tbody>

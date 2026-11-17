@@ -109,12 +109,12 @@ export default async function AdminEvaluationsPage({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-right text-slate-500">
-                  <th className="p-2">عنوان</th>
-                  <th className="p-2">ترم</th>
-                  <th className="p-2">شروع</th>
-                  <th className="p-2">پایان</th>
-                  <th className="p-2">وضعیت</th>
-                  <th className="p-2">عملیات</th>
+                  <th scope="col" className="p-2">عنوان</th>
+                  <th scope="col" className="p-2">ترم</th>
+                  <th scope="col" className="p-2">شروع</th>
+                  <th scope="col" className="p-2">پایان</th>
+                  <th scope="col" className="p-2">وضعیت</th>
+                  <th scope="col" className="p-2">عملیات</th>
                 </tr>
               </thead>
               <tbody>

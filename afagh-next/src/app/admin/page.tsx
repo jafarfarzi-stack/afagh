@@ -64,7 +64,7 @@ function InboxTh({
 }) {
   const active = sortKey === col;
   return (
-    <th className="p-2.5">
+    <th scope="col" className="p-2.5">
       {/* ⚠ `prefetch={false}` حیاتی است — این را حذف نکنید.
           Next.js App Router به‌طور پیش‌فرض هر <Link prefetch={false}> داخلِ viewport را
           prefetch می‌کند و هر prefetch یک **رندرِ کاملِ RSC** از همان صفحه است،
@@ -425,7 +425,7 @@ async function InboxSection({
               <InboxTh label="موضوع / درس" col="proc" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
               <InboxTh label="وضعیت" col="status" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
               <InboxTh label="زمان" col="created" sortKey={sortKey} sortDir={sortDir} href={sortHref} />
-              <th className="p-2.5 text-left">اقدام شورا</th>
+              <th scope="col" className="p-2.5 text-left">اقدام شورا</th>
             </tr>
           </thead>
           <tbody>

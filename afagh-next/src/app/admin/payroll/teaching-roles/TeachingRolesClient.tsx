@@ -217,11 +217,11 @@ export default function TeachingRolesClient() {
           <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="p-2.5">درس</th>
-                <th className="p-2.5">استاد</th>
-                <th className="p-2.5">نقش (تشخیص خودکار)</th>
-                <th className="p-2.5">نقش دستی</th>
-                <th className="p-2.5">فرمول</th>
+                <th scope="col" className="p-2.5">درس</th>
+                <th scope="col" className="p-2.5">استاد</th>
+                <th scope="col" className="p-2.5">نقش (تشخیص خودکار)</th>
+                <th scope="col" className="p-2.5">نقش دستی</th>
+                <th scope="col" className="p-2.5">فرمول</th>
               </tr>
             </thead>
             <tbody>

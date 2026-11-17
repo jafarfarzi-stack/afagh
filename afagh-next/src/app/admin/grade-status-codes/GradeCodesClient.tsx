@@ -384,19 +384,19 @@ export default function GradeCodesClient({
                 <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-slate-900 text-white text-center">
-                      <th className="p-2 border border-slate-800 w-10">ردیف</th>
-                      <th className="p-2 border border-slate-800">کد</th>
-                      <th className="p-2 border border-slate-800">عنوان درس</th>
-                      <th className="p-2 border border-slate-800">واحد</th>
-                      <th className="p-2 border border-slate-800">ن-نظری</th>
-                      <th className="p-2 border border-slate-800">ن-عملی</th>
-                      <th className="p-2 border border-slate-800">ماهیت</th>
-                      <th className="p-2 border border-slate-800">نوع</th>
-                      <th className="p-2 border border-slate-800">گروه</th>
-                      <th className="p-2 border border-slate-800">مقطع</th>
-                      <th className="p-2 border border-slate-800" title="کد وضعیت قبولی پیش‌فرض">کد قبولی</th>
-                      <th className="p-2 border border-slate-800" title="کد وضعیت مردودی پیش‌فرض">کد مردودی</th>
-                      <th className="p-2 border border-slate-800">عملیات</th>
+                      <th scope="col" className="p-2 border border-slate-800 w-10">ردیف</th>
+                      <th scope="col" className="p-2 border border-slate-800">کد</th>
+                      <th scope="col" className="p-2 border border-slate-800">عنوان درس</th>
+                      <th scope="col" className="p-2 border border-slate-800">واحد</th>
+                      <th scope="col" className="p-2 border border-slate-800">ن-نظری</th>
+                      <th scope="col" className="p-2 border border-slate-800">ن-عملی</th>
+                      <th scope="col" className="p-2 border border-slate-800">ماهیت</th>
+                      <th scope="col" className="p-2 border border-slate-800">نوع</th>
+                      <th scope="col" className="p-2 border border-slate-800">گروه</th>
+                      <th scope="col" className="p-2 border border-slate-800">مقطع</th>
+                      <th scope="col" className="p-2 border border-slate-800" title="کد وضعیت قبولی پیش‌فرض">کد قبولی</th>
+                      <th scope="col" className="p-2 border border-slate-800" title="کد وضعیت مردودی پیش‌فرض">کد مردودی</th>
+                      <th scope="col" className="p-2 border border-slate-800">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -470,13 +470,13 @@ export default function GradeCodesClient({
                     <table className="w-full border-collapse text-xs rt">
                       <thead>
                         <tr className="bg-slate-900 text-white text-center">
-                          <th className="p-2.5 border border-slate-800 w-10">ردیف</th>
-                          <th className="p-2.5 border border-slate-800">کد درس</th>
-                          <th className="p-2.5 border border-slate-800">عنوان درس</th>
-                          <th className="p-2.5 border border-slate-800">واحد</th>
-                          <th className="p-2.5 border border-slate-800">ترم</th>
-                          <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی">کد قبولی</th>
-                          <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی">کد مردودی</th>
+                          <th scope="col" className="p-2.5 border border-slate-800 w-10">ردیف</th>
+                          <th scope="col" className="p-2.5 border border-slate-800">کد درس</th>
+                          <th scope="col" className="p-2.5 border border-slate-800">عنوان درس</th>
+                          <th scope="col" className="p-2.5 border border-slate-800">واحد</th>
+                          <th scope="col" className="p-2.5 border border-slate-800">ترم</th>
+                          <th scope="col" className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی">کد قبولی</th>
+                          <th scope="col" className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی">کد مردودی</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -548,12 +548,12 @@ export default function GradeCodesClient({
                   <table className="w-full border-collapse text-xs rt">
                     <thead>
                       <tr className="bg-slate-900 text-white text-center">
-                        <th className="p-2 border border-slate-800 w-10">ردیف</th>
-                        <th className="p-2 border border-slate-800">برچسب (مثلاً عالی)</th>
-                        <th className="p-2 border border-slate-800">حداقل نمره</th>
-                        <th className="p-2 border border-slate-800">حداکثر نمره</th>
-                        <th className="p-2 border border-slate-800">قبول؟</th>
-                        <th className="p-2 border border-slate-800">عملیات</th>
+                        <th scope="col" className="p-2 border border-slate-800 w-10">ردیف</th>
+                        <th scope="col" className="p-2 border border-slate-800">برچسب (مثلاً عالی)</th>
+                        <th scope="col" className="p-2 border border-slate-800">حداقل نمره</th>
+                        <th scope="col" className="p-2 border border-slate-800">حداکثر نمره</th>
+                        <th scope="col" className="p-2 border border-slate-800">قبول؟</th>
+                        <th scope="col" className="p-2 border border-slate-800">عملیات</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -646,15 +646,15 @@ export default function GradeCodesClient({
                     <table className="w-full border-collapse text-xs rt">
                       <thead>
                         <tr className="bg-slate-100 text-center">
-                          <th className="p-1.5 border border-slate-200">نیمسال</th>
-                          <th className="p-1.5 border border-slate-200">کد</th>
-                          <th className="p-1.5 border border-slate-200 text-right">عنوان درس</th>
-                          <th className="p-1.5 border border-slate-200">واحد</th>
-                          <th className="p-1.5 border border-slate-200">نوع</th>
-                          <th className="p-1.5 border border-slate-200">الزامی</th>
-                          <th className="p-1.5 border border-slate-200">کف نمره</th>
-                          <th className="p-1.5 border border-slate-200">وضعیت قبولی</th>
-                          <th className="p-1.5 border border-slate-200">وضعیت مردودی</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">نیمسال</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">کد</th>
+                          <th scope="col" className="p-1.5 border border-slate-200 text-right">عنوان درس</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">واحد</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">نوع</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">الزامی</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">کف نمره</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">وضعیت قبولی</th>
+                          <th scope="col" className="p-1.5 border border-slate-200">وضعیت مردودی</th>
                         </tr>
                       </thead>
                       <tbody>

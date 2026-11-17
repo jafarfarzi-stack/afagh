@@ -403,34 +403,34 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
         <table className="w-full border-collapse text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-white text-center">
-              <th className="p-2.5 border border-slate-800 w-12 font-bold">ردیف</th>
-              <th className="p-2.5 border border-slate-800 font-bold">شماره دانشجویی</th>
-              <th className="p-2.5 border border-slate-800 font-bold text-right">نام دانشجو</th>
+              <th scope="col" className="p-2.5 border border-slate-800 w-12 font-bold">ردیف</th>
+              <th scope="col" className="p-2.5 border border-slate-800 font-bold">شماره دانشجویی</th>
+              <th scope="col" className="p-2.5 border border-slate-800 font-bold text-right">نام دانشجو</th>
               {offering.isCoTaught ? (
                 <>
-                  <th className="p-2.5 border border-slate-800 font-bold bg-indigo-950">
+                  <th scope="col" className="p-2.5 border border-slate-800 font-bold bg-indigo-950">
                     نمره تئوری (از ۲۰)
                     <div className="text-3xs text-indigo-300 font-normal">سهم {faNum((offering.coTaughtDetails?.theoryWeightRatio || 0.6) * 100)}٪</div>
                   </th>
-                  <th className="p-2.5 border border-slate-800 font-bold bg-purple-950">
+                  <th scope="col" className="p-2.5 border border-slate-800 font-bold bg-purple-950">
                     نمره عملی (از ۲۰)
                     <div className="text-3xs text-purple-300 font-normal">سهم {faNum((offering.coTaughtDetails?.labWeightRatio || 0.4) * 100)}٪</div>
                   </th>
                 </>
               ) : (
                 <>
-                  <th className="p-2 border border-slate-800 font-bold">میان‌ترم ({faNum(offering.rubric.midterm)})</th>
-                  <th className="p-2 border border-slate-800 font-bold">تکالیف ({faNum(offering.rubric.homework)})</th>
-                  <th className="p-2 border border-slate-800 font-bold">حضور ({faNum(offering.rubric.participation)})</th>
+                  <th scope="col" className="p-2 border border-slate-800 font-bold">میان‌ترم ({faNum(offering.rubric.midterm)})</th>
+                  <th scope="col" className="p-2 border border-slate-800 font-bold">تکالیف ({faNum(offering.rubric.homework)})</th>
+                  <th scope="col" className="p-2 border border-slate-800 font-bold">حضور ({faNum(offering.rubric.participation)})</th>
                   {offering.rubric.practical > 0 && (
-                    <th className="p-2 border border-slate-800 font-bold">عملی ({faNum(offering.rubric.practical)})</th>
+                    <th scope="col" className="p-2 border border-slate-800 font-bold">عملی ({faNum(offering.rubric.practical)})</th>
                   )}
-                  <th className="p-2 border border-slate-800 font-bold">پایان‌ترم ({faNum(offering.rubric.finalExam)})</th>
+                  <th scope="col" className="p-2 border border-slate-800 font-bold">پایان‌ترم ({faNum(offering.rubric.finalExam)})</th>
                 </>
               )}
-              <th className="p-2.5 border border-slate-800 font-black bg-slate-950 text-amber-300">نمره کل (از ۲۰)</th>
-              <th className="p-2.5 border border-slate-800 font-bold">نتیجه</th>
-              <th className="p-2.5 border border-slate-800 font-bold">وضعیت</th>
+              <th scope="col" className="p-2.5 border border-slate-800 font-black bg-slate-950 text-amber-300">نمره کل (از ۲۰)</th>
+              <th scope="col" className="p-2.5 border border-slate-800 font-bold">نتیجه</th>
+              <th scope="col" className="p-2.5 border border-slate-800 font-bold">وضعیت</th>
             </tr>
           </thead>
           <tbody>

@@ -453,24 +453,24 @@ setForm(Object.fromEntries(editFields.map(f => {
           <table className="w-full text-right text-xs rt">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="w-40 p-2.5">
+                <th scope="col" className="w-40 p-2.5">
                   <button onClick={() => toggleSort('code')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس کد">
                     کد{sortMark('code')}
                   </button>
                 </th>
-                <th className="p-2.5">
+                <th scope="col" className="p-2.5">
                   <button onClick={() => toggleSort('title')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس عنوان">
                     عنوان{sortMark('title')}
                   </button>
                 </th>
-                <th className="p-2.5">
+                <th scope="col" className="p-2.5">
                   <button onClick={() => toggleSort('context')} className="font-bold hover:text-indigo-600" title="مرتب‌سازی بر اساس زمینه">
                     زمینه{sortMark('context')}
                   </button>
                 </th>
-                {isTerm && <th className="w-28 p-2.5">شروع ترم</th>}
-                {isTerm && <th className="w-28 p-2.5">پایان ترم</th>}
-                <th className="w-32 p-2.5"></th>
+                {isTerm && <th scope="col" className="w-28 p-2.5">شروع ترم</th>}
+                {isTerm && <th scope="col" className="w-28 p-2.5">پایان ترم</th>}
+                <th scope="col" className="w-32 p-2.5"></th>
               </tr>
             </thead>
             <tbody>

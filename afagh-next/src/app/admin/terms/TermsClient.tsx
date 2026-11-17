@@ -349,14 +349,14 @@ export default function TermsClient({
                 <table className="hidden md:table w-full text-2xs rt">
                   <thead>
                     <tr className="bg-slate-50 border-b text-slate-600">
-                      <th className="px-2 py-1 text-right">کد</th>
-                      <th className="px-2 py-1 text-right">عنوان</th>
-                      <th className="px-2 py-1 text-right">نوع</th>
-                      <th className="px-2 py-1 text-right">شروع</th>
-                      <th className="px-2 py-1 text-right">پایان</th>
-                      <th className="px-2 py-1 text-center">پرچم فعال</th>
-                      <th className="px-2 py-1 text-center">امروز داخل این نیمسال است؟</th>
-                      <th className="px-2 py-1 text-center">عملیات</th>
+                      <th scope="col" className="px-2 py-1 text-right">کد</th>
+                      <th scope="col" className="px-2 py-1 text-right">عنوان</th>
+                      <th scope="col" className="px-2 py-1 text-right">نوع</th>
+                      <th scope="col" className="px-2 py-1 text-right">شروع</th>
+                      <th scope="col" className="px-2 py-1 text-right">پایان</th>
+                      <th scope="col" className="px-2 py-1 text-center">پرچم فعال</th>
+                      <th scope="col" className="px-2 py-1 text-center">امروز داخل این نیمسال است؟</th>
+                      <th scope="col" className="px-2 py-1 text-center">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>

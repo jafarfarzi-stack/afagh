@@ -204,7 +204,7 @@ export default function GroupContentPanel({
         <table className="w-full border-collapse text-xs rt">
           <thead>
             <tr className="bg-slate-100 text-center text-slate-500">
-              <th className="w-10 border border-slate-200 p-2">
+              <th scope="col" className="w-10 border border-slate-200 p-2">
                 <input
                   type="checkbox"
                   checked={allC}
@@ -212,9 +212,9 @@ export default function GroupContentPanel({
                   className="h-4 w-4 accent-emerald-600"
                 />
               </th>
-              <th className="border border-slate-200 p-2">کد</th>
-              <th className="border border-slate-200 p-2">عنوان درس</th>
-              <th className="w-12 border border-slate-200 p-2"></th>
+              <th scope="col" className="border border-slate-200 p-2">کد</th>
+              <th scope="col" className="border border-slate-200 p-2">عنوان درس</th>
+              <th scope="col" className="w-12 border border-slate-200 p-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -269,7 +269,7 @@ export default function GroupContentPanel({
         <table className="w-full border-collapse text-xs rt">
           <thead>
             <tr className="bg-slate-100 text-center text-slate-500">
-              <th className="w-10 border border-slate-200 p-2">
+              <th scope="col" className="w-10 border border-slate-200 p-2">
                 <input
                   type="checkbox"
                   checked={allM}
@@ -277,9 +277,9 @@ export default function GroupContentPanel({
                   className="h-4 w-4 accent-emerald-600"
                 />
               </th>
-              <th className="border border-slate-200 p-2">کد</th>
-              <th className="border border-slate-200 p-2">نام رشته</th>
-              <th className="w-12 border border-slate-200 p-2"></th>
+              <th scope="col" className="border border-slate-200 p-2">کد</th>
+              <th scope="col" className="border border-slate-200 p-2">نام رشته</th>
+              <th scope="col" className="w-12 border border-slate-200 p-2"></th>
             </tr>
           </thead>
           <tbody>

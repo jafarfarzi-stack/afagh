@@ -148,12 +148,12 @@ export default function CoverageClient() {
         <table className="w-full text-sm min-w-[900px] rt rt--scroll">
           <thead className="bg-gray-50">
             <tr>
-              <th className="p-2 text-right">درس</th>
-              <th className="p-2 text-right">استاد</th>
-              <th className="p-2 text-right">نوع / نقش</th>
-              <th className="p-2 text-center">دانشجو</th>
-              <th className="p-2 text-center">کلاس</th>
-              <th className="p-2 text-right">فرمول / علت نبود</th>
+              <th scope="col" className="p-2 text-right">درس</th>
+              <th scope="col" className="p-2 text-right">استاد</th>
+              <th scope="col" className="p-2 text-right">نوع / نقش</th>
+              <th scope="col" className="p-2 text-center">دانشجو</th>
+              <th scope="col" className="p-2 text-center">کلاس</th>
+              <th scope="col" className="p-2 text-right">فرمول / علت نبود</th>
             </tr>
           </thead>
           <tbody>

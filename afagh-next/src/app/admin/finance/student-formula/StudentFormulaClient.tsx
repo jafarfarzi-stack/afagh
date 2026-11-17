@@ -180,13 +180,13 @@ export default function StudentFormulaClient() {
         <table className="w-full text-xs rt">
           <thead>
             <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-2 px-2 text-right">دانشجو</th>
-              <th className="py-2 px-2 text-right">دامنه</th>
-              <th className="py-2 px-2 text-right">مبلغ ثابت (ریال)</th>
-              <th className="py-2 px-2 text-right">نرخ هر واحد (ریال)</th>
-              <th className="py-2 px-2 text-right">دلیل</th>
-              <th className="py-2 px-2 text-right">وضعیت</th>
-              <th className="py-2 px-2 text-right">عملیات</th>
+              <th scope="col" className="py-2 px-2 text-right">دانشجو</th>
+              <th scope="col" className="py-2 px-2 text-right">دامنه</th>
+              <th scope="col" className="py-2 px-2 text-right">مبلغ ثابت (ریال)</th>
+              <th scope="col" className="py-2 px-2 text-right">نرخ هر واحد (ریال)</th>
+              <th scope="col" className="py-2 px-2 text-right">دلیل</th>
+              <th scope="col" className="py-2 px-2 text-right">وضعیت</th>
+              <th scope="col" className="py-2 px-2 text-right">عملیات</th>
             </tr>
           </thead>
           <tbody>

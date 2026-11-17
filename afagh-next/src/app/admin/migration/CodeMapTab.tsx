@@ -176,11 +176,11 @@ export default function CodeMapTab({ domains, sourceCode }: { domains: DomainDef
         <table className="w-full text-right text-xs rt">
           <thead>
             <tr className="text-slate-500">
-              <th className="p-2">کد قدیمی</th><th className="p-2">عنوان قدیمی</th>
-              <th className="p-2">معادل در سامانهٔ جدید</th>
-              <th className="p-2">🔁 کد جدید (جایگزین می‌شود)</th>
-              <th className="p-2">اطمینان</th>
-              <th className="p-2">وضعیت</th><th className="p-2"></th>
+              <th scope="col" className="p-2">کد قدیمی</th><th scope="col" className="p-2">عنوان قدیمی</th>
+              <th scope="col" className="p-2">معادل در سامانهٔ جدید</th>
+              <th scope="col" className="p-2">🔁 کد جدید (جایگزین می‌شود)</th>
+              <th scope="col" className="p-2">اطمینان</th>
+              <th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2"></th>
             </tr>
           </thead>
           <tbody>

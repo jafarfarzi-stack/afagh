@@ -92,16 +92,16 @@ export default function AdminVirtualClassesClient({ terms, initialRows, initialE
         <table className="w-full text-xs rt border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white text-center">
-              <th className="p-2.5 border border-slate-800">درس</th>
-              <th className="p-2.5 border border-slate-800">استاد</th>
-              <th className="p-2.5 border border-slate-800">نیم‌سال</th>
-              <th className="p-2.5 border border-slate-800">گروه</th>
-              <th className="p-2.5 border border-slate-800">دانشجو</th>
-              <th className="p-2.5 border border-slate-800">وضعیت</th>
-              <th className="p-2.5 border border-slate-800">حاضرین</th>
-              <th className="p-2.5 border border-slate-800">ضبط</th>
-              <th className="p-2.5 border border-slate-800">آخرین همگام‌سازی</th>
-              <th className="p-2.5 border border-slate-800">آخرین برگزاری</th>
+              <th scope="col" className="p-2.5 border border-slate-800">درس</th>
+              <th scope="col" className="p-2.5 border border-slate-800">استاد</th>
+              <th scope="col" className="p-2.5 border border-slate-800">نیم‌سال</th>
+              <th scope="col" className="p-2.5 border border-slate-800">گروه</th>
+              <th scope="col" className="p-2.5 border border-slate-800">دانشجو</th>
+              <th scope="col" className="p-2.5 border border-slate-800">وضعیت</th>
+              <th scope="col" className="p-2.5 border border-slate-800">حاضرین</th>
+              <th scope="col" className="p-2.5 border border-slate-800">ضبط</th>
+              <th scope="col" className="p-2.5 border border-slate-800">آخرین همگام‌سازی</th>
+              <th scope="col" className="p-2.5 border border-slate-800">آخرین برگزاری</th>
             </tr>
           </thead>
           <tbody>

@@ -106,9 +106,9 @@ export default function ProfAvailabilityModal() {
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2 border border-slate-800 font-extrabold w-24">روز</th>
+                  <th scope="col" className="p-2 border border-slate-800 font-extrabold w-24">روز</th>
                   {teachingSlots.map(s => (
-                    <th key={s.id} className="p-2 border border-slate-800 font-extrabold whitespace-nowrap">
+                    <th scope="col" key={s.id} className="p-2 border border-slate-800 font-extrabold whitespace-nowrap">
                       {s.startTime}–{s.endTime}
                     </th>
                   ))}

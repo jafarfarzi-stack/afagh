@@ -150,11 +150,11 @@ export default function GradeObjectionsClient(props: {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
-                <th className="p-2 text-right">دانشجو</th>
-                <th className="p-2 text-right">درس / ترم</th>
-                <th className="p-2 text-right">متن اعتراض</th>
-                <th className="p-2">وضعیت</th>
-                <th className="p-2 text-right">یادداشت کارشناس</th>
+                <th scope="col" className="p-2 text-right">دانشجو</th>
+                <th scope="col" className="p-2 text-right">درس / ترم</th>
+                <th scope="col" className="p-2 text-right">متن اعتراض</th>
+                <th scope="col" className="p-2">وضعیت</th>
+                <th scope="col" className="p-2 text-right">یادداشت کارشناس</th>
               </tr>
             </thead>
             <tbody>

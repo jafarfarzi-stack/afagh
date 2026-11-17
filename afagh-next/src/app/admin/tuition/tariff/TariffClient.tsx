@@ -204,9 +204,9 @@ export default function TariffClient({
             <table className="w-full border-collapse text-2xs rt">
               <thead>
                 <tr className="bg-slate-50 text-slate-600">
-                  <th className="border-t border-slate-200 px-2 py-1 text-right font-bold">نوع درس مالی</th>
-                  <th className="border-t border-slate-200 px-2 py-1 text-center font-bold">هر واحد نظری (ریال)</th>
-                  <th className="border-t border-slate-200 px-2 py-1 text-center font-bold">هر واحد عملی (ریال)</th>
+                  <th scope="col" className="border-t border-slate-200 px-2 py-1 text-right font-bold">نوع درس مالی</th>
+                  <th scope="col" className="border-t border-slate-200 px-2 py-1 text-center font-bold">هر واحد نظری (ریال)</th>
+                  <th scope="col" className="border-t border-slate-200 px-2 py-1 text-center font-bold">هر واحد عملی (ریال)</th>
                 </tr>
               </thead>
               <tbody>

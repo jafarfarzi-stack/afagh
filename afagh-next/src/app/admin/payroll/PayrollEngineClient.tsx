@@ -413,11 +413,11 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
                 <table className="w-full text-right text-xs border-collapse rt">
                   <thead>
                     <tr className="bg-slate-100 border-b">
-                      <th className="p-2">کد درس</th>
-                      <th className="p-2">عنوان درس</th>
-                      <th className="p-2 text-center">گروه</th>
-                      <th className="p-2 text-center">تعداد واحد</th>
-                      <th className="p-2 text-center">ساعت تدریس هفتگی</th>
+                      <th scope="col" className="p-2">کد درس</th>
+                      <th scope="col" className="p-2">عنوان درس</th>
+                      <th scope="col" className="p-2 text-center">گروه</th>
+                      <th scope="col" className="p-2 text-center">تعداد واحد</th>
+                      <th scope="col" className="p-2 text-center">ساعت تدریس هفتگی</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -543,15 +543,15 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
                   <table className="w-full text-right text-xs border-collapse rt">
                     <thead>
                       <tr className="bg-slate-100 text-slate-800 border-b">
-                        <th className="p-2">کد درس</th>
-                        <th className="p-2">عنوان درس</th>
-                        <th className="p-2">مقطع</th>
-                        <th className="p-2">نوع درس</th>
-                        <th className="p-2 text-center">واحد مصوب</th>
-                        <th className="p-2 text-center">دانشجویان</th>
-                        <th className="p-2 text-center">ضریب اعمالی</th>
-                        <th className="p-2 text-center">سهم تدریس</th>
-                        <th className="p-2 text-center">واحد معادل نهایی</th>
+                        <th scope="col" className="p-2">کد درس</th>
+                        <th scope="col" className="p-2">عنوان درس</th>
+                        <th scope="col" className="p-2">مقطع</th>
+                        <th scope="col" className="p-2">نوع درس</th>
+                        <th scope="col" className="p-2 text-center">واحد مصوب</th>
+                        <th scope="col" className="p-2 text-center">دانشجویان</th>
+                        <th scope="col" className="p-2 text-center">ضریب اعمالی</th>
+                        <th scope="col" className="p-2 text-center">سهم تدریس</th>
+                        <th scope="col" className="p-2 text-center">واحد معادل نهایی</th>
                       </tr>
                     </thead>
                     <tbody>

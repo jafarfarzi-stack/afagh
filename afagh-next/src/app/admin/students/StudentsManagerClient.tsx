@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, getCohortStats, getTranscript, getTranscriptRegulation, loadStaffListAction, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsAction, bulkResetToNationalCodeAction, createStaffExpertAction, deleteStudentCompletelyAction, getCohortStats, getTranscript, getTranscriptRegulation, loadStaffListAction, resetUserPasswordAction, saveUserRolesAction, setStudentRegulationAction, setUserActiveAction, updateStaffProfileAction, updateStudentProfileAction, type TranscriptRow, type StudentProfilePatch } from './actions';
+import { askConfirm } from '@/lib/ui-feedback';
 import { requestStepUpAction } from '@/lib/step-up-actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
@@ -52,8 +53,10 @@ export default function StudentsManagerClient(props: {
   staffList?: StaffItem[];
   pagination?: Pagination;
   degrees?: { id: number; title: string }[];
-  majorOptions?: { id: number; name: string }[];
+  majorOptions?: { id: number; name: string; code?: string | null; facultyId?: number | null; degreeLevelId?: number | null }[];
   facultyOptions?: { id: number; name: string }[];
+  acceptOptions?: { code: string; title: string }[];
+  termStatusOptions?: { code: number; title: string }[];
   deptOptions?: { id: number; name: string; facultyId: number | null }[];
   /** گزینه‌های محل تولد/صدور از geo (سراسری) — کد وزارت در سرور resolve می‌شود */
   geoPlaces?: { title: string; ministryCode: string | null }[];
@@ -838,6 +841,20 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
               regulations={props.regulations ?? []}
               degrees={props.degrees ?? []}
               majors={props.majorOptions ?? []}
+              faculties={props.facultyOptions ?? []}
+              acceptOptions={props.acceptOptions ?? []}
+              onDelete={async () => {
+                const ok = await askConfirm({
+                  title: 'حذف کامل پروندهٔ دانشجو',
+                  body: `پروندهٔ ${currentStudent.studentCode} فقط وقتی حذف می‌شود که هیچ ثبت‌نام درسی، سابقهٔ مالی یا وضعیت ترمی نداشته باشد.`,
+                  danger: true,
+                  confirmText: 'حذف کامل',
+                });
+                if (!ok) return;
+                const r = await deleteStudentCompletelyAction(currentStudent.id);
+                showToast(r.ok ? 'پروندهٔ دانشجو حذف شد.' : (r.error || 'حذف انجام نشد.'));
+                if (r.ok) router.refresh();
+              }}
               uniCode={uniCodeOf(currentStudent.universityId)}
               onRegulationChange={handleRegulationChange}
               onToggleActive={() => void handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
@@ -986,13 +1003,13 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                   <table className="w-full text-right text-2xs rt">
                     <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                       <tr>
-                        <th className="p-1.5">ترم</th>
-                        <th className="p-1.5">کد درس</th>
-                        <th className="p-1.5">عنوان درس</th>
-                        <th className="p-1.5 text-center">واحد</th>
-                        <th className="p-1.5 text-center">نمره</th>
-                        <th className="p-1.5 text-center">وضعیت</th>
-                        {props.canEditGrades && <th className="p-1.5 text-center">عملیات</th>}
+                        <th scope="col" className="p-1.5">ترم</th>
+                        <th scope="col" className="p-1.5">کد درس</th>
+                        <th scope="col" className="p-1.5">عنوان درس</th>
+                        <th scope="col" className="p-1.5 text-center">واحد</th>
+                        <th scope="col" className="p-1.5 text-center">نمره</th>
+                        <th scope="col" className="p-1.5 text-center">وضعیت</th>
+                        {props.canEditGrades && <th scope="col" className="p-1.5 text-center">عملیات</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1117,7 +1134,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                   </colgroup>
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
-                      <th className="p-2 text-right whitespace-nowrap">عملیات</th>
+                      <th scope="col" className="p-2 text-right whitespace-nowrap">عملیات</th>
                       <ServerTh label="شماره دانشجویی" sortKey="studentCode" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('studentCode')} filter={stuFilters.f_code} onFilter={v => setStuFilters(f => ({ ...f, f_code: v }))} onApply={applyStuFilters} />
                       <ServerTh label="نام و نام خانوادگی" sortKey="name" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('name')} filter={stuFilters.f_name} onFilter={v => setStuFilters(f => ({ ...f, f_name: v }))} onApply={applyStuFilters} />
                       <ServerTh label="کد ملی" sortKey="nc" activeKey={stuSortKey || null} dir={(stuSortDir as 'asc' | 'desc') ?? 'asc'} onSort={() => toggleStuSort('nc')} filter={stuFilters.f_nc} onFilter={v => setStuFilters(f => ({ ...f, f_nc: v }))} onApply={applyStuFilters} />
@@ -1342,7 +1359,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                   </colgroup>
                   <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
                     <tr>
-                      <th className="p-2 text-right whitespace-nowrap">عملیات</th>
+                      <th scope="col" className="p-2 text-right whitespace-nowrap">عملیات</th>
                       {STAFF_COLS.map(c => (
                         <ClientTh
                           key={c.key}
@@ -1689,14 +1706,14 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                   <table className="w-full text-right text-2xs rt">
                     <thead className="bg-slate-100 border-b border-slate-300 font-bold">
                       <tr>
-                        <th className="p-2">#</th>
-                        <th className="p-2">تاریخ و زمان</th>
-                        <th className="p-2">اقدام‌کننده</th>
-                        <th className="p-2">عملیات</th>
-                        <th className="p-2">درس</th>
-                        <th className="p-2 text-center">نمره قبلی → جدید</th>
-                        <th className="p-2 text-center">کد وضعیت سما</th>
-                        <th className="p-2">دلیل ثبت‌شده</th>
+                        <th scope="col" className="p-2">#</th>
+                        <th scope="col" className="p-2">تاریخ و زمان</th>
+                        <th scope="col" className="p-2">اقدام‌کننده</th>
+                        <th scope="col" className="p-2">عملیات</th>
+                        <th scope="col" className="p-2">درس</th>
+                        <th scope="col" className="p-2 text-center">نمره قبلی → جدید</th>
+                        <th scope="col" className="p-2 text-center">کد وضعیت سما</th>
+                        <th scope="col" className="p-2">دلیل ثبت‌شده</th>
                       </tr>
                     </thead>
                     <tbody>

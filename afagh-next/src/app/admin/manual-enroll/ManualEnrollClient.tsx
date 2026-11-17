@@ -572,8 +572,8 @@ const filteredCatalog = useMemo(() => {
           <div className="max-h-[30rem] overflow-y-auto">
             <table className="w-full text-xs rt">
               <thead className="sticky top-0 bg-slate-100 text-slate-600"><tr>
-                <th className="p-2 text-right">دانشجو</th><th className="p-2 text-right">درس</th><th className="p-2 text-right">ترم</th>
-                <th className="p-2 text-right">توسط</th><th className="p-2 text-right">زمان</th><th className="p-2 text-center">نادیده</th><th className="p-2 text-right">دلیل</th>
+                <th scope="col" className="p-2 text-right">دانشجو</th><th scope="col" className="p-2 text-right">درس</th><th scope="col" className="p-2 text-right">ترم</th>
+                <th scope="col" className="p-2 text-right">توسط</th><th scope="col" className="p-2 text-right">زمان</th><th scope="col" className="p-2 text-center">نادیده</th><th scope="col" className="p-2 text-right">دلیل</th>
               </tr></thead>
               <tbody>
                 {historyL.map(h => (

@@ -63,15 +63,15 @@ export default function ExamAggregationTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-3">کد درس</th>
-                  <th className="p-3">عنوان درس امتحانی</th>
-                  <th className="p-3">استاد مدرس</th>
-                  <th className="p-3 text-center">وضعیت سالن‌ها</th>
-                  <th className="p-3 text-center">تعداد کل اوراق</th>
-                  <th className="p-3 text-center">پیامک تجمیعی به استاد</th>
-                  <th className="p-3 text-center">تحویل به استاد (QR)</th>
-                  <th className="p-3 text-center">بازگشت به بایگانی</th>
-                  <th className="p-3 text-left">عملیات بایگانی</th>
+                  <th scope="col" className="p-3">کد درس</th>
+                  <th scope="col" className="p-3">عنوان درس امتحانی</th>
+                  <th scope="col" className="p-3">استاد مدرس</th>
+                  <th scope="col" className="p-3 text-center">وضعیت سالن‌ها</th>
+                  <th scope="col" className="p-3 text-center">تعداد کل اوراق</th>
+                  <th scope="col" className="p-3 text-center">پیامک تجمیعی به استاد</th>
+                  <th scope="col" className="p-3 text-center">تحویل به استاد (QR)</th>
+                  <th scope="col" className="p-3 text-center">بازگشت به بایگانی</th>
+                  <th scope="col" className="p-3 text-left">عملیات بایگانی</th>
                 </tr>
               </thead>
               <tbody>

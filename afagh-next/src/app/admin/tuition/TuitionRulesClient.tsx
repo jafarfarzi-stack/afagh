@@ -243,7 +243,7 @@ export default function TuitionRulesClient({ rules, degrees, equivFixedMode }: {
           <thead className="bg-slate-100 text-slate-600 text-xs">
             <tr>
               {['مقطع', 'نوع ترم', 'نوع درس', 'ثابت', 'هر واحد', 'از ورودی', 'وضعیت', 'یادداشت', ''].map(h => (
-                <th key={h} className="p-3 text-right font-bold">{h}</th>
+                <th scope="col" key={h} className="p-3 text-right font-bold">{h}</th>
               ))}
             </tr>
           </thead>

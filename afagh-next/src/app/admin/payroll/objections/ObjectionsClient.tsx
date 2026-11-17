@@ -113,11 +113,11 @@ export default function ObjectionsClient(props: {
           <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
-                <th className="p-2 text-right">استاد</th>
-                <th className="p-2 text-right">ترم / فیش</th>
-                <th className="p-2 text-right">متن</th>
-                <th className="p-2">وضعیت</th>
-                <th className="p-2 text-right">نتیجه بررسی</th>
+                <th scope="col" className="p-2 text-right">استاد</th>
+                <th scope="col" className="p-2 text-right">ترم / فیش</th>
+                <th scope="col" className="p-2 text-right">متن</th>
+                <th scope="col" className="p-2">وضعیت</th>
+                <th scope="col" className="p-2 text-right">نتیجه بررسی</th>
               </tr>
             </thead>
             <tbody>

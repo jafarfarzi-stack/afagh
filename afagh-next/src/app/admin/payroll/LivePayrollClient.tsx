@@ -314,19 +314,19 @@ export default function LivePayrollClient({
           <table className="w-full text-right text-xs rt">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="p-2">استاد</th>
-                <th className="p-2">مرتبه / پایه</th>
-                <th className="p-2">نرخ واحد</th>
-                <th className="p-2">واحد معادل</th>
-                <th className="p-2">واحد قابل پرداخت</th>
-                <th className="p-2">ناخالص</th>
-                <th className="p-2">کسر غیبت</th>
-                <th className="p-2">مالیات</th>
-                <th className="p-2">خالص</th>
-                <th className="p-2">پرداخت‌شده</th>
-                <th className="p-2">وضعیت</th>
-                <th className="p-2">گلوگاه‌ها</th>
-                <th className="p-2">عملیات</th>
+                <th scope="col" className="p-2">استاد</th>
+                <th scope="col" className="p-2">مرتبه / پایه</th>
+                <th scope="col" className="p-2">نرخ واحد</th>
+                <th scope="col" className="p-2">واحد معادل</th>
+                <th scope="col" className="p-2">واحد قابل پرداخت</th>
+                <th scope="col" className="p-2">ناخالص</th>
+                <th scope="col" className="p-2">کسر غیبت</th>
+                <th scope="col" className="p-2">مالیات</th>
+                <th scope="col" className="p-2">خالص</th>
+                <th scope="col" className="p-2">پرداخت‌شده</th>
+                <th scope="col" className="p-2">وضعیت</th>
+                <th scope="col" className="p-2">گلوگاه‌ها</th>
+                <th scope="col" className="p-2">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -427,9 +427,9 @@ export default function LivePayrollClient({
             <table className="w-full text-right rt">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="p-2">درس</th><th className="p-2">واحد</th><th className="p-2">نقش</th>
-                  <th className="p-2">ضرایب</th><th className="p-2">معادل</th><th className="p-2">جلسات</th>
-                  <th className="p-2">مؤثر</th><th className="p-2">کسر غیبت</th><th className="p-2">مبلغ</th>
+                  <th scope="col" className="p-2">درس</th><th scope="col" className="p-2">واحد</th><th scope="col" className="p-2">نقش</th>
+                  <th scope="col" className="p-2">ضرایب</th><th scope="col" className="p-2">معادل</th><th scope="col" className="p-2">جلسات</th>
+                  <th scope="col" className="p-2">مؤثر</th><th scope="col" className="p-2">کسر غیبت</th><th scope="col" className="p-2">مبلغ</th>
                 </tr>
               </thead>
               <tbody>
@@ -692,10 +692,10 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
           <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="p-2.5">کد قانون</th>
-                <th className="p-2.5">عنوان</th>
-                <th className="p-2.5 text-center">ضریب جاری</th>
-                <th className="p-2.5 text-center">عملیات</th>
+                <th scope="col" className="p-2.5">کد قانون</th>
+                <th scope="col" className="p-2.5">عنوان</th>
+                <th scope="col" className="p-2.5 text-center">ضریب جاری</th>
+                <th scope="col" className="p-2.5 text-center">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -822,12 +822,12 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
           <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="p-2.5">شناسه</th>
-                <th className="p-2.5">شرایط تطبیق</th>
-                <th className="p-2.5">فرمول محاسبه</th>
-                <th className="p-2.5">عنوان</th>
-                <th className="p-2.5 text-center">فعال</th>
-                <th className="p-2.5 text-center">عملیات</th>
+                <th scope="col" className="p-2.5">شناسه</th>
+                <th scope="col" className="p-2.5">شرایط تطبیق</th>
+                <th scope="col" className="p-2.5">فرمول محاسبه</th>
+                <th scope="col" className="p-2.5">عنوان</th>
+                <th scope="col" className="p-2.5 text-center">فعال</th>
+                <th scope="col" className="p-2.5 text-center">عملیات</th>
               </tr>
             </thead>
             <tbody>

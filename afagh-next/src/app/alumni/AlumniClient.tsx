@@ -148,7 +148,7 @@ export default function AlumniClient({ me, services, initialRequests, degrees, i
         <h2 className="text-sm font-black text-slate-800 mb-2">پیگیری درخواست‌های من</h2>
         <table className="w-full text-2xs rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            {['کد رهگیری', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
+            {['کد رهگیری', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th scope="col" key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>
           <tbody>
             {requests.map(r => (

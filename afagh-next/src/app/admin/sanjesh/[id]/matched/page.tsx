@@ -95,11 +95,11 @@ export default async function SanjeshMatchedPage({
         <table className="w-full text-right text-xs">
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600">
             <tr>
-              <th className="sticky right-0 z-20 w-12 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">ردیف</th>
-              <th className="p-2 font-medium">نام</th>
-              <th className="p-2 font-medium">کد ملی</th>
-              <th className="p-2 font-medium">دانشجوی موجود</th>
-              <th className="p-2 font-medium">زمان تطبیق</th>
+              <th scope="col" className="sticky right-0 z-20 w-12 bg-slate-100 p-2 font-medium shadow-[-2px_0_0_0_#cbd5e1]">ردیف</th>
+              <th scope="col" className="p-2 font-medium">نام</th>
+              <th scope="col" className="p-2 font-medium">کد ملی</th>
+              <th scope="col" className="p-2 font-medium">دانشجوی موجود</th>
+              <th scope="col" className="p-2 font-medium">زمان تطبیق</th>
             </tr>
           </thead>
           <tbody>

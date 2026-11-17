@@ -116,14 +116,14 @@ export default function HandoverClient({
         <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-2xs text-white">
-              <th className="p-2.5">جلسه</th>
-              <th className="p-2.5">تاریخ / ساعت</th>
-              <th className="p-2.5">سالن</th>
-              <th className="p-2.5">حضور</th>
-              <th className="p-2.5">صورتجلسه</th>
-              <th className="p-2.5">دریافت مخزن</th>
-              <th className="p-2.5">بسته‌ها</th>
-              <th className="p-2.5">اقدام</th>
+              <th scope="col" className="p-2.5">جلسه</th>
+              <th scope="col" className="p-2.5">تاریخ / ساعت</th>
+              <th scope="col" className="p-2.5">سالن</th>
+              <th scope="col" className="p-2.5">حضور</th>
+              <th scope="col" className="p-2.5">صورتجلسه</th>
+              <th scope="col" className="p-2.5">دریافت مخزن</th>
+              <th scope="col" className="p-2.5">بسته‌ها</th>
+              <th scope="col" className="p-2.5">اقدام</th>
             </tr>
           </thead>
           <tbody>
@@ -177,12 +177,12 @@ export default function HandoverClient({
         <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-2xs text-white">
-              <th className="p-2.5">درس</th>
-              <th className="p-2.5">استاد</th>
-              <th className="p-2.5">وضعیت تحویل</th>
-              <th className="p-2.5">اوراق</th>
-              <th className="p-2.5">بایگانی</th>
-              <th className="p-2.5">اقدام</th>
+              <th scope="col" className="p-2.5">درس</th>
+              <th scope="col" className="p-2.5">استاد</th>
+              <th scope="col" className="p-2.5">وضعیت تحویل</th>
+              <th scope="col" className="p-2.5">اوراق</th>
+              <th scope="col" className="p-2.5">بایگانی</th>
+              <th scope="col" className="p-2.5">اقدام</th>
             </tr>
           </thead>
           <tbody>

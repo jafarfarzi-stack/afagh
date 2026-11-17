@@ -14,7 +14,7 @@ export default function OfferingsClient(props: {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-right text-xs rt">
-        <thead><tr className="text-slate-500"><th className="p-2">درس</th><th className="p-2">گروه</th><th className="p-2">ظرفیت</th><th className="p-2">نوع ارائه</th><th className="p-2">مقطع هدف</th><th className="p-2">رشتهٔ هدف</th><th className="p-2">ورودی از</th><th className="p-2">تا</th><th className="p-2"></th></tr></thead>
+        <thead><tr className="text-slate-500"><th scope="col" className="p-2">درس</th><th scope="col" className="p-2">گروه</th><th scope="col" className="p-2">ظرفیت</th><th scope="col" className="p-2">نوع ارائه</th><th scope="col" className="p-2">مقطع هدف</th><th scope="col" className="p-2">رشتهٔ هدف</th><th scope="col" className="p-2">ورودی از</th><th scope="col" className="p-2">تا</th><th scope="col" className="p-2"></th></tr></thead>
         <tbody>
           {props.rows.map(r => (
             <tr key={r.id} className="border-t border-slate-100">

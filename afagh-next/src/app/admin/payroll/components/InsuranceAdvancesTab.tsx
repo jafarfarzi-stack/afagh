@@ -88,14 +88,14 @@ export default function InsuranceAdvancesTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-3">کد</th>
-                  <th className="p-3">نام عضو هیئت علمی / مدرس</th>
-                  <th className="p-3 text-center">روزهای تدریس ماه جاری</th>
-                  <th className="p-3 text-center">بیمه تامین اجتماعی</th>
-                  <th className="p-3 text-center">مالیات تکلیفی ۱۰٪</th>
-                  <th className="p-3 text-center">دسترسی به درخواست مساعده</th>
-                  <th className="p-3 text-center">مبلغ علی‌الحساب</th>
-                  <th className="p-3 text-left">عملیات مالی</th>
+                  <th scope="col" className="p-3">کد</th>
+                  <th scope="col" className="p-3">نام عضو هیئت علمی / مدرس</th>
+                  <th scope="col" className="p-3 text-center">روزهای تدریس ماه جاری</th>
+                  <th scope="col" className="p-3 text-center">بیمه تامین اجتماعی</th>
+                  <th scope="col" className="p-3 text-center">مالیات تکلیفی ۱۰٪</th>
+                  <th scope="col" className="p-3 text-center">دسترسی به درخواست مساعده</th>
+                  <th scope="col" className="p-3 text-center">مبلغ علی‌الحساب</th>
+                  <th scope="col" className="p-3 text-left">عملیات مالی</th>
                 </tr>
               </thead>
               <tbody>

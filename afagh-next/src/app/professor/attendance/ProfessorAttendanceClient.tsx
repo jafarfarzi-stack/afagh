@@ -887,12 +887,12 @@ export default function ProfessorAttendanceClient({
                       <table className="w-full text-xs rt">
                         <thead className="bg-white text-slate-500">
                           <tr>
-                            <th className="p-1.5 text-right font-black w-24">تاریخ</th>
-                            <th className="p-1.5 text-center font-black w-14">جلسه</th>
-                            <th className="p-1.5 text-center font-black">ساعت</th>
-                            <th className="p-1.5 text-right font-black">سالن</th>
-                            <th className="p-1.5 text-center font-black w-20">وضعیت</th>
-                            <th className="p-1.5 text-center font-black w-16">ورود</th>
+                            <th scope="col" className="p-1.5 text-right font-black w-24">تاریخ</th>
+                            <th scope="col" className="p-1.5 text-center font-black w-14">جلسه</th>
+                            <th scope="col" className="p-1.5 text-center font-black">ساعت</th>
+                            <th scope="col" className="p-1.5 text-right font-black">سالن</th>
+                            <th scope="col" className="p-1.5 text-center font-black w-20">وضعیت</th>
+                            <th scope="col" className="p-1.5 text-center font-black w-16">ورود</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1316,11 +1316,11 @@ export default function ProfessorAttendanceClient({
           <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th className="p-3 border border-slate-800 w-12 font-extrabold">ردیف</th>
-                <th className="p-3 border border-slate-800 font-extrabold">شماره دانشجویی</th>
-                <th className="p-3 border border-slate-800 font-extrabold">نام و نام خانوادگی دانشجو</th>
-                <th className="p-3 border border-slate-800 font-extrabold">جمع غیبت در سایر جلسات</th>
-                <th className="p-3 border border-slate-800 font-extrabold min-w-[280px]">
+                <th scope="col" className="p-3 border border-slate-800 w-12 font-extrabold">ردیف</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold">شماره دانشجویی</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold">نام و نام خانوادگی دانشجو</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold">جمع غیبت در سایر جلسات</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold min-w-[280px]">
                   <div className="flex flex-col items-center gap-1.5">
                     <span>وضعیت حضور در این جلسه</span>
                     <span className="flex items-center justify-center gap-1">
@@ -1331,7 +1331,7 @@ export default function ProfessorAttendanceClient({
                     </span>
                   </div>
                 </th>
-                <th className="p-3 border border-slate-800 font-extrabold">توضیح کلاسی</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold">توضیح کلاسی</th>
               </tr>
             </thead>
             <tbody>

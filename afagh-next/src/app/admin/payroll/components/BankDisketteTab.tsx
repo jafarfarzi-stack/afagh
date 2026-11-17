@@ -43,13 +43,13 @@ export default function BankDisketteTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">ردیف</th>
-                  <th className="p-2.5">نام و نام خانوادگی استاد</th>
-                  <th className="p-2.5">کد ملی</th>
-                  <th className="p-2.5">شماره شبا مقصد (IBAN)</th>
-                  <th className="p-2.5">بانک عامل</th>
-                  <th className="p-2.5 text-center">مبلغ خالص واریزی (ريال)</th>
-                  <th className="p-2.5 text-center">شناسه پرداخت بانکی</th>
+                  <th scope="col" className="p-2.5">ردیف</th>
+                  <th scope="col" className="p-2.5">نام و نام خانوادگی استاد</th>
+                  <th scope="col" className="p-2.5">کد ملی</th>
+                  <th scope="col" className="p-2.5">شماره شبا مقصد (IBAN)</th>
+                  <th scope="col" className="p-2.5">بانک عامل</th>
+                  <th scope="col" className="p-2.5 text-center">مبلغ خالص واریزی (ريال)</th>
+                  <th scope="col" className="p-2.5 text-center">شناسه پرداخت بانکی</th>
                 </tr>
               </thead>
               <tbody>

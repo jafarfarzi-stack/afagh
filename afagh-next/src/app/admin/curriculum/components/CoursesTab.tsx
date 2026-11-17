@@ -89,7 +89,7 @@ export default function CoursesTab() {
 
   /** سرستون مرتب‌شونده — کلیک: صعودی/نزولی */
   const sortTh = (k: CourseSortKey, label: React.ReactNode, title?: string) => (
-    <th
+    <th scope="col"
       onClick={() => toggleSort(k)}
       title={title ?? 'برای مرتب‌سازی کلیک کنید'}
       className="p-2.5 border border-slate-800 cursor-pointer select-none hover:bg-slate-700"
@@ -235,20 +235,20 @@ export default function CoursesTab() {
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800 w-10">ردیف</th>
+                  <th scope="col" className="p-2.5 border border-slate-800 w-10">ردیف</th>
                   {sortTh('CODE', 'کد')}
                   {sortTh('TITLE', 'عنوان درس')}
                   {sortTh('UNITS', 'واحد')}
                   {sortTh('ROLE', 'نقش')}
                   {sortTh('SEM', 'ترم پیشنهادی')}
-                  <th className="p-2.5 border border-slate-800">الزامی در ترم</th>
-                  <th className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
-                  <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
-                  <th className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی (از curriculum_courses.failGradeStatusCode)">کد مردودی</th>
-                  <th className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">الزامی در ترم</th>
+                  <th scope="col" className="p-2.5 border border-slate-800" title="درس‌هایی که گذراندن‌شان برای فارغ‌التحصیلی اجباری است؛ موتور تطبیق فارغ‌التحصیلی فقط همین‌ها را چک می‌کند">شرط فارغ‌التحصیلی</th>
+                  <th scope="col" className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام قبولی (از curriculum_courses.passGradeStatusCode)">کد قبولی</th>
+                  <th scope="col" className="p-2.5 border border-slate-800" title="کد وضعیت سما هنگام مردودی (از curriculum_courses.failGradeStatusCode)">کد مردودی</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">پیش‌نیاز / هم‌نیاز</th>
                   {/* ستون چسبان: در جدول ۱۲ ستونی، دکمهٔ حذف باید همیشه دیده شود
                       (قبلاً انتهای جدولِ اسکرول‌شونده بود و پیدا نمی‌شد) */}
-                  <th className="p-2.5 border border-slate-800 sticky left-0 z-20 bg-slate-900 shadow-[4px_0_6px_-4px_rgba(0,0,0,.5)]">عملیات</th>
+                  <th scope="col" className="p-2.5 border border-slate-800 sticky left-0 z-20 bg-slate-900 shadow-[4px_0_6px_-4px_rgba(0,0,0,.5)]">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -416,10 +416,10 @@ export default function CoursesTab() {
                 <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-slate-900 text-white text-center">
-                      <th className="p-2.5 border border-slate-800">نوع درس</th>
-                      <th className="p-2.5 border border-slate-800">تعداد درس (جمع ۲)</th>
-                      <th className="p-2.5 border border-slate-800">مجموع واحد</th>
-                      <th className="p-2.5 border border-slate-800" title="سهم واحد مقرر این نقش — در تب «بررسی و خاتمه» تنظیم می‌شود">سهم مقرر</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">نوع درس</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">تعداد درس (جمع ۲)</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">مجموع واحد</th>
+                      <th scope="col" className="p-2.5 border border-slate-800" title="سهم واحد مقرر این نقش — در تب «بررسی و خاتمه» تنظیم می‌شود">سهم مقرر</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -123,12 +123,12 @@ export default function SettingsClient({ universities, faculties, initialCodes, 
         <table className="w-full text-right text-xs rt">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="p-2.5">عنوان واحد</th>
-              <th className="p-2.5">کد ۱۲ رقمی</th>
-              <th className="p-2.5">استان/شهر استقرار</th>
-              <th className="p-2.5">پیش‌فرض</th>
-              <th className="p-2.5">فعال</th>
-              <th className="p-2.5">عملیات</th>
+              <th scope="col" className="p-2.5">عنوان واحد</th>
+              <th scope="col" className="p-2.5">کد ۱۲ رقمی</th>
+              <th scope="col" className="p-2.5">استان/شهر استقرار</th>
+              <th scope="col" className="p-2.5">پیش‌فرض</th>
+              <th scope="col" className="p-2.5">فعال</th>
+              <th scope="col" className="p-2.5">عملیات</th>
             </tr>
           </thead>
           <tbody>

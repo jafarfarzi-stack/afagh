@@ -36,11 +36,11 @@ export default function MultipliersTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">عنوان قانون ضریب</th>
-                  <th className="p-2.5">دسته‌بندی</th>
-                  <th className="p-2.5 text-center">ضریب اعمالی</th>
-                  <th className="p-2.5">شرح قانون و استناد آیین‌نامه‌ای</th>
-                  <th className="p-2.5 text-center">وضعیت فعال</th>
+                  <th scope="col" className="p-2.5">عنوان قانون ضریب</th>
+                  <th scope="col" className="p-2.5">دسته‌بندی</th>
+                  <th scope="col" className="p-2.5 text-center">ضریب اعمالی</th>
+                  <th scope="col" className="p-2.5">شرح قانون و استناد آیین‌نامه‌ای</th>
+                  <th scope="col" className="p-2.5 text-center">وضعیت فعال</th>
                 </tr>
               </thead>
               <tbody>

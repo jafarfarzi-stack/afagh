@@ -191,7 +191,7 @@ export function Uploader({
           {curSheet.sample.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-right text-3xs rt">
-                <thead><tr className="text-slate-500">{curSheet.headers.map((h, i) => <th key={i} className="p-1">{h || i + 1}</th>)}</tr></thead>
+                <thead><tr className="text-slate-500">{curSheet.headers.map((h, i) => <th scope="col" key={i} className="p-1">{h || i + 1}</th>)}</tr></thead>
                 <tbody>
                   {curSheet.sample.map((r, i) => (
                     <tr key={i} className="border-t border-slate-100">

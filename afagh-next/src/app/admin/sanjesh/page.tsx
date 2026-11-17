@@ -155,14 +155,14 @@ export default async function SanjeshFilesPage({
             <table className="w-full text-right text-xs">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600">
                 <tr>
-                  <th className="p-2 font-medium">عنوان</th>
-                  <th className="p-2 font-medium">قالب</th>
-                  <th className="p-2 font-medium">سال</th>
-                  <th className="p-2 font-medium">ستون</th>
-                  <th className="p-2 font-medium">ردیف</th>
-                  <th className="p-2 font-medium">وضعیت تطبیق</th>
-                  <th className="p-2 font-medium">وضعیت</th>
-                  <th className="p-2 font-medium">عملیات</th>
+                  <th scope="col" className="p-2 font-medium">عنوان</th>
+                  <th scope="col" className="p-2 font-medium">قالب</th>
+                  <th scope="col" className="p-2 font-medium">سال</th>
+                  <th scope="col" className="p-2 font-medium">ستون</th>
+                  <th scope="col" className="p-2 font-medium">ردیف</th>
+                  <th scope="col" className="p-2 font-medium">وضعیت تطبیق</th>
+                  <th scope="col" className="p-2 font-medium">وضعیت</th>
+                  <th scope="col" className="p-2 font-medium">عملیات</th>
                 </tr>
               </thead>
               <tbody>

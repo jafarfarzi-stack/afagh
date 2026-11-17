@@ -117,8 +117,8 @@ export default function PlanView({ offeringId, data }: { offeringId: number; dat
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800">عنوان</th>
-                  <th className="p-2.5 border border-slate-800 w-28">درصد</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">عنوان</th>
+                  <th scope="col" className="p-2.5 border border-slate-800 w-28">درصد</th>
                 </tr>
               </thead>
               <tbody>

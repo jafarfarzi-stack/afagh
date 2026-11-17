@@ -517,10 +517,10 @@ export default function CoefficientsRulesTab({ state, api }: Props) {
           <table className="w-full text-right text-xs border-collapse rt">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="p-2.5">کد قانون</th>
-                <th className="p-2.5">عنوان</th>
-                <th className="p-2.5 text-center">ضریب جاری</th>
-                <th className="p-2.5 text-center">عملیات</th>
+                <th scope="col" className="p-2.5">کد قانون</th>
+                <th scope="col" className="p-2.5">عنوان</th>
+                <th scope="col" className="p-2.5 text-center">ضریب جاری</th>
+                <th scope="col" className="p-2.5 text-center">عملیات</th>
               </tr>
             </thead>
             <tbody>

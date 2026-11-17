@@ -150,14 +150,14 @@ export default function ManualAttendanceClient({
         <table className="w-full text-xs rt">
           <thead>
             <tr className="bg-slate-900 text-center text-2xs text-white">
-              <th className="p-2.5">جلسه</th>
-              <th className="p-2.5">تاریخ / ساعت</th>
-              <th className="p-2.5">درس</th>
-              <th className="p-2.5">استاد</th>
-              <th className="p-2.5">اثر انگشت (گیت)</th>
-              <th className="p-2.5">وضعیت ثبت‌شده</th>
-              <th className="p-2.5">تشکیل کلاس (زنده)</th>
-              <th className="p-2.5">تأیید دستی حضور</th>
+              <th scope="col" className="p-2.5">جلسه</th>
+              <th scope="col" className="p-2.5">تاریخ / ساعت</th>
+              <th scope="col" className="p-2.5">درس</th>
+              <th scope="col" className="p-2.5">استاد</th>
+              <th scope="col" className="p-2.5">اثر انگشت (گیت)</th>
+              <th scope="col" className="p-2.5">وضعیت ثبت‌شده</th>
+              <th scope="col" className="p-2.5">تشکیل کلاس (زنده)</th>
+              <th scope="col" className="p-2.5">تأیید دستی حضور</th>
             </tr>
           </thead>
           <tbody>

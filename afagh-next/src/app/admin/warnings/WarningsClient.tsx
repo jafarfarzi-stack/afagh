@@ -222,15 +222,15 @@ export default function WarningsClient() {
         <table className="w-full text-sm rt">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="p-2 text-right">#</th>
-              <th className="p-2 text-right">دانشجو</th>
-              <th className="p-2 text-right">شماره</th>
-              <th className="p-2 text-right">نوع</th>
-              <th className="p-2 text-right">عنوان</th>
-              <th className="p-2 text-right">موعد ارسال</th>
-              <th className="p-2 text-right">ارسال‌شده</th>
-              <th className="p-2 text-right">وضعیت</th>
-              <th className="p-2 text-right">عملیات</th>
+              <th scope="col" className="p-2 text-right">#</th>
+              <th scope="col" className="p-2 text-right">دانشجو</th>
+              <th scope="col" className="p-2 text-right">شماره</th>
+              <th scope="col" className="p-2 text-right">نوع</th>
+              <th scope="col" className="p-2 text-right">عنوان</th>
+              <th scope="col" className="p-2 text-right">موعد ارسال</th>
+              <th scope="col" className="p-2 text-right">ارسال‌شده</th>
+              <th scope="col" className="p-2 text-right">وضعیت</th>
+              <th scope="col" className="p-2 text-right">عملیات</th>
             </tr>
           </thead>
           <tbody>

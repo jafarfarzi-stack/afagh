@@ -202,8 +202,8 @@ export default function FinanceStudentClient(props: {
               <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">نوع</th><th className="p-2">ترم</th><th className="p-2">مقدار</th>
-                    <th className="p-2">وضعیت</th><th className="p-2">دلیل</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">نوع</th><th scope="col" className="p-2">ترم</th><th scope="col" className="p-2">مقدار</th>
+                    <th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">دلیل</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -314,8 +314,8 @@ export default function FinanceStudentClient(props: {
               <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">بنیاد</th><th className="p-2">ترم</th><th className="p-2">پوشش</th>
-                    <th className="p-2">شمارهٔ نامه</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">بنیاد</th><th scope="col" className="p-2">ترم</th><th scope="col" className="p-2">پوشش</th>
+                    <th scope="col" className="p-2">شمارهٔ نامه</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,8 +403,8 @@ export default function FinanceStudentClient(props: {
               <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">شماره</th><th className="p-2">بانک</th><th className="p-2">مبلغ</th>
-                    <th className="p-2">سررسید</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">شماره</th><th scope="col" className="p-2">بانک</th><th scope="col" className="p-2">مبلغ</th>
+                    <th scope="col" className="p-2">سررسید</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -531,8 +531,8 @@ export default function FinanceStudentClient(props: {
               <table className="w-full text-right text-xs rt rt--scroll">
                 <thead>
                   <tr className="border-b border-slate-200 text-2xs text-slate-500">
-                    <th className="p-2">نوع وام</th><th className="p-2">پرداخت‌کننده</th><th className="p-2">کد</th><th className="p-2">مبلغ</th>
-                    <th className="p-2">اقساط</th><th className="p-2">وضعیت</th><th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">نوع وام</th><th scope="col" className="p-2">پرداخت‌کننده</th><th scope="col" className="p-2">کد</th><th scope="col" className="p-2">مبلغ</th>
+                    <th scope="col" className="p-2">اقساط</th><th scope="col" className="p-2">وضعیت</th><th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>

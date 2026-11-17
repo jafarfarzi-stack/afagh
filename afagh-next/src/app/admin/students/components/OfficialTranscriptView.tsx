@@ -152,11 +152,11 @@ export default function OfficialTranscriptView({
         </colgroup>
         <thead>
           <tr className="border-b border-slate-300 text-slate-500">
-            <th className="p-1">کد درس</th>
-            <th className="p-1">نام درس</th>
-            <th className="p-1">واحد</th>
-            <th className="p-1">نمره</th>
-            <th className="p-1">وضع</th>
+            <th scope="col" className="p-1">کد درس</th>
+            <th scope="col" className="p-1">نام درس</th>
+            <th scope="col" className="p-1">واحد</th>
+            <th scope="col" className="p-1">نمره</th>
+            <th scope="col" className="p-1">وضع</th>
           </tr>
         </thead>
         <tbody>
@@ -299,9 +299,9 @@ export default function OfficialTranscriptView({
         <table className="w-full text-3xs border border-slate-400 rt">
           <thead>
             <tr className="bg-slate-100 border-b border-slate-300">
-              <th className="p-1 border-l border-slate-300">نوع درس</th>
-              {breakdown.map(b => <th key={b.type} className="p-1 border-l border-slate-300">{b.type}</th>)}
-              <th className="p-1">مجموع</th>
+              <th scope="col" className="p-1 border-l border-slate-300">نوع درس</th>
+              {breakdown.map(b => <th scope="col" key={b.type} className="p-1 border-l border-slate-300">{b.type}</th>)}
+              <th scope="col" className="p-1">مجموع</th>
             </tr>
           </thead>
           <tbody>

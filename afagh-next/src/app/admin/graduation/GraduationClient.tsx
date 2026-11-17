@@ -198,7 +198,7 @@ export default function GraduationClient({
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   {['دانشجو', 'رشته / مقطع', 'واحد', 'معدل', 'مدیر گروه', 'ایرانداک', 'وضعیت', 'آخرین رویداد', ''].map(h => (
-                    <th key={h} className="p-2 text-right font-black whitespace-nowrap">{h}</th>
+                    <th scope="col" key={h} className="p-2 text-right font-black whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -445,7 +445,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
           {!!d.degrees.length && (
             <table className="w-full text-3xs mt-2 rt">
               <thead className="bg-slate-50 text-slate-500"><tr>
-                {['نوع', 'سریال', 'کد استعلام', 'کد صحت', 'تاریخ', 'تحویل'].map(h => <th key={h} className="p-1 text-right font-black">{h}</th>)}
+                {['نوع', 'سریال', 'کد استعلام', 'کد صحت', 'تاریخ', 'تحویل'].map(h => <th scope="col" key={h} className="p-1 text-right font-black">{h}</th>)}
               </tr></thead>
               <tbody>
                 {d.degrees.map(g => (
@@ -484,7 +484,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
           {!!d.deliveries.length && (
             <table className="w-full text-3xs rt">
               <thead className="bg-slate-50 text-slate-500"><tr>
-                {['رویداد', 'کانال', 'گیرنده', 'نتیجه', 'زمان'].map(h => <th key={h} className="p-1 text-right font-black">{h}</th>)}
+                {['رویداد', 'کانال', 'گیرنده', 'نتیجه', 'زمان'].map(h => <th scope="col" key={h} className="p-1 text-right font-black">{h}</th>)}
               </tr></thead>
               <tbody>
                 {d.deliveries.map(v => (
@@ -537,7 +537,7 @@ function DeptsTab({ depts, onSave, onDelete, pending }: {
         <h3 className="text-xs font-black text-slate-800 mb-2">دپارتمان‌های تسویه‌حساب (کاملاً قابل پیکربندی)</h3>
         <table className="w-full text-2xs rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            {['کد', 'عنوان', 'بررسی خودکار', 'نقش مسئول', 'ترتیب', 'فعال', ''].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
+            {['کد', 'عنوان', 'بررسی خودکار', 'نقش مسئول', 'ترتیب', 'فعال', ''].map(h => <th scope="col" key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>
           <tbody>
             {depts.sort((a, b) => a.sortOrder - b.sortOrder).map(d => (
@@ -634,7 +634,7 @@ function AlumniTab({ rows, services, pending, onFilter, onResolve }: {
         </div>
         <table className="w-full text-2xs rt">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            {['کد رهگیری', 'دانش‌آموخته', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th key={h} className="p-2 text-right font-black">{h}</th>)}
+            {['کد رهگیری', 'دانش‌آموخته', 'خدمت', 'مقصد', 'هزینه', 'وضعیت', 'تاریخ', 'اقدام'].map(h => <th scope="col" key={h} className="p-2 text-right font-black">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r => (

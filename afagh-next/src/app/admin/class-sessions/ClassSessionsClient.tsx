@@ -193,18 +193,18 @@ export default function ClassSessionsClient({
         <table className="w-full text-xs rt hidden md:table">
           <thead>
             <tr className="bg-slate-900 text-center text-2xs text-white">
-              <th className="p-2.5">جلسه</th>
-              <th className="p-2.5">تاریخ</th>
-              <th className="p-2.5">ساعت</th>
-              <th className="p-2.5">محل تشکیل</th>
-              <th className="p-2.5">وضعیت</th>
-              <th className="p-2.5">جبرانی</th>
-              <th className="p-2.5">تعطیل</th>
-              <th className="p-2.5">فوق‌برنامه</th>
-              <th className="p-2.5">فعال</th>
-              <th className="p-2.5">تاریخ ایجاد</th>
-              <th className="p-2.5">مشاهدهٔ استاد</th>
-              <th className="p-2.5">آخرین تغییر</th>
+              <th scope="col" className="p-2.5">جلسه</th>
+              <th scope="col" className="p-2.5">تاریخ</th>
+              <th scope="col" className="p-2.5">ساعت</th>
+              <th scope="col" className="p-2.5">محل تشکیل</th>
+              <th scope="col" className="p-2.5">وضعیت</th>
+              <th scope="col" className="p-2.5">جبرانی</th>
+              <th scope="col" className="p-2.5">تعطیل</th>
+              <th scope="col" className="p-2.5">فوق‌برنامه</th>
+              <th scope="col" className="p-2.5">فعال</th>
+              <th scope="col" className="p-2.5">تاریخ ایجاد</th>
+              <th scope="col" className="p-2.5">مشاهدهٔ استاد</th>
+              <th scope="col" className="p-2.5">آخرین تغییر</th>
             </tr>
           </thead>
           <tbody>

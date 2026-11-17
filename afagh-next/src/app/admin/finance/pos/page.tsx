@@ -56,15 +56,15 @@ export default async function PosPage() {
           <table className="w-full text-right text-xs rt">
             <thead>
               <tr className="border-b border-slate-100 text-slate-500">
-                <th className="pb-2">STAN</th>
-                <th className="pb-2">RRN</th>
-                <th className="pb-2">مبلغ</th>
-                <th className="pb-2">نوع</th>
-                <th className="pb-2">روش کارت</th>
-                <th className="pb-2">وضعیت</th>
-                <th className="pb-2">ترمینال</th>
-                <th className="pb-2">دانشجو</th>
-                <th className="pb-2">زمان</th>
+                <th scope="col" className="pb-2">STAN</th>
+                <th scope="col" className="pb-2">RRN</th>
+                <th scope="col" className="pb-2">مبلغ</th>
+                <th scope="col" className="pb-2">نوع</th>
+                <th scope="col" className="pb-2">روش کارت</th>
+                <th scope="col" className="pb-2">وضعیت</th>
+                <th scope="col" className="pb-2">ترمینال</th>
+                <th scope="col" className="pb-2">دانشجو</th>
+                <th scope="col" className="pb-2">زمان</th>
               </tr>
             </thead>
             <tbody>

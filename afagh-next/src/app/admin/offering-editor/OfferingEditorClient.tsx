@@ -132,8 +132,8 @@ export default function OfferingEditorClient({ terms }: { terms: { id: number; t
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <table className="w-full text-xs rt">
           <thead className="bg-slate-100 text-slate-600"><tr>
-            <th className="p-2 text-right">درس</th><th className="p-2 text-center">گروه</th><th className="p-2 text-center">ظرفیت</th>
-            <th className="p-2 text-center">پر شدگی</th><th className="p-2 text-right">زمان کلاس</th><th className="p-2 text-center">امتحان</th><th className="p-2 text-center">عملیات</th>
+            <th scope="col" className="p-2 text-right">درس</th><th scope="col" className="p-2 text-center">گروه</th><th scope="col" className="p-2 text-center">ظرفیت</th>
+            <th scope="col" className="p-2 text-center">پر شدگی</th><th scope="col" className="p-2 text-right">زمان کلاس</th><th scope="col" className="p-2 text-center">امتحان</th><th scope="col" className="p-2 text-center">عملیات</th>
           </tr></thead>
           <tbody>
             {filtered.map(r => (

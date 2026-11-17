@@ -31,13 +31,13 @@ export default function CatalogTab() {
           <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th className="p-2.5 border border-slate-800">کد نسخه</th>
-                <th className="p-2.5 border border-slate-800">عنوان</th>
-                <th className="p-2.5 border border-slate-800">ورودی</th>
-                <th className="p-2.5 border border-slate-800">واحد الزامی</th>
-                <th className="p-2.5 border border-slate-800">تعداد درس</th>
-                <th className="p-2.5 border border-slate-800">وضعیت</th>
-                <th className="p-2.5 border border-slate-800 w-56">عملیات</th>
+                <th scope="col" className="p-2.5 border border-slate-800">کد نسخه</th>
+                <th scope="col" className="p-2.5 border border-slate-800">عنوان</th>
+                <th scope="col" className="p-2.5 border border-slate-800">ورودی</th>
+                <th scope="col" className="p-2.5 border border-slate-800">واحد الزامی</th>
+                <th scope="col" className="p-2.5 border border-slate-800">تعداد درس</th>
+                <th scope="col" className="p-2.5 border border-slate-800">وضعیت</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-56">عملیات</th>
               </tr>
             </thead>
             <tbody>

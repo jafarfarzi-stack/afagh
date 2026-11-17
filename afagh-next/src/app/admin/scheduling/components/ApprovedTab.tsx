@@ -24,14 +24,14 @@ export default function ApprovedTab() {
               <table className="w-full border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-900 text-white text-center">
-                    <th className="p-3 border border-slate-800 w-12">ردیف</th>
-                    <th className="p-3 border border-slate-800">کد درس</th>
-                    <th className="p-3 border border-slate-800">عنوان درس</th>
-                    <th className="p-3 border border-slate-800">گروه</th>
-                    <th className="p-3 border border-slate-800">تواتر هفته</th>
-                    <th className="p-3 border border-slate-800">استاد مدرس</th>
-                    <th className="p-3 border border-slate-800">زمان‌بندی</th>
-                    <th className="p-3 border border-slate-800">محل کلاس</th>
+                    <th scope="col" className="p-3 border border-slate-800 w-12">ردیف</th>
+                    <th scope="col" className="p-3 border border-slate-800">کد درس</th>
+                    <th scope="col" className="p-3 border border-slate-800">عنوان درس</th>
+                    <th scope="col" className="p-3 border border-slate-800">گروه</th>
+                    <th scope="col" className="p-3 border border-slate-800">تواتر هفته</th>
+                    <th scope="col" className="p-3 border border-slate-800">استاد مدرس</th>
+                    <th scope="col" className="p-3 border border-slate-800">زمان‌بندی</th>
+                    <th scope="col" className="p-3 border border-slate-800">محل کلاس</th>
                   </tr>
                 </thead>
                 <tbody>

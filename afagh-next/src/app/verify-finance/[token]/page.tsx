@@ -139,11 +139,11 @@ export default async function VerifyFinancePage({ params }: { params: Promise<{ 
             <table className="w-full text-right rt">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
-                  <th className="p-2">نیمسال</th>
-                  <th className="p-2">شهریه</th>
-                  <th className="p-2">تخفیف</th>
-                  <th className="p-2">پرداخت</th>
-                  <th className="p-2">مانده</th>
+                  <th scope="col" className="p-2">نیمسال</th>
+                  <th scope="col" className="p-2">شهریه</th>
+                  <th scope="col" className="p-2">تخفیف</th>
+                  <th scope="col" className="p-2">پرداخت</th>
+                  <th scope="col" className="p-2">مانده</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">

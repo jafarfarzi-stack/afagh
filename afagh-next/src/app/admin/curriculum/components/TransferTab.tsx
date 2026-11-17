@@ -137,12 +137,12 @@ export default function TransferTab() {
                 <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-rose-900 text-white text-center">
-                      <th className="p-2 border border-rose-800">کد نسخه</th>
-                      <th className="p-2 border border-rose-800">رشتهٔ مقصد</th>
-                      <th className="p-2 border border-rose-800">منبع انتقال</th>
-                      <th className="p-2 border border-rose-800">دروس</th>
-                      <th className="p-2 border border-rose-800">تاریخ</th>
-                      <th className="p-2 border border-rose-800 w-32">عملیات</th>
+                      <th scope="col" className="p-2 border border-rose-800">کد نسخه</th>
+                      <th scope="col" className="p-2 border border-rose-800">رشتهٔ مقصد</th>
+                      <th scope="col" className="p-2 border border-rose-800">منبع انتقال</th>
+                      <th scope="col" className="p-2 border border-rose-800">دروس</th>
+                      <th scope="col" className="p-2 border border-rose-800">تاریخ</th>
+                      <th scope="col" className="p-2 border border-rose-800 w-32">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>

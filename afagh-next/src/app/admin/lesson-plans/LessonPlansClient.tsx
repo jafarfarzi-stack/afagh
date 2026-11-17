@@ -236,13 +236,13 @@ export default function LessonPlansClient({
           <table className="w-full border-collapse text-xs rt">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th className="p-2.5 border border-slate-800 w-12">ردیف</th>
-                <th className="p-2.5 border border-slate-800">درس</th>
-                <th className="p-2.5 border border-slate-800">استاد</th>
-                <th className="p-2.5 border border-slate-800 w-28">وضعیت</th>
-                <th className="p-2.5 border border-slate-800 w-24">جلسات</th>
-                <th className="p-2.5 border border-slate-800 w-24">جمع بارم</th>
-                <th className="p-2.5 border border-slate-800 w-32">آخرین به‌روزرسانی</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-12">ردیف</th>
+                <th scope="col" className="p-2.5 border border-slate-800">درس</th>
+                <th scope="col" className="p-2.5 border border-slate-800">استاد</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-28">وضعیت</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-24">جلسات</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-24">جمع بارم</th>
+                <th scope="col" className="p-2.5 border border-slate-800 w-32">آخرین به‌روزرسانی</th>
               </tr>
             </thead>
             <tbody>

@@ -187,12 +187,12 @@ export default async function ClassroomsPage({ searchParams }: { searchParams: P
             <table className="w-full text-right text-xs">
               <thead>
                 <tr className="text-2xs text-slate-500">
-                  <th className="p-2 font-normal">نام کلاس</th>
-                  <th className="p-2 font-normal">کد</th>
-                  <th className="p-2 font-normal">ظرفیت</th>
-                  <th className="p-2 font-normal">نوع</th>
-                  <th className="p-2 font-normal">دانشکده</th>
-                  <th className="p-2 font-normal">برنامهٔ هفتگی</th>
+                  <th scope="col" className="p-2 font-normal">نام کلاس</th>
+                  <th scope="col" className="p-2 font-normal">کد</th>
+                  <th scope="col" className="p-2 font-normal">ظرفیت</th>
+                  <th scope="col" className="p-2 font-normal">نوع</th>
+                  <th scope="col" className="p-2 font-normal">دانشکده</th>
+                  <th scope="col" className="p-2 font-normal">برنامهٔ هفتگی</th>
                 </tr>
               </thead>
               <tbody>

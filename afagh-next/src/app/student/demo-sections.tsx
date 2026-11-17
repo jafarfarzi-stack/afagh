@@ -362,13 +362,13 @@ export function DemoChart({ filteredTermTitle }: { filteredTermTitle: string | n
                     <table className="w-full text-right text-xs rt">
                       <thead>
                         <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                          <th className="p-2 text-center w-8" title="تیک گذرانده‌ها">✓</th>
-                          <th className="p-2">کد درس</th>
-                          <th className="p-2">عنوان درس</th>
-                          <th className="p-2 text-center">واحد</th>
-                          <th className="p-2">نوع</th>
-                          <th className="p-2">پیش‌نیازها</th>
-                          <th className="p-2 text-left">وضعیت شما</th>
+                          <th scope="col" className="p-2 text-center w-8" title="تیک گذرانده‌ها">✓</th>
+                          <th scope="col" className="p-2">کد درس</th>
+                          <th scope="col" className="p-2">عنوان درس</th>
+                          <th scope="col" className="p-2 text-center">واحد</th>
+                          <th scope="col" className="p-2">نوع</th>
+                          <th scope="col" className="p-2">پیش‌نیازها</th>
+                          <th scope="col" className="p-2 text-left">وضعیت شما</th>
                         </tr>
                       </thead>
                       <tbody>

@@ -48,13 +48,13 @@ export default async function SanjeshTemplatesPage({
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <th className="p-2 font-medium">کلید</th>
-                <th className="p-2 font-medium">عنوان</th>
-                <th className="p-2 font-medium">نوع</th>
-                <th className="p-2 font-medium">سال</th>
-                <th className="p-2 font-medium">ستون</th>
-                <th className="p-2 font-medium">منبع</th>
-                <th className="p-2 font-medium">عملیات</th>
+                <th scope="col" className="p-2 font-medium">کلید</th>
+                <th scope="col" className="p-2 font-medium">عنوان</th>
+                <th scope="col" className="p-2 font-medium">نوع</th>
+                <th scope="col" className="p-2 font-medium">سال</th>
+                <th scope="col" className="p-2 font-medium">ستون</th>
+                <th scope="col" className="p-2 font-medium">منبع</th>
+                <th scope="col" className="p-2 font-medium">عملیات</th>
               </tr>
             </thead>
             <tbody>

@@ -87,14 +87,14 @@ export default async function AdminBiPage() {
             <table className="w-full text-right text-sm rt">
               <thead className="text-xs text-slate-400">
                 <tr className="border-b border-slate-700">
-                  <th className="p-2">استاد</th>
-                  <th className="p-2">رتبه / گروه</th>
-                  <th className="p-2">نمرهٔ جاری</th>
-                  <th className="p-2">روند</th>
-                  <th className="p-2">تغییر</th>
-                  <th className="p-2">پاسخ‌دهنده</th>
-                  <th className="p-2">کلاس</th>
-                  <th className="p-2">وضعیت</th>
+                  <th scope="col" className="p-2">استاد</th>
+                  <th scope="col" className="p-2">رتبه / گروه</th>
+                  <th scope="col" className="p-2">نمرهٔ جاری</th>
+                  <th scope="col" className="p-2">روند</th>
+                  <th scope="col" className="p-2">تغییر</th>
+                  <th scope="col" className="p-2">پاسخ‌دهنده</th>
+                  <th scope="col" className="p-2">کلاس</th>
+                  <th scope="col" className="p-2">وضعیت</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,8 +179,8 @@ export default async function AdminBiPage() {
             <table className="w-full text-right text-xs rt">
               <thead className="text-slate-400">
                 <tr className="border-b border-slate-700">
-                  <th className="p-1.5">کلید</th><th className="p-1.5">نوع</th><th className="p-1.5">ردیف</th>
-                  <th className="p-1.5">زمان محاسبه</th><th className="p-1.5">عمر</th><th className="p-1.5">وضعیت</th>
+                  <th scope="col" className="p-1.5">کلید</th><th scope="col" className="p-1.5">نوع</th><th scope="col" className="p-1.5">ردیف</th>
+                  <th scope="col" className="p-1.5">زمان محاسبه</th><th scope="col" className="p-1.5">عمر</th><th scope="col" className="p-1.5">وضعیت</th>
                 </tr>
               </thead>
               <tbody>

@@ -194,13 +194,13 @@ export default async function CourseFinancePage({
           <table className="w-full text-right text-xs">
             <thead>
               <tr className="text-slate-500">
-                <th className="p-2">کد</th>
-                <th className="p-2">عنوان</th>
-                <th className="p-2">گروه</th>
-                <th className="p-2">واحد (ن/ع)</th>
-                <th className="p-2">نوع درس مالی</th>
-                <th className="p-2">نرخ واحد (نظری)</th>
-                <th className="p-2">{term ? `ثبت‌نام ${term.termCode}` : 'ثبت‌نام'}</th>
+                <th scope="col" className="p-2">کد</th>
+                <th scope="col" className="p-2">عنوان</th>
+                <th scope="col" className="p-2">گروه</th>
+                <th scope="col" className="p-2">واحد (ن/ع)</th>
+                <th scope="col" className="p-2">نوع درس مالی</th>
+                <th scope="col" className="p-2">نرخ واحد (نظری)</th>
+                <th scope="col" className="p-2">{term ? `ثبت‌نام ${term.termCode}` : 'ثبت‌نام'}</th>
               </tr>
             </thead>
             <tbody>

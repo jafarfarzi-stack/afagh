@@ -3,13 +3,14 @@
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
+import { academic_terms, course_offerings, courses, educational_regulations, enrollments, legacy_code_maps, legacy_grades, roles, staff, student_term_states, students, term_status_types, universities, user_roles, users, sessions, signature_otps, doc_sign_otps, grade_submission_otps } from '@/db/schema';
 import { and, desc, eq, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { hashPassword, requireRole } from '@/lib/auth';
 import { z } from 'zod';
 import { clearPermissionCache } from '@/lib/permissions-enforcer';
 import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { samaStatusToInternal } from '@/lib/student-labels';
 import { requireStudentUniversity } from '@/lib/security';
 import { resolveCityMinistry } from '@/lib/shared-coding';
 import { toGregorian } from '@/lib/calendar';
@@ -795,6 +796,109 @@ export async function createStaffExpertAction(input: {
 }
 
 /** تنظیم نقش‌های یک کاربر (کارشناس/استاد) — فقط ADMIN؛ از تب اساتید در پنل دانشجویان */
+/**
+ * تعیین «وضعیت تحصیلی» از کدینگ term_status_types روی آخرین وضعیت ترم دانشجو.
+ * همان عنوانی که کنار شمارهٔ دانشجویی نمایش داده می‌شود.
+ */
+export async function setStudentTermStatusAction(
+  studentId: number,
+  code: number,
+): Promise<{ ok: boolean; error?: string; title?: string }> {
+  try {
+    await requireRole(['ADMIN', 'EDU_EXPERT']);
+  } catch {
+    return { ok: false, error: 'دسترسی به تغییر وضعیت تحصیلی ندارید.' };
+  }
+  const id = Number(studentId);
+  const c = Number(code);
+  if (!Number.isInteger(id) || !Number.isInteger(c)) return { ok: false, error: 'ورودی نامعتبر است.' };
+  const [t] = await db
+    .select({ code: term_status_types.code, title: term_status_types.title })
+    .from(term_status_types)
+    .where(eq(term_status_types.code, c))
+    .limit(1);
+  if (!t) return { ok: false, error: 'این کد وضعیت در کدینگ وجود ندارد.' };
+  const [st] = await db
+    .select({ id: student_term_states.id })
+    .from(student_term_states)
+    .where(eq(student_term_states.studentId, id))
+    .orderBy(desc(student_term_states.termId))
+    .limit(1);
+  if (!st) return { ok: false, error: 'این دانشجو هیچ رکورد وضعیت ترم ندارد؛ ابتدا ترم را ثبت کنید.' };
+  await db.update(student_term_states).set({
+    statusCode: String(t.code),
+    statusTitle: t.title,
+    normalizedStatusCode: String(t.code),
+    normalizedStatusTitle: t.title,
+  }).where(eq(student_term_states.id, st.id));
+  revalidatePath('/admin/students');
+  return { ok: true, title: t.title };
+}
+
+/**
+ * حذف کاملِ پروندهٔ دانشجو — فقط وقتی هیچ سابقهٔ درسی/مالی/ترمی ندارد.
+ * گارد دوم به‌صورت پویا همهٔ FKهای جدول students را چک می‌کند تا حذف،
+ * دادهٔ وابسته را یتیم نکند یا با خطای پایگاه‌داده شکست نخورد.
+ */
+export async function deleteStudentCompletelyAction(studentId: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireRole(['ADMIN']);
+  } catch {
+    return { ok: false, error: 'فقط مدیر سیستم (ADMIN) اجازهٔ حذف دانشجو را دارد.' };
+  }
+  const id = Number(studentId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'شناسهٔ دانشجو نامعتبر است.' };
+  const uni = await getCurrentUniversity().catch(() => null);
+  const [row] = await db
+    .select({ universityId: students.universityId, code: students.studentCode })
+    .from(students)
+    .where(eq(students.id, id))
+    .limit(1);
+  if (!row) return { ok: false, error: 'دانشجو یافت نشد.' };
+  if (row.universityId !== null && uni && row.universityId !== uni.id) {
+    return { ok: false, error: 'دانشجو متعلق به دانشگاه دیگری است.' };
+  }
+
+  const counts = await db.execute<{ enr: number; led: number; sts: number }>(sql`
+    SELECT
+      (SELECT count(*)::int FROM enrollments WHERE "studentId" = ${id}) AS enr,
+      (SELECT count(*)::int FROM student_ledger WHERE "studentId" = ${id}) AS led,
+      (SELECT count(*)::int FROM student_term_states WHERE "studentId" = ${id}) AS sts`);
+  const c = counts.rows[0];
+  const blockers = [
+    Number(c?.enr) > 0 ? 'ثبت‌نام درس' : null,
+    Number(c?.led) > 0 ? 'سابقهٔ مالی' : null,
+    Number(c?.sts) > 0 ? 'وضعیت ترم' : null,
+  ].filter(Boolean);
+  if (blockers.length) {
+    return { ok: false, error: `این دانشجو ${blockers.join('، ')} دارد و حذف کامل انجام نشد.` };
+  }
+
+  // هر جدولی که به students.id ارجاع می‌دهد — حتی یک ردیف = توقف
+  const fks = await db.execute<{ t: string; c: string }>(sql`
+    SELECT tc.table_name AS t, kcu.column_name AS c
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+    JOIN information_schema.constraint_column_usage ccu
+      ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+    WHERE tc.constraint_type = 'FOREIGN KEY'
+      AND ccu.table_name = 'students' AND ccu.column_name = 'id'`);
+  for (const fk of fks.rows) {
+    if (fk.t === 'students' || fk.t.startsWith('backup_') || /_bak|_backup/.test(fk.t)) continue;
+    const q = await db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM ${sql.identifier(fk.t)} WHERE ${sql.identifier(fk.c)} = ${id}`);
+    if (Number(q.rows[0]?.n) > 0) {
+      return { ok: false, error: `این دانشجو در «${fk.t}» سابقه دارد و حذف کامل انجام نشد.` };
+    }
+  }
+
+  await db.delete(students).where(eq(students.id, id));
+  revalidatePath('/admin/students');
+  revalidatePath('/admin/finance');
+  return { ok: true };
+}
+
 export async function saveUserRolesAction(userId: number, roleIds: number[]): Promise<{ ok: boolean; error?: string; added?: number; removed?: number }> {
   try {
     await requireRole(['ADMIN']);
@@ -840,9 +944,11 @@ export async function saveUserRolesAction(userId: number, roleIds: number[]): Pr
 /** فیلدهای قابل‌ذخیرهٔ پروندهٔ دانشجو (هم‌گام با تفاوت‌های types.ts) */
 export type StudentProfilePatch = {
   firstName?: string | null;
+  birthDate?: string | null;
   lastName?: string | null;
   nationalCode?: string | null;
   status?: string | null;
+  samaStatusCode?: string | null;
   degreeLevelId?: number | null;
   majorId?: number | null;
   quotaType?: string | null;
@@ -899,9 +1005,11 @@ export type StudentProfilePatch = {
 /** Zod allow-list گیت اعتبارسنجی وصلهٔ پروندهٔ دانشجو (maxها هم‌گام با slicing داخل اکشن) */
 const studentProfilePatchSchema = z.object({
   firstName: z.coerce.string().max(100).nullish(),
+  birthDate: z.coerce.string().max(20).nullish(),
   lastName: z.coerce.string().max(100).nullish(),
   nationalCode: z.coerce.string().max(10).nullish(),
   status: z.coerce.string().max(30).nullish(),
+  samaStatusCode: z.coerce.string().max(10).nullish(),
   degreeLevelId: z.coerce.number().int().positive().nullish(),
   majorId: z.coerce.number().int().positive().nullish(),
   quotaType: z.coerce.string().max(50).nullish(),
@@ -1010,8 +1118,14 @@ export async function updateStudentProfileAction(
         if (dup.length) return { ok: false, error: 'این کد ملی برای کاربر دیگری ثبت شده است.' };
       }
     }
+    if ('birthDate' in patch) {
+      const bd = clean((patch as Record<string, unknown>).birthDate, 20);
+      if (bd && !/^\d{4}-\d{2}-\d{2}$/.test(bd)) {
+        return { ok: false, error: 'قالب تاریخ تولد نامعتبر است.' };
+      }
+    }
     const us = [
-      ['firstName', 100], ['lastName', 100], ['nationalCode', 10],
+      ['firstName', 100], ['lastName', 100], ['nationalCode', 10], ['birthDate', 20],
       ['fatherName', 100], ['birthCertNo', 20], ['placeOfBirth', 150], ['placeOfIssue', 150],
       ['gender', 10], ['mobile', 11], ['email', 150], ['postalCode', 10], ['address', 300],
       ['passportNumber', 20], ['nationality', 10],
@@ -1040,10 +1154,19 @@ export async function updateStudentProfileAction(
       'guardianPhone', 'guardianAddress', 'guardianEmail', 'diplomaType', 'diplomaPlace',
       'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType',
       'englishExamType', 'englishScore', 'documentDeficiency', 'entryDate',
-      'status', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
+      'status', 'samaStatusCode', 'quotaType', 'acceptanceType', 'studyingMode', 'trainingMethod',
     ] as const;
     for (const k of ss) {
       if (k in patch) { const v = clean((patch as Record<string, unknown>)[k], 300); if (v !== undefined) stuSet[k] = v; }
+    }
+    // «وضعیت تحصیلی» از کدینگ سما می‌آید؛ وضعیت داخلی هم از همان کد مشتق می‌شود
+    // تا برچسب کنار شمارهٔ دانشجویی و فیلد پرونده یکی باشند.
+    if ('samaStatusCode' in patch) {
+      const code = clean((patch as Record<string, unknown>).samaStatusCode, 10);
+      if (code !== undefined) {
+        stuSet.samaStatusCode = code;
+        if (code) stuSet.status = samaStatusToInternal(code, uni.code);
+      }
     }
     const ns = ['hasDorm', 'tuitionPayer', 'certIssued3m', 'unitsRemaining', 'eqSemesters', 'entryYear', 'entryTerm', 'degreeLevelId', 'majorId'] as const;
     for (const k of ns) {

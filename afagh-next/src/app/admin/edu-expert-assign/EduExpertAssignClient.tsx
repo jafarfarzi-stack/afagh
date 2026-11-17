@@ -502,7 +502,7 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
             <table className="w-full text-sm rt hidden md:table">
               <thead className="bg-slate-900 text-white">
                 <tr>
-                  <th className="p-2 w-8">
+                  <th scope="col" className="p-2 w-8">
                     <input
                       type="checkbox"
                       checked={rows.length > 0 && rows.every((r) => selected.has(r.offeringId))}
@@ -517,12 +517,12 @@ export default function EduExpertAssignClient({ init }: { init: EduExpertAssignI
                       aria-label="انتخاب همه"
                     />
                   </th>
-                  <th className="p-2 text-right">#</th>
-                  <th className="p-2 text-right">درس</th>
-                  <th className="p-2 text-right">گروه</th>
-                  <th className="p-2 text-right">کلاس (اتاق)</th>
-                  <th className="p-2 text-right">کارشناسان</th>
-                  <th className="p-2 text-right">منبع</th>
+                  <th scope="col" className="p-2 text-right">#</th>
+                  <th scope="col" className="p-2 text-right">درس</th>
+                  <th scope="col" className="p-2 text-right">گروه</th>
+                  <th scope="col" className="p-2 text-right">کلاس (اتاق)</th>
+                  <th scope="col" className="p-2 text-right">کارشناسان</th>
+                  <th scope="col" className="p-2 text-right">منبع</th>
                 </tr>
               </thead>
               <tbody>

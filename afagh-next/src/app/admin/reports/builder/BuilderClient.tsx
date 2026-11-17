@@ -532,7 +532,7 @@ export default function BuilderClient({
             <table className="w-full text-right text-xs">
               <thead className="text-2xs text-slate-500 border-b border-slate-200">
                 <tr>
-                  {preview.columns.map(c => <th key={c.key} className="p-2 whitespace-nowrap">{c.title}</th>)}
+                  {preview.columns.map(c => <th scope="col" key={c.key} className="p-2 whitespace-nowrap">{c.title}</th>)}
                 </tr>
               </thead>
               <tbody>

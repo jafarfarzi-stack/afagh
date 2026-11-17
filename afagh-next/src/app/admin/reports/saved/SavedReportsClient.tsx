@@ -157,7 +157,7 @@ export default function SavedReportsClient({ reports, brand }: { reports: SavedR
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead className="text-2xs text-slate-500 border-b border-slate-200">
-                <tr>{result.columns.map(c => <th key={c.key} className="p-2 whitespace-nowrap">{c.title}</th>)}</tr>
+                <tr>{result.columns.map(c => <th scope="col" key={c.key} className="p-2 whitespace-nowrap">{c.title}</th>)}</tr>
               </thead>
               <tbody>
                 {result.rows.map((r, i) => (

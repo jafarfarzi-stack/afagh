@@ -228,9 +228,9 @@ export default async function StudentFinancePage({
             <table className="w-full text-right text-sm rt">
               <thead>
                 <tr className="text-xs text-slate-500 border-b border-slate-200">
-                  <th className="p-2">دانشجو</th>
-                  <th className="p-2">کد</th>
-                  <th className="p-2">مانده بدهی (ریال)</th>
+                  <th scope="col" className="p-2">دانشجو</th>
+                  <th scope="col" className="p-2">کد</th>
+                  <th scope="col" className="p-2">مانده بدهی (ریال)</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,9 +260,9 @@ export default async function StudentFinancePage({
             <table className="w-full text-right text-sm rt">
               <thead>
                 <tr className="text-xs text-slate-500 border-b border-slate-200">
-                  <th className="p-2">کد رهگیری</th>
-                  <th className="p-2">دانشجو</th>
-                  <th className="p-2">فرآیند / گام</th>
+                  <th scope="col" className="p-2">کد رهگیری</th>
+                  <th scope="col" className="p-2">دانشجو</th>
+                  <th scope="col" className="p-2">فرآیند / گام</th>
                 </tr>
               </thead>
               <tbody>
@@ -329,10 +329,10 @@ export default async function StudentFinancePage({
           <table className="w-full text-right text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-200">
-                <th className="p-2">نوع واریز</th>
-                <th className="p-2">تعداد تراکنش</th>
-                <th className="p-2">جمع مبلغ (ریال)</th>
-                <th className="p-2">سهم</th>
+                <th scope="col" className="p-2">نوع واریز</th>
+                <th scope="col" className="p-2">تعداد تراکنش</th>
+                <th scope="col" className="p-2">جمع مبلغ (ریال)</th>
+                <th scope="col" className="p-2">سهم</th>
               </tr>
             </thead>
             <tbody>
@@ -387,13 +387,13 @@ export default async function StudentFinancePage({
           <table className="w-full text-right text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-200">
-                <th className="p-2">تاریخ</th>
-                <th className="p-2">دانشجو</th>
-                <th className="p-2">نوع</th>
-                <th className="p-2">نوع واریز</th>
-                <th className="p-2">تاریخ واریز</th>
-                <th className="p-2">مبلغ (ریال)</th>
-                <th className="p-2">شرح</th>
+                <th scope="col" className="p-2">تاریخ</th>
+                <th scope="col" className="p-2">دانشجو</th>
+                <th scope="col" className="p-2">نوع</th>
+                <th scope="col" className="p-2">نوع واریز</th>
+                <th scope="col" className="p-2">تاریخ واریز</th>
+                <th scope="col" className="p-2">مبلغ (ریال)</th>
+                <th scope="col" className="p-2">شرح</th>
               </tr>
             </thead>
             <tbody>

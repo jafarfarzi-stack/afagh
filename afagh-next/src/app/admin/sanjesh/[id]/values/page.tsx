@@ -103,11 +103,11 @@ export default async function SanjeshValuesPage({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-100 text-slate-600">
                 <tr>
-                  <th className="p-1.5 font-medium">مقدار سنجش</th>
-                  <th className="p-1.5 font-medium">عنوان سنجش</th>
-                  <th className="p-1.5 font-medium">کد داخلی</th>
-                  <th className="p-1.5 font-medium">عنوان داخلی</th>
-                  <th className="w-16 p-1.5 font-medium">حذف</th>
+                  <th scope="col" className="p-1.5 font-medium">مقدار سنجش</th>
+                  <th scope="col" className="p-1.5 font-medium">عنوان سنجش</th>
+                  <th scope="col" className="p-1.5 font-medium">کد داخلی</th>
+                  <th scope="col" className="p-1.5 font-medium">عنوان داخلی</th>
+                  <th scope="col" className="w-16 p-1.5 font-medium">حذف</th>
                 </tr>
               </thead>
               <tbody>

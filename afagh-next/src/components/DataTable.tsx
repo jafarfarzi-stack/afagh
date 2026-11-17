@@ -105,11 +105,20 @@ export function ClientTh<T>({
 }) {
   const active = sortKey === col.key;
   return (
-    <th className={`p-2 align-top ${col.className ?? ''}`}>
+    <th
+      scope="col"
+      aria-sort={col.sortable === false ? undefined : active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`p-2 align-top ${col.className ?? ''}`}
+    >
       {col.sortable === false ? (
         <span className="whitespace-nowrap">{col.label}</span>
       ) : (
-        <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}>
+        <button
+          onClick={onSort}
+          title="مرتب‌سازی"
+          aria-label={`مرتب‌سازی بر اساس ${col.label}`}
+          className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}
+        >
           {col.label}{' '}
           <span className="inline-block w-4 text-center">
             {active ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
@@ -122,6 +131,7 @@ export function ClientTh<T>({
           onChange={e => onFilter(e.target.value)}
           onClick={e => e.stopPropagation()}
           placeholder="فیلتر…"
+          aria-label={`فیلتر ${col.label}`}
           className="mt-1 block h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-2xs font-normal"
         />
       )}
@@ -236,7 +246,7 @@ export function ServerTh({
 }) {
   const active = activeKey === sortKey;
   return (
-    <th className={`p-2 align-top ${className ?? ''}`}>
+    <th scope="col" className={`p-2 align-top ${className ?? ''}`}>
       <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}>
         {label}{' '}
         <span className="inline-block w-4 text-center">

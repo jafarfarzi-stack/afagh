@@ -146,7 +146,7 @@ export default function StudentCardsClient({
           <thead className="bg-slate-100 text-slate-700">
             <tr>
               {['دانشجو', 'شمارهٔ دانشجویی', 'وضعیت تحصیلی', 'بدهی (ریال)', 'وضعیت کارت', 'انقضا', 'توکن امنیتی', 'عملیات'].map(h => (
-                <th key={h} className="p-2.5 font-bold whitespace-nowrap">{h}</th>
+                <th scope="col" key={h} className="p-2.5 font-bold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>

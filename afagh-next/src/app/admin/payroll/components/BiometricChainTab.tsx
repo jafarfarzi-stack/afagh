@@ -90,15 +90,15 @@ export default function BiometricChainTab({ state, api }: Props) {
             <table className="w-full text-right text-xs border-collapse rt">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-2.5">کد</th>
-                  <th className="p-2.5">نام استاد</th>
-                  <th className="p-2.5 text-center">تاریخ</th>
-                  <th className="p-2.5">عنوان درس و گروه</th>
-                  <th className="p-2.5 text-center">ساعت کلاسی</th>
-                  <th className="p-2.5 text-center">تردد گیت ورودی</th>
-                  <th className="p-2.5 text-center">روش تایید حضور</th>
-                  <th className="p-2.5">جزئیات و آی‌پی ثبت‌شده</th>
-                  <th className="p-2.5 text-center">اثر مالی</th>
+                  <th scope="col" className="p-2.5">کد</th>
+                  <th scope="col" className="p-2.5">نام استاد</th>
+                  <th scope="col" className="p-2.5 text-center">تاریخ</th>
+                  <th scope="col" className="p-2.5">عنوان درس و گروه</th>
+                  <th scope="col" className="p-2.5 text-center">ساعت کلاسی</th>
+                  <th scope="col" className="p-2.5 text-center">تردد گیت ورودی</th>
+                  <th scope="col" className="p-2.5 text-center">روش تایید حضور</th>
+                  <th scope="col" className="p-2.5">جزئیات و آی‌پی ثبت‌شده</th>
+                  <th scope="col" className="p-2.5 text-center">اثر مالی</th>
                 </tr>
               </thead>
               <tbody>

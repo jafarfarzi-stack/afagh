@@ -98,7 +98,7 @@ export default function SaminClient({
         <h3 className="font-bold text-xs">صف ثمین (۵۰ اخیر)</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-2xs rt">
-            <thead><tr className="bg-slate-50 border-b"><th className="px-2 py-1 text-right">person_pk</th><th className="px-2 py-1">وضعیت</th><th className="px-2 py-1">trace</th></tr></thead>
+            <thead><tr className="bg-slate-50 border-b"><th scope="col" className="px-2 py-1 text-right">person_pk</th><th scope="col" className="px-2 py-1">وضعیت</th><th scope="col" className="px-2 py-1">trace</th></tr></thead>
             <tbody>
               {staging.map(s => (
                 <tr key={s.id} className="border-b">
@@ -116,7 +116,7 @@ export default function SaminClient({
         <h3 className="font-bold text-xs">لاگ همگام‌سازی (۲۰ اخیر)</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-2xs rt">
-            <thead><tr className="bg-slate-50 border-b"><th className="px-2 py-1">trace</th><th className="px-2 py-1">وضعیت</th><th className="px-2 py-1">نتیجه</th></tr></thead>
+            <thead><tr className="bg-slate-50 border-b"><th scope="col" className="px-2 py-1">trace</th><th scope="col" className="px-2 py-1">وضعیت</th><th scope="col" className="px-2 py-1">نتیجه</th></tr></thead>
             <tbody>
               {logs.map(l => (
                 <tr key={l.id} className="border-b">

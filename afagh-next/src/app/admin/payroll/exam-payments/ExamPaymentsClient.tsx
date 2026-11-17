@@ -153,10 +153,10 @@ export default function ExamPaymentsClient(props: {
             <table className="w-full text-xs rt">
               <thead>
                 <tr className="border-b border-amber-200 text-2xs text-amber-800">
-                  <th className="p-1.5 text-right">استاد</th>
-                  <th className="p-1.5">درس در انتظار بایگانی</th>
-                  <th className="p-1.5">پرداخت ثبت‌شده</th>
-                  <th className="p-1.5">اقدام</th>
+                  <th scope="col" className="p-1.5 text-right">استاد</th>
+                  <th scope="col" className="p-1.5">درس در انتظار بایگانی</th>
+                  <th scope="col" className="p-1.5">پرداخت ثبت‌شده</th>
+                  <th scope="col" className="p-1.5">اقدام</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,14 +222,14 @@ export default function ExamPaymentsClient(props: {
           <table className="w-full text-sm rt">
             <thead>
               <tr className="text-xs text-slate-500 border-b">
-                <th className="p-2 text-right">استاد</th>
-                <th className="p-2">منبع</th>
-                <th className="p-2">جلسات</th>
-                <th className="p-2">واحد</th>
-                <th className="p-2">مبلغ</th>
-                <th className="p-2">آمادگی پرداخت</th>
-                <th className="p-2">ابلاغ</th>
-                <th className="p-2">حذف</th>
+                <th scope="col" className="p-2 text-right">استاد</th>
+                <th scope="col" className="p-2">منبع</th>
+                <th scope="col" className="p-2">جلسات</th>
+                <th scope="col" className="p-2">واحد</th>
+                <th scope="col" className="p-2">مبلغ</th>
+                <th scope="col" className="p-2">آمادگی پرداخت</th>
+                <th scope="col" className="p-2">ابلاغ</th>
+                <th scope="col" className="p-2">حذف</th>
               </tr>
             </thead>
             <tbody>

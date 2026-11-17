@@ -232,14 +232,14 @@ export default function ProfessorContractClient({ demo = false, initialContract,
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800 w-12">ردیف</th>
-                  <th className="p-2.5 border border-slate-800">کد درس</th>
-                  <th className="p-2.5 border border-slate-800">عنوان درس مصوب</th>
-                  <th className="p-2.5 border border-slate-800">گروه</th>
-                  <th className="p-2.5 border border-slate-800">واحد تئوری</th>
-                  <th className="p-2.5 border border-slate-800">واحد عملی</th>
-                  <th className="p-2.5 border border-slate-800">ساعت هفتگی</th>
-                  <th className="p-2.5 border border-slate-800">کل ساعات ترم</th>
+                  <th scope="col" className="p-2.5 border border-slate-800 w-12">ردیف</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">کد درس</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">عنوان درس مصوب</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">گروه</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">واحد تئوری</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">واحد عملی</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">ساعت هفتگی</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">کل ساعات ترم</th>
                 </tr>
               </thead>
               <tbody>

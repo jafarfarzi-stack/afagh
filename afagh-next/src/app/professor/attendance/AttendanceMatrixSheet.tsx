@@ -59,18 +59,18 @@ export default function AttendanceMatrixSheet({
               <table className="tr-term-table w-full border-collapse text-center rt">
                 <thead>
                   <tr className="bg-slate-100 text-3xs text-slate-700">
-                    <th className="border border-slate-300 px-1 py-1">ردیف</th>
-                    <th className="border border-slate-300 px-1 py-1">شمارهٔ دانشجویی</th>
-                    <th className="border border-slate-300 px-1 py-1 text-right">نام و نام خانوادگی</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1">ردیف</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1">شمارهٔ دانشجویی</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1 text-right">نام و نام خانوادگی</th>
                     {sessions.map(s => (
-                      <th key={s.id} className="border border-slate-300 px-0.5 py-1">
+                      <th scope="col" key={s.id} className="border border-slate-300 px-0.5 py-1">
                         {faNum(s.sessionNo)}
                         <span className="block font-normal text-[8px] text-slate-500">{s.sessionDate}</span>
                       </th>
                     ))}
-                    <th className="border border-slate-300 px-1 py-1">حاضر</th>
-                    <th className="border border-slate-300 px-1 py-1">غایب</th>
-                    <th className="border border-slate-300 px-1 py-1">درصد</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1">حاضر</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1">غایب</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1">درصد</th>
                   </tr>
                 </thead>
                 <tbody>

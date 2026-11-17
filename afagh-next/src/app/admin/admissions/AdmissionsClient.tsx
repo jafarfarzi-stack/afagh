@@ -832,11 +832,11 @@ export default function AdmissionsClient({
                     <table className="w-full text-right text-2xs">
                       <thead className="text-slate-500 sticky top-0 bg-white dark:bg-slate-900">
                         <tr>
-                          <th className="p-1.5 font-medium">نام</th>
-                          <th className="p-1.5 font-medium">کد ملی</th>
-                          <th className="p-1.5 font-medium">شمارهٔ موجود</th>
-                          <th className="p-1.5 font-medium">رشته</th>
-                          <th className="p-1.5 font-medium">اقدام</th>
+                          <th scope="col" className="p-1.5 font-medium">نام</th>
+                          <th scope="col" className="p-1.5 font-medium">کد ملی</th>
+                          <th scope="col" className="p-1.5 font-medium">شمارهٔ موجود</th>
+                          <th scope="col" className="p-1.5 font-medium">رشته</th>
+                          <th scope="col" className="p-1.5 font-medium">اقدام</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -933,12 +933,12 @@ export default function AdmissionsClient({
                     <table className="w-full mt-1 text-right text-2xs">
                       <thead className="text-slate-500">
                         <tr>
-                          <th className="p-1 font-medium">شماره</th>
-                          <th className="p-1 font-medium">رشته</th>
-                          <th className="p-1 font-medium">ورودی/ترم</th>
-                          <th className="p-1 font-medium">وضعیت</th>
-                          <th className="p-1 font-medium">منبع</th>
-                          <th className="p-1 font-medium">روش ورود</th>
+                          <th scope="col" className="p-1 font-medium">شماره</th>
+                          <th scope="col" className="p-1 font-medium">رشته</th>
+                          <th scope="col" className="p-1 font-medium">ورودی/ترم</th>
+                          <th scope="col" className="p-1 font-medium">وضعیت</th>
+                          <th scope="col" className="p-1 font-medium">منبع</th>
+                          <th scope="col" className="p-1 font-medium">روش ورود</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1298,12 +1298,12 @@ export default function AdmissionsClient({
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
-                      <th className="p-2 font-bold">کد رشتهٔ سنجش</th>
-                      <th className="p-2 font-bold">گروه رشته</th>
-                      <th className="p-2 font-bold">مقطع</th>
-                      <th className="p-2 font-bold">تعداد</th>
-                      <th className="p-2 font-bold">رشتهٔ دانشگاه</th>
-                      <th className="p-2 font-bold">وضعیت</th>
+                      <th scope="col" className="p-2 font-bold">کد رشتهٔ سنجش</th>
+                      <th scope="col" className="p-2 font-bold">گروه رشته</th>
+                      <th scope="col" className="p-2 font-bold">مقطع</th>
+                      <th scope="col" className="p-2 font-bold">تعداد</th>
+                      <th scope="col" className="p-2 font-bold">رشتهٔ دانشگاه</th>
+                      <th scope="col" className="p-2 font-bold">وضعیت</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1900,11 +1900,11 @@ export default function AdmissionsClient({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="p-2 font-bold w-8">#</th>
-                  <th className="p-2 font-bold">عنوان</th>
-                  <th className="p-2 font-bold">فرمول</th>
-                  <th className="p-2 font-bold">توضیح</th>
-                  <th className="p-2 font-bold w-32">عملیات</th>
+                  <th scope="col" className="p-2 font-bold w-8">#</th>
+                  <th scope="col" className="p-2 font-bold">عنوان</th>
+                  <th scope="col" className="p-2 font-bold">فرمول</th>
+                  <th scope="col" className="p-2 font-bold">توضیح</th>
+                  <th scope="col" className="p-2 font-bold w-32">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -2200,11 +2200,11 @@ export default function AdmissionsClient({
             <table className="w-full text-right text-xs rt">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
-                  <th className="p-3">سرویس</th>
-                  <th className="p-3">آدرس اندپوینت</th>
-                  <th className="p-3">وضعیت HTTP</th>
-                  <th className="p-3">زمان تاخیر</th>
-                  <th className="p-3">نتیجه</th>
+                  <th scope="col" className="p-3">سرویس</th>
+                  <th scope="col" className="p-3">آدرس اندپوینت</th>
+                  <th scope="col" className="p-3">وضعیت HTTP</th>
+                  <th scope="col" className="p-3">زمان تاخیر</th>
+                  <th scope="col" className="p-3">نتیجه</th>
                 </tr>
               </thead>
               <tbody>

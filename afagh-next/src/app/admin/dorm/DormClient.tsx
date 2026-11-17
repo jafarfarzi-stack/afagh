@@ -161,15 +161,15 @@ export default function DormClient() {
         <table className="w-full text-sm rt">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="p-2 text-right">#</th>
-              <th className="p-2 text-right">دانشجو</th>
-              <th className="p-2 text-right">شماره</th>
-              <th className="p-2 text-right">خوابگاه</th>
-              <th className="p-2 text-right">اتاق / تخت</th>
-              <th className="p-2 text-right">سال تحصیلی</th>
-              <th className="p-2 text-right">اعتبار</th>
-              <th className="p-2 text-right">وضعیت</th>
-              <th className="p-2 text-right">عملیات</th>
+              <th scope="col" className="p-2 text-right">#</th>
+              <th scope="col" className="p-2 text-right">دانشجو</th>
+              <th scope="col" className="p-2 text-right">شماره</th>
+              <th scope="col" className="p-2 text-right">خوابگاه</th>
+              <th scope="col" className="p-2 text-right">اتاق / تخت</th>
+              <th scope="col" className="p-2 text-right">سال تحصیلی</th>
+              <th scope="col" className="p-2 text-right">اعتبار</th>
+              <th scope="col" className="p-2 text-right">وضعیت</th>
+              <th scope="col" className="p-2 text-right">عملیات</th>
             </tr>
           </thead>
           <tbody>

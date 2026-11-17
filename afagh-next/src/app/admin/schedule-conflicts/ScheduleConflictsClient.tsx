@@ -352,12 +352,12 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
               <table className="w-full text-right text-xs rt">
                 <thead>
                   <tr className="text-slate-500">
-                    <th className="p-2">موجودیتِ درگیر</th>
-                    <th className="p-2">روز</th>
-                    <th className="p-2">بازه</th>
-                    <th className="p-2">دروس درگیر</th>
-                    <th className="p-2">دانشجو</th>
-                    <th className="p-2">عملیات</th>
+                    <th scope="col" className="p-2">موجودیتِ درگیر</th>
+                    <th scope="col" className="p-2">روز</th>
+                    <th scope="col" className="p-2">بازه</th>
+                    <th scope="col" className="p-2">دروس درگیر</th>
+                    <th scope="col" className="p-2">دانشجو</th>
+                    <th scope="col" className="p-2">عملیات</th>
                   </tr>
                 </thead>
                 <tbody>

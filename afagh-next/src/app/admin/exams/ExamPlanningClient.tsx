@@ -365,12 +365,12 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800">سشن</th>
-                  <th className="p-2.5 border border-slate-800">تاریخ</th>
-                  <th className="p-2.5 border border-slate-800">ساعت</th>
-                  <th className="p-2.5 border border-slate-800">مراقبین</th>
-                  <th className="p-2.5 border border-slate-800">حضور و غیاب ثبت‌شده</th>
-                  <th className="p-2.5 border border-slate-800">عملیات</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">سشن</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">تاریخ</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">ساعت</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">مراقبین</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">حضور و غیاب ثبت‌شده</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">عملیات</th>
                 </tr>
               </thead>
               <tbody>
@@ -426,13 +426,13 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
             <table className="hidden md:table w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2.5 border border-slate-800">کد درس</th>
-                  <th className="p-2.5 border border-slate-800">عنوان</th>
-                  <th className="p-2.5 border border-slate-800">گروه</th>
-                  <th className="p-2.5 border border-slate-800">استاد</th>
-                  <th className="p-2.5 border border-slate-800">تاریخ / ساعت</th>
-                  <th className="p-2.5 border border-slate-800">سالن</th>
-                  <th className="p-2.5 border border-slate-800">بستهٔ اوراق</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">کد درس</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">عنوان</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">گروه</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">استاد</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">تاریخ / ساعت</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">سالن</th>
+                  <th scope="col" className="p-2.5 border border-slate-800">بستهٔ اوراق</th>
                 </tr>
               </thead>
               <tbody>
@@ -630,12 +630,12 @@ export default function ExamPlanningClient({ initial, universityId }: { initial:
                 <table className="w-full border-collapse text-xs rt">
                   <thead>
                     <tr className="bg-slate-900 text-white text-center">
-                      <th className="p-2.5 border border-slate-800">تاریخ</th>
-                      <th className="p-2.5 border border-slate-800">شیفت</th>
-                      <th className="p-2.5 border border-slate-800">تقاضا</th>
-                      <th className="p-2.5 border border-slate-800">ظرفیت خالی</th>
-                      <th className="p-2.5 border border-slate-800">اشغال</th>
-                      <th className="p-2.5 border border-slate-800">وضعیت</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">تاریخ</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">شیفت</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">تقاضا</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">ظرفیت خالی</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">اشغال</th>
+                      <th scope="col" className="p-2.5 border border-slate-800">وضعیت</th>
                     </tr>
                   </thead>
                   <tbody>

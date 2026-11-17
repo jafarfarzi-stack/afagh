@@ -158,12 +158,12 @@ export default function CouncilClient() {
           <table className="w-full text-sm rt">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="p-2 text-right">#</th>
-                <th className="p-2 text-right">عنوان</th>
-                <th className="p-2 text-right">تاریخ جلسه</th>
-                <th className="p-2 text-right">اعضا</th>
-                <th className="p-2 text-right">مصوبات</th>
-                <th className="p-2 text-right">عملیات</th>
+                <th scope="col" className="p-2 text-right">#</th>
+                <th scope="col" className="p-2 text-right">عنوان</th>
+                <th scope="col" className="p-2 text-right">تاریخ جلسه</th>
+                <th scope="col" className="p-2 text-right">اعضا</th>
+                <th scope="col" className="p-2 text-right">مصوبات</th>
+                <th scope="col" className="p-2 text-right">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -228,14 +228,14 @@ export default function CouncilClient() {
             <table className="w-full text-sm rt">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="p-2 text-right">#</th>
-                  <th className="p-2 text-right">جلسه</th>
-                  <th className="p-2 text-right">دانشجو</th>
-                  <th className="p-2 text-right">نوع</th>
-                  <th className="p-2 text-right">متن</th>
-                  <th className="p-2 text-right">وضعیت اجرا</th>
-                  <th className="p-2 text-right">مهلت</th>
-                  <th className="p-2 text-right">عملیات</th>
+                  <th scope="col" className="p-2 text-right">#</th>
+                  <th scope="col" className="p-2 text-right">جلسه</th>
+                  <th scope="col" className="p-2 text-right">دانشجو</th>
+                  <th scope="col" className="p-2 text-right">نوع</th>
+                  <th scope="col" className="p-2 text-right">متن</th>
+                  <th scope="col" className="p-2 text-right">وضعیت اجرا</th>
+                  <th scope="col" className="p-2 text-right">مهلت</th>
+                  <th scope="col" className="p-2 text-right">عملیات</th>
                 </tr>
               </thead>
               <tbody>

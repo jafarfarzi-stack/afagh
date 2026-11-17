@@ -182,12 +182,12 @@ export default function OrphanCoursesPanel({
             <table className="w-full border-collapse text-xs rt">
               <thead>
                 <tr className="bg-slate-900 text-white text-center">
-                  <th className="p-2 border border-slate-800 w-10">
+                  <th scope="col" className="p-2 border border-slate-800 w-10">
                     <input type="checkbox" checked={rows.length > 0 && rows.every(r => sel.has(r.id))} onChange={togglePage} className="w-4 h-4 accent-emerald-600" />
                   </th>
-                  <th className="p-2 border border-slate-800">کد</th>
-                  <th className="p-2 border border-slate-800">{mode === 'courses' ? 'عنوان درس' : 'نام رشته'}</th>
-                  {mode === 'courses' && <th className="p-2 border border-slate-800">نوع</th>}
+                  <th scope="col" className="p-2 border border-slate-800">کد</th>
+                  <th scope="col" className="p-2 border border-slate-800">{mode === 'courses' ? 'عنوان درس' : 'نام رشته'}</th>
+                  {mode === 'courses' && <th scope="col" className="p-2 border border-slate-800">نوع</th>}
                 </tr>
               </thead>
               <tbody>
