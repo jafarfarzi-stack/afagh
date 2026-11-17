@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { faId } from '@/lib/calendar';
 
 /** سطر فهرست مالی — هم‌شکل FinanceStudentRow (ساختاری؛ بدون وابستگی سرور) */
 export interface PickerStudent {
@@ -222,7 +223,7 @@ export default function StudentPicker({
                       <span className="block">{s.majorTitle ?? '—'}</span>
                       <span className="block text-3xs text-slate-400">{s.degreeTitle ?? ''}</span>
                     </td>
-                    <td className="p-2.5 text-slate-600">{s.entryYear ? fa(s.entryYear) : '—'}</td>
+                    <td className="p-2.5 text-slate-600">{s.entryYear ? faId(s.entryYear) : '—'}</td>
                     <td className="p-2.5">
                       <span
                         className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-black ${

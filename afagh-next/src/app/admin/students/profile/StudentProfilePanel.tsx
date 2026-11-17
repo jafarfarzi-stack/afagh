@@ -25,6 +25,7 @@ import type { RegulationPick, StudentItem } from '../types';
 import Link from 'next/link';
 import { SAMA_STATUS_TITLE, QUOTA_FA, STUDENT_STATUS_FA, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 import { dateToJalali, faNum } from '../transcript-utils';
+import { faId } from '@/lib/calendar';
 import { normalizeFa, toEnDigits } from '@/lib/persian-search';
 
 // ── لوک‌آپ‌های سما: کد خام ← عنوان فارسی (فایل‌های «دوره.txt»، «شيوه آموزش.txt»، «نحوه ورود به دانشگاه.txt») ──
@@ -453,7 +454,7 @@ export default function StudentProfilePanel({
                 hint={(
                   <>
                     {entryStart ? `شروع: ${entryStart}` : 'سال ۴ رقمی + ترم ۱ رقمی'}
-                    {entryYear ? ` — سال ${faNum(entryYear, 0)}` : ''}
+                    {entryYear ? ` — سال ${faId(entryYear)}` : ''}
                     {entryTerm ? ` / ترم ${faNum(entryTerm, 0)}` : ''}
                   </>
                 )}

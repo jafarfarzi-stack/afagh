@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { faId } from '@/lib/calendar';
 import {
   deleteDiscountTypeAction, deleteFormulaAction, deleteLoanProductAction,
   deleteSponsorAction, saveDiscountTypeAction, saveFormulaAction,
@@ -395,7 +396,7 @@ export default function RulesClient(props: {
                       <td className="p-2 text-slate-600">{f.majorId ? props.majorsOptions.find((m) => m.id === f.majorId)?.title || '—' : 'همه'}</td>
                       <td className="p-2 text-slate-600">
                         {f.entryYearFrom || f.entryYearTo
-                          ? `${f.entryYearFrom ? fa(f.entryYearFrom) : '…'} تا ${f.entryYearTo ? fa(f.entryYearTo) : '…'}`
+                          ? `${f.entryYearFrom ? faId(f.entryYearFrom) : '…'} تا ${f.entryYearTo ? faId(f.entryYearTo) : '…'}`
                           : 'همه'}
                       </td>
                       <td className="p-2">{fa(f.fixedAmount)}</td>

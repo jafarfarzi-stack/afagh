@@ -140,6 +140,14 @@ export function faDigits(input: string | number): string {
   return String(input).replace(/\d/g, d => FA_DIGITS[Number(d)]);
 }
 
+/**
+ * «شناسه» با ارقام فارسی و **بدون** جداکنندهٔ هزارگان.
+ * سال ورود (۱۳۹۴)، کد ترم (۱۴۰۴۱)، شمارهٔ سند/فیش/قرارداد، کد دانشجو…
+ * ⚠ برای مبلغ/تعداد از `groupThousands` استفاده کنید؛ استفادهٔ اشتباه از
+ * `toLocaleString('fa-IR')` روی شناسه، «۱۳۹۴» را به «۱٬۳۹۴» تبدیل می‌کند.
+ */
+export const faId = faDigits;
+
 /** «۱٬۲۳۴٬۵۶۷» با جداکنندهٔ هزارگان */
 export function groupThousands(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '٬');

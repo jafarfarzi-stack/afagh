@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { faId } from '@/lib/calendar';
 import { copyTariffYearAction, saveTariffGroupAction, type TariffRateInput } from './actions';
 
 export interface TariffGroup {
@@ -78,7 +79,7 @@ export default function TariffClient({
     startTransition(async () => {
       const res = await copyTariffYearAction({ fromYear, toYear, overwrite });
       setMsg(res.ok
-        ? { kind: 'ok', text: `تعرفهٔ سال ${fa(toYear)} از ${fa(fromYear)} ساخته شد (${fa(res.inserted ?? 0)} ردیف). حالا نرخ‌ها را بازبینی/ویرایش کنید.` }
+        ? { kind: 'ok', text: `تعرفهٔ سال ${faId(toYear)} از ${faId(fromYear)} ساخته شد (${fa(res.inserted ?? 0)} ردیف). حالا نرخ‌ها را بازبینی/ویرایش کنید.` }
         : { kind: 'err', text: res.error ?? 'خطا در کپی.' });
       if (res.ok) router.push(`/admin/tuition/tariff?year=${toYear}`);
     });
@@ -107,7 +108,7 @@ export default function TariffClient({
                 : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500'
             }`}
           >
-            {fa(y)}
+            {faId(y)}
           </button>
         ))}
         <span className="mr-auto text-2xs text-slate-500">
@@ -197,7 +198,7 @@ export default function TariffClient({
                 {g.majors.map((m) => `${m.code}${m.faculty ? ` (${m.faculty})` : ''}`).join(' · ')}
               </p>
               <p className="mt-1 text-3xs text-slate-500">
-                ورودی‌ها: {[...new Set(g.majors.flatMap((m) => m.entryYears))].sort((a, b) => a - b).map(fa).join('، ')}
+                ورودی‌ها: {[...new Set(g.majors.flatMap((m) => m.entryYears))].sort((a, b) => a - b).map(faId).join('، ')}
               </p>
             </div>
 

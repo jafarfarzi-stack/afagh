@@ -6,6 +6,7 @@ import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { MALI_TYPE_LABELS, MALI_TYPE_NON_CHARGING, maliTypeLabel } from '@/lib/mali-types';
 import MaliTypeSelect from './MaliTypeSelect';
+import { faId } from '@/lib/calendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,7 +160,7 @@ export default async function CourseFinancePage({
             value={fa(Number(impact?.n ?? 0))}
             tone={Number(impact?.n ?? 0) ? 'rose' : 'ok'}
           />
-          <Stat label="سال تعرفه" value={termYear ? fa(termYear) : '—'} />
+          <Stat label="سال تعرفه" value={termYear ? faId(termYear) : '—'} />
         </div>
       </div>
 
@@ -225,7 +226,7 @@ export default async function CourseFinancePage({
                       {mt == null ? (
                         <span className="text-rose-700">—</span>
                       ) : !defined ? (
-                        <span className="text-amber-700">در تعرفهٔ {fa(termYear)} نیست</span>
+                        <span className="text-amber-700">در تعرفهٔ {faId(termYear)} نیست</span>
                       ) : (
                         <span className="font-mono text-slate-700" dir="ltr">
                           {fa(Number(rate?.minTh ?? 0))}
@@ -256,7 +257,7 @@ export default async function CourseFinancePage({
       </div>
 
       <div className="card">
-        <h2 className="mb-2 font-bold">راهنمای انواع (نرخ‌های {termYear ? fa(termYear) : 'سال جاری'})</h2>
+        <h2 className="mb-2 font-bold">راهنمای انواع (نرخ‌های {termYear ? faId(termYear) : 'سال جاری'})</h2>
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(MALI_TYPE_LABELS).map(([k, label]) => {
             const n = Number(k);

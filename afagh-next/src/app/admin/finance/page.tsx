@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth';
 import { listFinanceStudents, listFinanceFilterOptions, summarizeFinanceStudents, countFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getTermScope } from '@/lib/term-scope';
+import { faId } from '@/lib/calendar';
 import FinanceTable from './FinanceTable';
 
 export const dynamic = 'force-dynamic';
@@ -230,7 +231,7 @@ export default async function FinanceWorklistPage(props: {
             <select name="entryYear" defaultValue={entryYear ?? ''} className={inputCls}>
               <option value="">همهٔ ورودی‌ها</option>
               {options.entryYears.map((y) => (
-                <option key={y} value={y}>{fa(y)}</option>
+                <option key={y} value={y}>{faId(y)}</option>
               ))}
             </select>
           </label>

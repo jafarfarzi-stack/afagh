@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { notify, askConfirm } from '@/lib/ui-feedback';
+import { faId } from '@/lib/calendar';
 import { ENTITIES, type EntitySpec, type FieldSpec } from '@/lib/finance-base/entities';
 
 const faNum = (v: unknown) => Number(v ?? 0).toLocaleString('fa-IR');
@@ -288,7 +289,7 @@ export default function BaseDataClient() {
             <tbody>
               {payload.rows.map((row) => (
                 <tr key={String(row.id)} className="border-b border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-2 py-1.5 text-slate-400">{faNum(row.id)}</td>
+                  <td className="px-2 py-1.5 text-slate-400">{faId(row.id)}</td>
                   {spec.list.map((c) => (
                     <td key={c} className="whitespace-nowrap px-2 py-1.5 text-slate-800">
                       {cellText(spec, c, row, refs)}

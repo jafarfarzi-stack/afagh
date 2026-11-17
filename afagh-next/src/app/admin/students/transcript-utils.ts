@@ -235,7 +235,15 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
 }
 
 export const faNum = (n: number | null | undefined, digits = 2): string =>
-  n == null ? '—' : n.toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  n == null
+    ? '—'
+    // digits=0 یعنی «بدون اعشار» — ولی جداکنندهٔ هزارگان هم باید خاموش شود،
+    // وگرنه سال ۱۳۹۴ به «۱٬۳۹۴» تبدیل می‌شود (باگ گزارش‌شده).
+    : n.toLocaleString('fa-IR', {
+        maximumFractionDigits: digits,
+        minimumFractionDigits: 0,
+        useGrouping: digits !== 0,
+      });
 
 /** ارقام لاتین → فارسی (برای سال/کد ترم؛ بدون جداکنندهٔ هزارگان) */
 export const faDigits = (v: string | number): string =>
