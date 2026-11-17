@@ -43,7 +43,7 @@ export default function ProfessorNav() {
   return (
     <>
       <nav
-        className="ui-bottom-nav md:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
+        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
         style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         aria-label="ناوبری اصلی استاد"
       >
@@ -81,7 +81,7 @@ export default function ProfessorNav() {
       </nav>
 
       {open && (
-        <div className="md:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="منوی استاد">
+        <div className="lg:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="منوی استاد">
           <div className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} />
           <aside className="absolute bottom-0 inset-x-0 max-h-[82vh] overflow-y-auto rounded-t-3xl bg-white shadow-2xl flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
             {/* دستگیرهٔ کشیدن — نشانهٔ بصریِ «شیت» و کمک به درکِ بستن */}

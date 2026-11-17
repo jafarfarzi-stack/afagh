@@ -12,10 +12,10 @@ import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import TermSwitcher from '@/components/TermSwitcher';
 import { getTermScope, termOrdinalForEntry } from '@/lib/term-scope';
-import { isDemoStudentUser } from '@/lib/demo-accounts';
-import { DEMO_STUDENT } from '@/lib/demo-student-data';
 import HeaderActions from '@/components/HeaderActions';
-import StudentNav, { StudentSidebar } from './StudentNav';
+import StudentNav from './StudentNav';
+import PortalNav from '@/components/portal/PortalNav';
+import { STUDENT_GROUPS } from '@/lib/portal-nav';
 import UserAvatar from '@/components/UserAvatar';
 import BackToDashboard from '@/components/BackToDashboard';
 import RoleTour from '@/components/tour/RoleTour';
@@ -45,7 +45,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
     logoSetting,
     debtRials,
     termScope,
-    demo,
     siblings,
     customCodes,
     lockMin,
@@ -68,7 +67,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
     // وضعیت مالی — یک کوئری سبک روی دفتر تراکنش (همان محاسبهٔ بدهی کارت آزمون)
     me ? studentDebtRials(me.id).catch(() => null) : Promise.resolve(null),
     getTermScope(me?.universityId ?? null),
-    isDemoStudentUser(user.id),
     // حساب‌های هم‌شخص (شماره دانشجویی/کد پرسنلی دیگرِ همین کدملی) برای سوییچر بالای صفحه
     getSiblingAccounts().catch(() => []),
     // دانشجو معمولاً یک نقش دارد؛ فقط وقتی نقش/مجوز دیگری هم دارد سراغ RBAC می‌رویم
@@ -91,7 +89,6 @@ export default async function StudentLayout({ children }: { children: React.Reac
         ? 'تسویه کامل (تراز ۰ ریال)'
         : `بدهی ${debtRials.toLocaleString('fa-IR')} ریال`;
 
-  const sidebarStudentCode = demo ? DEMO_STUDENT.studentCode : me?.studentCode ?? null;
   const permissionCount = customCodes.length;
 
   // شمارهٔ «ترم» هدر = وضعیتِ تحصیلیِ فعلیِ دانشجو، نه ترمِ در حال مرور.
@@ -217,13 +214,21 @@ export default async function StudentLayout({ children }: { children: React.Reac
         </div>
       </header>
 
-      {/* بدنه دو ستونه دسکتاپ: سایدبار سمت راست + محتوای اصلی */}
-      <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
-        {/* سایدبار عمودی سمت راست (دسکتاپ) */}
-        <StudentSidebar user={{ name: user.name, studentCode: sidebarStudentCode }} />
+      {/* بدنه دو ستونه دسکتاپ: سایدبارِ مشترکِ پورتال (از `lg`) + محتوای اصلی.
+          زیر `lg` سایدبار پنهان است و همان نوار پایین/شیتِ موبایل کار می‌کند. */}
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 items-start gap-4 p-3 pb-24 sm:p-6 lg:gap-6 lg:pb-10">
+        <PortalNav
+          groups={STUDENT_GROUPS}
+          surface="student"
+          help={{ href: '/help/student', label: 'راهنمای دانشجو' }}
+        />
 
         {/* محتوای اصلی صفحه */}
-        <main id="main" className="flex-1 min-w-0 overflow-x-hidden print:!overflow-visible print:!px-0 print:!pb-2 p-3 sm:p-5 md:p-6 pb-24 md:pb-8">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="min-w-0 flex-1 overflow-x-hidden scroll-mt-[6.5rem] print:!overflow-visible print:!px-0 print:!pb-2"
+        >
           {/* دکمهٔ بازگشت به کارتابل دانشجو — روی همهٔ زیرصفحه‌ها (نه خودِ /student).
               در موبایل مفیدتر است: سایدبار پنهان است و تنها راه قبلی نوار پایین بود. */}
           <BackToDashboard href="/student" label="بازگشت به کارتابل دانشجو" />

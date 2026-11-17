@@ -9,6 +9,8 @@ import { ADMIN_PANEL_ROLES } from '@/lib/panel-links';
 import SessionLock from '@/components/SessionLock';
 import DeptSwitcher from './DeptSwitcher';
 import GroupManagerNav from './GroupManagerNav';
+import PortalNav from '@/components/portal/PortalNav';
+import { GM_GROUPS } from '@/lib/portal-nav';
 import BackToDashboard from '@/components/BackToDashboard';
 
 export default async function GroupManagerLayout({ children }: { children: React.ReactNode }) {
@@ -86,13 +88,23 @@ export default async function GroupManagerLayout({ children }: { children: React
         </div>
 
         {depts.length > 1 && <DeptSwitcher depts={depts} activeId={current?.id ?? 0} />}
-
-        <GroupManagerNav />
       </header>
-      <main id="main" className="mx-auto max-w-7xl p-3 pb-16 sm:p-5">
-        <BackToDashboard href="/group-manager" label="بازگشت به کارتابل مدیر گروه" />
-        {children}
-      </main>
+
+      {/* ناوبریِ موبایل — نوارِ قرصی از سربرگِ چسبان بیرون آمد تا فقط زیر `lg`
+          بماند و در دسکتاپ جای خود را به سایدبارِ مشترک بدهد. پس‌زمینهٔ فیروزه‌ای
+          عمداً همان رنگِ سربرگ است؛ قرص‌های روشن روی آن خوانا می‌مانند. */}
+      <div className="bg-teal-900 lg:hidden print:hidden">
+        <GroupManagerNav />
+      </div>
+
+      {/* بدنهٔ دوستونه در `lg+`: سایدبارِ مشترکِ پورتال + محتوا */}
+      <div className="mx-auto flex w-full max-w-[1600px] items-start gap-4 p-3 pb-24 sm:p-6 lg:gap-6 lg:pb-10">
+        <PortalNav groups={GM_GROUPS} surface="group-manager" />
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden scroll-mt-[6.5rem]">
+          <BackToDashboard href="/group-manager" label="بازگشت به کارتابل مدیر گروه" />
+          {children}
+        </main>
+      </div>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
     </div>
   );

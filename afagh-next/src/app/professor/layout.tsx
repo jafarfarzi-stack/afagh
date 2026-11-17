@@ -14,6 +14,8 @@ import HeaderActions from '@/components/HeaderActions';
 import UserAvatar from '@/components/UserAvatar';
 import BackToDashboard from '@/components/BackToDashboard';
 import ProfessorNav from './ProfessorNav';
+import PortalNav from '@/components/portal/PortalNav';
+import { PROFESSOR_GROUPS } from '@/lib/portal-nav';
 import RoleTour from '@/components/tour/RoleTour';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import { getSetting } from '@/lib/settings';
@@ -165,12 +167,22 @@ export default async function ProfessorLayout({ children }: { children: React.Re
 
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-7xl min-w-0 overflow-x-hidden p-3 pb-28 sm:p-6 md:pb-10">
-        {/* دکمهٔ بازگشت به کارتابل استاد — روی همهٔ زیرصفحه‌ها (نه خودِ /professor)
-            رنگ از `lib/back-button.ts` می‌آید تا با بقیهٔ پنل‌ها یکی بماند. */}
-        <BackToDashboard href="/professor" label="بازگشت به کارتابل استاد" />
-        {children}
-      </main>
+      {/* بدنهٔ دوستونه در `lg+`: سایدبارِ مشترکِ پورتال + محتوا.
+          پیش‌تر در دسکتاپ هیچ ناوبری‌ای نبود (نوار پایین `md:hidden` بود)؛
+          اکنون `lg` به بالا سایدبار می‌گیرد و زیرِ آن همان نوار پایین/شیت. */}
+      <div className="mx-auto flex w-full max-w-[1600px] items-start gap-4 p-3 pb-24 sm:p-6 lg:gap-6 lg:pb-10">
+        <PortalNav
+          groups={PROFESSOR_GROUPS}
+          surface="professor"
+          help={{ href: '/help/professor', label: 'راهنمای استاد' }}
+        />
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden scroll-mt-[6.5rem]">
+          {/* دکمهٔ بازگشت به کارتابل استاد — روی همهٔ زیرصفحه‌ها (نه خودِ /professor)
+              رنگ از `lib/back-button.ts` می‌آید تا با بقیهٔ پنل‌ها یکی بماند. */}
+          <BackToDashboard href="/professor" label="بازگشت به کارتابل استاد" />
+          {children}
+        </main>
+      </div>
       <ProfessorNav />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
       {/* تور آشناییِ نخستین ورود — فقط صفحهٔ /professor و فقط یک بار (نسخهٔ v1). */}

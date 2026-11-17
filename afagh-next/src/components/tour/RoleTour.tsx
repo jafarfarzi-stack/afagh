@@ -88,7 +88,7 @@ export default function RoleTour({ surface }: { surface: Surface }) {
     setActive(false);
   }, [surface]);
 
-  if (!active) return null;
+  if (!active || total === 0) return null;
 
   return <TourOverlay step={steps[index]} index={index} total={total} onNext={next} onPrev={prev} onSkip={skip} />;
 }

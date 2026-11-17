@@ -94,6 +94,7 @@ export default function TourOverlay({
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const focusedStepRef = useRef<string | null>(null);
 
   const uid = useId();
   const titleId = `${uid}-title`;
@@ -207,8 +208,13 @@ export default function TourOverlay({
   }, []);
 
   useEffect(() => {
-    primaryRef.current?.focus();
-  }, [step.id]);
+    // تا جای حباب مشخص نشده (`visibility:hidden`) فوکوس گرفتن ممکن نیست.
+    if (!sheet && !pos) return;
+    // فقط یک بار برای هر مرحله؛ اسکرول/تغییر موقعیت نباید فوکوس را بدزدد.
+    if (focusedStepRef.current === step.id) return;
+    focusedStepRef.current = step.id;
+    primaryRef.current?.focus({ preventScroll: true });
+  }, [pos, sheet, step.id]);
 
   /* کلیدها: Esc=رد کردن، Enter/ArrowLeft=بعدی، ArrowRight=قبلی، Tab چرخش در حباب. */
   useEffect(() => {
@@ -247,10 +253,12 @@ export default function TourOverlay({
         trapTab(e);
         return;
       }
+      const target = e.target as HTMLElement | null;
+      // اگر کاربر واقعاً مشغول تایپ در صفحه است، کلیدهای ناوبری تور دخالت نکنند.
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (e.key === 'Enter') {
         // اگر فوکوس روی خودِ دکمه‌هاست، کلیکِ بومی همان کار را می‌کند (نه دو بار).
-        const target = e.target as HTMLElement | null;
-        if (target?.closest('button, a, input, textarea, select')) return;
+        if (target?.closest('button, a')) return;
         e.preventDefault();
         onNext();
         return;

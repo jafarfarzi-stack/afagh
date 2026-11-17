@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -34,78 +34,6 @@ const TAB_LABELS: Record<string, string> = {
   '/student/finance': 'امور مالی',
 };
 
-export function StudentSidebar({ user }: { user: { name: string; studentCode?: string | null } }) {
-  const pathname = usePathname();
-
-  return (
-    <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white border-l border-slate-200 shadow-xs shrink-0 max-h-screen sticky top-0 self-start overflow-y-auto print:hidden">
-      {/* Student Profile Quick Tile */}
-      <div className="p-4 border-b border-slate-100 bg-slate-50/70">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-black text-lg shadow-xs">
-            {user.name.slice(0, 1) || 'د'}
-          </div>
-          <div className="overflow-hidden">
-            <h3 className="font-black text-slate-900 text-xs sm:text-sm truncate">{user.name}</h3>
-            <p className="text-2xs text-slate-500 font-mono">
-              شماره دانشجویی: <span dir="ltr">{user.studentCode || '—'}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Nav links */}
-      <div className="p-3 space-y-1 flex-1 overflow-y-auto text-xs">
-        <div className="px-3 py-1 text-3xs font-black text-slate-400 uppercase tracking-wider">
-          منوی دسترسی و خدمات
-        </div>
-        {NAV_ITEMS.map(n => {
-          const isActive = n.exact ? pathname === n.href : pathname.startsWith(n.href);
-          return (
-            <Link prefetch={false}
-              key={n.href}
-              href={n.href}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl font-bold transition-all ${
-                isActive
-                  ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/20 translate-x-1'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="text-base">{n.icon}</span>
-                <span>{n.label}</span>
-              </div>
-              {n.badge && (
-                <span
-                  className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-black ${
-                    isActive ? 'bg-emerald-900 text-emerald-100' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {n.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Manual & Help link */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-1">
-        <Link prefetch={false}
-          href="/help/student"
-          className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 transition"
-        >
-          <div className="flex items-center gap-2">
-            <span>📖</span>
-            <span>راهنمای دانشجو</span>
-          </div>
-          <span className="text-3xs bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">راهنما</span>
-        </Link>
-      </div>
-    </aside>
-  );
-}
-
 export default function StudentNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -117,7 +45,7 @@ export default function StudentNav() {
       {/* ⚡ نوار پایین بدون backdrop-blur (بلور روی المان fixed = عامل اصلی تأخیر
           لمسی در موبایل) + touch-action:manipulation برای پاسخ فوری تب‌ها */}
       <nav
-        className="ui-bottom-nav md:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
+        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
         style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         aria-label="ناوبری اصلی دانشجو"
       >
@@ -158,7 +86,7 @@ export default function StudentNav() {
       </nav>
 
       {open && (
-        <div className="md:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="منوی دانشجو">
+        <div className="lg:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="منوی دانشجو">
           <div className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} />
           <aside className="absolute bottom-0 inset-x-0 max-h-[82vh] overflow-y-auto rounded-t-3xl bg-white shadow-2xl flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
             <div aria-hidden className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
