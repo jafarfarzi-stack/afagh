@@ -22,22 +22,22 @@ export type HeroTone = 'indigo' | 'emerald' | 'teal' | 'slate';
 const TONES: Record<HeroTone, { glow: string; badge: string; dot: string }> = {
   indigo: {
     glow: 'radial-gradient(720px 260px at 88% -30%, rgba(99,102,241,.30), transparent 68%), radial-gradient(420px 200px at 6% 120%, rgba(139,92,246,.16), transparent 70%)',
-    badge: 'border-indigo-100 bg-indigo-50 text-indigo-700 dark:border-indigo-800/60 dark:bg-indigo-950/60 dark:text-indigo-200',
+    badge: 'bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 ring-indigo-200/70 dark:from-indigo-950/60 dark:to-indigo-900/50 dark:text-indigo-200 dark:ring-indigo-800/60',
     dot: 'bg-indigo-500',
   },
   emerald: {
     glow: 'radial-gradient(720px 260px at 88% -30%, rgba(16,185,129,.28), transparent 68%), radial-gradient(420px 200px at 6% 120%, rgba(20,184,166,.16), transparent 70%)',
-    badge: 'border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/60 dark:text-emerald-200',
+    badge: 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 ring-emerald-200/70 dark:from-emerald-950/60 dark:to-emerald-900/50 dark:text-emerald-200 dark:ring-emerald-800/60',
     dot: 'bg-emerald-500',
   },
   teal: {
     glow: 'radial-gradient(720px 260px at 88% -30%, rgba(13,148,136,.28), transparent 68%), radial-gradient(420px 200px at 6% 120%, rgba(56,189,248,.14), transparent 70%)',
-    badge: 'border-teal-100 bg-teal-50 text-teal-700 dark:border-teal-800/60 dark:bg-teal-950/60 dark:text-teal-200',
+    badge: 'bg-gradient-to-br from-teal-50 to-teal-100 text-teal-700 ring-teal-200/70 dark:from-teal-950/60 dark:to-teal-900/50 dark:text-teal-200 dark:ring-teal-800/60',
     dot: 'bg-teal-500',
   },
   slate: {
     glow: 'radial-gradient(720px 260px at 88% -30%, rgba(100,116,139,.22), transparent 68%), radial-gradient(420px 200px at 6% 120%, rgba(99,102,241,.12), transparent 70%)',
-    badge: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    badge: 'bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700 ring-slate-200/70 dark:from-slate-800 dark:to-slate-800/80 dark:text-slate-200 dark:ring-slate-700',
     dot: 'bg-slate-400',
   },
 };
@@ -87,7 +87,7 @@ export default function PanelHero({
   const t = TONES[tone] ?? TONES.indigo;
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm print:hidden sm:p-5">
+    <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-e2 [--enter-opacity:0] [animation:ui-enter_140ms_ease-out_both] print:hidden sm:p-5">
       {/* هالهٔ نرمِ برند — تزئینی و بدون تأثیر بر چیدمان */}
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: t.glow }} />
 
@@ -98,7 +98,7 @@ export default function PanelHero({
             {icon ? (
               <span
                 aria-hidden
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-lg shadow-sm sm:h-11 sm:w-11 sm:text-xl ${t.badge}`}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg shadow-e1 ring-1 ring-inset sm:h-11 sm:w-11 sm:text-xl ${t.badge}`}
               >
                 {icon}
               </span>
@@ -142,7 +142,7 @@ export function HeroStatsRow({ stats }: { stats: HeroStat[] }) {
         <div
           key={s.label}
           title={s.title}
-          className="rounded-xl bg-slate-50/80 px-3 py-2 text-center sm:rounded-none sm:bg-transparent sm:px-4"
+          className="rounded-xl bg-slate-50/80 px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,.7)] ring-1 ring-inset ring-slate-200/60 sm:rounded-none sm:bg-transparent sm:px-4 sm:shadow-none sm:ring-0"
         >
           <p className={`truncate text-base font-black tabular-nums leading-tight sm:text-lg ${s.tone ?? 'text-slate-900'}`}>
             {s.value}

@@ -11,7 +11,48 @@ import Icon from '@/components/ui/Icon';
 /**
  * منوی کشویی سمت راست کارتابل مدیریت — جایگزین نوار افقی قبلی.
  * دکمهٔ ثابت بالا-راست + پنل لغزنده از راست با جست‌وجو؛ فقط نقش‌های مجاز.
+ *
+ * بازطراحیِ بصری (بدونِ تغییرِ داده، نقش یا مسیر):
+ *   • شمارندهٔ «تعدادِ ماژولِ هر دسته» از کنارِ برچسب‌ها حذف شد؛ عددِ تزئینی
+ *     بود و اسکنِ فهرست را کند می‌کرد. شمارش فقط در کارت‌های دسته در داشبورد
+ *     می‌ماند. هیچ نشانهٔ «کارِ باقی‌مانده» در این فهرست وجود ندارد.
+ *   • سطحِ روشن (هم‌خانوادهٔ کارت‌های سفیدِ بدنه) + نوارِ رنگیِ برند در هدر از
+ *     همان توکنِ `navPanel`؛ ردیف‌ها یک کاشیِ ۲۴px برای آیکون دارند تا چشم روی
+ *     یک محورِ عمودی بماند و اسکن سریع‌تر شود.
+ *   • جست‌وجو در بالای پنل می‌ماند (sticky) و نتیجه‌ها تخت هستند؛ نامِ دسته
+ *     زیرِ هر نتیجه به‌عنوان زیرنویس می‌آید، نه سرستون.
  */
+
+/* ── کلاس‌های پایهٔ ردیف‌ها ───────────────────────────────────────────────
+   ارتفاعِ کف ۳۶px (`min-h-9`) برای هدفِ لمس، ولی padding عمودی کم تا ردیف‌های
+   بیشتری در همان ارتفاعِ دید جا شوند. گذار `ui-t` است (۱۴۰ms روی رنگ/سایه)،
+   نه `transition-all`؛ هیچ انیمیشنی روی عرض/ارتفاع نیست. */
+const ITEM =
+  'group relative flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] leading-5 ui-t ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/70 ' +
+  'focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
+const ITEM_IDLE =
+  'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/70 dark:hover:text-white';
+const ITEM_ACTIVE =
+  'bg-indigo-50 font-extrabold text-indigo-800 ring-1 ring-inset ring-indigo-200 ' +
+  'dark:bg-indigo-950/60 dark:text-indigo-100 dark:ring-indigo-800/70';
+const TILE = 'flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-1 ring-inset';
+const TILE_IDLE = 'bg-slate-100 text-slate-500 ring-slate-200/80 group-hover:bg-white dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700 dark:group-hover:bg-slate-700/70';
+const TILE_ACTIVE = 'bg-white text-indigo-700 ring-indigo-200 dark:bg-indigo-900/60 dark:text-indigo-200 dark:ring-indigo-700/70';
+/* سرستونِ کوچکِ کم‌رنگ با خطِ جداکنندهٔ نازک — ۸px فاصله در بالا و پایین. */
+const SECTION =
+  'mb-2 mt-2 border-t border-slate-200/80 pt-2 text-3xs font-black text-slate-500 dark:border-slate-700/70 dark:text-slate-400';
+
+/** نوارِ لهجهٔ ۳px در لبهٔ inline-start ردیفِ فعال. */
+function AccentBar() {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-y-1.5 start-0 w-[3px] rounded-full bg-indigo-600 dark:bg-indigo-400"
+    />
+  );
+}
+
 export default function AdminNav({ roles, permissions, theme }: { roles: string[]; permissions?: string[]; theme?: UniTheme }) {
   const th: UniTheme = theme ?? {
     header: 'bg-indigo-950', badge: 'bg-indigo-900/90 hover:bg-indigo-900 border-indigo-600/60',
@@ -60,6 +101,12 @@ export default function AdminNav({ roles, permissions, theme }: { roles: string[
     if (!t) return modules;
     return modules.filter(m => faIncludes(m.title, t) || faIncludes(m.desc, t));
   }, [modules, q]);
+  // نامِ دسته برای زیرنویسِ نتیجه‌های جست‌وجو (همان دادهٔ `groupedModules`).
+  const groupTitles = useMemo(
+    () => new Map(grouped.map(g => [g.group.key, g.group.title] as const)),
+    [grouped],
+  );
+  const searching = q.trim() !== '';
 
   return (
     <>
@@ -89,34 +136,36 @@ export default function AdminNav({ roles, permissions, theme }: { roles: string[
         {/* پس‌زمینهٔ نیمه‌شفاف (فقط موبایل) */}
         <div className="absolute inset-0 bg-slate-950/60 lg:hidden" onClick={() => setOpen(false)} aria-hidden />
         <aside
-          className={`absolute top-0 right-0 h-full w-80 max-w-[85vw] ${th.navPanel} text-white shadow-2xl flex flex-col
-            lg:static lg:top-auto lg:right-auto lg:min-h-[calc(100dvh-8rem)] lg:w-64 xl:w-72 lg:max-w-none lg:sticky lg:top-[6.5rem]
-            lg:rounded-2xl lg:border lg:shadow-sm`}
+          className={`absolute top-0 right-0 h-full w-80 max-w-[85vw] flex flex-col overflow-hidden bg-white text-slate-800 shadow-2xl
+            lg:static lg:top-auto lg:right-auto lg:min-h-[calc(100dvh-8rem)] lg:max-h-[calc(100dvh-8rem)] lg:w-64 xl:w-72 lg:max-w-none lg:sticky lg:top-[6.5rem]
+            lg:rounded-2xl lg:border lg:border-slate-200 lg:shadow-e1 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700`}
         >
-          {/* هدر */}
-          <div className={`flex items-center justify-between p-3 border-b ${th.navBorder}`}>
-            <p className="flex items-center gap-2 font-extrabold text-sm">
-              <Icon emoji="🧭" className="h-4 w-4" /> منوی مدیریت
+          {/* هدر — نوارِ رنگیِ برند (همان توکنِ `navPanel` که مدیرِ دانشگاه تنظیم می‌کند) */}
+          <div className={`${th.navPanel} flex items-center justify-between gap-2 px-3 py-2.5 border-b lg:rounded-t-[15px]`}>
+            <p className="flex min-w-0 items-center gap-2 text-[13px] font-extrabold">
+              <Icon emoji="🧭" className="h-4 w-4" />
+              <span className="truncate">منوی مدیریت</span>
             </p>
             <button
               onClick={() => setOpen(false)}
               aria-label="بستن منو"
-              className={`lg:hidden rounded-lg p-1.5 ${th.navHover}`}
+              className="lg:hidden shrink-0 rounded-lg p-1.5 text-white/80 ui-t hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
               <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
           </div>
 
-          {/* جست‌وجو */}
-          <div className={`p-3 border-b ${th.navBorder}`}>
+          {/* جست‌وجو — چسبیده به بالای پنل و بیرون از ناحیهٔ اسکرول */}
+          <div className={`sticky top-0 z-10 border-b ${th.navBorder} bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900`}>
             <div className="relative">
-              <Icon emoji="🔍" className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-70" />
+              <Icon emoji="🔍" className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 autoFocus={open}
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="جست‌وجوی ماژول…"
-                className={`w-full rounded-lg border py-1.5 pr-8 pl-3 text-xs focus:outline-none ${th.navInput}`}
+                aria-label="جست‌وجوی ماژول"
+                className={`w-full rounded-lg border py-1.5 ps-8 pe-2.5 text-xs focus:outline-none ${th.navInput}`}
               />
             </div>
           </div>
@@ -138,72 +187,92 @@ export default function AdminNav({ roles, permissions, theme }: { roles: string[
               هم عمداً خاموش است تا هیچ رندری در پس‌زمینه اجرا نشود. جست‌وجو باقی
               مانده تا مسیرِ «یک‌کلیکی» به ماژولِ خاص از دست نرود — نتیجهٔ جست‌وجو
               حداکثر چند لینک است، نه ۵۱. */}
-          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1 text-[13px]">
+          <nav aria-label="ناوبری کارتابل مدیریت" className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2">
             <Link
               href="/admin"
               prefetch={false}
               aria-current={pathname === '/admin' ? 'page' : undefined}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${pathname === '/admin' ? th.navActive : th.navHover}`}
+              className={`${ITEM} ${pathname === '/admin' ? ITEM_ACTIVE : ITEM_IDLE}`}
             >
-              <Icon emoji="🏠" className="h-4 w-4 shrink-0" />
-              <span className="flex-1">داشبورد</span>
+              {pathname === '/admin' && <AccentBar />}
+              <span aria-hidden className={`${TILE} ${pathname === '/admin' ? TILE_ACTIVE : TILE_IDLE}`}>
+                <Icon emoji="🏠" className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">داشبورد</span>
             </Link>
 
-            {q.trim() !== '' ? (
-              /* حالت جست‌وجو: پرشِ مستقیم به ماژول (بدون prefetch) */
+            {searching ? (
+              /* حالت جست‌وجو: فهرستِ تخت با نامِ دسته به‌عنوان زیرنویس (بدون prefetch) */
               filtered.length > 0 ? (
-                filtered.map(m => {
-                  const active = pathname === m.href || pathname.startsWith(m.href + '/');
-                  return (
-                    <Link
-                      key={m.href}
-                      href={m.href}
-                      prefetch={false}
-                      title={m.desc}
-                      aria-current={active ? 'page' : undefined}
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] transition-colors ${active ? th.navActive : th.navHover}`}
-                    >
-                      <span aria-hidden className="shrink-0">{m.icon}</span>
-                      <span className="flex-1 truncate">{m.title}</span>
-                    </Link>
-                  );
-                })
+                <>
+                  <p className={SECTION}>نتایج جست‌وجو</p>
+                  {filtered.map(m => {
+                    const active = pathname === m.href || pathname.startsWith(m.href + '/');
+                    const groupTitle = m.group ? groupTitles.get(m.group) : undefined;
+                    return (
+                      <Link
+                        key={m.href}
+                        href={m.href}
+                        prefetch={false}
+                        title={`${m.title} — ${m.desc}`}
+                        aria-current={active ? 'page' : undefined}
+                        className={`${ITEM} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}
+                      >
+                        {active && <AccentBar />}
+                        <span aria-hidden className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}>{m.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{m.title}</span>
+                          <span className="block truncate text-3xs font-normal text-slate-500 dark:text-slate-400">
+                            {groupTitle ?? m.desc}
+                          </span>
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </>
               ) : (
-                <p className={`px-3 py-4 text-center text-xs ${th.navMuted}`}>ماژولی یافت نشد.</p>
+                <p className="px-2.5 py-6 text-center text-xs text-slate-500 dark:text-slate-400">ماژولی یافت نشد.</p>
               )
             ) : (
-              /* حالت عادی: فقط ۸ بخشِ اصلی */
-              grouped.map(g => {
-                const href = `/admin/c/${g.group.key}`;
-                const active = pathname === href || pathname.startsWith(href + '/') || activeGroup === g.group.key;
-                return (
-                  <Link
-                    key={g.group.key}
-                    href={href}
-                    prefetch={false}
-                    title={g.group.desc}
-                    aria-current={active ? 'page' : undefined}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 font-bold transition-colors ${active ? th.navActive : th.navHover}`}
-                  >
-                    <span aria-hidden className="shrink-0">{g.group.icon}</span>
-                    <span className="flex-1 truncate">{g.group.title}</span>
-                    <span className={`shrink-0 rounded px-1 text-3xs font-black tabular-nums ${th.navMuted}`}>
-                      {g.modules.length}
-                    </span>
-                  </Link>
-                );
-              })
+              /* حالت عادی: سرستونِ کم‌رنگ + ۸ بخشِ اصلی، بدونِ شمارندهٔ تعداد */
+              grouped.length > 0 && (
+                <>
+                  <p className={SECTION}>بخش‌های کارتابل</p>
+                  {grouped.map(g => {
+                    const href = `/admin/c/${g.group.key}`;
+                    const active = pathname === href || pathname.startsWith(href + '/') || activeGroup === g.group.key;
+                    return (
+                      <Link
+                        key={g.group.key}
+                        href={href}
+                        prefetch={false}
+                        title={`${g.group.title} — ${g.group.desc}`}
+                        aria-current={active ? 'page' : undefined}
+                        className={`${ITEM} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}
+                      >
+                        {active && <AccentBar />}
+                        <span aria-hidden className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}>{g.group.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{g.group.title}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              )
             )}
           </nav>
 
           {/* دکمهٔ راهنما */}
-          <div className={`p-2 border-t ${th.navBorder}`}>
+          <div className={`border-t ${th.navBorder} p-2 dark:border-slate-700`}>
             <Link
               href="/help/admin"
               prefetch={false}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] bg-emerald-700/70 hover:bg-emerald-700 border border-emerald-500/40 font-bold transition-colors"
+              title="راهنمای کاربری کارتابل مدیریت و PDF"
+              className={`${ITEM} border border-emerald-200 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-900/50`}
             >
-              <Icon emoji="📖" className="h-4 w-4 shrink-0" /> راهنمای کاربری و PDF
+              <span aria-hidden className={`${TILE} bg-emerald-100 text-emerald-700 ring-emerald-200/80 dark:bg-emerald-900/60 dark:text-emerald-200 dark:ring-emerald-800/70`}>
+                <Icon emoji="📖" className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">راهنمای کاربری و PDF</span>
             </Link>
           </div>
         </aside>

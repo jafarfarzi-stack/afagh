@@ -31,26 +31,51 @@ function buildFinanceHref(
 
 type KpiTone = 'slate' | 'rose' | 'violet' | 'indigo' | 'emerald' | 'amber' | 'sky';
 
-const KPI_TONE: Record<KpiTone, { wrap: string; text: string; icon: string }> = {
-  slate: { wrap: 'from-slate-50 to-white border-slate-200', text: 'text-slate-800', icon: 'bg-slate-700' },
-  rose: { wrap: 'from-rose-50 to-white border-rose-200', text: 'text-rose-700', icon: 'bg-rose-600' },
-  violet: { wrap: 'from-violet-50 to-white border-violet-200', text: 'text-violet-700', icon: 'bg-violet-600' },
-  indigo: { wrap: 'from-indigo-50 to-white border-indigo-200', text: 'text-indigo-700', icon: 'bg-indigo-600' },
-  emerald: { wrap: 'from-emerald-50 to-white border-emerald-200', text: 'text-emerald-700', icon: 'bg-emerald-600' },
-  amber: { wrap: 'from-amber-50 to-white border-amber-200', text: 'text-amber-700', icon: 'bg-amber-500' },
-  sky: { wrap: 'from-sky-50 to-white border-sky-200', text: 'text-sky-700', icon: 'bg-sky-600' },
+const KPI_TONE: Record<KpiTone, { tile: string; text: string }> = {
+  slate: { tile: 'bg-slate-50 text-slate-600 ring-slate-200/70', text: 'text-slate-700' },
+  rose: { tile: 'bg-rose-50 text-rose-600 ring-rose-200/70', text: 'text-rose-700' },
+  violet: { tile: 'bg-violet-50 text-violet-600 ring-violet-200/70', text: 'text-violet-700' },
+  indigo: { tile: 'bg-indigo-50 text-indigo-600 ring-indigo-200/70', text: 'text-indigo-700' },
+  emerald: { tile: 'bg-emerald-50 text-emerald-600 ring-emerald-200/70', text: 'text-emerald-700' },
+  amber: { tile: 'bg-amber-50 text-amber-600 ring-amber-200/70', text: 'text-amber-700' },
+  sky: { tile: 'bg-sky-50 text-sky-600 ring-sky-200/70', text: 'text-sky-700' },
 };
+
+/**
+ * مقدارِ بلند را برای جا شدن در کارتِ KPI فشرده می‌کند (۱۲۳٬۴۵۶٬۷۸۹٬۰۱۲ → ۱۲۳ میلیارد).
+ * عددِ دقیق همیشه در `title` می‌ماند، پس هیچ داده‌ای با کوتاه‌سازی از دست نمی‌رود.
+ */
+function compactFa(value: string): string {
+  const latin = value.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[^\d]/g, '');
+  const n = Number(latin);
+  if (!n) return value;
+  return new Intl.NumberFormat('fa-IR', { notation: 'compact' })
+    .format(n)
+    .replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+}
 
 function Kpi({ icon, label, value, tone, sub }: { icon: string; label: string; value: string; tone: KpiTone; sub?: string }) {
   const t = KPI_TONE[tone];
+  // واحد فقط برای کارت‌های ریالی؛ کارتِ «تعداد دانشجو» واحدِ نفر می‌گیرد.
+  const unit = label.includes('ریال') ? 'ریال' : 'نفر';
+  const shown = value.length > 12 ? compactFa(value) : value;
   return (
-    <div className={`rounded-xl border bg-gradient-to-b ${t.wrap} p-3 text-center shadow-sm transition-shadow hover:shadow`}>
-      <div className={`mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg text-sm text-white shadow-sm ${t.icon}`}>
+    <div
+      title={`${label}: ${value} ${unit}`}
+      className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 text-start shadow-e1 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/80"
+    >
+      <span
+        aria-hidden
+        className={`absolute end-3 top-3 flex h-8 w-8 items-center justify-center rounded-xl text-sm shadow-[inset_0_1px_0_rgba(255,255,255,.7)] ring-1 ring-inset ${t.tile}`}
+      >
         {icon}
-      </div>
-      <p className={`text-lg font-black leading-tight ${t.text}`}>{value}</p>
-      <p className="mt-0.5 text-2xs font-medium text-slate-500">{label}</p>
-      {sub && <p className={`mt-0.5 text-3xs font-bold ${t.text} opacity-80`}>{sub}</p>}
+      </span>
+      <p className="min-h-9 pe-11 text-2xs font-bold text-slate-600">{label}</p>
+      <p className="mt-1 flex items-baseline gap-1 text-2xl font-black leading-none tracking-tight text-slate-900 tabular-nums sm:text-[1.75rem]">
+        <span className="min-w-0 truncate" title={`${value} ${unit}`}>{shown}</span>
+        <span className="text-2xs font-bold text-slate-500">{unit}</span>
+      </p>
+      {sub && <p className={`mt-1 text-3xs font-bold ${t.text}`}>{sub}</p>}
     </div>
   );
 }
@@ -178,14 +203,14 @@ export default async function FinanceWorklistPage(props: {
           sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
         />
         {/* نرخ وصول — کارت تمام‌عرض */}
-        <div className="col-span-2 rounded-xl border border-indigo-200 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-sm md:col-span-4">
+        <div className="col-span-2 rounded-2xl border border-indigo-200/80 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-e1 md:col-span-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به خالص بدهی)</span>
-            <span className="font-black text-indigo-700">{fa(collectionRate)}٪</span>
+            <span className="text-3xl font-black tabular-nums text-indigo-700">{fa(collectionRate)}٪</span>
           </div>
-          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
             <div
-              className="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-400 transition-all"
+              className="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-400"
               style={{ width: `${collectionRate}%` }}
             />
           </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import Button from './Button';
 
 /**
  * دیالوگ مشترک — جانشین مودال‌های دستیِ `fixed inset-0` و دیالوگ‌های بومی.
@@ -97,16 +98,9 @@ export default function Modal({
           <h2 id="afagh-modal-title" className="text-sm font-black text-slate-900 dark:text-slate-100">
             {title}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="بستن"
-            className="grid place-items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-          >
-            <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+          <Button size="icon" variant="ghost" aria-label="بستن" label="بستن" onClick={onClose}>
+            ✕
+          </Button>
         </div>
         {children}
         {footer ? (

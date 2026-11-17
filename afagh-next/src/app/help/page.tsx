@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
 import HelpSearch from '@/components/help/HelpSearch';
 import { HelpTopBar } from '@/components/help/HelpNav';
+import TourReplayButton from '@/components/tour/TourReplayButton';
+import { surfaceForRoles } from '@/components/tour/tour-steps';
 import { allRoleGuides, buildHelpIndex, defaultGuideForRoles, isHelpRoleKey, visibleGuides } from './content/index';
 
 export const metadata = { title: 'مرکز راهنمای سامانه آفاق' };
@@ -23,6 +25,8 @@ export default async function HelpLandingPage(props: { searchParams: Promise<{ t
   if (sp.tab && isHelpRoleKey(sp.tab)) redirect(`/help/${sp.tab}`);
 
   const roles = user.roles ?? [];
+  // کارتابلی که دکمهٔ «نمایش دوبارهٔ تور» باید به آن برگردد (دانشجو/استاد/مدیریت)
+  const tourSurface = surfaceForRoles(roles);
   const guides = visibleGuides(roles);
   const def = defaultGuideForRoles(roles);
   const index = buildHelpIndex(guides);
@@ -31,7 +35,16 @@ export default async function HelpLandingPage(props: { searchParams: Promise<{ t
   return (
     <div className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-8" dir="rtl">
       <div className="mx-auto max-w-5xl space-y-6">
-        <HelpTopBar role={def} title="مرکز راهنمای سامانه آفاق" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <HelpTopBar role={def} title="مرکز راهنمای سامانه آفاق" />
+          </div>
+          {tourSurface && (
+            <div className="shrink-0">
+              <TourReplayButton surface={tourSurface} />
+            </div>
+          )}
+        </div>
         <div className="flex flex-col gap-4 rounded-3xl border border-indigo-700/50 bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 p-6 text-white shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
             <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-slate-950">مرکز راهنمای سامانه دانشگاهی آفاق</span>

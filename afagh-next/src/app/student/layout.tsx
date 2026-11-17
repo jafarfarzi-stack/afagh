@@ -18,6 +18,7 @@ import HeaderActions from '@/components/HeaderActions';
 import StudentNav, { StudentSidebar } from './StudentNav';
 import UserAvatar from '@/components/UserAvatar';
 import BackToDashboard from '@/components/BackToDashboard';
+import RoleTour from '@/components/tour/RoleTour';
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRole(['STUDENT']);
@@ -233,6 +234,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
       {/* نوار ناوبری پایین فقط برای موبایل */}
       <StudentNav />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
+      {/* تور آشناییِ نخستین ورود — فقط صفحهٔ /student و فقط یک بار (نسخهٔ v1). */}
+      <RoleTour surface="student" />
     </div>
   );
 }

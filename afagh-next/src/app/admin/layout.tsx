@@ -19,6 +19,7 @@ import { getTermScope } from '@/lib/term-scope';
 import UserAvatar from '@/components/UserAvatar';
 import AdminBackBar from '@/components/AdminBackBar';
 import { ADMIN_MODULES, canSeeModule } from '@/lib/admin-modules';
+import RoleTour from '@/components/tour/RoleTour';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
@@ -138,7 +139,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         permissionCount={customPermissionCount}
         siblings={siblings}
       />
-      <TermSwitcher terms={termScope.terms} selectedId={termScope.selectedId} />
+      {/* نشانهٔ تور آشنایی — همین جعبهٔ انتخاب نیمسال را برجسته می‌کند.
+          (خودِ `TermSwitcher` مشترک است و نباید برای این کار تغییر کند.)
+          ⚠ جعبهٔ اضافه، `summary` را از قاعدهٔ هدرِ `.hdr-controls > details
+          > summary` (globals.css) خارج می‌کند؛ همان ارتفاع/چیدمان با
+          واریانت‌های زیر دقیقاً بازسازی می‌شود تا ردیف هدر جابه‌جا نشود. */}
+      <div
+        data-tour="term-switcher"
+        className="flex items-center [&>details>summary]:inline-flex [&>details>summary]:h-8 [&>details>summary]:items-center [&>details>summary]:whitespace-nowrap"
+      >
+        <TermSwitcher terms={termScope.terms} selectedId={termScope.selectedId} />
+      </div>
       {canSwitchUniversity && (
         <UniversitySwitcher
           universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
@@ -231,6 +242,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </main>
       </div>
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
+      {/* تور آشناییِ نخستین ورود — فقط صفحهٔ /admin و فقط یک بار (نسخهٔ v1). */}
+      <RoleTour surface="admin" />
     </div>
   );
 }

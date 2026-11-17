@@ -14,6 +14,7 @@ import HeaderActions from '@/components/HeaderActions';
 import UserAvatar from '@/components/UserAvatar';
 import BackToDashboard from '@/components/BackToDashboard';
 import ProfessorNav from './ProfessorNav';
+import RoleTour from '@/components/tour/RoleTour';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import { getSetting } from '@/lib/settings';
 
@@ -172,6 +173,8 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       </main>
       <ProfessorNav />
       <SessionLock name={user.name} timeoutMin={lockMin} initialLocked={lockOn} />
+      {/* تور آشناییِ نخستین ورود — فقط صفحهٔ /professor و فقط یک بار (نسخهٔ v1). */}
+      <RoleTour surface="professor" />
     </div>
   );
 }

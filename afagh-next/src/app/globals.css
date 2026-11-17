@@ -475,7 +475,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
-  border-radius: 6px;
+  /* `border-radius: 6px` شکلِ خودِ عنصر را عوض می‌کرد: دکمهٔ pill یا کارتِ
+     گرد هنگام فوکوس گوشه‌های تیز/متفاوت می‌گرفت. با inherit، حلقه شکلِ
+     عنصر را می‌پوشاند و هیچ رندر مجددی لازم نیست. */
+  border-radius: inherit;
 }
 /* حلقهٔ فوکوسِ .input عمداً داخل @layer components تعریف شد (بالاتر). */
 
@@ -1208,6 +1211,14 @@ html {
   --ui-shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
   --ui-shadow-2: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 26px -14px rgba(16, 24, 40, 0.18);
   --ui-shadow-3: 0 2px 6px rgba(16, 24, 40, 0.07), 0 22px 50px -22px rgba(16, 24, 40, 0.30);
+  /* ── مقیاسِ ارتفاعِ مشترک با تیلویند (`shadow-e1`…`shadow-e3`) ──
+     همان مقادیرِ tailwind.config.ts، به‌صورت متغیر تا کلاس‌های `.ui-*`
+     بدون تکرارِ رشتهٔ بلندِ سایه از آن‌ها استفاده کنند. */
+  --e1: inset 0 1px 0 0 rgb(255 255 255 / .85), 0 1px 2px 0 rgb(15 23 42 / .05), 0 4px 8px -4px rgb(15 23 42 / .06), 0 12px 24px -16px rgb(15 23 42 / .16);
+  --e2: 0 2px 4px -1px rgb(15 23 42 / .06), 0 10px 20px -8px rgb(15 23 42 / .12), 0 24px 40px -24px rgb(15 23 42 / .22);
+  --e3: 0 4px 8px -2px rgb(15 23 42 / .08), 0 16px 32px -12px rgb(15 23 42 / .16), 0 48px 72px -32px rgb(15 23 42 / .28);
+  --pressed: inset 0 2px 4px 0 rgb(15 23 42 / .12), inset 0 1px 0 0 rgb(15 23 42 / .06);
+  --key: inset 0 1px 0 0 rgb(255 255 255 / .18), 0 1px 0 0 rgb(15 23 42 / .10), 0 2px 4px -1px rgb(15 23 42 / .18);
   /* درخششِ پس‌زمینهٔ صفحه (یک لکهٔ نرم در گوشهٔ بالا) */
   --ui-glow: radial-gradient(1100px 380px at 92% -8%, rgba(99, 102, 241, 0.10), transparent 62%),
              radial-gradient(800px 320px at 4% 0%, rgba(14, 165, 233, 0.07), transparent 60%);
@@ -1232,6 +1243,12 @@ html {
   --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
   --ui-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.50), 0 12px 30px -16px rgba(0, 0, 0, 0.75);
   --ui-shadow-3: 0 2px 6px rgba(0, 0, 0, 0.55), 0 26px 60px -26px rgba(0, 0, 0, 0.85);
+  /* در تیره، خطِ نوریِ inset ضعیف‌تر است و سایه‌ها سیاه‌اند نه آبی‌خاکستری. */
+  --e1: inset 0 1px 0 0 rgb(255 255 255 / .06), 0 1px 2px 0 rgb(0 0 0 / .40), 0 4px 8px -4px rgb(0 0 0 / .40), 0 12px 24px -16px rgb(0 0 0 / .55);
+  --e2: inset 0 1px 0 0 rgb(255 255 255 / .06), 0 2px 4px -1px rgb(0 0 0 / .40), 0 10px 20px -8px rgb(0 0 0 / .50), 0 24px 40px -24px rgb(0 0 0 / .65);
+  --e3: inset 0 1px 0 0 rgb(255 255 255 / .06), 0 4px 8px -2px rgb(0 0 0 / .45), 0 16px 32px -12px rgb(0 0 0 / .55), 0 48px 72px -32px rgb(0 0 0 / .75);
+  --pressed: inset 0 2px 4px 0 rgb(0 0 0 / .45), inset 0 1px 0 0 rgb(255 255 255 / .04);
+  --key: inset 0 1px 0 0 rgb(255 255 255 / .12), 0 1px 0 0 rgb(0 0 0 / .30), 0 2px 4px -1px rgb(0 0 0 / .40);
   --ui-glow: radial-gradient(1100px 380px at 92% -8%, rgba(99, 102, 241, 0.16), transparent 62%),
              radial-gradient(800px 320px at 4% 0%, rgba(14, 165, 233, 0.09), transparent 60%);
 }
@@ -1711,4 +1728,79 @@ html {
   .report-print-template { display: none !important; }
   #report-print-root .report-print-template { display: block !important; }
   #report-print-root .rp-probe { display: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   پایهٔ عمق + حرکت — فقط CSS، بدون وابستگی به JSX
+   ═══════════════════════════════════════════════════════════════════════════
+   هدف: از حالتِ «تخت» بیرون آمدن، بدونِ هزینهٔ رندر. بودجهٔ سخت‌گیرانه:
+
+   • فقط `transform` و `box-shadow` (و رنگ‌ها) متحرک می‌شوند. هندسه
+     (width/height/top/left) هرگز — چون layout/paint اجباری می‌کند.
+   • `will-change` عمداً نیست: لایهٔ GPU دائمی برای صدها کارت، حافظهٔ
+     گرافیکی را می‌بلعد و روی لپ‌تاپ‌های اداری کندتر است.
+   • بدون `backdrop-filter`/`filter: blur` (پرهزینه‌ترین‌ها روی اسکرول).
+   • همه چیز داخل `@media screen` است تا چاپ دست‌نخورده بماند؛ هیچ
+     `max-width` بی‌`screen` هم اضافه نمی‌شود (گاردِ تست).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  @media screen {
+    /* گذارِ استانداردِ سطح: ۱۴۰ms، منحنیِ «سریع شروع، نرم پایان». */
+    .ui-t {
+      transition-property: transform, box-shadow, background-color, border-color;
+      transition-duration: 140ms;
+      transition-timing-function: cubic-bezier(.16, 1, .3, 1);
+    }
+
+    /* بلندشدنِ ۲px فقط با ماوسِ واقعی؛ در لمس هیچ حرکتِ شبح‌واری نمی‌ماند. */
+    .ui-lift {
+      transition-property: transform, box-shadow;
+      transition-duration: 140ms;
+      transition-timing-function: cubic-bezier(.16, 1, .3, 1);
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .ui-lift:hover { transform: translate3d(0, -2px, 0); }
+    }
+    .ui-lift:active { transform: translateY(1px); }
+
+    /* بازخوردِ فشار: ۱px پایین + سایهٔ فرورفته (بدون تغییرِ هندسه). */
+    .ui-press { transition: box-shadow 90ms cubic-bezier(.16, 1, .3, 1), transform 90ms cubic-bezier(.16, 1, .3, 1); }
+    .ui-press:active { transform: translateY(1px); box-shadow: var(--e1); }
+
+    /* ورودِ آرام برای دیالوگ/کارتِ تازه‌رسیده.
+       عمداً از همان `@keyframes ui-enter` موجود (بالاتر در همین فایل) استفاده
+       می‌شود؛ تعریفِ دوبارهٔ آن، ورودِ `animate-in` (۴۸ مورد) را بی‌صدا
+       ساده می‌کرد و scale/جهتِ آن‌ها را از بین می‌برد. مقادیرِ زیر همان
+       «از پایین ۴px، شفاف → کامل» را با متغیرهای آن کی‌فریم می‌سازند. */
+    .ui-enter {
+      --enter-opacity: 0;
+      --enter-y: 4px;
+      animation: ui-enter 140ms cubic-bezier(.16, 1, .3, 1) both;
+    }
+
+    /* پنلِ پایه: سطحِ سفید/تیره + مرزِ مویی + e1. جانشینِ امنِ کارت‌های
+       دست‌ساز در صفحاتِ تازه. */
+    .ui-panel {
+      background: var(--ui-card);
+      border: 1px solid var(--ui-stroke);
+      border-radius: 1rem;
+      box-shadow: var(--e1);
+    }
+  }
+}
+
+/* احترام به «کاهش حرکت»: انیمیشن و گذار کامل خاموش، بدونِ حذفِ محتوا. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-enter, .ui-t, .ui-lift, .ui-press { animation: none !important; transition: none !important; }
+  .ui-lift:hover, .ui-lift:active, .ui-press:active { transform: none !important; }
+}
+
+/* چاپ: عمق و حرکت معنا ندارد؛ فقط کاغذِ تخت و جوهرِ کمتر. */
+@media print {
+  .card, .ui-card, .ui-t, .ui-lift, .ui-press, .ui-enter {
+    box-shadow: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
 }

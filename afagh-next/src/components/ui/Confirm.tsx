@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import Button from './Button';
 import Modal from './Modal';
 import { registerConfirm, type ConfirmOptions } from '@/lib/ui-feedback';
 
@@ -63,24 +64,17 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         size="sm"
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => answer(false)}
-              className="flex-1 rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
+            <Button type="button" variant="secondary" full onClick={() => answer(false)}>
               {pending?.opts.cancelText ?? 'انصراف'}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant={pending?.opts.danger ? 'danger' : 'success'}
+              full
               onClick={() => answer(true)}
-              className={`flex-1 rounded-xl px-4 py-2 text-xs font-bold text-white transition ${
-                pending?.opts.danger
-                  ? 'bg-rose-600 hover:bg-rose-500'
-                  : 'bg-emerald-700 hover:bg-emerald-600'
-              }`}
             >
               {pending?.opts.confirmText ?? 'تأیید'}
-            </button>
+            </Button>
           </>
         }
       >

@@ -8,6 +8,7 @@ import { MAX_TERM_CODES, parseTermSelection } from '@/lib/term-selection';
 import { CODE_LIST_LIMIT, parseCodeList } from '@/lib/code-list';
 import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 import ReportPrint from '@/components/ui/ReportPrint';
+import CardTile from '@/components/ui/CardTile';
 
 /** دستهبندی کارتهای گزارش: مالی به سه گروه منطقی تقسیم شده است */
 type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-academic' | 'finance-ops' | 'graduates' | 'council' | 'research';
@@ -296,6 +297,18 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [err, setErr] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
   const [showLinks, setShowLinks] = useState(false);
+
+  /**
+   * گزارش‌های «پیشنهادِ شروع» — در تبِ هر مرکز، این‌ها کاشیِ بزرگ‌تر
+   * (feature) می‌گیرند تا کاربر تازه‌وارد بداند از کجا شروع کند.
+   * هر موردی که در `visibleCards` نباشد، خودبه‌خود رندر نمی‌شود.
+   */
+  const FEATURED = new Set<string>([
+    // آموزشی
+    'active-term', 'status-summary', 'by-faculty', 'probation', 'top-students', 'grade-entry-report',
+    // مالی
+    'total-payments', 'tuition-overview', 'finance-worklist', 'income-statement', 'balance-sheet', 'payroll-overview',
+  ]);
 
   // ── محدودسازی بر اساس مرکز (scope) + مجوزها ──
   const scopeFiltered = CARDS.filter(c =>
@@ -631,35 +644,20 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 <span className="text-2xs font-normal text-slate-400">({faNum(g.cards.length)})</span>
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {g.cards.map(c => {
-                  const desc = c.desc ?? DESC[c.kind];
-                  return (
-                    <button
-                      key={c.kind}
-                      disabled={c.soon}
-                      aria-pressed={kind === c.kind}
-                      title={desc ? `${c.title} — ${desc}` : c.title}
-                      onClick={() => pick(c.kind)}
-                      className={`flex items-start gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] leading-snug transition-all shadow-sm
-                        ${c.soon
-                          ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed'
-                          : kind === c.kind
-                            ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-md ring-1 ring-indigo-200'
-                            : 'bg-gradient-to-b from-white to-slate-100 border-slate-300 text-slate-700 hover:border-indigo-300 hover:shadow'}`}
-                    >
-                      <span className="text-2xl leading-none">{c.icon}</span>
-                      <span className="min-w-0">
-                        <span className="block line-clamp-2">{c.title}</span>
-                        {desc && <span className="mt-0.5 block text-3xs font-normal text-slate-500 line-clamp-2">{desc}</span>}
-                        {(c.needsTerm || c.soon) && (
-                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-3xs font-bold text-slate-600">
-                            {c.soon ? 'به‌زودی' : 'نیازمند ترم'}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
+                {g.cards.map(c => (
+                  <CardTile
+                    key={c.kind}
+                    tone={c.cat}
+                    size={FEATURED.has(c.kind) ? 'feature' : 'standard'}
+                    icon={c.icon}
+                    title={c.title}
+                    desc={c.desc ?? DESC[c.kind]}
+                    badge={c.soon ? 'به‌زودی' : c.needsTerm ? 'نیازمند ترم' : FEATURED.has(c.kind) ? 'پیشنهاد' : undefined}
+                    selected={kind === c.kind}
+                    soon={c.soon}
+                    onClick={() => pick(c.kind)}
+                  />
+                ))}
               </div>
             </section>
           ))}
