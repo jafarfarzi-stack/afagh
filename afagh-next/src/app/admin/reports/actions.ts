@@ -90,12 +90,28 @@ function reportCenter(kind: string): 'finance' | 'edu' {
   return FINANCE_KINDS.has(kind) ? 'finance' : 'edu';
 }
 
+/**
+ * کش کوتاه‌مدتِ گزینه‌های فیلتر (ترم/مقطع/دانشکده/گروه/رشته/ورودی/برند).
+ * این داده به کاربر وابسته نیست و فقط به دانشگاه فعال + فرم امضا؛ کلید هم
+ * همان دو مقدار است. ۸ کوئری سریالی در هر بازدید صفحهٔ گزارش‌ها حذف می‌شود.
+ */
+const FILTER_OPTIONS_TTL_MS = 5 * 60 * 1000;
+const filterOptionsCache = new Map<string, { at: number; value: FilterOptions }>();
+
+/** پاک‌کردن کش فیلترها — پس از تغییر ترم/دانشکده/رشته/تنظیمات برند */
+export async function invalidateReportFilterCache(): Promise<void> {
+  filterOptionsCache.clear();
+}
+
 export async function getFilterOptions({ universityId, signerForm = 'edu-report' }: { universityId?: number; signerForm?: string } = {}): Promise<FilterOptions> {
   await requireRole(ROLES);
   // 🔒 اگر دانشگاهِ فعال معتبر نباشد (۰ = DENY_UNI یا نامشخص) از «هیچ دانشگاهی»
   // استفاده می‌شود، نه «همهٔ دانشگاه‌ها». پیش‌تر شرط کاملاً حذف می‌شد و فهرست
   // ترم/دانشکده/گروه/رشته/ورودیِ همهٔ دانشگاه‌ها لو می‌رفت (fail-open).
   const uid = isRealUniversityId(universityId) ? universityId : -1;
+  const cacheKey = `${uid}|${signerForm}`;
+  const cached = filterOptionsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < FILTER_OPTIONS_TTL_MS) return cached.value;
   const terms = await db.execute<{ code: string; title: string | null }>(
     uid
       ? sql`SELECT DISTINCT "termCode" AS code, MAX(title) AS title FROM academic_terms WHERE "universityId" = ${uid} GROUP BY "termCode" ORDER BY "termCode" DESC`
@@ -125,7 +141,7 @@ export async function getFilterOptions({ universityId, signerForm = 'edu-report'
   // ── هویت بصری سند چاپی (همان منبع واحدِ گزارشساز/گزارشهای ذخیرهشده) ──
   const brand = await getReportPrintBrand(signerForm, uid > 0 ? uid : undefined);
 
-  return {
+  const result: FilterOptions = {
     terms: terms.rows,
     degrees: degrees.rows,
     faculties: faculties.rows,
@@ -140,6 +156,8 @@ export async function getFilterOptions({ universityId, signerForm = 'edu-report'
     universityLogoUrl: brand.universityLogoUrl,
     signers: brand.signers,
   };
+  filterOptionsCache.set(cacheKey, { at: Date.now(), value: result });
+  return result;
 }
 
 export async function assertReportPermission(kind: string): Promise<void> {

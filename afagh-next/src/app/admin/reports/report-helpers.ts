@@ -170,6 +170,14 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   return c;
 }
 
+/** شرطِ «فقط کدهای دانشجوییِ این فهرست» — null یعنی فیلتری اعمال نشود */
+export function studentCodeCond(f: ReportFilters, alias = 's') {
+  if (typeof f.studentCodes !== 'string' || !f.studentCodes.trim()) return null;
+  const picked = parseCodeList(f.studentCodes, { minDigits: 4, maxDigits: 20 }).codes;
+  if (!picked.length) return sql`1 = 0`;
+  return sql`${sql.identifier(alias)}."studentCode" IN (${sql.join(picked.map((code) => sql`${code}`), sql`, `)})`;
+}
+
 export function joinAnd(conds: ReturnType<typeof sql>[]) {
   if (!conds.length) return sql``;
   return sql`WHERE ${sql.join(conds, sql` AND `)}`;
@@ -192,16 +200,23 @@ export async function paged(
   const where = joinAnd(whereConds);
   const grp = groupBy ? sql`GROUP BY ${groupBy}` : sql``;
   const hav = having ? sql`HAVING ${having}` : sql``;
-  const cnt = await db.execute<{ n: string }>(
-    sql`SELECT COUNT(*)::int AS n FROM (SELECT 1 ${baseFrom} ${where} ${grp} ${hav}) t`,
-  );
+  // شمارش و داده هم‌زمان اجرا می‌شوند (هر دو به هم وابسته نیستند)؛ فقط اگر
+  // شمارهٔ صفحه از محدوده بیرون باشد، یک بار دیگر با صفحهٔ نهایی خوانده می‌شود.
+  const dataSql = (safePage: number) =>
+    sql`SELECT ${selectCols} ${baseFrom} ${where} ${grp} ${hav} ${orderBy} LIMIT ${per} OFFSET ${(safePage - 1) * per}`;
+  const [cnt, firstData] = await Promise.all([
+    db.execute<{ n: string }>(
+      sql`SELECT COUNT(*)::int AS n FROM (SELECT 1 ${baseFrom} ${where} ${grp} ${hav}) t`,
+    ),
+    db.execute<Record<string, unknown>>(dataSql(page)),
+  ]);
   const total = Number(cnt.rows[0]?.n ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / per));
   const safe = Math.min(page, totalPages);
-  const data = await db.execute<Record<string, unknown>>(
-    sql`SELECT ${selectCols} ${baseFrom} ${where} ${grp} ${hav} ${orderBy} LIMIT ${per} OFFSET ${(safe - 1) * per}`,
-  );
-  return { columns, rows: data.rows, total, page: safe, per, totalPages };
+  const rows = safe === page
+    ? firstData.rows
+    : (await db.execute<Record<string, unknown>>(dataSql(safe))).rows;
+  return { columns, rows, total, page: safe, per, totalPages };
 }
 
 export const STU_FROM = sql`FROM students s JOIN users u ON u.id = s."userId" LEFT JOIN majors m ON m.id = s."majorId" LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId" LEFT JOIN faculties fc ON fc.id = m."facultyId"`;

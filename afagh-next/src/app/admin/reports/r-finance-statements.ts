@@ -1,5 +1,5 @@
 import type { ReportFilters, ReportResult } from './report-helpers';
-import { PER } from './report-helpers';
+import { PER, studentCodeCond } from './report-helpers';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
@@ -234,6 +234,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}`;
     const conds = [
       sql`s."universityId" = ${uni}`,
+      ...(studentCodeCond(f) ? [studentCodeCond(f)!] : []),
       ...(f.facultyId ? [sql`fc.id = ${f.facultyId}`] : []),
       ...(f.majorId ? [sql`m.id = ${f.majorId}`] : []),
       ...(f.degreeId
@@ -837,6 +838,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         LEFT JOIN academic_terms at ON at.id = sl."termId"`,
       [
         sql`s."universityId" = ${uni}`,
+        ...(studentCodeCond(f) ? [studentCodeCond(f)!] : []),
         ...(f.facultyId ? [sql`fc.id = ${f.facultyId}`] : []),
         ...(f.majorId ? [sql`m.id = ${f.majorId}`] : []),
       ],

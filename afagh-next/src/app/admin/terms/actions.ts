@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { academic_terms, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { termContainsToday } from '@/lib/term-scope';
+import { invalidateReportFilterCache } from '@/app/admin/reports/actions';
 
 export type TermActivationResult =
   | { ok: true; message: string; activated: number; cleared: number; missing: string[] }
@@ -28,6 +29,9 @@ function revalidateTermPaths(): void {
   revalidatePath('/admin/terms');
   revalidatePath('/admin');
   revalidatePath('/admin/scheduling');
+  // کش گزینه‌های فیلتر گزارش‌ها و کش ترم باید فوراً تازه شوند
+  void invalidateReportFilterCache();
+  void import('@/lib/term-scope').then(m => m.invalidateTermCache());
 }
 
 async function applyActivation(
