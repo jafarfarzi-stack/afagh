@@ -175,8 +175,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   const [q, setQ] = useState('');
   const [nationalCode, setNationalCode] = useState('');
   const [miss, setMiss] = useState('national');
-  /** وضعیت تحصیلی: ALL = همه، وگرنه کد دقیق (ACTIVE/GRADUATED/…) */
-  const [status, setStatus] = useState('ALL');
+  /** وضعیت تحصیلی — پیش‌فرض «در حال تحصیل» است تا فهرست‌ها با کل دانشجویان
+   *  (فارغ‌التحصیل/انصرافی/فوت‌شده) پر نشوند. بقیهٔ وضعیت‌ها از همین منو
+   *  قابل انتخاب‌اند. گزارش‌های ماهیت‌وضعیتی و گزارش‌هایی که سرور خودش
+   *  وضعیت را تعیین می‌کند، از این پیش‌فرض مستثنا هستند (STATUS_FIXED). */
+  const [status, setStatus] = useState('ACTIVE');
   /** دامنه: all = کل دوره، term = فقط نیمسالِ انتخاب‌شده */
   const [scopeMode, setScopeMode] = useState<'all' | 'term'>('all');
   /** لیست کد دانشجو: متنِ خام کاربر + کدهای نرمال‌شده‌ی اعمال‌شده */
@@ -219,6 +222,38 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     'bi-facilities', 'graduation-dossiers', 'grade-audit-log',
   ]);
   const showStudentFilters = !COURSE_LEVEL_KINDS.has(kind);
+  /**
+   * گزارش‌هایی که **ماهیتشان** یک وضعیت خاص است و نباید فیلتر وضعیت رویشان
+   * اعمال شود (وگرنه با شرطِ خودِ کوئری تضاد می‌کند و خروجی خالی می‌شود).
+   * برای این‌ها `status` با مقدار ALL فرستاده می‌شود و شرطِ خودِ سرور می‌ماند؛
+   * در UI هم منو قفل و دلیلش نوشته می‌شود.
+   */
+  const STATUS_FIXED: Record<string, string> = {
+    graduates: 'GRADUATED',
+    'graduates-info': 'GRADUATED',
+    'portal-export': 'GRADUATED',
+    noshow: 'NO_SHOW',
+    transfers: 'TRANSFERRED',
+    docs: 'ACTIVE',
+    tuition: 'ACTIVE',
+  };
+  /** گزارش‌های توزیعی: فیلتر وضعیت خودِ گزارش را بی‌معنا می‌کند. */
+  const STATUS_ANY_KINDS = new Set([
+    'status-summary', 'status-report', 'status-change-report', 'major-change-report',
+  ]);
+  const fixedStatus = STATUS_FIXED[kind];
+  const statusValue = fixedStatus ? 'ALL' : STATUS_ANY_KINDS.has(kind) ? 'ALL' : status;
+  const STATUS_FA: Record<string, string> = {
+    ACTIVE: 'در حال تحصیل',
+    GRADUATED: 'فارغ‌التحصیل',
+    SUSPENDED: 'محروم از تحصیل',
+    WITHDRAWN: 'انصراف',
+    EXPELLED: 'اخراج',
+    TRANSFERRED: 'انتقالی / میهمان',
+    NO_SHOW: 'عدم مراجعه',
+    DECEASED: 'فوت',
+    UNKNOWN: 'نامشخص',
+  };
   useEffect(() => {
     if (!visibleCards.some(c => c.kind === kind)) setKind(visibleCards[0]?.kind ?? 'active-term');
     if (cat && !visibleCards.some(c => c.cat === cat)) setCat(undefined);
@@ -235,7 +270,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
    */
   const filterKey = (o: Record<string, unknown>) =>
     JSON.stringify(Object.entries(o).filter(([k]) => k !== 'page').sort(([a], [b]) => a.localeCompare(b)));
-  const filters = { term: effectiveTerm, terms: multiTerms, studentCodes, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, status, scope: scopeMode, ...extra };
+  const filters = { term: effectiveTerm, terms: multiTerms, studentCodes, degreeId, facultyId, departmentId, majorId, entryYear, q: q.trim(), nationalCode: nationalCode.trim(), miss, page: 1, universityId, status: statusValue, scope: scopeMode, ...extra };
   const staleResult = !!res && ranKey !== '' && ranKey !== filterKey(filters as Record<string, unknown>);
 
   const run = async (page = 1, kindOverride?: string) => {
@@ -700,26 +735,54 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 />
               </label>
             )}
+            {/* ── وضعیت استاد (فقط گزارش «اساتید»): پیش‌فرض فقط فعال‌ها ----------
+                چرا: جدول staff برای آفاق ۱٬۳۹۹ رکورد دارد که تنها ۴۴۶ تای آن‌ها
+                فعال‌اند؛ بدون این فیلتر، «اساتید» بیش از سه برابر واقعیت شمرده
+                می‌شد. بقیهٔ وضعیت‌ها از همین منو قابل انتخاب‌اند. */}
+            {kind === 'staff-list' && (
+              <label className="flex items-center gap-1" title="پیش‌فرض فقط استادان فعال است؛ غیرفعال‌ها از همین منو">
+                <span className="font-bold text-slate-600">وضعیت استاد:</span>
+                <select
+                  value={extra.staffStatus ?? 'ACTIVE'}
+                  onChange={e => setExtra({ ...extra, staffStatus: e.target.value })}
+                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
+                >
+                  <option value="ACTIVE">فعال (پیش‌فرض)</option>
+                  <option value="INACTIVE">غیرفعال</option>
+                  <option value="ALL">همه</option>
+                </select>
+              </label>
+            )}
             {/* ── وضعیت تحصیلی + دامنهٔ گزارش (همهٔ گزارش‌ها) ── */}
             {showStudentFilters && (
               <label className="flex items-center gap-1">
                 <span className="font-bold text-slate-600">وضعیت تحصیلی:</span>
-                <select
-                  value={status}
-                  onChange={e => setStatus(e.target.value)}
-                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
-                >
-                  <option value="ALL">همهٔ وضعیت‌ها</option>
-                  <option value="ACTIVE">در حال تحصیل</option>
-                  <option value="GRADUATED">فارغ‌التحصیل</option>
-                  <option value="SUSPENDED">محروم از تحصیل</option>
-                  <option value="WITHDRAWN">انصراف</option>
-                  <option value="EXPELLED">اخراج</option>
-                  <option value="TRANSFERRED">انتقالی / میهمان</option>
-                  <option value="NO_SHOW">عدم مراجعه</option>
-                  <option value="DECEASED">فوت</option>
-                  <option value="UNKNOWN">نامشخص</option>
-                </select>
+                {fixedStatus ? (
+                  <span className="rounded border border-slate-200 bg-slate-100 px-2 py-1.5 text-slate-600" title="این گزارش ماهیتاً فقط همین وضعیت را نشان می‌دهد">
+                    {STATUS_FA[fixedStatus] ?? fixedStatus} — ثابتِ این گزارش
+                  </span>
+                ) : STATUS_ANY_KINDS.has(kind) ? (
+                  <span className="rounded border border-slate-200 bg-slate-100 px-2 py-1.5 text-slate-600" title="این گزارش همهٔ وضعیت‌ها را برای محاسبه لازم دارد">
+                    همهٔ وضعیت‌ها — لازمهٔ این گزارش
+                  </span>
+                ) : (
+                  <select
+                    value={status}
+                    onChange={e => setStatus(e.target.value)}
+                    className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
+                  >
+                    <option value="ACTIVE">در حال تحصیل (پیش‌فرض)</option>
+                    <option value="ALL">همهٔ وضعیت‌ها</option>
+                    <option value="GRADUATED">فارغ‌التحصیل</option>
+                    <option value="SUSPENDED">محروم از تحصیل</option>
+                    <option value="WITHDRAWN">انصراف</option>
+                    <option value="EXPELLED">اخراج</option>
+                    <option value="TRANSFERRED">انتقالی / میهمان</option>
+                    <option value="NO_SHOW">عدم مراجعه</option>
+                    <option value="DECEASED">فوت</option>
+                    <option value="UNKNOWN">نامشخص</option>
+                  </select>
+                )}
               </label>
             )}
             {showStudentFilters && (

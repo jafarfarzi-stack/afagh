@@ -43,21 +43,36 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       pushUni(conds, 'st', f);
       if (f.departmentId) conds.push(sql`st."departmentId" = ${f.departmentId}`);
       if (f.facultyId) conds.push(sql`st."facultyId" = ${f.facultyId}`);
+      /* وضعیت استاد — پیش‌فرض «فقط فعال».
+         چرا: جدول staff برای آفاق ۱٬۳۹۹ رکورد دارد ولی تنها ۴۴۶ تای آن‌ها
+         فعال‌اند (isActive=1)؛ بدون این شرط «اساتید» سه برابر واقعیت شمرده
+         می‌شد. غیرفعال‌ها از فیلتر «وضعیت استاد» در UI قابل فراخوانی‌اند. */
+      const staffStatus = String(f.staffStatus ?? 'ACTIVE').toUpperCase();
+      if (staffStatus !== 'ALL') {
+        conds.push(staffStatus === 'INACTIVE'
+          ? sql`COALESCE(st."isActive", 1) = 0`
+          : sql`COALESCE(st."isActive", 1) = 1`);
+      }
       if (f.q) {
         // 🔒 فرار wildcard ورودی کاربر (با ESCAPE '\')
         const like = `%${escapeLikeChars(String(f.q))}%`;
         conds.push(sql`(st."staffCode" ILIKE ${like} ESCAPE '\\' OR u."firstName" ILIKE ${like} ESCAPE '\\' OR u."lastName" ILIKE ${like} ESCAPE '\\')`);
       }
-      const cols = sql`st."staffCode" AS code, u."firstName" || ' ' || u."lastName" AS name, st."academicRank" AS rank, dep.name AS department, st."staffType" AS type, ${offCount}`;
+      const cols = sql`st."staffCode" AS code, u."firstName" || ' ' || u."lastName" AS name, st."academicRank" AS rank, dep.name AS department, st."staffType" AS type,
+        CASE WHEN COALESCE(st."isActive", 1) = 1 THEN 'فعال' ELSE 'غیرفعال' END AS active,
+        ${offCount}`;
       const r = await paged(
         [
           { key: 'code', title: 'کد استاد' }, { key: 'name', title: 'نام' },
           { key: 'rank', title: 'مرتبه' }, { key: 'department', title: 'گروه' },
-          { key: 'type', title: 'نوع همکاری' }, { key: 'offerings', title: 'تعداد ارائه' },
+          { key: 'type', title: 'نوع همکاری' }, { key: 'active', title: 'وضعیت' },
+          { key: 'offerings', title: 'تعداد ارائه' },
         ],
         from, conds, cols, sql`ORDER BY code`, f,
       );
-      r.summary = `${r.total.toLocaleString('fa-IR')} استاد${term ? ` — ${r.total.toLocaleString('fa-IR')} ارائه در ترم ${term}` : ''}`;
+      const statusFa = staffStatus === 'INACTIVE' ? 'استاد غیرفعال'
+        : staffStatus === 'ALL' ? 'استاد (فعال و غیرفعال)' : 'استاد فعال';
+      r.summary = `${r.total.toLocaleString('fa-IR')} ${statusFa}${term ? ` — ترم ${term}` : ''}`;
       return r;
     }
 
