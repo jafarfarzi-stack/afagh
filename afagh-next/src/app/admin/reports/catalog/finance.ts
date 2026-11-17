@@ -76,17 +76,31 @@ const PAID_TYPES = `(${ledgerTypesCsv(PAID_LEDGER_TYPES)})`;
  *
  * 🔒 شرطِ هم‌دانشگاهی: ردیف‌های دفترِ مالیِ دانشجویی که دانشگاهشان با خودِ
  *   دانشجو نمی‌خواند (دادهٔ کهنه/ناهماهنگ) شمرده نمی‌شوند.
+ *
+ * 🔒 سقفِ تخفیف در سطح (دانشجو × ترم): تخفیفِ هر ترم نمی‌تواند از شهریهٔ همان
+ *   ترم بیشتر شود. اگر تخفیف را روی کلِ دوره جمع بزنیم، تخفیفِ اضافیِ یک ترم
+ *   بدهیِ ترمِ دیگر را خنثی می‌کند و «مانده» کمتر از واقعیت درمی‌آید.
+ *   همین قاعده در `ledgerCte()` صورت‌های مالی (r-finance-statements.ts) هست؛
+ *   برای همین دو سطح جمع داریم: اول per (دانشجو، ترم)، بعد per دانشجو.
  */
 const BALANCE_LEDGER_JOIN = `LEFT JOIN LATERAL (
-      SELECT sl2."studentId" AS "studentId",
-        COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${CHARGE_TYPES}), 0)::bigint AS "charge",
-        COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${DISC_TYPES}), 0)::bigint AS "discount",
-        COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${PAID_TYPES}), 0)::bigint AS "paid",
-        COUNT(sl2.id)::int AS "txnCount"
-      FROM student_ledger sl2
-      WHERE sl2."studentId" = s.id
-        AND (sl2."universityId" = s."universityId" OR sl2."universityId" IS NULL)
-      GROUP BY sl2."studentId"
+      SELECT t."studentId" AS "studentId",
+        COALESCE(SUM(t."charge"), 0)::bigint AS "charge",
+        COALESCE(SUM(LEAST(t."discount", t."charge")), 0)::bigint AS "discount",
+        COALESCE(SUM(t."paid"), 0)::bigint AS "paid",
+        COALESCE(SUM(t."txnCount"), 0)::int AS "txnCount"
+      FROM (
+        SELECT sl2."studentId", sl2."termId",
+          COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${CHARGE_TYPES}), 0) AS "charge",
+          COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${DISC_TYPES}), 0) AS "discount",
+          COALESCE(SUM(sl2."amount") FILTER (WHERE sl2."transactionType" IN ${PAID_TYPES}), 0) AS "paid",
+          COUNT(sl2.id)::int AS "txnCount"
+        FROM student_ledger sl2
+        WHERE sl2."studentId" = s.id
+          AND (sl2."universityId" = s."universityId" OR sl2."universityId" IS NULL)
+        GROUP BY sl2."studentId", sl2."termId"
+      ) t
+      GROUP BY t."studentId"
     ) sl ON TRUE`;
 
 // ══════════════════════════════════════════════════════════════════════

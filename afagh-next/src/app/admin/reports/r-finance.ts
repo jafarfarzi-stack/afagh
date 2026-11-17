@@ -2,7 +2,7 @@ import type { ReportFilters, ReportResult } from './report-helpers';
 import { joinAnd, paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES } from '@/lib/ledger-balance';
+import { DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES, ledgerTypesCsv } from '@/lib/ledger-balance';
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { faNum } from '@/lib/report-format';
@@ -22,13 +22,57 @@ const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
  * می‌آیند. تعریفِ محلیِ تازه ممنوع است: همین تکرار بود که `CREDIT` (پرداختیِ
  * دادهٔ مهاجرت) و زیرنوع‌های `TUITION_BATES_*` را از گزارش‌ها جا می‌انداخت و
  * «کل پرداختی» را برای دانشجویانِ مؤسسه‌های منحله صفر نشان می‌داد.
+ *
+ * ⚠ نامِ مستعار فقط از کدِ همین ماژول می‌آید (نه ورودی کاربر) ⇒ تزریق ممکن نیست.
  */
-const inTypes = (types: readonly string[]) =>
-  sql`sl."transactionType" IN (${sql.join(types.map((t) => sql`${t}`), sql`, `)})`;
+const typesIn = (alias: string, types: readonly string[]) =>
+  sql.raw(`"${alias}"."transactionType" IN (${ledgerTypesCsv(types)})`);
+
+const inTypes = (types: readonly string[]) => typesIn('sl', types);
 
 const CHARGE = inTypes(DEBT_LEDGER_TYPES);
 const DISC = inTypes(DISCOUNT_LEDGER_TYPES);
 const PAID = inTypes(PAID_LEDGER_TYPES);
+
+/**
+ * جمعِ دفترِ مالیِ یک دانشجو با **سقفِ تخفیف در سطح (دانشجو × ترم)**.
+ *
+ * ⚠ چرا LATERAL و نه JOIN + GROUP BY در بیرون؟ چون سقف باید *قبل از* جمعِ
+ *   کلِ دوره اعمال شود: تخفیفِ هر ترم حداکثر به اندازهٔ شهریهٔ همان ترم است.
+ *   اگر تخفیف را روی کلِ دوره جمع بزنیم، تخفیفِ اضافیِ یک ترم بدهیِ ترمِ دیگر
+ *   را خنثی می‌کند و «مانده» کمتر از واقعیت درمی‌آید. همین قاعده در
+ *   `ledgerCte()` صورت‌های مالی (r-finance-statements.ts) و در منبعِ
+ *   `finance-balance` گزارش‌ساز (catalog/finance.ts) پیاده شده است.
+ *
+ * ستون‌های خروجی (با نامِ مستعارِ `sl`): charge، discount، paid، txnCount.
+ * اگر دانشجو هیچ ردیفِ دفتری نداشته باشد، یک ردیفِ صفر برمی‌گردد (رفتارِ
+ * LEFT JOIN LATERAL با تجمیعِ بدون GROUP BY).
+ */
+function ledgerSumJoin(opts: { term?: string; uni?: number } = {}) {
+  const termCond = opts.term
+    ? sql`AND sl2."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${opts.term} LIMIT 1)`
+    : sql``;
+  const uniCond = opts.uni
+    ? sql`AND (sl2."universityId" = ${opts.uni} OR sl2."universityId" IS NULL)`
+    : sql``;
+  return sql`LEFT JOIN LATERAL (
+      SELECT
+        COALESCE(SUM(t."charge"), 0)::bigint AS "charge",
+        COALESCE(SUM(LEAST(t."discount", t."charge")), 0)::bigint AS "discount",
+        COALESCE(SUM(t."paid"), 0)::bigint AS "paid",
+        COALESCE(SUM(t."txnCount"), 0)::int AS "txnCount"
+      FROM (
+        SELECT sl2."termId",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DEBT_LEDGER_TYPES)}), 0) AS "charge",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DISCOUNT_LEDGER_TYPES)}), 0) AS "discount",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', PAID_LEDGER_TYPES)}), 0) AS "paid",
+          COUNT(sl2.id)::int AS "txnCount"
+        FROM student_ledger sl2
+        WHERE sl2."studentId" = s.id ${termCond} ${uniCond}
+        GROUP BY sl2."termId"
+      ) t
+    ) sl ON TRUE`;
+}
 
 
 export const CARDS = [
@@ -111,22 +155,17 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
 
   // ── صورت‌حساب شهریه دانشجو: تجمیع student_ledger ──
   if (kind === 'tuition-statement') {
-    const ledgerJoin = f.term
-      ? sql`LEFT JOIN student_ledger sl ON sl."studentId" = s.id AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)`
-      : sql`LEFT JOIN student_ledger sl ON sl."studentId" = s.id`;
     const from = sql`FROM students s JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
       LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-      ${ledgerJoin}`;
+      ${ledgerSumJoin({ term: f.term })}`;
     const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
       m.name AS major, d.title AS degree, s."entryYear" AS y,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)::bigint AS charge,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)::bigint AS discount,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0)::bigint AS paid,
-      (COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)
-        - COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)
-        - COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0))::bigint AS balance,
-      COUNT(sl.id)::int AS txns`;
+      sl."charge"::bigint AS charge,
+      sl."discount"::bigint AS discount,
+      sl."paid"::bigint AS paid,
+      (sl."charge" - sl."discount" - sl."paid")::bigint AS balance,
+      sl."txnCount" AS txns`;
     const r = await paged(
       [
         { key: 'code', title: 'شماره دانشجویی' }, { key: 'name', title: 'نام' },
@@ -137,7 +176,6 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'balance', title: 'مانده بدهی', format: 'MONEY' }, { key: 'txns', title: 'تراکنش', format: 'NUMBER' },
       ],
       from, studentWhere(f), cols, sql`ORDER BY balance DESC`, f,
-      sql`s.id, s."studentCode", u."firstName", u."lastName", m.name, d.title, s."entryYear"`,
     );
    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — ترم ${f.term}` : ' — همه ترم‌ها'} (مانده = بدهی − تخفیف − پرداختی)`;
     return r;
@@ -160,20 +198,17 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
       LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-      LEFT JOIN student_ledger sl ON sl."studentId" = s.id
-      ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}`;
+      ${ledgerSumJoin({ term: f.term, uni: f.universityId })}`;
     const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
       m.name AS major, d.title AS degree,
-      (COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)
-        - COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)
-        - COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0))::bigint AS balance,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0)::bigint AS paid`;
+      (sl."charge" - sl."discount" - sl."paid")::bigint AS balance,
+      sl."paid"::bigint AS paid`;
     /**
      * فقط دانشجویانی که در بازهٔ انتخابی ردیفِ دفتر مالی دارند.
      * پیش‌تر همهٔ ۳۹٬۹۵۴ دانشجو (حتی آن‌ها که هیچ ردیف مالی نداشتند) با
      * «۰ ریال» فهرست می‌شدند و گزارش بی‌معنا می‌شد.
      */
-    const conds = [...studentWhere(f), uniCond, sql`sl.id IS NOT NULL`];
+    const conds = [...studentWhere(f), sql`sl."txnCount" > 0`];
     const r = await paged(
       [
         { key: 'code', title: 'شماره دانشجو' },
@@ -183,14 +218,13 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'paid', title: 'کل پرداختی', format: 'MONEY' },
       ],
       from, conds, cols, sql`ORDER BY paid DESC, s."studentCode"`, f,
-      sql`s.id, s."studentCode", u."firstName", u."lastName", m.name, d.title`,
     );
     // جمع کل باید روی **همهٔ** ردیف‌ها باشد؛ قبلاً فقط ۵۰ ردیفِ صفحهٔ جاری
     // جمع می‌شد و «جمع پرداختی: ۰ ریال» می‌داد در حالی که گزارش پر از عدد بود.
     const agg = await db.execute<{ paid: string }>(sql`
       SELECT COALESCE(SUM(x.paid), 0)::bigint AS paid FROM (
-        SELECT COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0) AS paid
-        ${from} ${joinAnd(conds)} GROUP BY s.id
+        SELECT sl."paid"::bigint AS paid
+        ${from} ${joinAnd(conds)}
       ) x`);
     const totalPaid = Number(agg.rows[0]?.paid ?? 0);
     r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ نیمسال‌ها'}`;
@@ -333,13 +367,19 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       LEFT JOIN majors m ON m.id = s."majorId"
       ${f.term ? sql`JOIN academic_terms t ON t.id = sl."termId"` : sql`LEFT JOIN academic_terms t ON t.id = sl."termId"`}
       ${f.term ? sql`AND t."termCode" = ${f.term}` : sql``}`;
+    // سقفِ تخفیف در همین سطح (دانشجو × ترم) اعمال می‌شود؛ این گزارش هر
+    // ردیفش یک دانشجو در یک ترم است، پس LEAST مستقیماً درست است.
+    const chargeSum = sql`COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)`;
+    const discSum = sql`LEAST(
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0),
+      ${chargeSum}
+    )`;
     const cols = sql`COALESCE(t."termCode", '—') AS term, s."studentCode" AS code,
       u."firstName" || ' ' || u."lastName" AS name, m.name AS major,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)::bigint AS discount,
+      ${discSum}::bigint AS discount,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0)::bigint AS paid,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)::bigint AS charge,
-      (COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)
-        - COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC}), 0)
+      ${chargeSum}::bigint AS charge,
+      (${chargeSum} - ${discSum}
         - COALESCE(SUM(sl.amount) FILTER (WHERE ${PAID}), 0))::bigint AS balance`;
     const r = await paged(
       [

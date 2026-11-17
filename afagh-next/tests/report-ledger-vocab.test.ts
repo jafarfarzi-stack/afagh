@@ -89,13 +89,29 @@ const totalPayments = finance.slice(
   finance.indexOf("if (kind === 'student-payments')"),
 );
 ok('بلوکِ گزارش پیدا شد', totalPayments.length > 200);
-ok('فیلترِ ترم دارد', totalPayments.includes('sl."termId" = (SELECT id FROM academic_terms'));
-ok('دانشجویانِ بدونِ ردیفِ مالی حذف می‌شوند', totalPayments.includes('sl.id IS NOT NULL'));
+ok('فیلترِ ترم دارد', /ledgerSumJoin\(\{\s*term:\s*f\.term/.test(totalPayments));
+ok('دانشجویانِ بدونِ ردیفِ مالی حذف می‌شوند', totalPayments.includes('sl."txnCount" > 0'));
 ok('جمع کل روی همهٔ ردیف‌ها محاسبه می‌شود (نه صفحهٔ جاری)', /db\.execute/.test(totalPayments));
 ok('کارتِ گزارش در r-finance.ts نیازمند ترم است',
   /kind: 'total-payments'[^}]*needsTerm: true/.test(finance));
 ok('کارتِ گزارش در ReportsClient نیازمند ترم است',
   /kind: 'total-payments'[^}]*needsTerm: true/.test(client));
+
+console.log('\n۶) سقفِ تخفیف در سطح (دانشجو × ترم) در گزارش‌های تجمیعی');
+// قاعده: تخفیفِ هر ترم حداکثر به اندازهٔ شهریهٔ همان ترم؛ بدون این سقف،
+// تخفیفِ اضافیِ یک ترم بدهیِ ترمِ دیگر را خنثی می‌کند و «مانده» کم می‌شود.
+ok('r-finance: کمکیِ ledgerSumJoin سقف را روی (دانشجو × ترم) می‌گذارد',
+  /LEAST\(\s*t\."discount",\s*t\."charge"\s*\)/.test(finance)
+  && /GROUP BY sl2\."termId"/.test(finance));
+ok('r-finance: صورت‌حساب شهریه از همان کمکی استفاده می‌کند',
+  /if \(kind === 'tuition-statement'\)[\s\S]*?ledgerSumJoin\(\{\s*term:\s*f\.term\s*\}\)/.test(finance));
+ok('r-finance: گزارش مالی نیمسال (per دانشجو×ترم) سقف را دارد',
+  /const discSum = sql`LEAST\(/.test(finance));
+ok('catalog/finance: منبعِ «ماندهٔ دانشجو» سقف را اعمال می‌کند',
+  /LEAST\(t\."discount", t\."charge"\)/.test(catalog));
+ok('catalog/finance: دو سطح جمع دارد (ترم → دانشجو)',
+  /GROUP BY sl2\."studentId", sl2\."termId"/.test(catalog));
+ok('statements: مرجعِ قاعده (ledgerCte) هنوز سقف دارد', /LEAST\(/.test(statements));
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
