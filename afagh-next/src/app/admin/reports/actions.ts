@@ -232,6 +232,9 @@ async function runReportMultiTerm(
   const base: ReportFilters = { ...f, universityId: uni.id, terms: undefined };
   const merged: Record<string, unknown>[] = [];
   let columns: ReportColumn[] = [];
+  /** ترم‌هایی که سقفِ ۳۰۰۰ ردیف روی آن‌ها خورده — باید در سند اعلام شود. */
+  const cappedTerms: string[] = [];
+  let expectedTotal = 0;
   for (const t of terms) {
     const first = await executeReport(kind, { ...base, term: t, page: 1 });
     if (!columns.length && first.columns.length) {
@@ -244,19 +247,29 @@ async function runReportMultiTerm(
       const r = await executeReport(kind, { ...base, term: t, page: p });
       rows.push(...r.rows);
     }
+    // جمعِ واقعیِ هر ترم از خودِ گزارش می‌آید، نه از طولِ بریده‌شده
+    expectedTotal += Number(first.total) || rows.length;
+    if (rows.length < (Number(first.total) || rows.length)) cappedTerms.push(t);
     for (const row of rows) merged.push({ ...row, __term: t });
   }
   const total = merged.length;
   const totalPages = Math.max(1, Math.ceil(total / per));
   const page = Math.min(Math.max(1, Number(f.page) || 1), totalPages);
+  const capNote = cappedTerms.length
+    ? ` — ⚠ ناقص: سقف ${MULTI_TERM_CAP.toLocaleString('fa-IR')} ردیف در ترم ${cappedTerms.join('، ')}`
+    : '';
   return {
     columns: columns.length ? columns : [{ key: '__term', title: 'ترم' }],
     rows: merged.slice((page - 1) * per, page * per),
     total,
+    // 🔒 totalِ «قابل‌انتظار» تا مسیر چاپ/CSV بفهمد ردیف جا افتاده است.
+    //    اگر سقف خورده باشد، total بزرگ‌تر از rowsِ ادغام‌شده گزارش می‌شود.
+    expectedTotal: Math.max(expectedTotal, total),
+    truncated: cappedTerms.length > 0,
     page,
     per,
     totalPages,
-    summary: `${terms.length.toLocaleString('fa-IR')} ترم (${terms.join('، ')}) — ${total.toLocaleString('fa-IR')} ردیف`,
+    summary: `${terms.length.toLocaleString('fa-IR')} ترم (${terms.join('، ')}) — ${total.toLocaleString('fa-IR')} ردیف${capNote}`,
   };
 }
 
@@ -769,11 +782,15 @@ async function collectReportRows(kind: string, f: ReportFilters, maxRows: number
     if (!r.rows.length) break;
     all.push(...r.rows);
   }
+  // 🔒 «کلِ قابل‌انتظار» = ماکسیممِ totalِ گزارش و totalِ پیش از سقفِ ماژول.
+  //    قبلاً سقفِ چنده‌ترمی total را هم بریده بود و `truncated` هرگز true نمی‌شد.
+  const expected = Math.max(Number(first.expectedTotal ?? first.total) || 0, Number(first.total) || 0);
   return {
     columns: first.columns,
     rows: all.slice(0, maxRows),
     total: first.total,
-    truncated: first.total > Math.min(all.length, maxRows),
+    expectedTotal: expected,
+    truncated: Boolean(first.truncated) || expected > Math.min(all.length, maxRows),
   };
 }
 
@@ -810,9 +827,22 @@ export async function exportReport(
   const data = await collectReportRows(kind, { ...f, universityId: uni.id }, PRINT_MAX_ROWS);
   // گارد تزریق فرمول سمت سرور (مصرف‌کنندهٔ دیگری لازم نیست دوباره پیاده کند)
   const esc = (v: string) => (/^[=+\-@|\t\r]/.test(v.trimStart()) ? `'${v}` : v);
+  /**
+   * 🔒 مبالغ باید در فایل اکسل **عدد** باشند، نه متن فارسی.
+   * پیش‌تر ستون‌های MONEY به شکل «۱٬۲۳۴٬۵۶۷ ریال» نوشته می‌شدند و Excel
+   * نمی‌توانست جمع بزند. واحد (ریال) در عنوان ستون است، نه در سلول.
+   * اعداد منفی عدد می‌مانند (گارد فرمول فقط روی متن اعمال می‌شود).
+   */
+  const cellForCsv = (value: unknown, format?: string): string => {
+    if (format === 'MONEY' || format === 'NUMBER' || format === 'YEAR') {
+      const n = Number(value);
+      return Number.isFinite(n) ? String(n) : '';
+    }
+    return esc(formatReportCell(value, format));
+  };
   return {
     header: data.columns.map(c => esc(c.title)),
-    lines: data.rows.map(row => data.columns.map(c => esc(formatReportCell(row[c.key], c.format)))),
+    lines: data.rows.map(row => data.columns.map(c => cellForCsv(row[c.key], c.format))),
     total: data.total,
     truncated: data.truncated,
   };

@@ -123,6 +123,17 @@ export default function ReportPrint({
   const displayRows = printRows ?? rows;
 
   /**
+   * 🔒 هر تغییر گزارش/فیلتر باید ردیف‌های چاپِ قبلی را دور بریزد.
+   * پیش‌تر این state هرگز ریست نمی‌شد و بعد از یک چاپ موفق، چاپ گزارش بعدی
+   * همان دادهٔ قبلی را زیر هدر جدید چاپ می‌کرد.
+   */
+  useEffect(() => {
+    setPrintRows(null);
+    setPrintTotal(null);
+    setPrintTruncated(false);
+  }, [rows, columns, title]);
+
+  /**
    * چاپ: اگر `fetchAll` هست، اول همهٔ ردیف‌ها را می‌گیریم و بعد سند را
    * می‌سازیم. React پس از setState دوباره رندر می‌کند؛ دو frame صبر می‌کنیم
    * تا الگوی چاپی با ردیف‌های تازه در DOM بنشیند.
@@ -144,6 +155,10 @@ export default function ReportPrint({
       await printReportDocument(orientation);
     } catch {
       setFetching(false);
+      // 🔒 هرگز سندِ ناقص را «کامل» چاپ نکن: صفحهٔ جاری با برچسب «سند ناقص».
+      setPrintRows(null);
+      setPrintTotal(null);
+      setPrintTruncated(true);
       // حتی اگر واکشی کامل نشد، همان صفحهٔ جاری چاپ شود (بهتر از هیچ)
       await printReportDocument(orientation);
     }

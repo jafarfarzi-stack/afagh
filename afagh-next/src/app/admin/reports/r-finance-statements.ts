@@ -918,12 +918,16 @@ async function runPaged(
     sql`SELECT COUNT(*)::int AS n FROM (SELECT 1 ${from} ${where} ${grp}) t`,
   );
   const total = Number(cnt.rows[0]?.n ?? 0);
-  const totalPages = Math.max(1, Math.ceil(total / PER));
+  // 🔒 اندازهٔ صفحه را از درخواست بگیر (مثل `paged()`)، نه ۵۰ ثابت.
+  //    پیش‌تر مسیر چاپ/CSV که pageSize=500 می‌خواست، در عمل ۵۰ می‌گرفت و
+  //    روی ۱۰۰۰ ردیف متوقف می‌شد، در حالی که سند «سقف ۱۰٬۰۰۰» می‌گفت.
+  const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
+  const totalPages = Math.max(1, Math.ceil(total / per));
   const safe = Math.min(page, totalPages);
   const data = await db.execute<Record<string, unknown>>(
-    sql`SELECT ${cols} ${from} ${where} ${grp} ${orderBy} LIMIT ${PER} OFFSET ${(safe - 1) * PER}`,
+    sql`SELECT ${cols} ${from} ${where} ${grp} ${orderBy} LIMIT ${per} OFFSET ${(safe - 1) * per}`,
   );
-  return { columns, rows: data.rows, total, page: safe, per: PER, totalPages };
+  return { columns, rows: data.rows, total, page: safe, per, totalPages };
 }
 
 /** دوره‌های (ترم) به‌همراه تجمیع مالی — پایهٔ سود و زیان و بهای تمام‌شده */

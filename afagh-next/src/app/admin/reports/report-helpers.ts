@@ -71,6 +71,14 @@ export type ReportResult = {
   columns: ReportColumn[];
   rows: Record<string, unknown>[];
   total: number;
+  /**
+   * جمعِ «قابل‌انتظار» پیش از اعمال هر سقفی (مثلاً سقف ۳۰۰۰ ردیف در گزارش
+   * چنده‌ترمی). اگر از `total` بزرگ‌تر باشد، یعنی ردیف جا افتاده و سند/CSV
+   * باید «ناقص» علامت بخورد. مسیر چاپ و خروجی از همین استفاده می‌کند.
+   */
+  expectedTotal?: number;
+  /** آیا نتیجه پیش از این بریده شده است؟ (سقف ترم/سقف ماژول) */
+  truncated?: boolean;
   page: number;
   per: number;
   totalPages: number;
