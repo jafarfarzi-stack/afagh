@@ -10,9 +10,9 @@ import { faNum, formatReportCell as fmtCell } from '@/lib/report-format';
 import ReportPrint from '@/components/ui/ReportPrint';
 
 /** دستهبندی کارتهای گزارش: مالی به سه گروه منطقی تقسیم شده است */
-type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-academic' | 'finance-ops' | 'research';
+type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-academic' | 'finance-ops' | 'graduates' | 'council' | 'research';
 
-type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; customs?: { key: string; title: string }[] };
+type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; desc?: string; customs?: { key: string; title: string }[] };
 
 /** تمام دستههای مالی — هم در فیلتر Scope و هم در فیلتر تبها استفاده میشود */
 const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-academic', 'finance-ops']);
@@ -22,12 +22,110 @@ const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'probation', label: '⚠️ مشروطی و آیین‌نامه' },
   { key: 'program', label: '🗓️ برنامه و نمره' },
   { key: 'exams', label: '📝 امتحانات' },
-  { key: 'classes', label: '🏫 کلاس‌ها' },
+  { key: 'classes', label: '🏫 کلاس‌ها و استادان' },
+  { key: 'graduates', label: '🎓 دانش‌آموختگان و مدارک' },
+  { key: 'council', label: '🏛️ شورا و مکاتبات' },
+  { key: 'research', label: '🔬 پژوهش و آزمون جامع' },
   { key: 'finance', label: '💰 پرداخت و حسابداری' },
   { key: 'finance-academic', label: '🎓 شهریه و مالی تحصیلی' },
   { key: 'finance-ops', label: '📦 انبار، قراردادها و پیمانکاران' },
-  { key: 'research', label: '🎓 پژوهش و مکاتبات' },
 ];
+
+/** تب «همه» — کل فهرست یک‌جا، تا کاربر ناآشنا به دسته‌بندی گم نشود */
+const ALL_TAB = '__all';
+
+/**
+ * زیرگروهِ هر گزارش داخل تب خودش — یک تب ۱۳ کارتی به چند بخش قابل اسکن
+ * تبدیل می‌شود (ایراد «دکمه‌ها در هم‌برهم‌اند و دسته‌بندی ندارند»).
+ * کلیدِ ناموجود = «سایر».
+ */
+const SUB: Record<string, string> = {
+  'active-term': 'فهرست و وضعیت', 'status-summary': 'فهرست و وضعیت', 'status-report': 'فهرست و وضعیت',
+  'by-faculty': 'فهرست و وضعیت', 'by-major': 'فهرست و وضعیت', 'grade-status': 'وضعیت نمره',
+  entries: 'فهرست و وضعیت', incomplete: 'پروندهٔ ناقص', docs: 'پروندهٔ ناقص',
+  'no-photo': 'پروندهٔ ناقص', noshow: 'تغییرات', transfers: 'تغییرات',
+  'major-change-report': 'تغییرات', 'status-change-report': 'تغییرات',
+  top: 'برترین‌ها', 'top-students': 'برترین‌ها',
+  probation: 'مشروطی', 'probation-violations': 'مشروطی', 'probation-chains': 'مشروطی',
+  'unit-cap-violations': 'سقف و کف واحد', 'repeated-courses': 'دروس', 'third-attempt': 'دروس',
+  'prereq-violations': 'دروس', 'course-grade-status': 'دروس',
+  'enrollment-pick': 'ثبت‌نام و درس', 'offered-course-roster': 'ثبت‌نام و درس',
+  'student-weekly-conflicts': 'تداخل برنامه', 'student-exam-conflicts': 'تداخل برنامه',
+  'gpa-refresh-preview': 'معدل و پرونده', 'profile-refresh': 'معدل و پرونده',
+  'portal-export': 'معدل و پرونده', 'grade-audit-log': 'معدل و پرونده',
+  'exam-session-sheet': 'جلسه و صندلی', 'seat-numbers': 'جلسه و صندلی',
+  'final-exam-schedule': 'جلسه و صندلی', 'exam-entry-card': 'جلسه و صندلی',
+  'grade-entry-report': 'ثبت نمره', 'grade-deadline': 'ثبت نمره', 'transcript-card': 'کارنامه',
+  'empty-rooms': 'کلاس و سالن', 'weekly-timetable': 'کلاس و سالن', 'room-conflicts': 'کلاس و سالن',
+  'low-enrollment': 'کلاس و سالن', 'makeup-courses': 'کلاس و سالن',
+  'staff-list': 'استادان', 'staff-courses': 'استادان', 'staff-timetable': 'استادان',
+  'prof-formation-summary': 'تشکیل جلسات', 'prof-formation-detail': 'تشکیل جلسات',
+  'prof-formation-none': 'تشکیل جلسات', 'prof-sessions-unformed': 'تشکیل جلسات',
+  'attendance-list': 'حضور و غیاب',
+  'total-payments': 'پرداخت‌ها', 'student-payments': 'پرداخت‌ها', 'term-payments': 'پرداخت‌ها',
+  'finance-worklist': 'پرداخت‌ها', tuition: 'شهریه',
+  'accounting-voucher': 'حسابداری', 'general-ledger': 'حسابداری', 'daily-journal': 'حسابداری',
+  'income-statement': 'صورت‌های مالی', 'balance-sheet': 'صورت‌های مالی', 'cash-flow': 'صورت‌های مالی',
+  'costing-report': 'صورت‌های مالی', 'budget-variance': 'صورت‌های مالی', 'sales-report': 'صورت‌های مالی',
+  'revenue-hierarchy': 'صورت‌های مالی', 'vat-report': 'حسابداری', 'company-expenses': 'هزینه‌ها',
+  'allocation-report': 'هزینه‌ها',
+  'contractor-report': 'قرارداد و انبار', 'contractor-settlement': 'قرارداد و انبار',
+  'insurance-report': 'قرارداد و انبار', 'legal-report': 'قرارداد و انبار', 'inventory-report': 'قرارداد و انبار',
+  'tuition-statement': 'شهریهٔ دانشجو', 'tuition-overview': 'شهریهٔ دانشجو',
+  'tuition-faculty-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
+  'major-financial': 'شهریهٔ دانشجو', 'term-financial': 'شهریهٔ دانشجو',
+  'tuition-tariff': 'تعرفه', 'payroll-overview': 'حق‌التدریس',
+  'bi-teaching-quality': 'کیفیت و امکانات', 'bi-facilities': 'کیفیت و امکانات',
+  proposals: 'پروپوزال و دفاع', 'proposal-cap': 'پروپوزال و دفاع', defenses: 'پروپوزال و دفاع',
+  seminars: 'پروپوزال و دفاع', jame: 'آزمون جامع', payesh: 'پایش',
+  'council-edu': 'شورا', discipline: 'شورا', 'letter-templates': 'مکاتبات', 'pending-requests': 'مکاتبات',
+  graduates: 'دانش‌آموختگان', 'graduates-info': 'دانش‌آموختگان', 'grad-cert': 'گواهی‌ها',
+  'study-cert': 'گواهی‌ها', 'edu-confirm': 'گواهی‌ها', 'military-defer': 'گواهی‌ها',
+  'student-card': 'کارت و پرونده', 'graduation-dossiers': 'کارت و پرونده',
+};
+
+/** توضیح یک‌خطی فقط برای کارت‌هایی که عنوانشان به‌تنهایی گویا نیست */
+const DESC: Record<string, string> = {
+  'status-summary': 'شمارش دانشجویان به تفکیک وضعیت و مقطع',
+  'status-report': 'یک ردیف برای هر دانشجو با وضعیت فعلی',
+  'status-change-report': 'گذارِ وضعیت از ترمی به ترم دیگر',
+  'major-change-report': 'دانشجویان با کد وضعیتِ تغییر رشته',
+  top: 'میانگین سادهٔ نمرات دروس (حداقل ۱۷ و ۱۰ درس)',
+  'top-students': 'معدلِ رسمی و وزنی، با رتبه',
+  probation: 'مشروطیِ همین ترم بر پایهٔ معدل رسمی',
+  'probation-violations': 'تعداد ترم‌های مشروطی در برابر سقف آیین‌نامه',
+  'probation-chains': 'طولانی‌ترین زنجیرهٔ مشروطیِ متوالی',
+  incomplete: 'دانشجویان با کد ملی/موبایل/رشتهٔ ناقص',
+  docs: 'وضعیت مدارک پروندهٔ دانشجویان فعال',
+  'no-photo': 'برای پیگیری عکس دانشجو',
+  'offered-course-roster': 'نیازمند کد یا نام درس — یک ردیف per ثبت‌نام',
+  'enrollment-pick': 'تجمیعی per دانشجو در یک ترم',
+  'exam-session-sheet': 'شمارش حاضر/غایب هر سانس',
+  'seat-numbers': 'دانشجو × صندلی هر سانس',
+  'final-exam-schedule': 'تاریخ و ساعت هر درس',
+  'grade-entry-report': 'وضعیت ثبت نمرهٔ استادان',
+  'grade-deadline': 'روزهای باقی‌مانده تا مهلت ثبت',
+  'staff-list': 'کد/مرتبه/گروه + تعداد ارائه (پیش‌فرض: فقط فعال)',
+  'staff-courses': 'ارائه‌های هر استاد در ترم',
+  'staff-timetable': 'جلسات هفتگی هر استاد',
+  'prof-formation-summary': 'درصد تشکیل جلسات per استاد',
+  'prof-formation-detail': 'همان آمار per استاد × درس',
+  'prof-formation-none': 'استادانی که حضوری ثبت نکرده‌اند',
+  'prof-sessions-unformed': 'ریز جلساتی که حضور استاد ثبت نشده',
+  'attendance-list': 'حضور/غیاب دانشجویان هر ارائه',
+  'total-payments': 'مانده + کل پرداختی هر دانشجو',
+  'student-payments': 'ریز فیش‌های پرداخت',
+  'term-payments': 'جمع پرداختی هر ترم',
+  'finance-worklist': 'ماندهٔ مالی همهٔ دانشجویان',
+  tuition: 'ریز تراکنش‌های شهریه',
+  'tuition-statement': 'بدهی/تخفیف/پرداختی/مانده هر دانشجو',
+  'tuition-overview': 'مانده + واحد و مساعده',
+  'exam-entry-card': 'کارت ورود به جلسهٔ دانشجو',
+  'transcript-card': 'کارنامهٔ تحصیلی',
+  'graduation-dossiers': 'وضعیت پروندهٔ فراغت‌التحصیلی',
+  payesh: 'پاسخ‌های طرح پایش',
+  jame: 'واجدان شرایط آزمون جامع',
+};
 
 const CARDS: Card[] = [
   { kind: 'active-term', cat: 'students', icon: '🧑‍🎓', title: 'گزارش دانشجویان فعال ترم', needsTerm: true },
@@ -38,14 +136,14 @@ const CARDS: Card[] = [
   { kind: 'probation', cat: 'probation', icon: '⚠️', title: 'مشروطی‌های ترم', needsTerm: true },
   { kind: 'top', cat: 'program', icon: '🏆', title: 'گزارش نمرات برتر هر رشته' },
   { kind: 'incomplete', cat: 'students', icon: '📋', title: 'تکمیلی دانشجویان (پرونده ناقص)' },
-  { kind: 'graduates', cat: 'research', icon: '🎓', title: 'دانش‌آموختگان' },
+  { kind: 'graduates', cat: 'graduates', icon: '🎓', title: 'دانش‌آموختگان', desc: 'فهرست پایه: کد، نام، کد ملی، رشته، مقطع، ورودی' },
   { kind: 'entries', cat: 'students', icon: '📥', title: 'ورودی‌های جدید' },
   { kind: 'noshow', cat: 'students', icon: '🚫', title: 'عدم مراجعه‌ها' },
   { kind: 'transfers', cat: 'students', icon: '🔀', title: 'میهمان / انتقالی' },
   { kind: 'tuition', cat: 'finance-academic', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
   { kind: 'payesh', cat: 'research', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', cat: 'research', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
-  { kind: 'docs', cat: 'research', icon: '📎', title: 'مدارک دانشجویان' },
+  { kind: 'docs', cat: 'graduates', icon: '📎', title: 'مدارک دانشجویان' },
 
   // ── موج ۲: ۵۰ گزارش خانواده‌ها (منطق در r-*.ts) ──
   // آموزشی/مشروطی
@@ -63,7 +161,7 @@ const CARDS: Card[] = [
   { kind: 'offered-course-roster', cat: 'program', icon: '👥', title: 'دانشجویان درس ارائه‌شده', needsTerm: true },
   { kind: 'top-students', cat: 'program', icon: '🏆', title: 'نفرات برتر (معدل کل)' },
   { kind: 'no-photo', cat: 'students', icon: '📷', title: 'دانشجویان فاقد عکس' },
-  { kind: 'graduates-info', cat: 'research', icon: '🎓', title: 'اطلاعات دانش‌آموختگان' },
+  { kind: 'graduates-info', cat: 'graduates', icon: '🎓', title: 'اطلاعات دانش‌آموختگان' },
   // وضعیت و عملیات
   { kind: 'status-report', cat: 'students', icon: '📊', title: 'وضعیت دانشجویان' },
   { kind: 'major-change-report', cat: 'students', icon: '🔀', title: 'تغییر رشته' },
@@ -129,26 +227,27 @@ const CARDS: Card[] = [
   { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته', needsTerm: true },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
-  { kind: 'pending-requests', cat: 'research', icon: '⏳', title: 'درخواست‌های درانتظار' },
   { kind: 'defenses', cat: 'research', icon: '🎤', title: 'لیست دفاعیات' },
   { kind: 'proposals', cat: 'research', icon: '📄', title: 'پروپوزال' },
   { kind: 'seminars', cat: 'research', icon: '💬', title: 'سمینار', soon: true },
   // شورا و مکاتبات
-  { kind: 'council-edu', cat: 'research', icon: '🏛', title: 'شورای آموزشی', needsTerm: true },
-  { kind: 'discipline', cat: 'research', icon: '⚖', title: 'کمیته انضباطی', soon: true },
-  { kind: 'letter-templates', cat: 'research', icon: '📄', title: 'قالب‌های مکاتبات' },
+  { kind: 'council-edu', cat: 'council', icon: '🏛', title: 'شورای آموزشی', needsTerm: true },
+  { kind: 'discipline', cat: 'council', icon: '⚖', title: 'کمیته انضباطی', soon: true },
+  { kind: 'letter-templates', cat: 'council', icon: '📄', title: 'قالب‌های مکاتبات' },
+  { kind: 'pending-requests', cat: 'council', icon: '⏳', title: 'درخواست‌های درانتظار' },
   { kind: 'transcript-card', cat: 'exams', icon: '🎓', title: 'کارنامه دانشجویان' },
   { kind: 'exam-entry-card', cat: 'exams', icon: '🎟', title: 'کارت ورود به جلسه', needsTerm: true },
-  { kind: 'student-card', cat: 'research', icon: '🪪', title: 'کارت دانشجویی' },
-  { kind: 'study-cert', cat: 'research', icon: '📜', title: 'گواهی اشتغال به تحصیل' },
-  { kind: 'edu-confirm', cat: 'research', icon: '✅', title: 'تاییدیه تحصیلی' },
-  { kind: 'grad-cert', cat: 'research', icon: '🎓', title: 'گواهی پایان تحصیلات' },
-  { kind: 'military-defer', cat: 'research', icon: '🎖', title: 'معافیت تحصیلی' },
+  // مدارک و دانش‌آموختگان
+  { kind: 'student-card', cat: 'graduates', icon: '🪪', title: 'کارت دانشجویی' },
+  { kind: 'study-cert', cat: 'graduates', icon: '📜', title: 'گواهی اشتغال به تحصیل' },
+  { kind: 'edu-confirm', cat: 'graduates', icon: '✅', title: 'تاییدیه تحصیلی' },
+  { kind: 'grad-cert', cat: 'graduates', icon: '🎓', title: 'گواهی پایان تحصیلات' },
+  { kind: 'military-defer', cat: 'graduates', icon: '🎖', title: 'معافیت تحصیلی' },
   { kind: 'finance-worklist', cat: 'finance', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
   { kind: 'payroll-overview', cat: 'finance-academic', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
   { kind: 'bi-teaching-quality', cat: 'finance-academic', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
   { kind: 'bi-facilities', cat: 'finance-academic', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
-  { kind: 'graduation-dossiers', cat: 'research', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
+  { kind: 'graduation-dossiers', cat: 'graduates', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
   { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات', needsTerm: true },
   { kind: 'third-attempt', cat: 'probation', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },
 ];
@@ -157,7 +256,7 @@ const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-
 
 export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string> }) {
   const [kind, setKind] = useState<string>(initialKind ?? 'active-term');
-  const [cat, setCat] = useState<ReportCat | undefined>(undefined);
+  const [cat, setCat] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
   const initialTermCodes = (initialTerm ?? '').split(/[,،\s]+/).map(s => s.trim()).filter(Boolean);
   const [term, setTerm] = useState(initialTermCodes[0] || opts.latestTerm);
@@ -203,10 +302,32 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     scope === 'finance' ? FINANCE_CATS.has(c.cat) : scope === 'edu' ? !FINANCE_CATS.has(c.cat) : true,
   );
   const visibleCards = allowedKinds ? scopeFiltered.filter(c => allowedKinds.includes(c.kind)) : scopeFiltered;
-  const tabKeys = CATEGORIES.map(c => c.key).filter(k => visibleCards.some(c => c.cat === k));
-  const activeCat = cat && tabKeys.includes(cat) ? cat : tabKeys[0];
-  const searchedCards = search.trim() ? visibleCards.filter(c => faIncludes(c.title, search) || faIncludes(c.kind, search)) : visibleCards;
-  const gridCards = activeCat ? searchedCards.filter(c => c.cat === activeCat) : searchedCards;
+  /** تبها = «همه» + هر دستهای که کارت مجاز دارد (با شمارنده) */
+  const catKeys = CATEGORIES.map(c => c.key).filter(k => visibleCards.some(c => c.cat === k));
+  const tabKeys: string[] = [ALL_TAB, ...catKeys];
+  const activeTab = cat && tabKeys.includes(cat) ? cat : (catKeys[0] ?? ALL_TAB);
+  const countIn = (k: ReportCat) => visibleCards.filter(c => c.cat === k).length;
+  /**
+   * جست‌وجو **در همهٔ دسته‌ها** انجام می‌شود؛ قبلاً فقط تب فعال جست‌وجو می‌شد و
+   * عبارتِ موجود در تب دیگر پیام «یافت نشد» می‌داد.
+   */
+  const searchActive = search.trim().length > 0;
+  const searchedCards = searchActive ? visibleCards.filter(c => faIncludes(c.title, search) || faIncludes(c.kind, search)) : visibleCards;
+  const gridCards = searchActive || activeTab === ALL_TAB ? searchedCards : searchedCards.filter(c => c.cat === activeTab);
+  /** گروه‌بندی نمایش: در جست‌وجو/تب «همه» بر اساس دسته، وگرنه بر اساس زیرگروهِ تب */
+  const cardGroups: { label: string; cards: Card[] }[] = (() => {
+    const byCat = searchActive || activeTab === ALL_TAB;
+    const order: string[] = [];
+    const map = new Map<string, Card[]>();
+    for (const c of gridCards) {
+      const label = byCat
+        ? (CATEGORIES.find(x => x.key === c.cat)?.label ?? 'سایر')
+        : (SUB[c.kind] ?? 'سایر');
+      if (!map.has(label)) { map.set(label, []); order.push(label); }
+      map.get(label)!.push(c);
+    }
+    return order.map(label => ({ label, cards: map.get(label)! }));
+  })();
 
   const card = visibleCards.find(c => c.kind === kind);
   /**
@@ -256,7 +377,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   };
   useEffect(() => {
     if (!visibleCards.some(c => c.kind === kind)) setKind(visibleCards[0]?.kind ?? 'active-term');
-    if (cat && !visibleCards.some(c => c.cat === cat)) setCat(undefined);
+    if (cat && cat !== ALL_TAB && !visibleCards.some(c => c.cat === cat)) setCat(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowedKinds, scope]);
   // «همهٔ ترمها» = term خالی (همهٔ ماژولهای r-*.ts آن را «بدون فیلتر» میگیرند)؛
@@ -275,6 +396,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
 
   const run = async (page = 1, kindOverride?: string) => {
     const k = kindOverride ?? kind;
+    if (!k) { setErr('ابتدا یک گزارش را از فهرست بالا انتخاب کنید.'); return; }
     if (termMode === 'many' && manyTerms.length === 0 && page === 1) {
       setErr('دستکم یک ترم انتخاب کنید، یا حالت «همهٔ ترمها» را بزنید.');
       return;
@@ -287,7 +409,10 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       setRes(result);
       setRanKey(filterKey(used));
       setTimeout(() => {
-        document.getElementById('report-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const el = document.getElementById('report-result');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // جابه‌جاییِ فوکوس تا صفحه‌خوان از نتیجه باخبر شود (tabIndex=-1 روی همان عنصر)
+        (el as HTMLElement | null)?.focus?.({ preventScroll: true });
       }, 50);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'خطای نامشخص در اجرای گزارش');
@@ -310,6 +435,9 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     setKind(k);
     setRes(null);
     setErr('');
+    // فیلترهای سفارشیِ گزارش قبلی نباید بی‌صدا روی گزارش جدید اثر بگذارند
+    // (مثلاً «نیمسال ورود» که فقط در «نفرات برتر» دیده می‌شود).
+    setExtra({});
   };
 
   /**
@@ -393,31 +521,51 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         <p className="text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">مرکز گزارش‌های مالی</p>
       )}
 
-      {/* نوار دسته‌بندی (تب‌ها) */}
+      {/* نوار دسته‌بندی (تب‌ها) — با شمارنده و تب «همه» */}
       {tabKeys.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {CATEGORIES
-            .filter(c => (scope === 'finance' ? FINANCE_CATS.has(c.key) : scope === 'edu' ? !FINANCE_CATS.has(c.key) : true) && tabKeys.includes(c.key))
-            .map(c => (
-              <button
-                key={c.key}
-                onClick={() => setCat(c.key)}
-                className={`px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-all shadow-sm
-                  ${activeCat === c.key
-                    ? 'bg-indigo-600 border-indigo-700 text-white shadow-md'
-                    : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-300 hover:shadow'}`}
-              >
-                {c.label}
-              </button>
-            ))}
+        <div role="tablist" aria-label="دسته‌بندی گزارش‌ها" className="flex flex-wrap items-center gap-2">
+          {[{ key: ALL_TAB, label: '📚 همه' }, ...CATEGORIES]
+            .filter(c => c.key === ALL_TAB || ((scope === 'finance' ? FINANCE_CATS.has(c.key as ReportCat) : scope === 'edu' ? !FINANCE_CATS.has(c.key as ReportCat) : true) && catKeys.includes(c.key as ReportCat)))
+            .map(c => {
+              const isAll = c.key === ALL_TAB;
+              const n = isAll ? visibleCards.length : countIn(c.key as ReportCat);
+              const active = activeTab === c.key;
+              return (
+                <button
+                  key={c.key}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    setCat(c.key);
+                    // انتخابِ قبلی اگر در تب جدید نیست پاک شود تا «اجرای گزارش»
+                    // گزارشِ تبی را که دیده نمی‌شود اجرا نکند (باگ قبلی).
+                    if (!isAll && !visibleCards.some(x => x.cat === c.key && x.kind === kind)) {
+                      setKind('');
+                      setRes(null);
+                      setRanKey('');
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-all shadow-sm
+                    ${active
+                      ? 'bg-indigo-600 border-indigo-700 text-white shadow-md'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-300 hover:shadow'}`}
+                >
+                  {c.label}
+                  <span className={`ms-1 text-2xs font-normal ${active ? 'text-indigo-100' : 'text-slate-400'}`}>
+                    ({faNum(n)})
+                  </span>
+                </button>
+              );
+            })}
         </div>
       )}
 
-      {/* جست‌وجوی گزارش‌ها */}
+      {/* جست‌وجوی گزارش‌ها — در همهٔ دسته‌ها */}
       <input
         value={search}
+        aria-label="جست‌وجو در گزارش‌ها"
         onChange={e => setSearch(e.target.value)}
-        placeholder={`🔍 جست‌وجو در گزارش‌ها (نام یا کد)… (${visibleCards.length} گزارش)`}
+        placeholder={`🔍 جست‌وجو در همهٔ گزارش‌ها (نام گزارش)… (${faNum(visibleCards.length)} گزارش)`}
         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
       />
 
@@ -427,7 +575,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
           <span className="ml-1 hidden max-w-56 truncate text-2xs font-extrabold text-slate-600 sm:inline">
             {card?.title ?? 'گزارش'}
           </span>
-          <button onClick={() => run(1)} disabled={loading} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded disabled:opacity-50">
+          <button onClick={() => run(1)} disabled={loading || !card} title={!card ? 'ابتدا یک گزارش را انتخاب کنید' : undefined} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded disabled:opacity-50">
             {loading ? '⏳ در حال اجرا...' : '▶ اجرای گزارش'}
           </button>
           {res && res.rows.length > 0 && (
@@ -462,26 +610,50 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         </div>
       )}
 
-      {/* کارت‌های گزارش دستهٔ فعال */}
+      {/* کارت‌های گزارش — گروه‌بندی‌شده تا هر تب قابل اسکن باشد */}
       {gridCards.length === 0 ? (
-        <p className="p-6 text-center text-slate-500 text-sm bg-white border border-slate-300 rounded-xl shadow-sm">گزارشی با این عبارت یا در این دسته یافت نشد.</p>
+        <p className="p-6 text-center text-slate-500 text-sm bg-white border border-slate-300 rounded-xl shadow-sm">گزارشی با این عبارت یافت نشد.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {gridCards.map(c => (
-            <button
-              key={c.kind}
-              disabled={c.soon}
-              onClick={() => pick(c.kind)}
-              className={`flex items-center gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] transition-all shadow-sm
-                ${c.soon
-                  ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed'
-                  : kind === c.kind
-                    ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-md'
-                    : 'bg-gradient-to-b from-white to-slate-100 border-slate-300 text-slate-700 hover:border-indigo-300 hover:shadow'}`}
-            >
-              <span className="text-2xl">{c.icon}</span>
-              <span>{c.title}{c.soon && <span className="block text-3xs font-normal">به‌زودی</span>}</span>
-            </button>
+        <div className="space-y-4">
+          {cardGroups.map(g => (
+            <section key={g.label}>
+              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold text-slate-500">
+                <span className="h-1 w-1 rounded-full bg-indigo-400" />
+                {g.label}
+                <span className="text-2xs font-normal text-slate-400">({faNum(g.cards.length)})</span>
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {g.cards.map(c => {
+                  const desc = c.desc ?? DESC[c.kind];
+                  return (
+                    <button
+                      key={c.kind}
+                      disabled={c.soon}
+                      aria-pressed={kind === c.kind}
+                      title={desc ? `${c.title} — ${desc}` : c.title}
+                      onClick={() => pick(c.kind)}
+                      className={`flex items-start gap-2 p-3 rounded-lg border-2 text-right font-bold text-[13px] leading-snug transition-all shadow-sm
+                        ${c.soon
+                          ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed'
+                          : kind === c.kind
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-md ring-1 ring-indigo-200'
+                            : 'bg-gradient-to-b from-white to-slate-100 border-slate-300 text-slate-700 hover:border-indigo-300 hover:shadow'}`}
+                    >
+                      <span className="text-2xl leading-none">{c.icon}</span>
+                      <span className="min-w-0">
+                        <span className="block line-clamp-2">{c.title}</span>
+                        {desc && <span className="mt-0.5 block text-3xs font-normal text-slate-500 line-clamp-2">{desc}</span>}
+                        {(c.needsTerm || c.soon) && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-200/70 px-1.5 py-0.5 text-3xs font-bold text-slate-600">
+                            {c.soon ? 'به‌زودی' : 'نیازمند ترم'}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -680,8 +852,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                     <option value="FEMALE">زن</option>
                   </select>
                 </label>
-                <label className="flex items-center gap-1">
-                  <span className="font-bold text-slate-600">دانشجویان:</span>
+                <label className="flex items-center gap-1" title="وضعیت فعالیت دانشجو (مستقل از وضعیت تحصیلی)">
+                  <span className="font-bold text-slate-600">وضعیت فعالیت:</span>
                   <select value={extra.statusScope ?? 'ALL'} onChange={e => setExtra({ ...extra, statusScope: e.target.value })} className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
                     <option value="ALL">همه</option>
                     <option value="ACTIVE">فعال</option>
@@ -786,8 +958,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               </label>
             )}
             {showStudentFilters && (
-              <label className="flex items-center gap-1" title="همه = همهٔ دانشجویان؛ فقط فعالان نیمسال = دانشجویانی که در ترم انتخابی ثبت‌نام یا ردیف مالی دارند">
-                <span className="font-bold text-slate-600">دانشجویان:</span>
+              <label className="flex items-center gap-1" title="کل دوره = همهٔ دانشجویان؛ فقط فعالان نیمسال = دانشجویانی که در ترم انتخابی ثبت‌نام یا ردیف مالی دارند">
+                <span className="font-bold text-slate-600">دامنهٔ نیمسال:</span>
                 <select
                   value={scopeMode}
                   disabled={termMode !== 'one'}
@@ -795,7 +967,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                   className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 disabled:opacity-50"
                   title={termMode !== 'one' ? 'برای این فیلتر، ترم را روی «یک ترم» بگذارید' : undefined}
                 >
-                  <option value="all">همه</option>
+                  <option value="all">کل دوره</option>
                   <option value="term">فقط فعالان نیمسال</option>
                 </select>
               </label>
@@ -910,16 +1082,18 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
 
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}
       {/* نتیجه */}
-      <div id="report-result" className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-[10rem] print:hidden">
+      <div id="report-result" tabIndex={-1} className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-[10rem] print:hidden focus:outline-none">
         {err ? (
-          <p className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
+          <p role="alert" className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
         ) : loading ? (
           <p className="p-8 text-center text-slate-600 text-sm font-bold" role="status" aria-live="polite">
             ⏳ در حال اجرای گزارش «{card?.title}»…
           </p>
         ) : !res ? (
           <p className="p-8 text-center text-slate-500 text-sm">
-            گزارش «{card?.title}» انتخاب شد. ابتدا فیلترهای بالا (ترم، مقطع، دانشکده، وضعیت، دامنه …) را تنظیم کنید، سپس «▶ اجرای گزارش» را بزنید.
+            {card
+              ? `گزارش «${card.title}» انتخاب شد. ابتدا فیلترهای بالا را تنظیم کنید، سپس «▶ اجرای گزارش» را بزنید.`
+              : 'یک گزارش را از فهرست بالا انتخاب کنید.'}
           </p>
         ) : res.rows.length === 0 ? (
           <div className="p-6 text-center">
@@ -929,7 +1103,12 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
           </div>
         ) : (
           <>
-            {res.summary && <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">{res.summary}</div>}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">
+              <span role="status" aria-live="polite">
+                {faNum(res.total)} رکورد در {faNum(res.totalPages)} صفحه
+              </span>
+              {res.summary && <span className="font-normal text-slate-600">{res.summary}</span>}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs rt">
                 <thead className="bg-slate-100 border-b border-slate-300 font-bold text-slate-700 sticky top-0">
