@@ -218,5 +218,16 @@ ok(!/height:\s*209mm\b/.test(doorCss),
 ok(/body:has\(\.ds-sheet\)[\s\S]{0,200}?min-height:\s*0\s*!important/.test(printBody),
   'door-sign-print: resetِ چاپ شاملِ خودِ body:has(.ds-sheet) است');
 
+// رگرسیون ۱۶ نوامبر ۱۴۰۵: پوستهٔ پنلِ ادمین والدِ <main> را p-5/pb-16
+// پدگذاری میکند؛ بدون صفرکردن آن والد، پوسترِ ۲۹۷mm از چپ بریده میشود و
+// ۶۴px پدِ پایینی \((208mm + 17mm) > 210mm\) برگِ دومِ خالی میسازد.
+// بازتولید: والد با پدِ واقعی → ۲ برگ؛ با قاعدهٔ زیر → ۱ برگ (هم با
+// حاشیهٔ ۰ و هم با حاشیهٔ پیشفرض کروم).
+const parentReset = printBody.match(/body:has\(\.ds-sheet\)\s*div:has\(>\s*main\)\s*\{([^}]*)\}/)?.[1] ?? '';
+ok(/padding:\s*0\s*!important/.test(parentReset),
+  'door-sign-print: پدِ والدِ <main> در چاپ صفر میشود (جلوگیری از برشِ چپ و برگِ دوم)');
+ok(/gap:\s*0\s*!important/.test(parentReset) && /max-width:\s*none\s*!important/.test(parentReset),
+  'door-sign-print: فاصله و سقفِ عرضِ والدِ <main> در چاپ حذف میشود');
+
 console.log(`\nprint-media-guard: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -505,6 +505,16 @@ export default async function DoorSignPrint({
     .ds-sheet, .ds-grid, .ds-grid-b, .ds-day, .ds-day-b { direction: rtl !important; }
     body:has(.ds-sheet) .wb-chrome { display:none !important; }
     body:has(.ds-sheet) main { max-width:none !important; width:auto !important; margin:0 !important; padding:0 !important; }
+    /* ⚠ علتِ «برگٔ دومِ خالی» و «بریدهشدن از چپ» (گزارشِ ۱۶ نوامبر ۱۴۰۵):
+       پوستهٔ پنلِ ادمین والدِ <main> را با p-5 (۲۰px) و pb-16 (۶۴px) پدگذاری
+       میکند. قاعدهٔ بالا فقط <main> را صفر میکرد؛ والدِ فلِکس همان ۲۰px
+       افقی (→ برشِ لبهٔ چپِ پوسترِ ۲۹۷mm) و ۶۴px عمودی (→ ۲۰۸+۱۷mm =
+       ۲۲۵mm یعنی برگِ دوم) نگه میداشت. بازتولید با چاپِ عینِ همانDOM در
+       کروم: قبل ۲ برگ، بعد از صفرکردن والد ۱ برگ (هم با حاشیهٔ ۰ و هم با
+       حاشیهٔ پیشفرض). :has(> main) دقیقاً همان والد را میگیرد. */
+    body:has(.ds-sheet) div:has(> main) {
+      padding:0 !important; gap:0 !important; max-width:none !important;
+    }
     body:has(.ds-sheet) .print-area { display:none !important; }
     /* پوستهٔ پنل (min-h-screen) در چاپ ارتفاعِ یک صفحهٔ کامل می‌گیرد و پوسترِ
        ۲۰۸mm را به لبه می‌چسباند؛ یک پیکسل بیشتر = برگِ دومِ خالی. */
