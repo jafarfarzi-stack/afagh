@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { faIncludes } from '@/lib/persian-search';
+import { askConfirm } from '@/lib/ui-feedback';
 import {
   createEquivalenceClusterAction,
   deleteEquivalenceClusterAction,
@@ -95,9 +96,9 @@ export default function EquivalenceClustersClient({ clusters, courses }: { clust
     );
   };
 
-  const removeCluster = () => {
+  const removeCluster = async () => {
     if (!selected) return;
-    if (!window.confirm(`خوشهٔ «${selected.clusterTitle}» حذف شود؟ دروس عضو از خوشه جدا می‌شوند.`)) return;
+    if (!(await askConfirm({ title: `خوشهٔ «${selected.clusterTitle}» حذف شود؟ دروس عضو از خوشه جدا می‌شوند.`, danger: true }))) return;
     startTransition(async () => {
       const r = await deleteEquivalenceClusterAction(selected.id);
       if (!r.ok) {

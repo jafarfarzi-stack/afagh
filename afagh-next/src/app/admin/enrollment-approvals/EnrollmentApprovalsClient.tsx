@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { askConfirm } from '@/lib/ui-feedback';
+import Modal from '@/components/ui/Modal';
 
 type Msg = { text: string; kind: 'ok' | 'error' } | null;
 
@@ -364,14 +365,22 @@ function RequestForm({ onClose, onSaved }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 space-y-3"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">درخواست تأیید ثبت‌نام انگلیسی</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+    <Modal
+      open
+      onClose={onClose}
+      title="درخواست تأیید ثبت‌نام انگلیسی"
+      size="md"
+      footer={
+        <div className="ms-auto flex items-center gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
+          <button onClick={save} disabled={busy}
+            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+            {busy ? 'در حال ذخیره…' : 'ثبت درخواست'}
+          </button>
         </div>
-
+      }
+    >
+      <div className="space-y-3">
         {err && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2 rounded-lg">{err}</div>}
 
         <div className="space-y-1">
@@ -424,15 +433,7 @@ function RequestForm({ onClose, onSaved }: {
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
             placeholder="توضیح درخواست…" />
         </label>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
-          <button onClick={save} disabled={busy}
-            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
-            {busy ? 'در حال ذخیره…' : 'ثبت درخواست'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

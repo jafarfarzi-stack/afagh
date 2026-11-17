@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { ADD_LABEL, CREATE_ELSEWHERE, EDIT_FIELDS, NEW_FIELDS, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 import { jalaliDateOf, parseJalaliDate } from '@/lib/scheduling-core';
 import JalaliDateTimeInput from '@/components/JalaliDateTimeInput';
+import Modal from '@/components/ui/Modal';
 import Link from 'next/link';
 import { askConfirm } from '@/lib/ui-feedback';
 
@@ -107,11 +108,12 @@ export default function CodesClient({
     setForm(Object.fromEntries((NEW_FIELDS[table] ?? []).map(f => [f.name, f.def ?? ''])));
   }, [table]);
 
-  const closeForm = () => {
+  // مرجع ثابت: Modal اثر فوکوس را با تغییر onClose دوباره اجرا می‌کند و فوکوس را از فرم می‌رباید
+  const closeForm = useCallback(() => {
     setAdding(false);
     setEditingId(null);
-    setForm(Object.fromEntries(newFields.map(f => [f.name, f.def ?? ''])));
-  };
+    setForm(Object.fromEntries((NEW_FIELDS[table] ?? []).map(f => [f.name, f.def ?? ''])));
+  }, [table]);
 
   const submitNew = () =>
     start(async () => {
@@ -376,18 +378,29 @@ setForm(Object.fromEntries(editFields.map(f => {
 
         {/* فرم افزودن / ویرایش — به‌صورت پاپ‌آپ */}
         {adding && (cur?.creatable || editingId != null) && (
-          <div
-            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-[1px]"
-            onClick={closeForm}
+          <Modal
+            open
+            onClose={closeForm}
+            title={editingId != null ? `✏️ ویرایش ${cur?.title ?? ''}` : `➕ ${ADD_LABEL[table] ?? 'افزودن'} جدید`}
+            size="lg"
+            footer={(
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  disabled={pending}
+                  onClick={submitNew}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {editingId != null ? 'ذخیرهٔ تغییرات' : 'ثبت'}
+                </button>
+                <button onClick={closeForm} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
+                <span className="text-2xs text-slate-500">
+                  {table === 'term'
+                    ? 'تاریخ‌ها را وارد کنید؛ «ترم جاری» و «انتخاب واحد باز» در هر دانشگاه فقط برای یک ترم فعال می‌شود.'
+                    : 'کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.'}
+                </span>
+              </div>
+            )}
           >
-          <div
-            className="my-6 w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className={'mb-2 rounded-lg px-3 py-2 text-2xs font-bold text-slate-700 ' + (editingId != null ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700')}>
-              {editingId != null ? `✏️ ویرایش ${cur?.title}` : `➕ ${ADD_LABEL[table] ?? 'افزودن'} جدید`}
-              <button onClick={closeForm} className="float-left rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-2xs text-slate-600">بستن</button>
-            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {formFields.map(f => (
                 <label key={f.name} className="block">
@@ -430,23 +443,7 @@ setForm(Object.fromEntries(editFields.map(f => {
                 </label>
               ))}
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                disabled={pending}
-                onClick={submitNew}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {editingId != null ? 'ذخیرهٔ تغییرات' : 'ثبت'}
-              </button>
-              <button onClick={closeForm} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-600">انصراف</button>
-              <span className="text-2xs text-slate-500">
-                {table === 'term'
-                  ? 'تاریخ‌ها را وارد کنید؛ «ترم جاری» و «انتخاب واحد باز» در هر دانشگاه فقط برای یک ترم فعال می‌شود.'
-                  : 'کد را همان‌طور بنویسید که در فایل‌های اکسل مبدأ آمده — تطبیق انتقال داده اول با کد انجام می‌شود.'}
-              </span>
-            </div>
-          </div>
-          </div>
+          </Modal>
         )}
 
         <div className="overflow-x-auto">

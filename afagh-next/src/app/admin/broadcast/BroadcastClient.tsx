@@ -13,6 +13,7 @@ import {
   type TermOffering,
 } from './actions';
 import type { Channel } from '@/lib/messaging';
+import { askConfirm } from '@/lib/ui-feedback';
 
 const CHANNELS: { key: Channel; label: string }[] = [
   { key: 'INAPP', label: '📥 داخل پورتال' },
@@ -127,9 +128,12 @@ export default function BroadcastClient({ filters }: { filters: BroadcastFilters
       setResult('⛔ اول متن پیام را بنویسید.');
       return;
     }
-    const ok = window.confirm(
-      `پیام به ${count ? count.count.toLocaleString('fa-IR') + ' نفر' : 'مخاطبان فیلترشده'} ارسال شود؟ این عمل قابل بازگشت نیست.`,
-    );
+    const ok = await askConfirm({
+      title: `پیام به ${count ? count.count.toLocaleString('fa-IR') + ' نفر' : 'مخاطبان فیلترشده'} ارسال شود؟`,
+      body: 'این عمل قابل بازگشت نیست.',
+      confirmText: 'ارسال کن',
+      danger: true,
+    });
     if (!ok) return;
     setBusy(true);
     setResult(null);

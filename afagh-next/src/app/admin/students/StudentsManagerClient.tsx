@@ -11,6 +11,7 @@ import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components
 import { gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 import MobileCardList from '@/components/MobileCardList';
 import { useConfirm } from '@/components/ui/Confirm';
+import Modal from '@/components/ui/Modal';
 
 // ── هستهٔ خالص و قرارداد داده از ماژول‌های جدا (ریفکتور دور ۱۱) ──
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
@@ -37,6 +38,62 @@ export { doPrintTranscript };
  * چاپ مستقیم همان نمای روی صفحه (WYSIWYG) — پیاده‌سازی در
  * `@/components/print-transcript` است تا کارنامهٔ مالی هم همان رفتار را داشته باشد.
  */
+
+/**
+ * میان‌برهای «امور اساتید و آموزش» — فقط مسیرهای واقعیِ ثبت‌شده در
+ * `ADMIN_MODULES` (بدون مسیر ساختگی).
+ *
+ * قاعده: یک کارت = یک مقصد؛ هیچ دو کارتی href یکسان ندارند.
+ * کارت‌های حذف‌شده و دلیلشان:
+ *  • «تغییر کلمهٔ عبور جاری» → با اکشن سربرگ/صفحهٔ `/change-password` تکراری بود.
+ *  • «معرفی استاد جدید» → همان تب «معرفی و پرونده اساتید» بالای همین صفحه.
+ *  • «تخصیص استاد راهنمای جمعی» و «ارسال پیامک به دانشجویان کلاس» → فقط toast
+ *    نمایش می‌دادند و هیچ صفحه‌ای باز نمی‌کردند (میان‌بر بی‌مقصد).
+ */
+const EDU_QUICK_LINKS: { href: string; icon: string; title: string; desc: string; tone: string }[] = [
+  {
+    href: '/admin/class-sessions',
+    icon: '🎓',
+    title: 'مدیریت جلسات درس (حضور و غیاب و جبرانی)',
+    desc: 'جدول جلسات درس با پرچم‌های تعطیل/فوق‌برنامه/فعال، ممیزی زمانی و لیست دانشجویان',
+    tone: 'bg-purple-100 text-purple-800',
+  },
+  {
+    href: '/admin/attendance-control',
+    icon: '⏱️',
+    title: 'کنترل حضور و غیاب کلاس‌ها',
+    desc: 'ثبتِ تشکیلِ کلاس‌های امروز در اتاق‌های تحت مسئولیت — به‌نامِ استاد هر درس',
+    tone: 'bg-indigo-100 text-indigo-800',
+  },
+  {
+    href: '/admin/weekly-board',
+    icon: '🗓️',
+    title: 'سردر برنامهٔ هفتگی',
+    desc: 'برنامهٔ هفتگی کلاس‌ها — قابل چاپ برای نصب روی سردر',
+    tone: 'bg-teal-100 text-teal-800',
+  },
+  {
+    href: '/admin/offering-editor',
+    icon: '🛠️',
+    title: 'تعریف درس در ترم',
+    desc: 'ظرفیت، زمان کلاس، سالن و امتحان — با گارد تداخل',
+    tone: 'bg-violet-100 text-violet-800',
+  },
+  {
+    href: '/admin/curriculum',
+    icon: '📚',
+    title: 'کاتالوگ و سرفصل رشته‌ها',
+    desc: 'مدیریت چارت، انتقال کاتالوگ و سقف واحدها',
+    tone: 'bg-emerald-100 text-emerald-800',
+  },
+  {
+    href: '/admin/reports',
+    icon: '📑',
+    title: 'مرکز گزارش‌های آموزشی',
+    desc: 'فعال ترم، خلاصه وضعیت، مشروطی، برترها + خروجی Excel',
+    tone: 'bg-blue-100 text-blue-800',
+  },
+];
 
 export default function StudentsManagerClient(props: {
   /** اکشن سروری: فیلتر کد ملی را در کوکی HttpOnly ذخیره می‌کند (نه در URL) */
@@ -1410,125 +1467,67 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* ۳. کاشی‌ها و منوی عملیات سریع اساتید و آموزش (مطابق تصویر ۸)     */}
+      {/* ۳. کاشی‌ها و منوی عملیات سریع اساتید و آموزش                     */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {mainView === 'quick_menu' && (
         <div className="bg-slate-200 p-5 sm:p-8 rounded-xl border border-slate-400 shadow-xl space-y-4">
-          <div className="bg-white p-3 rounded-lg border border-slate-300 font-bold text-slate-800 text-sm">
-            ⚡ کاشی‌ها و منوی میانبرهای امور اساتید و آموزش
+          <div className="bg-white p-3 rounded-lg border border-slate-300 font-bold text-slate-800 text-sm flex flex-wrap items-center justify-between gap-2">
+            <span>⚡ کاشی‌ها و منوی میان‌برهای امور اساتید و آموزش</span>
+            <span className="text-3xs font-bold text-slate-500">{EDU_QUICK_LINKS.length.toLocaleString('fa-IR')} میان‌بر</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
-            {/* کاشی ۱: معرفی استاد جدید */}
-            <button
-              onClick={() => {
-                setMainView('professors');
-                setProfTab('info_combined');
-                setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
-                setCreateStaffMsg('');
-                setCreateStaffOpen(true);
-              }}
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-dashed border-indigo-400 hover:border-indigo-600 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                👥
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-indigo-950">معرفی استاد جدید</p>
-                <p className="text-2xs text-slate-500 mt-0.5">ثبت مشخصات، استخدام و امضای الکترونیک</p>
-              </div>
-            </button>
-
-            {/* کاشی ۲: تغییر کلمه عبور جاری */}
-            <button
-              onClick={() => showToast('پنجره تغییر کلمه عبور جاری باز شد')}
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-slate-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-yellow-100 text-yellow-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🔑
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-slate-900">تغییر کلمه عبور جاری</p>
-                <p className="text-2xs text-slate-500 mt-0.5">تغییر رمز ورود و تنظیمات امنیتی</p>
-              </div>
-            </button>
-
-            {/* کاشی ۳: تخصیص استاد راهنمای جمعی */}
-            <button
-              onClick={() => showToast('فرآیند تخصیص استاد راهنمای جمعی دانشجویان فعال گردید')}
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-slate-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                👨‍💼
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-slate-900">تخصیص استاد راهنمای جمعی</p>
-                <p className="text-2xs text-slate-500 mt-0.5">انتساب گروهی دانشجویان به اساتید راهنما</p>
-              </div>
-            </button>
-
-            {/* کاشی ۴: ارسال پیامک به دانشجویان کلاس */}
-            <button
-              onClick={() => showToast('سامانه ارسال پیامک گروهی به کلاس آماده است')}
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-slate-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                📱
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-slate-900">ارسال پیامک به دانشجویان کلاس</p>
-                <p className="text-2xs text-slate-500 mt-0.5">ارسال اطلاعیه، لغو یا تغییر زمان جلسه</p>
-              </div>
-            </button>
-
-            {/* کاشی ۵: مدیریت جلسات درس */}
-            <Link prefetch={false}
-              href="/admin/class-sessions"
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-slate-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🎓
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-slate-900">مدیریت جلسات درس (حضور و غیاب و جبرانی)</p>
-                <p className="text-2xs text-slate-500 mt-0.5">جدول جلسات درس با پرچم‌های تعطیل/فوق‌برنامه/فعال، ممیزی زمانی و لیست دانشجویان</p>
-              </div>
-            </Link>
-
-            {/* کاشی ۶: کاتالوگ و سرفصل رشته‌ها */}
-            <Link prefetch={false}
-              href="/admin/curriculum"
-              className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-indigo-300 hover:border-indigo-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                📚
-              </div>
-              <div>
-                <p className="font-extrabold text-sm text-indigo-950">کاتالوگ و سرفصل رشته‌ها</p>
-                <p className="text-2xs text-slate-500 mt-0.5">مدیریت چارت، انتقال کاتالوگ و سقف واحدها</p>
-              </div>
-            </Link>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
+            {EDU_QUICK_LINKS.map((c) => (
+              <Link
+                key={c.href}
+                href={c.href}
+                prefetch={false}
+                className="p-4 bg-gradient-to-b from-white to-slate-100 border-2 border-slate-300 hover:border-indigo-500 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-3 text-right group"
+              >
+                <div
+                  aria-hidden
+                  className={`w-12 h-12 shrink-0 rounded-lg flex items-center justify-center text-2xl group-hover:scale-110 transition-transform ${c.tone}`}
+                >
+                  {c.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-extrabold text-sm text-slate-900">{c.title}</p>
+                  <p className="text-2xs text-slate-500 mt-0.5 leading-5">{c.desc}</p>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       )}
 
       {/* ── مودال ثبت / اصلاح نمره (ادمین و کارشناس فارغ‌التحصیلان) ── */}
       {gradeEditModalOpen && currentStudent && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-amber-700 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm flex items-center gap-2">
-                <span>✏️</span> ثبت و اصلاح نمره (آموزش / فارغ‌التحصیلان)
-              </h3>
+        <Modal
+          open={gradeEditModalOpen}
+          onClose={() => setGradeEditModalOpen(false)}
+          title="✏️ ثبت و اصلاح نمره (آموزش / فارغ‌التحصیلان)"
+          size="md"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setGradeEditModalOpen(false)}
-                className="text-amber-100 hover:text-white text-lg leading-none"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors"
               >
-                ✕
+                انصراف
+              </button>
+              <button
+                type="submit"
+                form="grade-edit-form"
+                disabled={gradeSaving}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {gradeSaving ? 'در حال ثبت…' : '💾 ثبت نمره و لاگ ممیزی'}
               </button>
             </div>
-            <form onSubmit={handleSaveGrade} className="p-5 space-y-4 text-xs">
+          )}
+        >
+          <form id="grade-edit-form" onSubmit={handleSaveGrade} className="space-y-4 text-xs">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 text-slate-800">
                 <p><b>دانشجو:</b> {currentStudent.firstName} {currentStudent.lastName} ({currentStudent.studentCode})</p>
                 <p><b>رشته:</b> {currentStudent.majorName} — <b>مقطع:</b> {currentStudent.degreeLevel}</p>
@@ -1655,48 +1654,36 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </ul>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setGradeEditModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="submit"
-                  disabled={gradeSaving}
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  {gradeSaving ? 'در حال ثبت…' : '💾 ثبت نمره و لاگ ممیزی'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {/* ── مودال لاگ ممیزی تغییرات نمره (Audit Trail) ── */}
       {auditLogModalOpen && currentStudent && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full border border-slate-300 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm flex items-center gap-2">
-                <span>📜</span> تاریخچه و لاگ ممیزی نمرات (Audit Trail)
-              </h3>
+        <Modal
+          open={auditLogModalOpen}
+          onClose={() => setAuditLogModalOpen(false)}
+          title="📜 تاریخچه و لاگ ممیزی نمرات (Audit Trail)"
+          size="lg"
+          footer={(
+            <>
+              <a href="/admin/grades/audit" className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline">📋 مشاهدهٔ همهٔ لاگ‌های نمرات (سراسری)</a>
               <button
                 type="button"
                 onClick={() => setAuditLogModalOpen(false)}
-                className="text-slate-300 hover:text-white text-lg leading-none"
+                className="ms-auto px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
               >
-                ✕
+                بستن
               </button>
-            </div>
-            <div className="p-4 border-b border-slate-200 bg-slate-50 text-xs flex flex-wrap items-center justify-between gap-2">
+            </>
+          )}
+        >
+          <>
+            <div className="border-b border-slate-200 bg-slate-50 text-xs flex flex-wrap items-center justify-between gap-2 pb-2 mb-3">
               <p><b>دانشجو:</b> {currentStudent.firstName} {currentStudent.lastName} — <b>شماره دانشجویی:</b> <span className="font-mono">{currentStudent.studentCode}</span></p>
               <span className="text-2xs text-slate-500 font-mono">{auditLogs.length} رکورد ثبت‌شده</span>
             </div>
-            <div className="p-4 overflow-y-auto flex-1 text-xs">
+            <div className="text-xs">
               {auditLogsLoading ? (
                 <p className="text-center text-slate-500 py-8">در حال بارگذاری سوابق ممیزی…</p>
               ) : auditLogs.length === 0 ? (
@@ -1757,29 +1744,27 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </div>
               )}
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              <a href="/admin/grades/audit" className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline">📋 مشاهدهٔ همهٔ لاگ‌های نمرات (سراسری)</a>
-              <button
-                type="button"
-                onClick={() => setAuditLogModalOpen(false)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
-              >
-                بستن
-              </button>
-            </div>
-          </div>
-        </div>
+          </>
+        </Modal>
       )}
 
       {/* ── مودال تغییر رمز کاربر (فقط ADMIN) ── */}
       {bulkOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">🔑 بازنشانی گروهی رمز</h3>
-              <button type="button" onClick={() => setBulkOpen(false)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          title="🔑 بازنشانی گروهی رمز"
+          size="md"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={() => setBulkOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="submit" form="bulk-reset-form" disabled={bulkSaving} className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {bulkSaving ? 'در حال اجرا…' : '⚠ اعمال به همه'}
+              </button>
             </div>
-            <form onSubmit={handleBulkReset} className="p-5 space-y-3 text-xs">
+          )}
+        >
+          <form id="bulk-reset-form" onSubmit={handleBulkReset} className="space-y-3 text-xs">
               <div className="flex items-center gap-3">
                 <label className="text-slate-600 font-bold">گروه:</label>
                 <label className="flex items-center gap-1 cursor-pointer">
@@ -1839,25 +1824,26 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 <span>همچنین نقش‌های جاافتادهٔ همهٔ حساب‌ها را بساز (ترمیم norole)</span>
               </label>
               <p className="text-3xs text-slate-500">این عملیات بی‌بازگشت است؛ رمز جاری همهٔ حساب‌های این گروه باطل می‌شود.</p>
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setBulkOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="submit" disabled={bulkSaving} className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {bulkSaving ? 'در حال اجرا…' : '⚠ اعمال به همه'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {roleModalFor && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">⚙ نقش‌های «{roleModalFor.name}»</h3>
-              <button type="button" onClick={() => setRoleModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open={!!roleModalFor}
+          onClose={() => setRoleModalFor(null)}
+          title={`⚙ نقش‌های «${roleModalFor.name}»`}
+          size="md"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={() => setRoleModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="submit" form="roles-form" disabled={roleSaving} className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {roleSaving ? 'در حال ثبت…' : '💾 ثبت نقش‌ها'}
+              </button>
             </div>
-            <form onSubmit={handleSaveRoles} className="p-5 space-y-3 text-xs">
+          )}
+        >
+          <form id="roles-form" onSubmit={handleSaveRoles} className="space-y-3 text-xs">
               <p className="text-[10.5px] text-slate-500 leading-relaxed">
                 نقش‌های تعریف‌شده را تیک بزنید/بردارید (کارشناس مالی، کارشناس آموزش، مدیر گروه، …). برای تعریف نقش جدید به صفحهٔ{' '}
                 <a href="/admin/permissions" className="font-bold text-indigo-700 underline">مدیریت سطوح دسترسی و نقش‌ها</a> بروید.
@@ -1888,25 +1874,26 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </div>
               )}
               {roleMsg && <p className="text-xs font-bold break-words">{roleMsg}</p>}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setRoleModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="submit" disabled={roleSaving} className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {roleSaving ? 'در حال ثبت…' : '💾 ثبت نقش‌ها'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {createStaffOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">＋ ثبت استاد / کارمند جدید</h3>
-              <button type="button" onClick={() => setCreateStaffOpen(false)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open={createStaffOpen}
+          onClose={() => setCreateStaffOpen(false)}
+          title="＋ ثبت استاد / کارمند جدید"
+          size="md"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={() => setCreateStaffOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="submit" form="create-staff-form" disabled={createStaffBusy} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {createStaffBusy ? 'در حال ثبت…' : '＋ ثبت حساب جدید'}
+              </button>
             </div>
-            <form onSubmit={handleCreateStaff} className="p-5 space-y-3 text-xs">
+          )}
+        >
+          <form id="create-staff-form" onSubmit={handleCreateStaff} className="space-y-3 text-xs">
               <p className="text-[10.5px] text-slate-500 leading-relaxed">
                 حساب کاربری ساخته می‌شود (ورود اولیه با <b>کد ملی</b> + تغییر اجباری رمز). پس از ثبت، از <b>ستون «نقش‌ها»</b> در همین صفحه یا صفحهٔ استاد و کارکنان، تخصص هر کارشناس را تعیین کنید.
               </p>
@@ -1962,25 +1949,26 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </label>
               </div>
               {createStaffMsg && <p className="text-xs font-bold leading-relaxed break-words">{createStaffMsg}</p>}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setCreateStaffOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="submit" disabled={createStaffBusy} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {createStaffBusy ? 'در حال ثبت…' : '＋ ثبت حساب جدید'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {pwModalFor && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">🔑 تغییر رمز «{pwModalFor.name}»</h3>
-              <button type="button" onClick={() => setPwModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open={!!pwModalFor}
+          onClose={() => setPwModalFor(null)}
+          title={`🔑 تغییر رمز «${pwModalFor.name}»`}
+          size="sm"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={() => setPwModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="submit" form="pw-change-form" disabled={pwSaving} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {pwSaving ? 'در حال ثبت…' : '💾 ثبت رمز جدید'}
+              </button>
             </div>
-            <form onSubmit={handleResetPassword} className="p-5 space-y-3 text-xs">
+          )}
+        >
+          <form id="pw-change-form" onSubmit={handleResetPassword} className="space-y-3 text-xs">
               <p className="text-slate-600">رمز جدید را وارد کنید (۱۰ تا ۱۲۸ کاراکتر). کاربر در اولین ورود ملزم به تغییر رمز می‌شود.</p>
               <input
                 type="text"
@@ -1993,15 +1981,8 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 onChange={e => setPwInput(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-slate-500 focus:outline-none"
               />
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setPwModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="submit" disabled={pwSaving} className="px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {pwSaving ? 'در حال ثبت…' : '💾 ثبت رمز جدید'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
     </div>

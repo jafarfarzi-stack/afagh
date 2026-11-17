@@ -10,6 +10,7 @@ import {
   type MyMsgRecord,
 } from './actions';
 import type { Channel } from '@/lib/messaging';
+import { askConfirm } from '@/lib/ui-feedback';
 
 const CHANNELS: { key: Channel; label: string }[] = [
   { key: 'INAPP', label: '📥 داخل پورتال' },
@@ -57,7 +58,12 @@ export default function ProfBroadcastClient({ classes }: { classes: MyClass[] })
       setError('اول متن پیام را بنویسید.');
       return;
     }
-    if (!window.confirm(`به دانشجویان این کلاس (${selCls?.label ?? ''}) ارسال شود؟`)) return;
+    const ok = await askConfirm({
+      title: `به دانشجویان این کلاس (${selCls?.label ?? ''}) ارسال شود؟`,
+      confirmText: 'ارسال کن',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     setReport(null);

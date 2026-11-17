@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { usePlanning } from '../PlanningProvider';
 import { faNum, DAY_NAMES } from '../planning-core';
 import { saveProfessorAvailabilityForStaffAction } from '../availability-actions';
+import Modal from '@/components/ui/Modal';
 
 type Status = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
@@ -35,8 +36,6 @@ export default function ProfAvailabilityModal() {
     }
     return g;
   }, [realAvailRows, editingProfId, teachingSlots]);
-
-  if (!isProfAvailabilityModalOpen) return null;
 
   const current = (d: number, sid: number): Status => grid[`${d}:${sid}`] ?? initial[`${d}:${sid}`] ?? 'UNAVAIL';
   const toggle = (d: number, sid: number) => {
@@ -73,83 +72,13 @@ export default function ProfAvailabilityModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="p-4 bg-indigo-950 text-white flex items-center justify-between">
-          <div>
-            <h3 className="font-extrabold text-sm sm:text-base">
-              📖 برنامهٔ اعلامی استاد: {editingProf.name}
-            </h3>
-            <span className="text-xs text-indigo-200">
-              {editingProf.academicRank} — {editingProf.departmentName}
-            </span>
-          </div>
-          <button onClick={() => setIsProfAvailabilityModalOpen(false)} className="text-white/60 hover:text-white">✕</button>
-        </div>
-
-        <div className="p-4 overflow-auto space-y-3 text-xs">
-          <p className="text-2xs text-slate-600 font-bold">
-            مدیر گروه می‌تواند این ماتریس را به‌نام استاد اصلاح کند. روی هر خانه کلیک کنید:
-            <b className="text-emerald-700"> 🟩 اولویت</b> · <b className="text-amber-700"> 🟨 در صورت نیاز</b> · <b className="text-rose-700"> 🟥 عدم حضور</b>
-          </p>
-
-          {/* انتخاب همه — یک کلیک برای کل ماتریس */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-3xs font-black text-slate-500">انتخاب همه:</span>
-            <button type="button" onClick={() => applyAll('PREF')} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-bold text-2xs hover:bg-emerald-200">🟩 همه اولویت</button>
-            <button type="button" onClick={() => applyAll('AVAIL')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200">🟨 همه در صورت نیاز</button>
-            <button type="button" onClick={() => applyAll('UNAVAIL')} className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 font-bold text-2xs hover:bg-rose-200">🟥 همه عدم حضور</button>
-            <button type="button" onClick={() => setGrid({})} className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-2xs hover:bg-slate-200">↺ بازگردانی</button>
-          </div>
-
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
-            <table className="w-full border-collapse text-xs rt">
-              <thead>
-                <tr className="bg-slate-900 text-white text-center">
-                  <th scope="col" className="p-2 border border-slate-800 font-extrabold w-24">روز</th>
-                  {teachingSlots.map(s => (
-                    <th scope="col" key={s.id} className="p-2 border border-slate-800 font-extrabold whitespace-nowrap">
-                      {s.startTime}–{s.endTime}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {DAY_NAMES.slice(0, 7).map((day, d) => (
-                  <tr key={d} className={d % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="p-2 border border-slate-200 font-extrabold text-center bg-slate-100">{day}</td>
-                    {teachingSlots.map(s => {
-                      const st = current(d, s.id);
-                      const cls = st === 'PREF'
-                        ? 'bg-emerald-600 text-white border-emerald-700'
-                        : st === 'AVAIL'
-                          ? 'bg-amber-100 text-amber-900 border-amber-300'
-                          : 'bg-rose-100 text-rose-900 border-rose-300';
-                      return (
-                        <td key={s.id} className="p-1.5 border border-slate-200 text-center">
-                          <button
-                            type="button"
-                            onClick={() => toggle(d, s.id)}
-                            className={`w-full py-2 rounded-lg border font-extrabold text-3xs ${cls}`}
-                          >
-                            {st === 'PREF' ? '🟩 اولویت' : st === 'AVAIL' ? '🟨 در صورت نیاز' : '🟥 عدم حضور'}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="text-3xs text-slate-500 font-bold">
-            {faNum(teachingSlots.length)} زنگ در روز · ترتیب زنگ‌ها از تنظیمات دانشگاه می‌آید (ساعت کلاس و برنامه‌ریزی).
-          </div>
-          {msg && <div className="p-2 rounded-lg bg-slate-100 text-slate-800 font-bold">{msg}</div>}
-        </div>
-
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+    <Modal
+      open={isProfAvailabilityModalOpen}
+      onClose={() => setIsProfAvailabilityModalOpen(false)}
+      title={`📖 برنامهٔ اعلامی استاد: ${editingProf.name}`}
+      size="lg"
+      footer={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="text-3xs font-bold text-slate-500">
             {selectedTermId ? `ترم فعال: ${faNum(selectedTermId)}` : 'ترمی انتخاب نشده'}
           </span>
@@ -166,7 +95,72 @@ export default function ProfAvailabilityModal() {
             </button>
           </div>
         </div>
+      }
+    >
+      <p className="mb-3 text-xs font-bold text-slate-500">
+        {editingProf.academicRank} — {editingProf.departmentName}
+      </p>
+      <div className="space-y-3 text-xs">
+        <p className="text-2xs text-slate-600 font-bold">
+          مدیر گروه می‌تواند این ماتریس را به‌نام استاد اصلاح کند. روی هر خانه کلیک کنید:
+          <b className="text-emerald-700"> 🟩 اولویت</b> · <b className="text-amber-700"> 🟨 در صورت نیاز</b> · <b className="text-rose-700"> 🟥 عدم حضور</b>
+        </p>
+
+        {/* انتخاب همه — یک کلیک برای کل ماتریس */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-3xs font-black text-slate-500">انتخاب همه:</span>
+          <button type="button" onClick={() => applyAll('PREF')} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-bold text-2xs hover:bg-emerald-200">🟩 همه اولویت</button>
+          <button type="button" onClick={() => applyAll('AVAIL')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200">🟨 همه در صورت نیاز</button>
+          <button type="button" onClick={() => applyAll('UNAVAIL')} className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 font-bold text-2xs hover:bg-rose-200">🟥 همه عدم حضور</button>
+          <button type="button" onClick={() => setGrid({})} className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-2xs hover:bg-slate-200">↺ بازگردانی</button>
+        </div>
+
+        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <table className="w-full border-collapse text-xs rt">
+            <thead>
+              <tr className="bg-slate-900 text-white text-center">
+                <th scope="col" className="p-2 border border-slate-800 font-extrabold w-24">روز</th>
+                {teachingSlots.map(s => (
+                  <th scope="col" key={s.id} className="p-2 border border-slate-800 font-extrabold whitespace-nowrap">
+                    {s.startTime}–{s.endTime}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DAY_NAMES.slice(0, 7).map((day, d) => (
+                <tr key={d} className={d % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="p-2 border border-slate-200 font-extrabold text-center bg-slate-100">{day}</td>
+                  {teachingSlots.map(s => {
+                    const st = current(d, s.id);
+                    const cls = st === 'PREF'
+                      ? 'bg-emerald-600 text-white border-emerald-700'
+                      : st === 'AVAIL'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-rose-100 text-rose-900 border-rose-300';
+                    return (
+                      <td key={s.id} className="p-1.5 border border-slate-200 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggle(d, s.id)}
+                          className={`w-full py-2 rounded-lg border font-extrabold text-3xs ${cls}`}
+                        >
+                          {st === 'PREF' ? '🟩 اولویت' : st === 'AVAIL' ? '🟨 در صورت نیاز' : '🟥 عدم حضور'}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="text-3xs text-slate-500 font-bold">
+          {faNum(teachingSlots.length)} زنگ در روز · ترتیب زنگ‌ها از تنظیمات دانشگاه می‌آید (ساعت کلاس و برنامه‌ریزی).
+        </div>
+        {msg && <div className="p-2 rounded-lg bg-slate-100 text-slate-800 font-bold">{msg}</div>}
       </div>
-    </div>
+    </Modal>
   );
 }

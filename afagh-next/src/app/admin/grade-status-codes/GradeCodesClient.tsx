@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Modal from '@/components/ui/Modal';
 import { GRADE_STATUS_CODES, gradeStatusOptionLabel, gradeStatusTitleOf } from '@/lib/grade-status-codes';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
 
@@ -689,15 +690,21 @@ export default function GradeCodesClient({
 
       {/* ═══ مودال تعریف/ویرایش درس ═══ */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setModalOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto mx-4" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <h2 className="font-extrabold text-slate-900">
-                {editingCourse ? `✏️ ویرایش درس: ${editingCourse.code}` : '📘 تعریف درس جدید'}
-              </h2>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">✕</button>
+        <Modal
+          open
+          onClose={() => setModalOpen(false)}
+          title={editingCourse ? `✏️ ویرایش درس: ${editingCourse.code}` : '📘 تعریف درس جدید'}
+          size="lg"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={() => setModalOpen(false)} className="border border-slate-300 px-5 py-2.5 rounded-lg text-sm font-bold">انصراف</button>
+              <button type="submit" form="course-form" disabled={bankSaving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50">
+                {bankSaving ? 'در حال ذخیره...' : editingCourse ? 'ذخیره تغییرات' : 'ذخیره درس'}
+              </button>
             </div>
-            <form action={saveCourse} className="p-6 space-y-5">
+          )}
+        >
+            <form id="course-form" action={saveCourse} className="space-y-5">
               <input type="hidden" name="id" value={editingCourse?.id ?? ''} />
 
               {/* ردیف ۱: کد + عنوان */}
@@ -884,17 +891,8 @@ export default function GradeCodesClient({
                 <label className="block text-xs font-bold text-slate-600 mb-1">توضیحات درس</label>
                 <textarea name="description" rows={2} defaultValue={editingCourse?.description ?? ''} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white resize-none" />
               </div>
-
-              {/* دکمه‌ها */}
-              <div className="flex gap-2 pt-2 border-t border-slate-100">
-                <button type="submit" disabled={bankSaving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50">
-                  {bankSaving ? 'در حال ذخیره...' : editingCourse ? 'ذخیره تغییرات' : 'ذخیره درس'}
-                </button>
-                <button type="button" onClick={() => setModalOpen(false)} className="border border-slate-300 px-5 py-2.5 rounded-lg text-sm font-bold">انصراف</button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Toast */}

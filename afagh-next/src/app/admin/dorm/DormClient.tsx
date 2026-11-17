@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import Modal from '@/components/ui/Modal';
 import { askConfirm } from '@/lib/ui-feedback';
 
 type Msg = { text: string; kind: 'ok' | 'error' } | null;
@@ -305,14 +306,21 @@ function DormForm({ editing, onClose, onSaved }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 space-y-3"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{editing ? `ویرایش سکونت #${editing.id}` : 'سکونت خوابگاهی جدید'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+    <Modal
+      open
+      onClose={onClose}
+      title={editing ? `ویرایش سکونت #${editing.id}` : 'سکونت خوابگاهی جدید'}
+      footer={(
+        <div className="ms-auto flex items-center gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
+          <button onClick={save} disabled={busy}
+            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+            {busy ? 'در حال ذخیره…' : 'ذخیره'}
+          </button>
         </div>
-
+      )}
+    >
+      <div className="space-y-3">
         {err && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2 rounded-lg">{err}</div>}
 
         {!editing && (
@@ -383,20 +391,15 @@ function DormForm({ editing, onClose, onSaved }: {
             {DORM_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
         </label>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
-          <button onClick={save} disabled={busy}
-            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
-            {busy ? 'در حال ذخیره…' : 'ذخیره'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // ═══════════ کارت سکونت قابل چاپ ═══════════
+// عمداً مودال دستی مانده: این لایه برای «چاپ» است و پوشش `<Modal>` کلاس `print:hidden`
+// دارد؛ اگر به Modal تبدیل شود، کارت در خروجی چاپ دیده نمی‌شود. عنوانش هم بخشی از
+// طرح خود کارت است، نه سرفصل دیالوگ.
 
 function ResidenceCard({ row, onClose }: { row: DormRow; onClose: () => void }) {
   return (

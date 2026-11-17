@@ -8,6 +8,7 @@ import {
   setClearanceAction, startClearanceAction, waiveSajjadAction,
 } from './actions';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
+import Modal from '@/components/ui/Modal';
 
 // ═══ میز کار فارغ‌التحصیلی و صدور مدارک ═══
 
@@ -271,15 +272,11 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
   const stepIdx = steps.findIndex(s => s.code === a.workflowStatus);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex justify-start" dir="rtl" onClick={onClose}>
-      <div className="bg-slate-50 w-full max-w-3xl h-full overflow-y-auto p-4 space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-black text-slate-900">{d.student.fullName}</h2>
-            <p className="text-2xs text-slate-500 font-mono">{faNum(d.student.studentCode)} — {d.student.majorName ?? '—'} / {d.student.degreeTitle ?? '—'}</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 text-xl font-black">✕</button>
-        </div>
+    <Modal open onClose={onClose} title={d.student.fullName} size="lg">
+      <div className="space-y-3">
+        <p className="-mt-1 text-2xs text-slate-500 font-mono">
+          {faNum(d.student.studentCode)} — {d.student.majorName ?? '—'} / {d.student.degreeTitle ?? '—'}
+        </p>
 
         {/* نوار مراحل */}
         <div className="card p-3">
@@ -508,7 +505,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

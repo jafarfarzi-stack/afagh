@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
+import { askConfirm } from '@/lib/ui-feedback';
 
 type Member = {
   offeringId: number;
@@ -81,9 +82,9 @@ export default function CourseMergeClient() {
     }
   }, [termId, load]);
 
-  const mutate = (offeringIds: number[], mode: 'merge' | 'split' | 'auto', confirmText?: string) => {
+  const mutate = async (offeringIds: number[], mode: 'merge' | 'split' | 'auto', confirmText?: string) => {
     if (offeringIds.length === 0) return;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await askConfirm({ title: confirmText }))) return;
     setMsg(null);
     startTransition(async () => {
       try {

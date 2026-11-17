@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { notify, askConfirm } from '@/lib/ui-feedback';
+import Modal from '@/components/ui/Modal';
 
 function toJalali(gy: number, gm: number, gd: number): string {
   const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
@@ -380,92 +381,13 @@ function FormulaForm({
     'w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl" dir="rtl">
-        <h2 className="font-bold text-slate-800 mb-3">{edit ? 'ویرایش فرمول ویژه' : 'فرمول ویژهٔ جدید'}</h2>
-        <div className="space-y-3">
-          {!edit && (
-            <label className="flex flex-col gap-1 relative">
-              <span className="text-2xs font-medium text-slate-600">دانشجو</span>
-              <input
-                value={studentQ}
-                onChange={(e) => {
-                  setStudentQ(e.target.value);
-                  setStudentId(null);
-                }}
-                placeholder="نام یا شماره دانشجویی…"
-                className={inputCls}
-              />
-              {hits.length > 0 && (
-                <div className="absolute top-full z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-40 overflow-auto">
-                  {hits.map((h) => (
-                    <button
-                      key={h.studentId}
-                      type="button"
-                      onClick={() => {
-                        setStudentId(h.studentId);
-                        setStudentQ(`${h.name} (${h.studentCode})`);
-                        setHits([]);
-                      }}
-                      className="block w-full px-3 py-1.5 text-right text-xs hover:bg-slate-100"
-                    >
-                      {h.name} — {h.studentCode}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </label>
-          )}
-          <label className="flex flex-col gap-1">
-            <span className="text-2xs font-medium text-slate-600">دامنه (خالی = همهٔ ترم‌ها)</span>
-            <select value={termId} onChange={(e) => setTermId(e.target.value)} className={inputCls}>
-              <option value="">همهٔ ترم‌ها</option>
-              {terms.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title} ({t.termCode})
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium text-slate-600">مبلغ ثابت (ریال)</span>
-              <input
-                value={fixed}
-                onChange={(e) => setFixed(e.target.value)}
-                inputMode="numeric"
-                dir="ltr"
-                className={inputCls}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium text-slate-600">نرخ هر واحد (ریال)</span>
-              <input
-                value={perUnit}
-                onChange={(e) => setPerUnit(e.target.value)}
-                inputMode="numeric"
-                dir="ltr"
-                className={inputCls}
-              />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="text-2xs font-medium text-slate-600">دلیل / مصوبه</span>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={2}
-              className={inputCls}
-              placeholder="مثلاً: مصوبهٔ کمیسیون موارد خاص…"
-            />
-          </label>
-          {!edit && (
-            <p className="text-2xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">
-              با ثبت فرمول جدید، فرمول فعال قبلی همین دانشجو در همین دامنه غیرفعال می‌شود.
-            </p>
-          )}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      title={edit ? 'ویرایش فرمول ویژه' : 'فرمول ویژهٔ جدید'}
+      size="md"
+      footer={
+        <div className="ms-auto flex items-center gap-2">
           <button onClick={onClose} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs">
             انصراف
           </button>
@@ -477,7 +399,90 @@ function FormulaForm({
             {saving ? 'در حال ذخیره…' : 'ذخیره'}
           </button>
         </div>
+      }
+    >
+      <div className="space-y-3">
+        {!edit && (
+          <label className="flex flex-col gap-1 relative">
+            <span className="text-2xs font-medium text-slate-600">دانشجو</span>
+            <input
+              value={studentQ}
+              onChange={(e) => {
+                setStudentQ(e.target.value);
+                setStudentId(null);
+              }}
+              placeholder="نام یا شماره دانشجویی…"
+              className={inputCls}
+            />
+            {hits.length > 0 && (
+              <div className="absolute top-full z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-40 overflow-auto">
+                {hits.map((h) => (
+                  <button
+                    key={h.studentId}
+                    type="button"
+                    onClick={() => {
+                      setStudentId(h.studentId);
+                      setStudentQ(`${h.name} (${h.studentCode})`);
+                      setHits([]);
+                    }}
+                    className="block w-full px-3 py-1.5 text-right text-xs hover:bg-slate-100"
+                  >
+                    {h.name} — {h.studentCode}
+                  </button>
+                ))}
+              </div>
+            )}
+          </label>
+        )}
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium text-slate-600">دامنه (خالی = همهٔ ترم‌ها)</span>
+          <select value={termId} onChange={(e) => setTermId(e.target.value)} className={inputCls}>
+            <option value="">همهٔ ترم‌ها</option>
+            {terms.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title} ({t.termCode})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-medium text-slate-600">مبلغ ثابت (ریال)</span>
+            <input
+              value={fixed}
+              onChange={(e) => setFixed(e.target.value)}
+              inputMode="numeric"
+              dir="ltr"
+              className={inputCls}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-medium text-slate-600">نرخ هر واحد (ریال)</span>
+            <input
+              value={perUnit}
+              onChange={(e) => setPerUnit(e.target.value)}
+              inputMode="numeric"
+              dir="ltr"
+              className={inputCls}
+            />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium text-slate-600">دلیل / مصوبه</span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            className={inputCls}
+            placeholder="مثلاً: مصوبهٔ کمیسیون موارد خاص…"
+          />
+        </label>
+        {!edit && (
+          <p className="text-2xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">
+            با ثبت فرمول جدید، فرمول فعال قبلی همین دانشجو در همین دامنه غیرفعال می‌شود.
+          </p>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

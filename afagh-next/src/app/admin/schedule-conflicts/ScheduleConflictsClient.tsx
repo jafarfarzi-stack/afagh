@@ -19,6 +19,7 @@ import {
   type ConflictSlot,
 } from '@/lib/schedule-conflicts-core';
 import type { ScheduleConflictReport } from '@/lib/schedule-conflicts';
+import { askConfirm } from '@/lib/ui-feedback';
 
 type Term = { id: number; termCode: string; title: string };
 
@@ -92,18 +93,19 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
     );
   }, [report, kind, showReviewed, q]);
 
-  const onMergeGroup = (g: ConflictGroup) => {
+  const onMergeGroup = async (g: ConflictGroup) => {
     if (!termId) return;
     const ids = g.slots.map((s) => s.offeringId);
     if (ids.length < 2) return;
-    if (
-      !window.confirm(
-        `${ids.length} کلاس به‌عنوان یک جلسهٔ ادغامی ثبت شوند؟\n\n` +
-          g.slots.map((s) => `• ${s.courseCode} ${s.courseTitle} (گروه ${s.groupNumber})`).join('\n') +
-          `\n\nدر تقویم استاد با برچسب «کلاس ادغامی» نمایش داده می‌شوند و از این گزارش حذف می‌شوند.`,
-      )
-    )
-      return;
+    const ok = await askConfirm({
+      title: `${ids.length} کلاس به‌عنوان یک جلسهٔ ادغامی ثبت شوند؟`,
+      body:
+        g.slots.map((s) => `• ${s.courseCode} ${s.courseTitle} (گروه ${s.groupNumber})`).join('\n') +
+        `\n\nدر تقویم استاد با برچسب «کلاس ادغامی» نمایش داده می‌شوند و از این گزارش حذف می‌شوند.`,
+      confirmText: 'ادغام کن',
+      danger: false,
+    });
+    if (!ok) return;
     setMsg(null);
     startTransition(async () => {
       const res = await markOfferingsMergedAction(termId, ids);
@@ -133,19 +135,20 @@ export default function ScheduleConflictsClient({ terms }: { terms: Term[] }) {
     });
   };
 
-  const onMergeAllLikely = () => {
+  const onMergeAllLikely = async () => {
     if (!termId || !report) return;
     const targets = report.groups.filter((g) => !g.reviewed && g.likelyMerged && g.slots.length >= 2);
     if (!targets.length) return;
     const total = targets.reduce((n, g) => n + g.slots.length, 0);
-    if (
-      !window.confirm(
-        `${targets.length} مسئله که «احتمالاً یک جلسه» هستند ادغام شوند؟ (${total} کلاس)\n\n` +
-          `شرط: همان استاد، همان سالن، اختلافِ ساعت کمتر از ۲۰ دقیقه.\n` +
-          `مواردی که سالن یا استادشان متفاوت است دست‌نخورده می‌مانند.`,
-      )
-    )
-      return;
+    const ok = await askConfirm({
+      title: `${targets.length} مسئله که «احتمالاً یک جلسه» هستند ادغام شوند؟ (${total} کلاس)`,
+      body:
+        `شرط: همان استاد، همان سالن، اختلافِ ساعت کمتر از ۲۰ دقیقه.\n` +
+        `مواردی که سالن یا استادشان متفاوت است دست‌نخورده می‌مانند.`,
+      confirmText: 'ادغام کن',
+      danger: false,
+    });
+    if (!ok) return;
     setMsg(null);
     startTransition(async () => {
       const res = await markOfferingsMergedBulkAction(

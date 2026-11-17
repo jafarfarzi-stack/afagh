@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth';
-import { groupedModules, FINANCE_SUBGROUPS } from '@/lib/admin-modules';
+import { groupedModules, FINANCE_SUBGROUPS, canSeeModule, ADMIN_MODULES } from '@/lib/admin-modules';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +14,18 @@ const ALL_ADMIN_ROLES = [
   'VAULT_MANAGER',
   'DEP_HEAD',
   'VICE_EDU',
+];
+
+/**
+ * میان‌برهای پرکاربرد «آموزش» که ماژولشان در دستهٔ دیگری ثبت شده است
+ * (برنامه‌ریزی درسی و گزارش‌ها). مسیرها فقط از `ADMIN_MODULES` خوانده می‌شوند؛
+ * اگر ماژولی از قبل در همین دسته باشد یا کاربر نقش/مجوزش را نداشته باشد،
+ * نمایش داده نمی‌شود — بنابراین هیچ href تکراری ساخته نمی‌شود.
+ */
+const EDU_CROSS_GROUP_SHORTCUTS = [
+  '/admin/weekly-board',
+  '/admin/offering-editor',
+  '/admin/reports',
 ];
 
 /** صفحهٔ کاشی‌های یک دسته — /admin/c/edu */
@@ -73,8 +85,40 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
 
         const gridCls = 'grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3.5 lg:grid-cols-5';
 
+        // میان‌برها همیشه از رجیستری و با همان گاردِ نقش/مجوز فیلتر می‌شوند؛
+        // ماژول‌های همین دسته (و تکراری‌ها) کنار گذاشته می‌شوند تا هیچ مقصدی
+        // دو کارت نداشته باشد.
+        const shortcuts = g.group.key === 'edu'
+          ? EDU_CROSS_GROUP_SHORTCUTS.flatMap((href) => {
+              const m = ADMIN_MODULES.find((x) => x.href === href);
+              if (!m || m.inGrid === false) return [];
+              if (!canSeeModule(user.roles, m, permissionCodes)) return [];
+              if (g.modules.some((x) => x.href === m.href)) return [];
+              return [m];
+            })
+          : [];
+
         if (g.group.key !== 'fin') {
-          return <div className={gridCls}>{g.modules.map(renderCard)}</div>;
+          return (
+            <div className="space-y-5">
+              <div className={gridCls}>{g.modules.map(renderCard)}</div>
+              {shortcuts.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span aria-hidden className="text-base leading-none">🔗</span>
+                      <h2 className="text-xs font-black text-slate-800 sm:text-sm">میان‌برهای پرکاربرد آموزش</h2>
+                      <span className="hidden truncate text-2xs font-bold text-slate-400 sm:inline">
+                        ابزارهای برنامه‌ریزی و گزارش که در دستهٔ دیگری هستند
+                      </span>
+                    </div>
+                    <span className="ui-chip shrink-0">{shortcuts.length}</span>
+                  </div>
+                  <div className={gridCls}>{shortcuts.map(renderCard)}</div>
+                </section>
+              )}
+            </div>
+          );
         }
 
         return (

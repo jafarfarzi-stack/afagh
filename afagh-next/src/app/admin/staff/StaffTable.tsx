@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ClientTh, useClientTable, type ColumnDef } from '@/components/DataTable';
 import MobileCardList from '@/components/MobileCardList';
+import Modal from '@/components/ui/Modal';
 
 export type StaffRow = {
   staffId: number;
@@ -64,6 +65,10 @@ export default function StaffTable({
   });
 
   const setF = (k: keyof typeof cf) => (v: string) => setCf(prev => ({ ...prev, [k]: v }));
+
+  // مراجع ثابت: Modal اثر فوکوس را با تغییر onClose دوباره اجرا می‌کند و فوکوس را می‌رباید
+  const closeRolesModal = useCallback(() => setRoleModalFor(null), []);
+  const closeCreateModal = useCallback(() => setCreateOpen(false), []);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,113 +307,115 @@ export default function StaffTable({
       />
 
       {roleModalFor && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">⚙ نقش‌های «{roleModalFor.name} {roleModalFor.family}»</h3>
-              <button type="button" onClick={() => setRoleModalFor(null)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open
+          onClose={closeRolesModal}
+          title={`⚙ نقش‌های «${roleModalFor.name} ${roleModalFor.family}»`}
+          size="lg"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={closeRolesModal} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="button" disabled={saving} onClick={save} className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {saving ? 'در حال ثبت…' : '💾 ثبت نقش‌ها'}
+              </button>
             </div>
-            <div className="p-5 space-y-3 text-xs">
-              <p className="text-slate-600">
-                نقش‌های تعریف‌شده را تیک بزنید/بردارید (کارشناس، مدیر گروه، استاد، …). برای تعریف نقش جدید به صفحهٔ «مدیریت سطوح دسترسی و نقش‌ها» بروید.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-72 overflow-y-auto">
-                {rolesAll.map(r => (
-                  <label key={r.id} className="flex items-center gap-2 cursor-pointer border border-slate-200 rounded px-2.5 py-2 hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-slate-800 rounded"
-                      checked={sel.includes(r.id)}
-                      onChange={e => setSel(prev => e.target.checked ? [...prev, r.id] : prev.filter(x => x !== r.id))}
-                    />
-                    <span className="font-bold">{r.title || r.code}</span>
-                    {!r.title && <span className="text-slate-400 text-3xs">({r.code})</span>}
-                    {r.code === 'ADMIN' && <span className="text-[9px] text-amber-700 mr-auto">مدیر ارشد</span>}
-                  </label>
-                ))}
-              </div>
-              {msg && <p className="text-2xs" dir="auto">{msg}</p>}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setRoleModalFor(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="button" disabled={saving} onClick={save} className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {saving ? 'در حال ثبت…' : '💾 ثبت نقش‌ها'}
-                </button>
-              </div>
+          )}
+        >
+          <div className="space-y-3 text-xs">
+            <p className="text-slate-600">
+              نقش‌های تعریف‌شده را تیک بزنید/بردارید (کارشناس، مدیر گروه، استاد، …). برای تعریف نقش جدید به صفحهٔ «مدیریت سطوح دسترسی و نقش‌ها» بروید.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-72 overflow-y-auto">
+              {rolesAll.map(r => (
+                <label key={r.id} className="flex items-center gap-2 cursor-pointer border border-slate-200 rounded px-2.5 py-2 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-slate-800 rounded"
+                    checked={sel.includes(r.id)}
+                    onChange={e => setSel(prev => e.target.checked ? [...prev, r.id] : prev.filter(x => x !== r.id))}
+                  />
+                  <span className="font-bold">{r.title || r.code}</span>
+                  {!r.title && <span className="text-slate-400 text-3xs">({r.code})</span>}
+                  {r.code === 'ADMIN' && <span className="text-[9px] text-amber-700 mr-auto">مدیر ارشد</span>}
+                </label>
+              ))}
             </div>
+            {msg && <p className="text-2xs" dir="auto">{msg}</p>}
           </div>
-        </div>
+        </Modal>
       )}
 
       {createOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm">＋ ثبت کارشناس / کارمند جدید</h3>
-              <button type="button" onClick={() => setCreateOpen(false)} className="text-slate-300 hover:text-white text-lg leading-none">✕</button>
+        <Modal
+          open
+          onClose={closeCreateModal}
+          title="＋ ثبت کارشناس / کارمند جدید"
+          size="lg"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button type="button" onClick={closeCreateModal} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
+              <button type="submit" form="staff-create-form" disabled={creating} className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
+                {creating ? 'در حال ثبت…' : '💾 ثبت حساب'}
+              </button>
             </div>
-            <form onSubmit={create} className="p-5 space-y-3 text-xs max-h-[75vh] overflow-y-auto">
-              <p className="text-slate-600">
-                اطلاعات شناسنامه‌ای و شغلی این فرد ثبت می‌شود؛ رمز ورود اولیه = کد ملی و در اولین ورود مجبور به تغییر است. پس از ثبت، از ستون «نقش‌ها» نقش‌های کارشناس (مثل EDU_EXPERT) را بدهید.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">کد ملی (رمز اولیه) *</span>
-                  <input required pattern="[0-9]{10}" value={cf.nc} onChange={e => setF('nc')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" placeholder="کد ملی ۱۰ رقم" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">نام *</span>
-                  <input required value={cf.fn} onChange={e => setF('fn')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">نام خانوادگی *</span>
-                  <input required value={cf.ln} onChange={e => setF('ln')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">نام پدر</span>
-                  <input value={cf.father} onChange={e => setF('father')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">شمارهٔ شناسنامه</span>
-                  <input value={cf.bcn} onChange={e => setF('bcn')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">جنسیت</span>
-                  <select value={cf.gender} onChange={e => setF('gender')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                    <option value="">—</option>
-                    <option value="MALE">مرد</option>
-                    <option value="FEMALE">زن</option>
-                  </select>
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">موبایل</span>
-                  <input value={cf.mobile} onChange={e => setF('mobile')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" placeholder="0912…" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">ایمیل</span>
-                  <input type="email" value={cf.email} onChange={e => setF('email')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">کد پرسنلی (خالی = کد ملی)</span>
-                  <input value={cf.staffCode} onChange={e => setF('staffCode')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-slate-600 font-bold block mb-0.5">گروه آموزشی</span>
-                  <select value={cf.dept} onChange={e => setF('dept')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                    <option value="">—</option>
-                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </label>
-              </div>
-              {cmsg && <p className="text-2xs" dir="auto">{cmsg}</p>}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button type="button" onClick={() => setCreateOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg">انصراف</button>
-                <button type="submit" disabled={creating} className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold rounded-lg">
-                  {creating ? 'در حال ثبت…' : '💾 ثبت حساب'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          )}
+        >
+          <form id="staff-create-form" onSubmit={create} className="space-y-3 text-xs">
+            <p className="text-slate-600">
+              اطلاعات شناسنامه‌ای و شغلی این فرد ثبت می‌شود؛ رمز ورود اولیه = کد ملی و در اولین ورود مجبور به تغییر است. پس از ثبت، از ستون «نقش‌ها» نقش‌های کارشناس (مثل EDU_EXPERT) را بدهید.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">کد ملی (رمز اولیه) *</span>
+                <input required pattern="[0-9]{10}" value={cf.nc} onChange={e => setF('nc')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" placeholder="کد ملی ۱۰ رقم" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">نام *</span>
+                <input required value={cf.fn} onChange={e => setF('fn')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">نام خانوادگی *</span>
+                <input required value={cf.ln} onChange={e => setF('ln')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">نام پدر</span>
+                <input value={cf.father} onChange={e => setF('father')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">شمارهٔ شناسنامه</span>
+                <input value={cf.bcn} onChange={e => setF('bcn')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">جنسیت</span>
+                <select value={cf.gender} onChange={e => setF('gender')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                  <option value="">—</option>
+                  <option value="MALE">مرد</option>
+                  <option value="FEMALE">زن</option>
+                </select>
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">موبایل</span>
+                <input value={cf.mobile} onChange={e => setF('mobile')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" placeholder="0912…" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">ایمیل</span>
+                <input type="email" value={cf.email} onChange={e => setF('email')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">کد پرسنلی (خالی = کد ملی)</span>
+                <input value={cf.staffCode} onChange={e => setF('staffCode')(e.target.value)} dir="ltr" className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono" />
+              </label>
+              <label className="block col-span-1">
+                <span className="text-slate-600 font-bold block mb-0.5">گروه آموزشی</span>
+                <select value={cf.dept} onChange={e => setF('dept')(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
+                  <option value="">—</option>
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </label>
+            </div>
+            {cmsg && <p className="text-2xs" dir="auto">{cmsg}</p>}
+          </form>
+        </Modal>
       )}
     </div>
     </div>

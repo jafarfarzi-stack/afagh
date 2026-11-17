@@ -416,10 +416,14 @@ function useCurriculumWorkspace(
     if (!targetMajor) return;
     // گارد انتخاب اشتباه مقصد: نام رشتهٔ مبدأ/مقصد + تعداد دروس قبل از کپی عمیق پرسیده شود
     const courseCount = detail?.courses.length ?? 0;
-    if (!window.confirm(
-      `کپی عمیق چارت «${src.versionCode}» (${courseCount} درس) به رشتهٔ مقصد «${targetMajor.name}» انجام شود؟\n`
-      + `یک نسخهٔ DRAFT جدید در رشتهٔ مقصد ساخته می‌شود و دروس + پیش‌نیازها + ترم‌بندی کامل کپی می‌شوند.`
-    )) return;
+    const okCopy = await askConfirm({
+      title: `کپی عمیق چارت «${src.versionCode}» (${courseCount} درس) به رشتهٔ مقصد «${targetMajor.name}» انجام شود؟`,
+      body: 'یک نسخهٔ DRAFT جدید در رشتهٔ مقصد ساخته می‌شود و دروس + پیش‌نیازها + ترم‌بندی کامل کپی می‌شوند.',
+      confirmText: 'کپی کن',
+      cancelText: 'انصراف',
+      danger: false,
+    });
+    if (!okCopy) return;
     // کد یکتا برای رشتهٔ مقصد: اگر «{سال}-T1» از قبل هست، به T2، T3، … برس
     // (وگرنه انتقال دوم به همان رشته با خطای «کد تکراری» شکست می‌خورد)
     const base = `${src.entryYearFrom}-T`;
@@ -479,7 +483,13 @@ function useCurriculumWorkspace(
 
   const handleSyncRoles = async () => {
     if (selectedVersionId == null) return;
-    if (!window.confirm('نقش همهٔ دروس این نسخه از روی «نوع درس» بانک بازخوانی می‌شود و تغییرات دستی نقش‌ها از بین می‌رود. ادامه می‌دهید؟')) return;
+    const okSync = await askConfirm({
+      title: 'نقش همهٔ دروس این نسخه از روی «نوع درس» بانک بازخوانی می‌شود و تغییرات دستی نقش‌ها از بین می‌رود. ادامه می‌دهید؟',
+      confirmText: 'بازخوانی کن',
+      cancelText: 'انصراف',
+      danger: true,
+    });
+    if (!okSync) return;
     const ok = await run(() => syncRolesFromBankAction(selectedVersionId));
     if (ok) reloadDetail(selectedVersionId);
   };
@@ -490,7 +500,15 @@ function useCurriculumWorkspace(
    */
   const handleSyncRequisites = async (overwrite = false) => {
     if (selectedVersionId == null) { showToast('اول یک نسخه را انتخاب کنید.', 'error'); return; }
-    if (overwrite && !window.confirm('قواعد پیش‌نیاز/هم‌نیازِ موجود این نسخه با متن «جدول دروس» بازنویسی می‌شود. ادامه می‌دهید؟')) return;
+    if (overwrite) {
+      const okOverwrite = await askConfirm({
+        title: 'قواعد پیش‌نیاز/هم‌نیازِ موجود این نسخه با متن «جدول دروس» بازنویسی می‌شود. ادامه می‌دهید؟',
+        confirmText: 'بازنویسی کن',
+        cancelText: 'انصراف',
+        danger: true,
+      });
+      if (!okOverwrite) return;
+    }
     const ok = await run(() => syncRequisiteRulesAction(selectedVersionId, overwrite));
     if (ok) await reloadDetail(selectedVersionId);
   };

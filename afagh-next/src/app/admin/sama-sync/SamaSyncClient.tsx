@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { askConfirm } from '@/lib/ui-feedback';
 import { samaSyncAction, type SamaSyncResult } from './actions';
 
 const INITIAL: SamaSyncResult | null = null;
@@ -53,9 +54,20 @@ export default function SamaSyncClient({ terms, defaultTerm }: { terms: { termCo
             name="mode"
             value="apply"
             disabled={pending || !confirmed}
-            onClick={(e) => {
-              if (!confirmed) { e.preventDefault(); return; }
-              if (!window.confirm('ثبت‌نام‌های تازه و نمره‌های خالی اعمال می‌شود. ادامه؟')) e.preventDefault();
+            onClick={async (e) => {
+              // preventDefault باید پیش از await اجرا شود؛ وگرنه فرم بدون تأیید ارسال می‌شود.
+              // ارسالِ واقعی بعد از تأیید، دستی با requestSubmit انجام می‌شود.
+              const btn = e.currentTarget;
+              e.preventDefault();
+              if (!confirmed) return;
+              const ok = await askConfirm({
+                title: 'ثبت‌نام‌های تازه و نمره‌های خالی اعمال می‌شود. ادامه؟',
+                confirmText: 'اجرا',
+                cancelText: 'انصراف',
+                danger: true,
+              });
+              if (!ok) return;
+              btn.form?.requestSubmit(btn);
             }}
             className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-40"
           >

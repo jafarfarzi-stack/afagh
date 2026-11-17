@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   adminApproveWorkflowStepAction,
   adminClearParallelCheckpointAction,
@@ -10,6 +10,7 @@ import {
   adminRunSlaTimeoutCheckerAction,
   adminSaveProcessDefinitionAction,
 } from './actions';
+import Modal from '@/components/ui/Modal';
 
 interface ProcessStepDef {
   id?: number;
@@ -188,6 +189,9 @@ export default function AdminWorkflowsClient({
     actionType: 'APPROVE' | 'REJECT' | 'RETURN' | 'ESCALATE';
     note: string;
   } | null>(null);
+
+  // مرجع ثابت: Modal اثر فوکوس را با تغییر onClose دوباره اجرا می‌کند و فوکوس را می‌رباید
+  const closeDecisionModal = useCallback(() => setDecisionModal(null), []);
 
   // اجرای موتور بررسی SLA
   const handleRunSlaChecker = async () => {
@@ -1223,18 +1227,37 @@ export default function AdminWorkflowsClient({
 
       {/* دیالوگ اقدام تصمیم‌گیری */}
       {decisionModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
-            <h3 className="text-base font-black text-slate-900">
-              {decisionModal.actionType === 'APPROVE'
-                ? '✓ تایید و پیشبرد پرونده'
-                : decisionModal.actionType === 'REJECT'
-                ? '✗ رد قطعی درخواست'
-                : decisionModal.actionType === 'RETURN'
-                ? 'نیازمند بازبینی و اصلاح دانشجو'
-                : 'ارجاع مدیریتی پرونده (Escalate)'}
-            </h3>
-
+        <Modal
+          open
+          onClose={closeDecisionModal}
+          title={
+            decisionModal.actionType === 'APPROVE'
+              ? '✓ تایید و پیشبرد پرونده'
+              : decisionModal.actionType === 'REJECT'
+              ? '✗ رد قطعی درخواست'
+              : decisionModal.actionType === 'RETURN'
+              ? 'نیازمند بازبینی و اصلاح دانشجو'
+              : 'ارجاع مدیریتی پرونده (Escalate)'
+          }
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button
+                onClick={closeDecisionModal}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleDecisionSubmit}
+                disabled={isProcessing}
+                className="px-5 py-2 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow disabled:opacity-50"
+              >
+                {isProcessing ? 'در حال ثبت...' : 'ثبت قطعی اقدام'}
+              </button>
+            </div>
+          )}
+        >
+          <div className="space-y-4">
             <p className="text-xs text-slate-500">
               کد رهگیری: <b className="font-mono text-slate-800" dir="ltr">{decisionModal.trackingCode}</b> · دانشجو: {decisionModal.studentName}
             </p>
@@ -1249,24 +1272,8 @@ export default function AdminWorkflowsClient({
                 className="w-full p-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:bg-white"
               />
             </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setDecisionModal(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-              >
-                انصراف
-              </button>
-              <button
-                onClick={handleDecisionSubmit}
-                disabled={isProcessing}
-                className="px-5 py-2 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow disabled:opacity-50"
-              >
-                {isProcessing ? 'در حال ثبت...' : 'ثبت قطعی اقدام'}
-              </button>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

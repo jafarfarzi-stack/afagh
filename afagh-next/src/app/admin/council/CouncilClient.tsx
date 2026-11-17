@@ -7,6 +7,7 @@ import {
   splitLines,
 } from '@/lib/council';
 import { askConfirm } from '@/lib/ui-feedback';
+import Modal from '@/components/ui/Modal';
 
 type Msg = { text: string; kind: 'ok' | 'error' } | null;
 
@@ -342,13 +343,22 @@ function MeetingForm({ meeting, onClose, onSaved }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 space-y-3"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{meeting ? 'ویرایش جلسه' : 'جلسه جدید شورای آموزشی'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+    <Modal
+      open
+      onClose={onClose}
+      title={meeting ? 'ویرایش جلسه' : 'جلسه جدید شورای آموزشی'}
+      size="lg"
+      footer={(
+        <div className="ms-auto flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
+          <button onClick={save} disabled={busy}
+            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+            {busy ? 'در حال ذخیره…' : 'ذخیره'}
+          </button>
         </div>
+      )}
+    >
+      <div className="space-y-3" dir="rtl">
         {err && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2 rounded-lg">{err}</div>}
 
         <label className="block text-xs text-slate-500 space-y-1">
@@ -381,16 +391,8 @@ function MeetingForm({ meeting, onClose, onSaved }: {
           <textarea value={minutes} onChange={(e) => setMinutes(e.target.value)} rows={5}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
         </label>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
-          <button onClick={save} disabled={busy}
-            className="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
-            {busy ? 'در حال ذخیره…' : 'ذخیره'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -451,13 +453,22 @@ function DecisionForm({ decision, meetings, onClose, onSaved }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-5 space-y-3"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-slate-800">{decision ? 'ویرایش مصوبه' : 'مصوبه جدید'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+    <Modal
+      open
+      onClose={onClose}
+      title={decision ? 'ویرایش مصوبه' : 'مصوبه جدید'}
+      size="lg"
+      footer={(
+        <div className="ms-auto flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
+          <button onClick={save} disabled={busy}
+            className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50">
+            {busy ? 'در حال ذخیره…' : 'ذخیره'}
+          </button>
         </div>
+      )}
+    >
+      <div className="space-y-3" dir="rtl">
         {err && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2 rounded-lg">{err}</div>}
 
         <label className="block text-xs text-slate-500 space-y-1">
@@ -521,15 +532,7 @@ function DecisionForm({ decision, meetings, onClose, onSaved }: {
           <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
         </label>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600">انصراف</button>
-          <button onClick={save} disabled={busy}
-            className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50">
-            {busy ? 'در حال ذخیره…' : 'ذخیره'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

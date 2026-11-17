@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { faNum } from '../payrollData';
 import type { PayrollState, PayrollApi } from '../payrollReducer';
 import { FORMULA_VAR_HELP, evalFormula, validateFormula, type FormulaVars } from '@/lib/payroll-formula';
+import { askConfirm } from '@/lib/ui-feedback';
 
 interface Props {
   state: PayrollState;
@@ -390,7 +391,13 @@ export default function CoefficientsRulesTab({ state, api }: Props) {
   };
 
   const handleRuleDelete = async (id: number) => {
-    if (!window.confirm('آیا از حذف این قانون اطمینان دارید؟')) return;
+    const ok = await askConfirm({
+      title: 'حذف قانون محاسبه',
+      body: 'آیا از حذف این قانون اطمینان دارید؟',
+      confirmText: 'حذف',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/payroll/calculation-rules/${id}`, {
         method: 'DELETE',

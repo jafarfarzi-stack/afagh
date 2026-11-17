@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { notify, askConfirm } from '@/lib/ui-feedback';
+import Modal from '@/components/ui/Modal';
 
 const faNum = (v: unknown) => Number(v ?? 0).toLocaleString('fa-IR');
 
@@ -341,35 +342,13 @@ function FundForm({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl" dir="rtl">
-        <h2 className="font-bold text-slate-800 mb-3">{edit ? 'ویرایش صندوق' : 'صندوق جدید'}</h2>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium text-slate-600">کد (انگلیسی، یکتا)</span>
-              <input value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" className={inputCls} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium text-slate-600">عنوان</span>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="text-2xs font-medium text-slate-600">توضیح</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputCls} />
-          </label>
-          <label className="flex items-center gap-2 text-xs text-slate-700">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="accent-emerald-700"
-            />
-            فعال
-          </label>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      title={edit ? 'ویرایش صندوق' : 'صندوق جدید'}
+      size="md"
+      footer={
+        <div className="ms-auto flex items-center gap-2">
           <button onClick={onClose} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs">
             انصراف
           </button>
@@ -381,7 +360,33 @@ function FundForm({
             {saving ? 'در حال ذخیره…' : 'ذخیره'}
           </button>
         </div>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-medium text-slate-600">کد (انگلیسی، یکتا)</span>
+            <input value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" className={inputCls} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs font-medium text-slate-600">عنوان</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-2xs font-medium text-slate-600">توضیح</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputCls} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-700">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="accent-emerald-700"
+          />
+          فعال
+        </label>
       </div>
-    </div>
+    </Modal>
   );
 }

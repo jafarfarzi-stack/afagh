@@ -6,6 +6,7 @@ import {
   payrollMidtermAction, payrollPayslipAction,
 } from './actions';
 import { normalizeFa, faIncludes } from '@/lib/persian-search';
+import { askConfirm } from '@/lib/ui-feedback';
 
 // ═══ میز کار حق‌التدریس — دادهٔ واقعی از موتور مالی ═══
 
@@ -585,7 +586,13 @@ function CoefficientsRulesLiveTab({ term, onToast, busy }: CoefficientsRulesLive
   };
 
   const handleRuleDelete = async (id: number) => {
-    if (!window.confirm('آیا از حذف این قانون اطمینان دارید؟')) return;
+    const ok = await askConfirm({
+      title: 'حذف قانون محاسبه',
+      body: 'آیا از حذف این قانون اطمینان دارید؟',
+      confirmText: 'حذف',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/admin/payroll/calculation-rules/${id}`, {
         method: 'DELETE',

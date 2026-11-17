@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { askConfirm } from '@/lib/ui-feedback';
 import {
   activateTermForFilter, bulkDropAction, bulkEnrollAction, countBulkStudents, dropEnrollAction, getStudentCatalog, getStudentWarnings,
   listOfferingsForManualEnroll, manualEnrollAction, manualEnrollHistory,
@@ -113,7 +114,7 @@ const [scopeFilter, setScopeFilter] = useState<'mine' | 'chart' | 'common' | 'ot
   };
 
   const dropEnrolled = async (e: StudentTermEnrollment) => {
-    if (!window.confirm(`حذف «${e.code} ${e.title} (گ${e.groupNumber})» از ثبت‌نام ${selStudent?.name ?? ''}؟`)) return;
+    if (!(await askConfirm({ title: `حذف «${e.code} ${e.title} (گ${e.groupNumber})» از ثبت‌نام ${selStudent?.name ?? ''}؟`, danger: true }))) return;
     setBusy(true); setMsg(null);
     const r = await dropEnrollAction(e.enrollmentId, 'حذف توسط کارشناس از صفحهٔ ثبت‌نام تکی').catch(() => ({ ok: false as const, error: 'خطا' }));
     setMsg(r.ok ? { kind: 'ok', text: `✅ «${e.code}» حذف شد.` } : { kind: 'err', text: (r as any).error ?? 'ناموفق' });
@@ -132,7 +133,7 @@ const [scopeFilter, setScopeFilter] = useState<'mine' | 'chart' | 'common' | 'ot
 
   const doCart = async () => {
     if (!selStudent || !cart.length) { setMsg({ kind: 'err', text: 'دانشجو و حداقل یک درس از کاتالوگ را انتخاب کنید.' }); return; }
-    if (!window.confirm(`ثبت ${cart.length} درس از کاتالوگ برای ${selStudent.name}؟`)) return;
+    if (!(await askConfirm({ title: `ثبت ${cart.length} درس از کاتالوگ برای ${selStudent.name}؟` }))) return;
     setBusy(true); setMsg(null); let okN = 0, errN: string[] = [];
     for (const o of cart) {
       const r = await manualEnrollAction({ studentId: selStudent.studentId, offeringId: o.offeringId, override, reason }).catch(() => ({ ok: false as const, error: 'خطا' }));
@@ -198,7 +199,7 @@ const filteredCatalog = useMemo(() => {
     const title = op === 'enroll' ? 'ثبت‌نام دسته‌جمعی' : 'حذف دسته‌جمعی';
     const n = bulkCount ?? 0;
     if (!chosen.length) { setMsg({ kind: 'err', text: 'حداقل یک کلاس انتخاب کنید.' }); return; }
-    if (!window.confirm(`${title} برای ${n} دانشجو در ${chosen.length} کلاس؟ از جمله بیشنور.`)) return;
+    if (!(await askConfirm({ title: `${title} برای ${n} دانشجو در ${chosen.length} کلاس؟ از جمله بیشنور.`, danger: op === 'drop' }))) return;
     setBusy(true); setMsg(null);
     const r = op === 'enroll'
       ? await bulkEnrollAction(bulkFilter(), chosen, override, reason).catch(() => ({ ok: false as const, error: 'خطا' }))
@@ -547,7 +548,7 @@ const filteredCatalog = useMemo(() => {
             {bulkCount !== null && <span className="text-xs font-black text-indigo-800">{bulkCount.toLocaleString('fa-IR')} دانشجو</span>}
             <button disabled={busy} className="rounded-xl bg-emerald-700 px-5 py-2 text-white font-black text-xs disabled:opacity-50"
               onClick={async () => {
-                if (!window.confirm(`فعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
+                if (!(await askConfirm({ title: `فعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟` }))) return;
                 setBusy(true); setMsg(null);
                 const a = activateTermForFilter(activateFilter(), true).catch(() => ({ ok: false as const, error: 'خطا' }));
                 const r = await a;
@@ -556,7 +557,7 @@ const filteredCatalog = useMemo(() => {
               }}>🔋 فعال‌سازی در ترم</button>
             <button disabled={busy} className="rounded-xl bg-rose-700 px-5 py-2 text-white font-black text-xs disabled:opacity-50"
               onClick={async () => {
-                if (!window.confirm(`غیرفعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟`)) return;
+                if (!(await askConfirm({ title: `غیرفعال‌سازی ${bulkCount ?? '?'} دانشجو در ترم؟` }))) return;
                 setBusy(true); setMsg(null);
                 const r = await activateTermForFilter(activateFilter(), false).catch(() => ({ ok: false as const, error: 'خطا' }));
                 setMsg(r.ok ? { kind: 'ok', text: `✅ غیرفعال‌سازی: ${r.updated} دانشجو` } : { kind: 'err', text: r.error ?? '' });
