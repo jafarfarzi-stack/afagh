@@ -11,6 +11,7 @@ import { withUserRls } from '@/db';
 import { getStudentByUser, requireRole } from '@/lib/auth';
 import { releaseSeat, takeSeat } from '@/lib/waitingRoom';
 import { getBool } from '@/lib/settings';
+import { assertEnrollmentWrite } from '@/lib/enrollment-window';
 
 export async function dropCourseAction(enrollmentId: number): Promise<{ ok: boolean; error?: string; promotedTo?: string | null }> {
   const user = await requireRole(['STUDENT']);
@@ -18,7 +19,7 @@ export async function dropCourseAction(enrollmentId: number): Promise<{ ok: bool
   if (!me) return { ok: false, error: 'پروندهٔ دانشجویی یافت نشد.' };
 
   const [row] = await db
-    .select({ id: enrollments.id, offeringId: enrollments.offeringId, status: enrollments.status, title: courses.title })
+    .select({ id: enrollments.id, offeringId: enrollments.offeringId, status: enrollments.status, title: courses.title, termId: course_offerings.termId })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -26,6 +27,10 @@ export async function dropCourseAction(enrollmentId: number): Promise<{ ok: bool
     .where(and(eq(enrollments.id, enrollmentId), eq(enrollments.studentId, me.id)));
   if (!row) return { ok: false, error: 'ثبت‌نام یافت نشد.' };
   if (row.status !== 'REGISTERED') return { ok: false, error: 'فقط دروس ثبت‌شده قابل حذف‌اند.' };
+
+  // ⏳ گیت سروری «حذف و اضافه» — فقط بازهٔ addDrop (بدون پرچم ترم/کلید سراسری)
+  const gate = await assertEnrollmentWrite(row.termId, 'DROP');
+  if (!gate.ok) return { ok: false, error: gate.error };
 
   // ۱) حذف (ردیف خود دانشجو → تحت RLS §۲۱۷۰) + آزادسازی صندلی
   await withUserRls(user.id, tx => tx.update(enrollments).set({ status: 'DROPPED' }).where(and(eq(enrollments.id, row.id), eq(enrollments.studentId, me.id))));

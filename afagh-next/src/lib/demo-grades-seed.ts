@@ -161,12 +161,39 @@ export async function ensureGradePersistence(meta: GradePersistenceMeta): Promis
   }
 }
 
-/** یافتن ردیف دانشجوی واقعی (دمو: نگاشت mockId → students.id) */
+/**
+ * یافتن ردیف دانشجویی واقعی برای یک ارائه (دمو: نگاشت mockId → students.id).
+ *
+ * 🔒 ایزوله‌سازی دانشگاه: `students.studentCode` فقط در محدودهٔ همان دانشگاه
+ * یکتاست (`uq_students_uni_code`). پیش از این، جست‌وجو سراسری با `limit(1)`
+ * بود؛ در ۱۴۹ کدِ مشترکِ AFAGH↔SHAMS استاد می‌توانست نمرهٔ دانشجوی هم‌کدِ
+ * دانشگاه دیگر را بنویسد. حالا فقط دانشجوی همان دانشگاهِ ارائه پیدا می‌شود و
+ * ارائهٔ بدون دانشگاه «بسته» است (هیچ ردیفی برنمی‌گرداند).
+ */
 export async function resolveStudentRow(offeringId: number, studentCode: string) {
-  const [student] = await db.select().from(students).where(eq(students.studentCode, studentCode)).limit(1);
-  if (!student) return null;
-  const [enr] = await db
+  const [off] = await db
+    .select({ universityId: course_offerings.universityId })
+    .from(course_offerings)
+    .where(eq(course_offerings.id, offeringId))
+    .limit(1);
+  // بدون دانشگاه، تفکیک دانشجو ممکن نیست ⇒ fail closed
+  if (!off?.universityId) return null;
+
+  const [student] = await db
     .select()
+    .from(students)
+    .where(and(eq(students.studentCode, studentCode), eq(students.universityId, off.universityId)))
+    .limit(1);
+  if (!student) return null;
+  // وضعیت ثبت‌نام و وضعیت نمره هم برگردانده می‌شود تا فراخوان اعتبارسنجی کند
+  const [enr] = await db
+    .select({
+      id: enrollments.id,
+      studentId: enrollments.studentId,
+      offeringId: enrollments.offeringId,
+      status: enrollments.status,
+      gradeStatus: enrollments.gradeStatus,
+    })
     .from(enrollments)
     .where(and(eq(enrollments.studentId, student.id), eq(enrollments.offeringId, offeringId)))
     .limit(1)

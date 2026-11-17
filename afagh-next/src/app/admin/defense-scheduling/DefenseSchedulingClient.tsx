@@ -32,7 +32,7 @@ const toLocalInput = (iso: string | null) => {
 const PROPOSAL_FA: Record<string, string> = {
   NOT_STARTED: 'شروع نشده',
   SUBMITTED: 'ارسال‌شده',
-  SIMILARITY_CHECK: 'در حال بررسی همانندجویی',
+  SIMILARITY_CHECK: 'همانندجویی انجام نشد — بررسی دستی کارشناس',
   SIMILARITY_PASSED: 'همانندجویی تأیید شد — آمادهٔ تأیید کارشناس',
   SIMILARITY_HIGH: 'همانندجویی بالا — نیازمند اصلاح',
   EXPERT_REVIEW: 'در دست بررسی کارشناس',
@@ -51,6 +51,14 @@ const DEFENSE_FA: Record<string, string> = {
   FAILED: 'دفاع مردود ❌',
 };
 const RESULT_FA: Record<string, string> = { PASSED: 'قبول', FAILED: 'مردود', CONDITIONAL: 'قبول مشروط' };
+const SESSION_FA: Record<string, string> = {
+  SCHEDULED: 'برنامه‌ریزی‌شده',
+  CONDUCTED: 'برگزارشده',
+  CANCELLED: 'لغوشده',
+  RESCHEDULED: 'زمان‌بندی مجدد',
+  HELD: 'برگزارشده',
+  ABSENT: 'غیبت',
+};
 const FINAL_IRANDOC_FA: Record<string, string> = { PENDING: 'در انتظار استعلام', PASSED: 'قبول ✅', REJECTED: 'رد ❌' };
 
 type Draft = { tracking: string; scheduledAt: string; conductedAt: string; result: string; minutes: string };
@@ -299,7 +307,12 @@ function Row({
   onSchedule: () => void;
   onResult: () => void;
 }) {
-  const proposalOpen = r.proposalStatus === 'SIMILARITY_PASSED' || r.proposalStatus === 'EXPERT_REVIEW';
+  // SIMILARITY_CHECK = استعلام انجام نشده / بررسی دستی؛ کارشناس باید بتواند تأیید کند،
+  // وگرنه پرونده برای همیشه در صف می‌ماند (وقتی ایرانداک تنظیم نشده باشد همیشه همین حالت است).
+  const proposalOpen =
+    r.proposalStatus === 'SIMILARITY_PASSED'
+    || r.proposalStatus === 'SIMILARITY_CHECK'
+    || r.proposalStatus === 'EXPERT_REVIEW';
   const defense = r.defenseRequestStatus ?? 'NOT_REQUESTED';
 
   return (
@@ -313,7 +326,7 @@ function Row({
         </div>
         <div className="flex flex-wrap items-center gap-1">
           <span className="badge bg-slate-100 text-slate-700">{DEFENSE_FA[defense] ?? defense}</span>
-          {r.sessionStatus && <span className="badge bg-sky-100 text-sky-800">جلسه: {r.sessionStatus}</span>}
+          {r.sessionStatus && <span className="badge bg-sky-100 text-sky-800">جلسه: {SESSION_FA[r.sessionStatus] ?? r.sessionStatus}</span>}
           {r.finalIrandocStatus && (
             <span className={`badge ${r.finalIrandocStatus === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'}`}>
               ایرانداک نهایی: {FINAL_IRANDOC_FA[r.finalIrandocStatus] ?? r.finalIrandocStatus}

@@ -12,7 +12,7 @@
  */
 'use server';
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { createHash } from 'node:crypto';
 import { db } from '@/db';
@@ -27,6 +27,7 @@ import {
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
 import { globalCompliance } from '@/lib/compliance-integrations';
+import { assertGradeDeadline } from '@/lib/grades/finalize-lock';
 import { legacyOtpDigest, newOtpCode, otpDigest, otpEqual } from '@/lib/otp';
 import { rateLimit } from '@/lib/rateLimit';
 import { notifyUserMultichannel, sendSms } from '@/lib/messaging';
@@ -127,6 +128,10 @@ export async function saveGradeAction(
     // 🔒 مالکیت: فقط استادِ خودِ ارائه می‌تواند نمره ثبت کند (همان الگوی submitTemporaryAction)
     if (!(await memberOwnershipOk(me.id, [payload.offeringId]))) return invalid('شما استاد مسئول این درس نیستید.');
 
+    // 🔒 مهلت ثبت نمره (مهلت اختصاصی ارائه یا مهلت ترم — مقایسه در SQL)
+    const deadline = await assertGradeDeadline(payload.offeringId);
+    if (!deadline.ok) return invalid(deadline.error!);
+
     // 🔒 قفل نهایی: پس از finalize هیچ ویرایشی از این مسیر مجاز نیست.
     // بازگشایی فقط توسط مدیر انجام می‌شود (قلاب آینده: اکشن unfinalize مخصوص ADMIN که
     // gradesFinalizedAt را پاک می‌کند — این‌جا فقط رد می‌کنیم، UI بازگشایی ساخته نمی‌شود).
@@ -184,53 +189,54 @@ export async function saveGradeAction(
       }],
     });
 
-    // ۴) ثبت در enrollments (فقط اگر ردیف‌های واقعی موجود باشند)
+    // ۴) ثبت در enrollments — فقط روی ردیفِ ثبت‌نامِ موجود همان دانشجو
     const row = await resolveStudentRow(payload.offeringId, payload.studentCode);
-    let persisted = false;
-    if (row) {
-      // 🔒 قفل نمرهٔ نهایی‌شده: این اکشن با `onConflictDoUpdate` ردیف را
-      //    DRAFT می‌کرد، یعنی استاد می‌توانست نمرهٔ قطعیِ تأییدشده را خودش
-      //    برگرداند. حالا فقط با درخواست بازگشاییِ تأییدشده ممکن است.
-      {
-        const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
-        const gate = await assertGradeWriteAllowed(payload.offeringId);
-        if (!gate.ok) return invalid(gate.error!);
-      }
-      const gradeValue = payload.value === null ? null : String(Number(payload.value.toFixed(2)));
-      await db
-        .insert(enrollments)
-        .values({
-          studentId: row.student.id,
-          offeringId: payload.offeringId,
-          status: 'REGISTERED',
-          gradeValue,
-          gradeStatus: 'DRAFT',
-        })
-        .onConflictDoUpdate({
-          target: [enrollments.studentId, enrollments.offeringId],
-          set: { gradeValue, gradeStatus: 'DRAFT' },
-        });
-
-      // ثبت تکی در audit log
-      const [enr] = await db.select({ id: enrollments.id }).from(enrollments)
-        .where(and(eq(enrollments.studentId, row.student.id), eq(enrollments.offeringId, payload.offeringId))).limit(1);
-      if (enr) {
-        await logGradeChange({
-          enrollmentId: enr.id, studentId: row.student.id, offeringId: payload.offeringId,
-          action: 'DRAFT', newGradeValue: gradeValue, newGradeStatus: 'DRAFT',
-          actorUserId: user.id, actorRole: 'PROFESSOR',
-        });
-      }
-
-      persisted = true;
+    if (!row) {
+      // شاملِ ارائهٔ بدون دانشگاه (resolveStudentRow به‌صورت fail-closed null می‌دهد)
+      return invalid('دانشجو با این کد دانشجویی در دانشگاه این ارائه یافت نشد؛ ثبت نمره ممکن نیست.');
     }
+    if (!row.enrollment) {
+      return invalid('این دانشجو در این ارائه ثبت‌نام نکرده است؛ ثبت نمره ممکن نیست.');
+    }
+    if (row.enrollment.status === 'DROPPED' || row.enrollment.status === 'REJECTED') {
+      return invalid('ثبت‌نام این دانشجو در این ارائه حذف یا رد شده است؛ ثبت نمره ممکن نیست.');
+    }
+    if (row.enrollment.gradeStatus === 'FINALIZED') {
+      return invalid('نمرهٔ این دانشجو قطعی شده است؛ برای تغییر آن درخواست بازگشایی ثبت کنید.');
+    }
+
+    // 🔒 قفل نمرهٔ نهایی‌شده در سطح ارائه: این اکشن پیش‌تر با
+    //    `onConflictDoUpdate` ردیف را DRAFT می‌کرد، یعنی استاد می‌توانست
+    //    نمرهٔ قطعیِ تأییدشده را خودش برگرداند. حالا فقط با درخواست
+    //    بازگشاییِ تأییدشده ممکن است.
+    {
+      const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
+      const gate = await assertGradeWriteAllowed(payload.offeringId);
+      if (!gate.ok) return invalid(gate.error!);
+    }
+
+    const gradeValue = payload.value === null ? null : String(Number(payload.value.toFixed(2)));
+    // ⚠️ هیچ insert/onConflictDoUpdateای این‌جا نیست: insert می‌توانست ردیفِ
+    //    حذف‌شده را زنده کند یا (با کد دانشجوی هم‌کد) ردیف دانشجوی دیگری را
+    //    بازنویسی کند. فقط به‌روزرسانیِ ردیفِ ثبت‌نامِ همان دانشجو توسط id.
+    await db
+      .update(enrollments)
+      .set({ gradeValue, gradeStatus: 'DRAFT' })
+      .where(eq(enrollments.id, row.enrollment.id));
+
+    // ثبت تکی در audit log
+    await logGradeChange({
+      enrollmentId: row.enrollment.id, studentId: row.student.id, offeringId: payload.offeringId,
+      action: 'DRAFT', newGradeValue: gradeValue, newGradeStatus: 'DRAFT',
+      actorUserId: user.id, actorRole: 'PROFESSOR',
+    });
 
     // ۵) همگام‌سازی کش
     revalidatePath('/professor/grades');
 
     return {
       ok: true,
-      persisted,
+      persisted: true,
       savedAt: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     };
   } catch (err) {
@@ -253,6 +259,10 @@ export async function submitTemporaryAction(
 
     const targets = mergedTargets(payload);
     if (!(await memberOwnershipOk(me.id, targets))) return invalid('شما استاد مسئول این درس نیستید.');
+
+    // 🔒 مهلت ثبت نمره (مهلت اختصاصی ارائه یا مهلت ترم — مقایسه در SQL)
+    const deadline = await assertGradeDeadline(payload.offeringId);
+    if (!deadline.ok) return invalid(deadline.error!);
 
     // 🔒 قفل نهایی: ثبت موقت مجدد روی ارائهٔ نهایی‌شده ممنوع است (همان قاعدهٔ saveGradeAction).
     // تغییر نمرهٔ نهایی‌شده فقط از مسیر دومرحله‌ای درخواست بازگشایی (unfinalize) می‌گذرد.
@@ -278,17 +288,35 @@ export async function submitTemporaryAction(
       .update(course_offerings)
       .set({ gradesTemporaryAt: new Date() })
       .where(inArray(course_offerings.id, targets));
+
+    // 🔒 ردیف‌های FINALIZED هرگز نباید به TEMPORARY تنزل یابند؛ فقط برای
+    //    ردیف‌های غیرقطعی به‌روزرسانی می‌شود و تعدادِ رد‌شده گزارش می‌شود.
+    const finalizedRows = await db
+      .select({ id: enrollments.id })
+      .from(enrollments)
+      .where(and(
+        inArray(enrollments.offeringId, targets),
+        eq(enrollments.gradeStatus, 'FINALIZED'),
+      ));
+    const skipped = finalizedRows.length;
+
     await db
       .update(enrollments)
       .set({ gradeStatus: 'TEMPORARY' })
-      .where(inArray(enrollments.offeringId, targets));
+      .where(and(
+        inArray(enrollments.offeringId, targets),
+        ne(enrollments.gradeStatus, 'FINALIZED'),
+      ));
 
     for (const id of targets) {
       await logBulkGradeChange(id, 'TEMPORARY', user.id, 'PROFESSOR', 'ثبت موقت نمرات توسط استاد');
     }
 
     revalidatePath('/professor/grades');
-    return { ok: true, persisted: true };
+    const skippedNote = skipped > 0
+      ? `؛ ${skipped.toLocaleString('fa-IR')} ردیف قطعی‌شده بدون تغییر ماند`
+      : '';
+    return { ok: true, persisted: true, message: `ثبت موقت نمرات انجام شد${skippedNote}.` };
   } catch (err) {
     return fail(err);
   }
@@ -379,6 +407,10 @@ export async function finalizeSignedAction(
       return invalid('شما استاد مسئول این درس نیستید.');
     }
 
+    // 🔒 مهلت ثبت نمره (مهلت اختصاصی ارائه یا مهلت ترم — مقایسه در SQL)
+    const deadline = await assertGradeDeadline(payload.offeringId);
+    if (!deadline.ok) return invalid(deadline.error!);
+
     // 🔒 بررسی OTP: هش کد ورودی باید با ردیف فعالِ استفاده‌نشده و غیرمنقضی یکی باشد
     const [row] = await db.select().from(grade_submission_otps)
       .where(and(
@@ -423,6 +455,18 @@ export async function finalizeSignedAction(
         if (penalized.has(g.id)) (g as { gradeValue: string | null }).gradeValue = '0';
       }
     }
+    // 🔒 کامل بودن: نهایی‌سازیِ ردیفِ بدون نمره/کد وضعیت، نمرهٔ ناقص را مهرِ
+    //    قطعی می‌زند و بعد از آن فقط با بازگشایی اصلاح می‌شود. این بررسی پس از
+    //    اعمال سیاست صفرِ غیبت انجام می‌شود تا ردیف‌های مشمول مادهٔ ۷ مسدود نشوند.
+    const incomplete = grades.filter(g => {
+      const hasNumericGrade = g.gradeValue !== null && g.gradeValue !== ''
+        && Number.isFinite(Number(g.gradeValue));
+      return !hasNumericGrade && !g.samaGradeStatusCode;
+    });
+    if (incomplete.length > 0) {
+      return invalid(`${incomplete.length.toLocaleString('fa-IR')} دانشجو بدون نمره یا کد وضعیت مانده‌اند؛ ابتدا تکمیل کنید.`);
+    }
+
     // 🔗 زنجیره‌سازی: هشِ قبلیِ هر ارائه در ورودی هش جدید گنجانده می‌شود تا
     // نهایی‌سازیِ مجدد روی مقادیر دستکاری‌شده، زنجیره را آشکارا ادامه دهد
     // (ستون gradesHash از قبل وجود دارد — نیازی به مهاجرت نیست).
@@ -431,6 +475,16 @@ export async function finalizeSignedAction(
       .from(course_offerings)
       .where(inArray(course_offerings.id, targets));
     const prevHashById = new Map(prevHashRows.map(r => [r.id, r.gradesHash]));
+
+    // 🔒 اگر یکی از ارائه‌های هدف قبلاً نهایی شده باشد، هیچ‌کدام مهر نمی‌خورد
+    //    (جلوگیری از نهایی‌سازیِ نیمه‌کاره در درس مشترک).
+    const alreadySealed = await db
+      .select({ id: course_offerings.id })
+      .from(course_offerings)
+      .where(and(inArray(course_offerings.id, targets), isNotNull(course_offerings.gradesFinalizedAt)))
+      .limit(1);
+    if (alreadySealed.length > 0) return invalid('نمرات این درس قبلاً نهایی شده است.');
+
     for (const targetId of targets) {
       const memberGrades = grades.filter(gr => gr.offeringId === targetId);
       const chainInput = JSON.stringify({
@@ -440,10 +494,14 @@ export async function finalizeSignedAction(
         grades: memberGrades.map(gr => [gr.studentId, gr.gradeValue, gr.gradeStatus]),
       });
       const memberHash = 'SHA256:' + createHash('sha256').update(chainInput).digest('hex');
-      await db
+      // 🔒 مهرِ ارائه فقط اگر هنوز نهایی نشده باشد؛ وگرنه مسابقهٔ دو نهایی‌سازی
+      //    باعث می‌شد هشِ نفرِ دوم روی نمراتِ مهرشدهٔ نفرِ اول بنشیند.
+      const sealed = await db
         .update(course_offerings)
         .set({ gradesFinalizedAt: now, gradesHash: memberHash })
-        .where(eq(course_offerings.id, targetId));
+        .where(and(eq(course_offerings.id, targetId), isNull(course_offerings.gradesFinalizedAt)))
+        .returning({ id: course_offerings.id });
+      if (sealed.length === 0) return invalid('نمرات این درس قبلاً نهایی شده است.');
     }
 
     // نهایی‌سازی + محاسبه کد وضعیت سما برای هر دانشجو
@@ -451,7 +509,7 @@ export async function finalizeSignedAction(
       const samaCode = await resolveSamaGradeStatusCode(g.studentId, g.offeringId, g.gradeValue, g.samaGradeStatusCode ?? null);
       await db
         .update(enrollments)
-        .set({ gradeStatus: 'FINALIZED', samaGradeStatusCode: samaCode })
+        .set({ gradeStatus: 'FINALIZED', samaGradeStatusCode: samaCode, gradeValue: g.gradeValue })
         .where(eq(enrollments.id, g.id));
 
       await logGradeChange({

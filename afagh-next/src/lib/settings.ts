@@ -181,7 +181,7 @@ export const SETTING_DEFS: SettingDef[] = [
   // ── فارغ‌التحصیلی و صدور مدارک ──
   { key: 'GRAD_AUTO_SCAN', env: 'GRAD_AUTO_SCAN', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'شروع خودکار پروندهٔ فارغ‌التحصیلی', type: 'boolean', default: 'true', help: 'با قطعی‌شدن آخرین نمره، پرونده بدون درخواست دانشجو باز می‌شود' },
   { key: 'GRAD_MIN_GPA', env: 'GRAD_MIN_GPA', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'حداقل معدل کل برای فراغت', type: 'number', default: '12' },
-  { key: 'GRAD_THESIS_DEGREE_CODES', env: 'GRAD_THESIS_DEGREE_CODES', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'مقاطع دارای پایان‌نامه', type: 'text', default: 'MSC,PHD', help: 'کد مقاطعی که استعلام ایرانداک برایشان الزامی است (با ویرگول)' },
+  { key: 'GRAD_THESIS_DEGREE_CODES', env: 'GRAD_THESIS_DEGREE_CODES', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'مقاطع دارای پایان‌نامه', type: 'text', default: 'MS,PHD', help: 'کد مقاطعی که استعلام ایرانداک برایشان الزامی است (با ویرگول). کارشناسی ارشد و دکتری به‌صورت پیش‌فرض و مستقل از این مقدار الزامی‌اند؛ این کلید فقط مقطع دیگری را اضافه می‌کند (MSC/MA/MENG هم معادل ارشد شناخته می‌شوند)' },
   { key: 'GRAD_IRANDOC_MAX_SIMILARITY', env: 'GRAD_IRANDOC_MAX_SIMILARITY', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'سقف مجاز همانندجویی (٪)', type: 'number', default: '20' },
   { key: 'GRAD_REQUIRE_SAJJAD', env: 'GRAD_REQUIRE_SAJJAD', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'الزام ثبت درخواست کد صحت در سجاد توسط دانشجو', type: 'boolean', default: 'true', help: 'پیش از ارجاع پرونده به کارشناس صدور مدرک، دانشجو باید در سامانهٔ سجاد درخواست کد صحت ثبت و کد رهگیری را وارد کند' },
   { key: 'GRAD_REQUIRE_PHOTO', env: 'GRAD_REQUIRE_PHOTO', group: 'فارغ‌التحصیلی و صدور مدارک', label: 'الزام بارگذاری عکس ۴×۳', type: 'boolean', default: 'true' },
@@ -395,6 +395,41 @@ export async function getNumber(key: string, fallback = 0): Promise<number> {
 export async function getBool(key: string): Promise<boolean> {
   const v = (await getSetting(key)).trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+// ── مقطع دارای پایان‌نامه ──
+// کدهای واقعی مقاطع در `degree-configs.ts` اینها هستند: BS | MS | AD | PHD.
+// کدهای وارداتی/قدیمی هم با نام‌های MSC، MA و MENG می‌آیند؛ همهٔ آن‌ها یک
+// «کارشناسی ارشد» هستند و باید پایان‌نامه/ایرانداک داشته باشند.
+//
+// ⚠ چرا این مجموعه در کد ثابت است: پیش‌فرض تنظیمات `MSC,PHD` بود و مقایسهٔ
+//   خامِ رشته‌ای، دانشجوی `MS` را بی‌پایان‌نامه می‌کرد؛ یعنی `thesisRequired=0`
+//   و `irandocStatus='SKIPPED'` و عبور بی‌قید از مرحلهٔ ایرانداک. این مجموعه
+//   تضمین می‌کند پیش‌فرضِ امن حتی بدون تغییر تنظیمات برقرار باشد.
+const THESIS_DEGREE_CODES = new Set(['MS', 'MSC', 'MA', 'MENG', 'PHD']);
+
+/** نرمال‌سازی کد مقطع: trim + upper + حذف فاصله/نقطه/خط تیره (`M.Sc.` → `MSC`) */
+function normalizeDegreeCode(code: string | null | undefined): string {
+  return String(code ?? '').trim().toUpperCase().replace(/[\s.\-_]+/g, '');
+}
+
+/**
+ * آیا این کد مقطع پایان‌نامه/استعلام ایرانداک دارد؟
+ *
+ * @param code کد مقطع دانشجو (`BS`، `MS`، `AD`، `PHD` یا معادل‌های قدیمی)
+ * @param extraCodes مقدار تنظیمات `GRAD_THESIS_DEGREE_CODES` — فقط **افزودنی**؛
+ *        مقدار پیش‌فرضِ امن را هرگز حذف نمی‌کند تا یک اشتباه تایپی در پنل مدیر،
+ *        الزام پایان‌نامهٔ ارشد/دکتری را خاموش نکند.
+ */
+export function isThesisDegreeCode(code: string | null | undefined, extraCodes?: string): boolean {
+  const norm = normalizeDegreeCode(code);
+  if (!norm) return false;
+  if (THESIS_DEGREE_CODES.has(norm)) return true;
+  if (!extraCodes) return false;
+  return extraCodes
+    .split(/[,،|\s]+/)
+    .map(normalizeDegreeCode)
+    .some(c => c !== '' && c === norm);
 }
 
 export interface ResolvedSetting extends SettingDef {

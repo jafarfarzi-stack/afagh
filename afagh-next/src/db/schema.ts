@@ -1262,7 +1262,10 @@ export const cart_items = pgTable('cart_items', {
   createdAt: timestamp('createdAt').defaultNow(),
   universityId: integer('universityId').references((): AnyPgColumn => universities.id),
   UNIQUE: text('UNIQUE')
-});
+}, (t) => [
+  // سبد انتخاب واحد: یک ردیف برای هر (دانشجو، ارائه) — لازمهٔ ON CONFLICT در addToCartAction
+  uniqueIndex('uq_cart_items_student_offering').on(t.studentId, t.offeringId),
+]);
 
 export const enrollments = pgTable('enrollments', {
   id: serial('id').primaryKey(),

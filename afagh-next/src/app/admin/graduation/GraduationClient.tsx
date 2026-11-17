@@ -52,6 +52,9 @@ const STATUS_STYLE: Record<string, string> = {
   ISSUED: 'bg-emerald-700 text-white border-emerald-800',
   ON_HOLD: 'bg-rose-100 text-rose-800 border-rose-300',
 };
+const STATUS_FALLBACK: Record<string, string> = {
+  ON_HOLD: 'متوقف‌شده (نیازمند بررسی)',
+};
 const CLEAR_STYLE: Record<string, string> = {
   PENDING: 'bg-slate-100 text-slate-600 border-slate-300',
   CLEARED: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -218,7 +221,7 @@ export default function GraduationClient({
                     <td className="p-2">{!r.thesisRequired ? '—' : r.irandocStatus === 'PASSED' ? '✅' : r.irandocStatus === 'REJECTED' ? '⛔' : '⏳'}</td>
                     <td className="p-2">
                       <span className={`px-2 py-0.5 rounded-lg border text-3xs font-black ${STATUS_STYLE[r.workflowStatus] ?? 'bg-slate-100'}`}>
-                        {steps.find(s => s.code === r.workflowStatus)?.title ?? r.workflowStatus}
+                        {steps.find(s => s.code === r.workflowStatus)?.title ?? STATUS_FALLBACK[r.workflowStatus] ?? r.workflowStatus}
                       </span>
                     </td>
                     <td className="p-2 text-3xs text-slate-500">{dt(r.lastEventAt)}</td>
@@ -422,7 +425,7 @@ function DossierDrawer({ d, steps, pending, onClose, run }: {
             <Info label="عکس ۴×۳" value={a.photoDocumentId ? '✅ بارگذاری شد' : '⏳ در انتظار دانشجو'} />
             <Info label="تمبر ابطال" value={Number(a.stampFeeAmount ?? 0) <= 0 ? 'غیرفعال' : a.stampFeePaid ? '✅ پرداخت شد' : `⏳ ${money(Number(a.stampFeeAmount))}`} />
             <Info label="کد صحت وزارت" value={a.note?.startsWith('کد صحت') ? a.note.replace('کد صحت: ', '') : '—'} />
-            <Info label="وضعیت" value={steps.find(s => s.code === a.workflowStatus)?.title ?? a.workflowStatus} />
+            <Info label="وضعیت" value={steps.find(s => s.code === a.workflowStatus)?.title ?? STATUS_FALLBACK[a.workflowStatus] ?? a.workflowStatus} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button disabled={pending} onClick={() => run(() => advanceAction(a.id), 'وضعیت پرونده بازمحاسبه شد.')}

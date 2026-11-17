@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { getPosTerminals, getPosTransactions } from '@/lib/pos-actions';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { POS_ENTRY_MODE_FA, POS_TXN_STATUS_FA, POS_TXN_TYPE_FA, posLabel } from '@/lib/pos-labels';
 import PosTerminalClient from './PosTerminalClient';
 
 const POS_ROLES = ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'] as never[];
@@ -78,15 +79,15 @@ export default async function PosPage() {
                       tx.txnType === 'SALE' ? 'bg-emerald-50 text-emerald-700' :
                       tx.txnType === 'REFUND' ? 'bg-amber-50 text-amber-700' :
                       'bg-rose-50 text-rose-700'
-                    }`}>{tx.txnType}</span>
+                    }`}>{posLabel(POS_TXN_TYPE_FA, tx.txnType)}</span>
                   </td>
-                  <td className="py-2 text-slate-600">{tx.entryMode}</td>
+                  <td className="py-2 text-slate-600">{posLabel(POS_ENTRY_MODE_FA, tx.entryMode)}</td>
                   <td className="py-2">
                     <span className={`inline-block px-1.5 py-0.5 rounded text-3xs font-medium ${
                       tx.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
                       tx.status === 'VOIDED' ? 'bg-rose-50 text-rose-700' :
                       'bg-slate-50 text-slate-700'
-                    }`}>{tx.status}</span>
+                    }`}>{posLabel(POS_TXN_STATUS_FA, tx.status)}</span>
                   </td>
                   <td className="py-2 text-slate-600">{tx.terminalTitle} ({tx.terminalCode})</td>
                   <td className="py-2 text-slate-600">{tx.studentCode} - {tx.studentName}</td>

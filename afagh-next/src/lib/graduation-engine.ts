@@ -9,7 +9,7 @@ import {
   curriculum_versions, users,
   thesis_progress, thesis_progress_reports, defense_jury_pools, defense_sessions, irandoc_logs, staff, classrooms,
 } from '@/db/schema';
-import { getBool, getNumber, getSetting } from '@/lib/settings';
+import { getBool, getNumber, getSetting, isThesisDegreeCode, SETTING_BY_KEY } from '@/lib/settings';
 import { ledgerBalance } from '@/lib/ledger-balance';
 import { executeIrandocCheck } from '@/lib/api-integrations';
 import { ssrfFetch } from '@/lib/ssrf-guard';
@@ -227,21 +227,116 @@ async function notifyUser(userId: number, eventCode: string, text: string) {
     await notifyUserMultichannel({ userId, eventCode, text });
   } catch (e) {
     log.error('notify_failed', { eventCode, err: (e as Error).message });
-    await db.insert(notifications).values({ userId, eventCode, payload: JSON.stringify({ text }) });
+    // پیام درون‌سامانهٔ پشتیبان — خطای همین نوشتن هم نباید فرآیند را بشکند
+    try {
+      await db.insert(notifications).values({ userId, eventCode, payload: JSON.stringify({ text }) });
+    } catch (e2) {
+      log.error('notify_fallback_failed', { eventCode, err: (e2 as Error).message });
+    }
   }
 }
 
 async function notifyRole(roleCode: string | null, eventCode: string, text: string) {
   if (!roleCode) return;
-  const rows = await db.execute(sql`
-    select u.id from users u
-    join user_roles ur on ur."userId" = u.id
-    join roles r on r.id = ur."roleId"
-    where r.code = ${roleCode} and u."isActive" = 1 limit 50`);
-  for (const r of rows.rows as { id: number }[]) {
-    await notifyUser(Number(r.id), eventCode, text);
+  try {
+    const rows = await db.execute(sql`
+      select u.id from users u
+      join user_roles ur on ur."userId" = u.id
+      join roles r on r.id = ur."roleId"
+      where r.code = ${roleCode} and u."isActive" = 1 limit 50`);
+    for (const r of rows.rows as { id: number }[]) {
+      await notifyUser(Number(r.id), eventCode, text);
+    }
+  } catch (e) {
+    log.error('notify_role_failed', { roleCode, eventCode, err: (e as Error).message });
   }
 }
+
+/** اعلان به کاربرانِ چند کارمند (راهنما/داوران) — بی‌تکرار و بدون پرتاب خطا */
+async function notifyStaffIds(staffIds: (number | null | undefined)[], eventCode: string, text: string) {
+  const ids = [...new Set(staffIds.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0))];
+  if (!ids.length) return;
+  try {
+    const rows = await db.select({ userId: staff.userId }).from(staff).where(inArray(staff.id, ids));
+    const seen = new Set<number>();
+    for (const r of rows) {
+      const uid = Number(r.userId);
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      await notifyUser(uid, eventCode, text);
+    }
+  } catch (e) {
+    log.error('notify_staff_failed', { eventCode, err: (e as Error).message });
+  }
+}
+
+/** شناسهٔ کاربری/نام دانشجو برای متن اعلان‌های پایان‌نامه */
+async function thesisParty(studentId: number) {
+  try {
+    const [row] = await db.select({
+      userId: students.userId, studentCode: students.studentCode,
+      firstName: users.firstName, lastName: users.lastName,
+    }).from(students).innerJoin(users, eq(users.id, students.userId))
+      .where(eq(students.id, studentId)).limit(1);
+    return {
+      userId: row ? Number(row.userId) : null,
+      studentCode: row?.studentCode ?? '',
+      fullName: row ? `${row.firstName} ${row.lastName}`.trim() : '',
+    };
+  } catch (e) {
+    log.error('thesis_party_lookup_failed', { studentId, err: (e as Error).message });
+    return { userId: null, studentCode: '', fullName: '' };
+  }
+}
+
+/**
+ * سقف مجاز همانندجویی از تنظیمات سامانه (`GRAD_IRANDOC_MAX_SIMILARITY`).
+ * اگر مقدار ذخیره‌شده غیرعددی باشد، پیش‌فرضِ همان کلید در `SETTING_DEFS`
+ * به کار می‌رود؛ در هیچ مقایسه‌ای عدد ۲۰ هاردکد نیست.
+ */
+async function maxSimilarityThreshold(): Promise<number> {
+  const def = Number(SETTING_BY_KEY['GRAD_IRANDOC_MAX_SIMILARITY']?.default);
+  return getNumber('GRAD_IRANDOC_MAX_SIMILARITY', Number.isFinite(def) ? def : 0);
+}
+
+/** سقف مؤثر: اگر سرویس خودش سقف اعلام کرده، همان ملاک مقایسه است */
+function effectiveSimilarityThreshold(configured: number, providerThreshold: number | null | undefined): number {
+  const p = Number(providerThreshold);
+  return Number.isFinite(p) && p > 0 ? p : configured;
+}
+
+/** ثبت لاگ استعلام ایرانداک (بدون شکستن فرآیند در صورت خطای نوشتن) */
+async function logIrandocCheck(input: {
+  thesisProgressId: number; studentId: number; checkType: 'PRIOR' | 'PROPOSAL' | 'FINAL';
+  trackingCode?: string | null; title?: string | null; similarity?: number | null;
+  decision?: string | null; raw?: unknown;
+}) {
+  try {
+    await db.insert(irandoc_logs).values({
+      thesisProgressId: input.thesisProgressId,
+      studentId: input.studentId,
+      checkType: input.checkType,
+      trackingCode: input.trackingCode ?? null,
+      title: input.title ?? null,
+      similarityPercentage: input.similarity == null ? null : String(input.similarity),
+      decision: input.decision ?? null,
+      rawResponse: (input.raw ?? null) as never,
+    });
+  } catch (e) {
+    log.error('irandoc_log_failed', { checkType: input.checkType, err: (e as Error).message });
+  }
+}
+
+/** نتیجهٔ استعلام انجام نشده — متن یکسان در همهٔ مسیرهای پایان‌نامه */
+const IRANDOC_INCONCLUSIVE_MSG =
+  'استعلام همانندجویی انجام نشد؛ نتیجهٔ قطعی ثبت نشد و پرونده به بررسی کارشناس ارجاع شد.';
+
+/** برچسب فارسی نتیجهٔ دفاع برای متن اعلان‌ها */
+const DEFENSE_RESULT_FA: Record<'PASSED' | 'FAILED' | 'CONDITIONAL', string> = {
+  PASSED: 'قبول',
+  FAILED: 'مردود',
+  CONDITIONAL: 'قبول مشروط',
+};
 
 // ───────────────────── باز کردن خودکار پرونده ─────────────────────
 
@@ -305,8 +400,10 @@ export async function runGraduationScan(opts: { studentIds?: number[]; majorId?:
 
 /** ساخت پرونده و رفتن مستقیم به کارتابل مدیر گروه (بدون درخواست دانشجو) */
 export async function openDossier(audit: AuditResult): Promise<number> {
-  const thesisCodes = (await getSetting('GRAD_THESIS_DEGREE_CODES')).split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
-  const thesisRequired = !!audit.degreeCode && thesisCodes.includes(audit.degreeCode.toUpperCase());
+  // کدهای مقطع از تنظیمات فقط «افزودنی» هستند؛ ارشد/دکتری با کدهای واقعی
+  // (MS/PHD) و معادل‌ها (MSC/MA/MENG) همیشه پایان‌نامه دارند.
+  const thesisCodesOverride = await getSetting('GRAD_THESIS_DEGREE_CODES').catch(() => '');
+  const thesisRequired = isThesisDegreeCode(audit.degreeCode, thesisCodesOverride);
   const [term] = await db.select({ id: academic_terms.id }).from(academic_terms).where(eq(academic_terms.isCurrent, 1)).limit(1);
 
   const [ins] = await db.insert(graduation_audits).values({
@@ -429,31 +526,41 @@ export async function runIrandoc(auditId: number, params?: { trackingCode?: stri
   const tracking = params?.trackingCode?.trim() || a.irandocTrackingCode || '';
   if (!tracking) throw new Error('کد رهگیری ثبت پایان‌نامه در ایرانداک وارد نشده است.');
   const title = params?.thesisTitle?.trim() || a.thesisTitle || 'پایان‌نامه';
-  const threshold = await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20);
+  const configuredThreshold = await maxSimilarityThreshold();
 
   const r = await executeIrandocCheck({
     nationalCode: stu?.nationalCode ?? '', trackingCode: tracking,
-    thesisTitle: title, maxAllowedThreshold: threshold,
+    thesisTitle: title, maxAllowedThreshold: configuredThreshold,
   });
 
-  const passed = r.decision === 'AUTO_APPROVE';
+  // خطای سرویس/نبود کد ملی هرگز «رد» ثبت نمی‌شود؛ پرونده در انتظار بررسی کارشناس می‌ماند.
+  const inconclusive = !stu?.nationalCode
+    || r.status === 'FAILED'
+    || r.decision === 'MANUAL_REVIEW'
+    || !Number.isFinite(r.similarityPercentage);
+  const threshold = effectiveSimilarityThreshold(configuredThreshold, r.maxAllowedThreshold);
+  const passed = !inconclusive && r.decision === 'AUTO_APPROVE'
+    && Number(r.similarityPercentage) <= threshold;
+
   await db.update(graduation_audits).set({
     irandocTrackingCode: tracking, thesisTitle: title,
-    irandocSimilarityScore: String(r.similarityPercentage),
-    irandocStatus: passed ? 'PASSED' : 'REJECTED',
-    irandocCheckedAt: new Date(), lastEventAt: new Date(),
+    irandocSimilarityScore: inconclusive ? null : String(r.similarityPercentage),
+    irandocStatus: inconclusive ? 'PENDING' : passed ? 'PASSED' : 'REJECTED',
+    irandocCheckedAt: inconclusive ? null : new Date(), lastEventAt: new Date(),
   }).where(eq(graduation_audits.id, auditId));
 
   if (stu) {
     await notifyUser(stu.userId, 'GRADUATION_IRANDOC',
-      passed
-        ? `استعلام همانندجویی پایان‌نامه انجام شد: ${r.similarityPercentage}٪ (مجاز تا ${threshold}٪).`
-        : `درصد همانندجویی پایان‌نامه (${r.similarityPercentage}٪) بیش از سقف مجاز است؛ برای اصلاح با تحصیلات تکمیلی تماس بگیرید.`);
+      inconclusive
+        ? IRANDOC_INCONCLUSIVE_MSG
+        : passed
+          ? `استعلام همانندجویی پایان‌نامه انجام شد: ${r.similarityPercentage}٪ (مجاز تا ${threshold}٪).`
+          : `درصد همانندجویی پایان‌نامه (${r.similarityPercentage}٪) بیش از سقف مجاز (${threshold}٪) است؛ برای اصلاح با تحصیلات تکمیلی تماس بگیرید.`);
   }
 
-  log.info('irandoc_checked', { auditId, similarity: r.similarityPercentage, passed });
+  log.info('irandoc_checked', { auditId, similarity: r.similarityPercentage, passed, inconclusive });
   if (passed) await advanceDossier(auditId);
-  return { ok: true, passed, similarity: r.similarityPercentage, message: r.message };
+  return { ok: true, passed, inconclusive, similarity: r.similarityPercentage, message: inconclusive ? IRANDOC_INCONCLUSIVE_MSG : r.message };
 }
 
 // ───────────────── مرحله: تسویه‌حساب موازی ─────────────────
@@ -1143,7 +1250,7 @@ export async function submitThesisTitleAndSupervisor(input: {
         nationalCode: stu.nationalCode,
         trackingCode: '', // prior check doesn't need tracking code
         thesisTitle: input.titleFa,
-        maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+        maxAllowedThreshold: await maxSimilarityThreshold(),
       });
       priorTracking = r.trackingCode || '';
       priorSim = r.similarityPercentage;
@@ -1185,42 +1292,84 @@ export async function submitProposal(input: {
   if (!tp.titleFa) throw new Error('ابتدا عنوان و استاد راهنما را ثبت کنید (فاز ۱)');
   if (tp.irandocPriorStatus === 'REJECTED') throw new Error('پیشینه ایرانداک رد شده؛ ابتدا عنوان را تغییر دهید');
 
+  const configuredThreshold = await maxSimilarityThreshold();
+
   // محاسبه همانندجویی پروپوزال (نیاز به متن کامل یا Fitch - فعلاً شبیه‌سازی)
-  let propSim = 0;
+  let propSim: number | null = null;
+  let propStatus: 'SIMILARITY_PASSED' | 'SIMILARITY_HIGH' | 'SIMILARITY_CHECK' = 'SIMILARITY_CHECK';
+  let reason: string | null = IRANDOC_INCONCLUSIVE_MSG;
+  let usedThreshold = configuredThreshold;
   try {
     const [stu] = await db.select({ nationalCode: users.nationalCode })
       .from(students).innerJoin(users, eq(users.id, students.userId))
       .where(eq(students.id, tp.studentId)).limit(1);
-    if (stu?.nationalCode) {
+    if (!stu?.nationalCode) {
+      log.warn('proposal_similarity_no_national_code', { auditId: input.auditId });
+    } else {
       const r = await executeIrandocCheck({
         nationalCode: stu.nationalCode,
         trackingCode: '',
         thesisTitle: tp.titleFa,
-        maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
+        maxAllowedThreshold: configuredThreshold,
       });
-      propSim = r.similarityPercentage;
+      const sim = Number(r.similarityPercentage);
+      // خطای سرویس/درخواست بررسی دستی هرگز «قبول» یا «رد» قطعی نیست
+      const serviceOk = r.status !== 'FAILED' && r.decision !== 'MANUAL_REVIEW'
+        && Number.isFinite(r.similarityPercentage);
+      if (!serviceOk) {
+        log.warn('proposal_similarity_inconclusive', {
+          auditId: input.auditId, status: r.status, decision: r.decision,
+        });
+      } else {
+        usedThreshold = effectiveSimilarityThreshold(configuredThreshold, r.maxAllowedThreshold);
+        propSim = sim;
+        if (r.decision === 'REJECT_EXCEED_LIMIT' || sim > usedThreshold) {
+          propStatus = 'SIMILARITY_HIGH';
+          reason = `درصد همانندجویی پروپوزال (${sim}٪) از سقف مجاز (${usedThreshold}٪) بیشتر است؛ متن را اصلاح و دوباره بارگذاری کنید.`;
+        } else {
+          propStatus = 'SIMILARITY_PASSED';
+          reason = null;
+        }
+      }
+      await logIrandocCheck({
+        thesisProgressId: tp.id, studentId: tp.studentId, checkType: 'PROPOSAL',
+        trackingCode: '', title: tp.titleFa, similarity: propSim,
+        decision: serviceOk ? r.decision : 'MANUAL_REVIEW',
+        raw: { status: r.status, decision: r.decision, threshold: usedThreshold, message: reason },
+      });
     }
   } catch (e) {
     log.warn('proposal_similarity_failed', { auditId: input.auditId, err: (e as Error).message });
+    propStatus = 'SIMILARITY_CHECK';
+    reason = IRANDOC_INCONCLUSIVE_MSG;
   }
 
   const [updated] = await db.update(thesis_progress)
     .set({
       proposalFileId: input.fileId,
       proposalSubmittedAt: new Date(),
-      proposalSimilarity: String(propSim),
-      proposalStatus: propSim <= 20 ? 'SIMILARITY_PASSED' : 'SIMILARITY_HIGH',
+      proposalSimilarity: propSim == null ? null : String(propSim),
+      proposalStatus: propStatus,
       updatedAt: new Date(),
     })
     .where(eq(thesis_progress.id, tp.id))
     .returning();
 
-  // اگر مشابهت پایین است، مستقیماً به تأیید کارشناس می‌رود
-  if (propSim <= 20) {
-    // TODO: Notify EDU_EXPERT for review
+  // ارجاع به کارشناس: قبولی همانندجویی یا بررسی دستی (استعلام انجام‌نشده)
+  const party = await thesisParty(tp.studentId);
+  const who = `${party.fullName || 'دانشجو'}${party.studentCode ? ` (${party.studentCode})` : ''}`;
+  if (propStatus === 'SIMILARITY_PASSED') {
+    await notifyRole('EDU_EXPERT', 'THESIS_PROPOSAL_REVIEW',
+      `پروپوزال ${who} همانندجویی را گذراند (${propSim ?? 0}٪) و آمادهٔ تأیید کارشناس است.`);
+  } else if (propStatus === 'SIMILARITY_CHECK') {
+    await notifyRole('EDU_EXPERT', 'THESIS_PROPOSAL_MANUAL_REVIEW',
+      `استعلام همانندجویی پروپوزال ${who} انجام نشد؛ پرونده برای بررسی دستی به کارشناس ارجاع شد.`);
+  } else if (party.userId) {
+    await notifyUser(party.userId, 'THESIS_PROPOSAL_SIMILARITY_HIGH',
+      reason ?? `درصد همانندجویی پروپوزال بیش از سقف مجاز (${usedThreshold}٪) است.`);
   }
 
-  return { thesisProgress: updated, similarity: propSim };
+  return { thesisProgress: updated, similarity: propSim ?? 0, status: propStatus, reason };
 }
 
 /** تأیید پروپوزال توسط کارشناس آموزش + آپلود به ایرانداک */
@@ -1232,24 +1381,42 @@ export async function approveProposalAndUploadIrandoc(input: {
   
   const tp = await getOrCreateThesisProgress(input.auditId);
 
-  if (!['SIMILARITY_PASSED', 'EXPERT_REVIEW'].includes(tp.proposalStatus ?? '')) {
+  // پروپوزالِ با استعلام ناموفق (SIMILARITY_CHECK) هم پس از بررسی دستی کارشناس قابل تأیید است
+  if (!['SIMILARITY_PASSED', 'EXPERT_REVIEW', 'SIMILARITY_CHECK'].includes(tp.proposalStatus ?? '')) {
     throw new Error('پروپوزال در وضعیت قابل تأیید نیست');
   }
 
-  const [updated] = await db.update(thesis_progress)
-    .set({
-      proposalStatus: 'APPROVED',
-      proposalApprovedAt: new Date(),
-      proposalApprovedBy: input.approvedBy,
-      irandocUploadTracking: input.irandocTrackingCode,
-      irandocUploadStatus: 'UPLOADED',
-      irandocUploadedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(thesis_progress.id, tp.id))
-    .returning();
+  const trackingCode = (input.irandocTrackingCode ?? '').trim();
+  if (!trackingCode) throw new Error('کد رهگیری بارگذاری پروپوزال در ایرانداک را وارد کنید.');
 
-  // TODO: Update graduation_audits.irandocStatus = 'PASSED' + advanceDossier
+  // دو نوشتار اتمیک: تأیید پروپوزال و بستن مرحلهٔ ایرانداک پرونده باید با هم ثبت شوند،
+  // وگرنه پرونده تا ابد در IRANDOC_VERIFICATION می‌ماند (irandocStatus هرگز PASSED نمی‌شد).
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(thesis_progress)
+      .set({
+        proposalStatus: 'APPROVED',
+        proposalApprovedAt: new Date(),
+        proposalApprovedBy: input.approvedBy,
+        irandocUploadTracking: trackingCode,
+        irandocUploadStatus: 'UPLOADED',
+        irandocUploadedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(thesis_progress.id, tp.id))
+      .returning();
+
+    await tx.update(graduation_audits)
+      .set({
+        irandocStatus: 'PASSED',
+        irandocCheckedAt: new Date(),
+        lastEventAt: new Date(),
+      })
+      .where(eq(graduation_audits.id, input.auditId));
+
+    return row;
+  });
+
+  // پیشروی بیرون از تراکنش: ساخت چک‌لیست تسویه و اعلان‌ها
   await advanceDossier(input.auditId);
 
   return updated;
@@ -1283,7 +1450,11 @@ export async function requestDefense(input: {
     .where(eq(thesis_progress.id, tp.id))
     .returning();
 
-  // TODO: Notify supervisor for approval
+  // اطلاع به استاد راهنما برای تأیید یا رد درخواست دفاع
+  const party = await thesisParty(tp.studentId);
+  const who = `${party.fullName || 'دانشجو'}${party.studentCode ? ` (${party.studentCode})` : ''}`;
+  await notifyStaffIds([tp.supervisorId], 'THESIS_DEFENSE_REQUEST',
+    `${who} درخواست برگزاری دفاع پایان‌نامه ثبت کرد. لطفاً در میز «زمان‌بندی دفاع» درخواست را تأیید یا رد کنید.`);
   return updated;
 }
 
@@ -1309,7 +1480,11 @@ export async function supervisorApproveDefense(input: {
     .returning();
 
   if (input.approved) {
-    // TODO: Notify EDU_EXPERT
+    // اطلاع به کارشناس آموزش برای تعیین وقت و هیأت داوران
+    const party = await thesisParty(tp.studentId);
+    const who = `${party.fullName || 'دانشجو'}${party.studentCode ? ` (${party.studentCode})` : ''}`;
+    await notifyRole('EDU_EXPERT', 'THESIS_DEFENSE_APPROVED',
+      `درخواست دفاع ${who} توسط استاد راهنما تأیید شد؛ تعیین وقت و هیأت داوران در انتظار کارشناس آموزش است.`);
   }
   return updated;
 }
@@ -1399,6 +1574,27 @@ export async function expertScheduleDefense(input: {
       status: 'SCHEDULED',
     });
 
+  // اعلان زمان و مکان دفاع به دانشجو، استاد راهنما و هیأت داوران
+  const party = await thesisParty(tp.studentId);
+  const when = input.scheduledAt.toLocaleString('fa-IR', { dateStyle: 'full', timeStyle: 'short' });
+  let roomName: string | null = null;
+  if (roomId != null) {
+    const [roomRow] = await db.select({ name: classrooms.name })
+      .from(classrooms).where(eq(classrooms.id, roomId)).limit(1);
+    roomName = roomRow?.name ?? null;
+  }
+  const place = roomName ? `اتاق «${roomName}»` : 'محل دانشکده (طبق اعلام کارشناس)';
+  const who = `${party.fullName || 'دانشجو'}${party.studentCode ? ` (${party.studentCode})` : ''}`;
+  if (party.userId) {
+    await notifyUser(party.userId, 'THESIS_DEFENSE_SCHEDULED',
+      `جلسهٔ دفاع پایان‌نامهٔ شما در ${when} — ${place} برگزار می‌شود. لطفاً پیش از جلسه، نسخهٔ نهایی پایان‌نامه و مدارک لازم را آماده کنید.`);
+  }
+  await notifyStaffIds(
+    [updated.jurySupervisorId, updated.juryChairId, updated.juryInternalId, updated.juryExternalId],
+    'THESIS_DEFENSE_SCHEDULED',
+    `جلسهٔ دفاع ${who} در ${when} — ${place} برگزار می‌شود؛ حضور شما به‌عنوان عضو هیأت داوران/استاد راهنما الزامی است.`,
+  );
+
   return updated;
 }
 
@@ -1412,26 +1608,68 @@ export async function recordDefenseResult(input: {
   
   const tp = await getOrCreateThesisProgress(input.auditId);
 
-  const [updated] = await db.update(thesis_progress)
-    .set({
-      defenseRequestStatus: input.result === 'PASSED' ? 'PASSED' : 'FAILED',
-      defenseConductedAt: input.conductedAt,
-      defenseResult: input.result,
-      defenseNote: input.minutes,
-      updatedAt: new Date(),
-    })
-    .where(eq(thesis_progress.id, tp.id))
-    .returning();
+  /**
+   * نتیجهٔ «قبول مشروط» هرگز نباید PASSED تلقی شود (وگرنه دانشجو بدون اصلاحات
+   * به مرحلهٔ پایان‌نامهٔ نهایی می‌رود). enum و رابط کاربری مقدار CONDUCTED را
+   * می‌شناسند («برگزار شده»)، پس برای مشروط همان ثبت می‌شود تا از FAILED متمایز
+   * بماند؛ نتیجهٔ واقعی هم در defenseResult و defense_sessions.result می‌ماند.
+   */
+  const requestStatus = input.result === 'PASSED'
+    ? 'PASSED'
+    : input.result === 'CONDITIONAL' ? 'CONDUCTED' : 'FAILED';
+  const defenseDate = input.conductedAt.toISOString().slice(0, 10);
 
-  // Update defense_sessions
-  await db.update(defense_sessions)
-    .set({ status: 'CONDUCTED', result: input.result, minutes: input.minutes })
-    .where(eq(defense_sessions.thesisProgressId, tp.id));
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(thesis_progress)
+      .set({
+        defenseRequestStatus: requestStatus,
+        defenseConductedAt: input.conductedAt,
+        defenseResult: input.result,
+        defenseNote: input.minutes,
+        updatedAt: new Date(),
+      })
+      .where(eq(thesis_progress.id, tp.id))
+      .returning();
 
-  if (input.result === 'PASSED') {
-    // Advance to final thesis upload phase
-    // graduation_audits workflowStatus -> FINAL_THESIS_UPLOAD
+    // Update/ایجاد defense_sessions — تاریخِ واقعی برگزاری مبنای «تاریخ دانش‌آموختگی» است
+    await tx.insert(defense_sessions)
+      .values({
+        thesisProgressId: tp.id,
+        studentId: tp.studentId,
+        scheduledAt: tp.defenseScheduledAt ?? input.conductedAt,
+        roomId: tp.defenseRoomId,
+        chairId: tp.juryChairId,
+        supervisorId: tp.jurySupervisorId ?? tp.supervisorId,
+        internalId: tp.juryInternalId,
+        externalId: tp.juryExternalId,
+        status: 'CONDUCTED',
+        result: input.result,
+        minutes: input.minutes,
+        defenseDate,
+      })
+      .onConflictDoUpdate({
+        target: defense_sessions.thesisProgressId,
+        set: { status: 'CONDUCTED', result: input.result, minutes: input.minutes, defenseDate },
+      });
+
+    return row;
+  });
+
+  // اعلان نتیجه به دانشجو و استاد راهنما
+  const label = DEFENSE_RESULT_FA[input.result];
+  const party = await thesisParty(tp.studentId);
+  const who = `${party.fullName || 'دانشجو'}${party.studentCode ? ` (${party.studentCode})` : ''}`;
+  if (party.userId) {
+    const next = input.result === 'PASSED'
+      ? ' می‌توانید نسخهٔ نهایی پایان‌نامه را بارگذاری کنید.'
+      : input.result === 'CONDITIONAL'
+        ? ' اصلاحات اعلام‌شده را انجام دهید و برای بررسی دوباره با کارشناس آموزش پیگیری کنید.'
+        : ' برای پیگیری وضعیت با کارشناس آموزش تماس بگیرید.';
+    await notifyUser(party.userId, 'THESIS_DEFENSE_RESULT',
+      `نتیجهٔ دفاع پایان‌نامهٔ شما ثبت شد: ${label}.${next}`);
   }
+  await notifyStaffIds([tp.supervisorId], 'THESIS_DEFENSE_RESULT',
+    `نتیجهٔ دفاع ${who} ثبت شد: ${label}.`);
 
   return updated;
 }
@@ -1469,39 +1707,99 @@ export async function runFinalIrandocCheck(input: {
   
   const tp = await getOrCreateThesisProgress(input.auditId);
 
+  // 🔒 پیش‌نیازهای قطعی: فایل پایان‌نامهٔ نهایی و دفاعِ قبول‌شده
+  if (!tp.finalThesisFileId) {
+    throw new Error('ابتدا نسخهٔ نهایی پایان‌نامه را بارگذاری کنید؛ استعلام نهایی پیش از آن مجاز نیست.');
+  }
+  if (tp.defenseRequestStatus !== 'PASSED') {
+    throw new Error('دفاع پایان‌نامه هنوز با موفقیت برگزار نشده است؛ ثبت استعلام نهایی پیش از قبولی دفاع مجاز نیست.');
+  }
+
+  const trackingCode = (input.trackingCode ?? '').trim();
+  if (!trackingCode) throw new Error('کد رهگیری استعلام نهایی ایرانداک را وارد کنید.');
+
   const [stu] = await db.select({
     nationalCode: users.nationalCode,
   }).from(students).innerJoin(users, eq(users.id, students.userId))
     .where(eq(students.id, tp.studentId)).limit(1);
 
   const title = input.title || tp.titleFa || '';
-  const r = await executeIrandocCheck({
-    nationalCode: stu?.nationalCode ?? '',
-    trackingCode: input.trackingCode,
-    thesisTitle: title,
-    maxAllowedThreshold: await getNumber('GRAD_IRANDOC_MAX_SIMILARITY', 20),
-  });
+  const configuredThreshold = await maxSimilarityThreshold();
 
-  const passed = r.decision === 'AUTO_APPROVE';
+  let passed = false;
+  let similarity: number | null = null;
+  let status: 'PENDING' | 'PASSED' | 'REJECTED' = 'PENDING';
+  let reason: string | null = IRANDOC_INCONCLUSIVE_MSG;
+  let usedThreshold = configuredThreshold;
+
+  try {
+    const r = await executeIrandocCheck({
+      nationalCode: stu?.nationalCode ?? '',
+      trackingCode,
+      thesisTitle: title,
+      maxAllowedThreshold: configuredThreshold,
+    });
+    const sim = Number(r.similarityPercentage);
+    // خطای سرویس/نبود کد ملی/درخواست بررسی دستی: نتیجهٔ قطعی ثبت نمی‌شود (fail-closed)
+    const inconclusive = !stu?.nationalCode
+      || r.status === 'FAILED'
+      || r.decision === 'MANUAL_REVIEW'
+      || !Number.isFinite(r.similarityPercentage);
+    if (inconclusive) {
+      log.warn('final_irandoc_inconclusive', {
+        auditId: input.auditId, status: r.status, decision: r.decision,
+      });
+    } else {
+      usedThreshold = effectiveSimilarityThreshold(configuredThreshold, r.maxAllowedThreshold);
+      similarity = sim;
+      if (r.decision === 'REJECT_EXCEED_LIMIT' || sim > usedThreshold) {
+        status = 'REJECTED';
+        reason = `درصد همانندجویی پایان‌نامهٔ نهایی (${sim}٪) از سقف مجاز (${usedThreshold}٪) بیشتر است؛ متن را اصلاح و دوباره بارگذاری کنید.`;
+      } else {
+        status = 'PASSED';
+        passed = true;
+        reason = null;
+      }
+    }
+    await logIrandocCheck({
+      thesisProgressId: tp.id, studentId: tp.studentId, checkType: 'FINAL',
+      trackingCode, title, similarity,
+      decision: inconclusive ? 'MANUAL_REVIEW' : r.decision,
+      raw: { status: r.status, decision: r.decision, threshold: usedThreshold, message: reason },
+    });
+  } catch (e) {
+    log.error('final_irandoc_failed', { auditId: input.auditId, err: (e as Error).message });
+    await logIrandocCheck({
+      thesisProgressId: tp.id, studentId: tp.studentId, checkType: 'FINAL',
+      trackingCode, title, similarity: null, decision: 'MANUAL_REVIEW',
+      raw: { error: (e as Error).message, threshold: configuredThreshold, message: IRANDOC_INCONCLUSIVE_MSG },
+    });
+  }
+
   const [updated] = await db.update(thesis_progress)
     .set({
-      finalIrandocTracking: input.trackingCode,
-      finalIrandocSimilarity: String(r.similarityPercentage),
-      finalIrandocStatus: passed ? 'PASSED' : 'REJECTED',
-      finalIrandocCheckedAt: new Date(),
+      finalIrandocTracking: trackingCode,
+      finalIrandocSimilarity: similarity == null ? null : String(similarity),
+      finalIrandocStatus: status,
+      finalIrandocCheckedAt: status === 'PENDING' ? null : new Date(),
       updatedAt: new Date(),
     })
     .where(eq(thesis_progress.id, tp.id))
     .returning();
 
-  if (passed) {
-    // Update graduation_audits -> READY_TO_ISSUE
-    await db.update(graduation_audits)
-      .set({ workflowStatus: 'READY_TO_ISSUE', lastEventAt: new Date() })
-      .where(eq(graduation_audits.id, input.auditId));
+  const party = await thesisParty(tp.studentId);
+  if (party.userId) {
+    if (status === 'PENDING') {
+      await notifyUser(party.userId, 'THESIS_FINAL_IRANDOC', IRANDOC_INCONCLUSIVE_MSG);
+    } else if (status === 'REJECTED') {
+      await notifyUser(party.userId, 'THESIS_FINAL_IRANDOC', reason ?? 'استعلام نهایی ایرانداک رد شد؛ برای اصلاح متن با کارشناس آموزش پیگیری کنید.');
+    }
   }
 
-  return { thesisProgress: updated, passed, similarity: r.similarityPercentage };
+  // مسیر عادی پرونده: همهٔ دروازه‌های تسویه/تأیید مدیر گروه/عکس باید دوباره اعمال شوند
+  if (passed) await advanceDossier(input.auditId);
+
+  return { thesisProgress: updated, passed, similarity: similarity ?? 0, status, reason };
 }
 
 /** دریافت پیشرفت پایان‌نامه برای نمایش در پورتال دانشجو/استاد/ادمین */

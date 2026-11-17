@@ -32,6 +32,7 @@ import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
 import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curriculum-resolution';
 import { listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { createBypassRequest, cancelBypassRequest } from '@/lib/bypass-requests';
+import { assertEnrollmentWrite } from '@/lib/enrollment-window';
 
 /**
  * زمینهٔ انتخاب واحد.
@@ -82,6 +83,10 @@ export async function addToCartAction(offeringId: number) {
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری فعال نیست' };
 
+  // ⏳ گیت سروری پنجرهٔ انتخاب واحد — UI تنها مرجع نیست
+  const gate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!gate.ok) return { ok: false, error: gate.error };
+
   // 🔒 ارائه باید متعلق به دانشگاه و ترمِ خودِ دانشجو باشد
   const targetOff = await offeringInMyScope(myUni, term.id, offeringId);
   if (!targetOff) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
@@ -113,7 +118,7 @@ export async function addToCartAction(offeringId: number) {
   await db.transaction(tx =>
     tx
       .insert(cart_items)
-      .values({ studentId: me.id, offeringId, createdAt: new Date() })
+      .values({ studentId: me.id, offeringId, createdAt: new Date(), universityId: me.universityId })
       .onConflictDoUpdate({
         target: [cart_items.studentId, cart_items.offeringId],
         set: { createdAt: new Date() },
@@ -157,6 +162,10 @@ export async function autoFillCartFromChartAction(): Promise<{
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, count: 0, units: 0, message: 'ترم جاری فعال نیست.' };
   if (myUni == null) return { ok: false, count: 0, units: 0, message: 'دانشگاه شما مشخص نیست.' };
+
+  // ⏳ گیت سروری پنجرهٔ انتخاب واحد — چیدمان خودکار هم نوشتن در سبد است
+  const gate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!gate.ok) return { ok: false, count: 0, units: 0, message: gate.error };
 
   // ── سقف واحد از موتور آیین‌نامه (شامل ممتازی و واحدهای جبرانی) ──
   // پیش از این عدد ۲۰ سخت‌کد بود؛ دانشجوی ارشد/ممتاز/جبرانی چیدمان نادرست می‌گرفت.
@@ -415,7 +424,7 @@ export async function autoFillCartFromChartAction(): Promise<{
     await db.transaction(tx =>
       tx
         .insert(cart_items)
-        .values({ studentId: me.id, offeringId: off.id, createdAt: now })
+        .values({ studentId: me.id, offeringId: off.id, createdAt: now, universityId: me.universityId })
         .onConflictDoNothing()
     );
   }
@@ -461,7 +470,11 @@ export async function submitCartAction(acceptSameDayRisk = false): Promise<{
 }> {
   const og = await assertServerActionOrigin();
   if (!og.ok) return { queued: false, ticketId: '', position: 0, error: og.error };
-  const { user, me } = await ctx();
+  const { user, me, term } = await ctx();
+
+  // ⏳ گیت سروری پنجرهٔ انتخاب واحد — پیش از ورود به صف (کارگر صف هم مستقل بررسی می‌کند)
+  const gate = await assertEnrollmentWrite(term?.id, 'ADD');
+  if (!gate.ok) return { queued: false, ticketId: '', position: 0, error: gate.error };
 
   // سپر نرخ (§۲۰۷۷): بیش از ۵ درخواست ثبت در ثانیه → رد سریع
   if (!(await rateLimitSubmit(user.id))) {
@@ -543,6 +556,9 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
   if (!og.ok) return { ok: false, error: og.error };
   const { user, me, term, myUni } = await ctx();
   if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };
+  // ⏳ گیت سروری پنجرهٔ انتخاب واحد — ارجاع به کمیسیون هم ثبت‌نام می‌سازد
+  const gate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!gate.ok) return { ok: false, error: gate.error };
   // 🔒 فقط ارائهٔ همین دانشگاه و همین ترم — وگرنه درخواست معرفی به کمیته
   //    برای درسی از دانشگاه/نیمسال دیگر ثبت می‌شد.
   const target = await offeringInMyScope(myUni, term.id, offeringId);

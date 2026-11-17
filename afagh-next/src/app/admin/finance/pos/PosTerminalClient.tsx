@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { recordPosSale, voidPosTransaction, getPosTransactions } from '@/lib/pos-actions';
+import { POS_ENTRY_MODE_FA, POS_TXN_STATUS_FA, POS_TXN_TYPE_FA, posLabel } from '@/lib/pos-labels';
 
 type Terminal = {
   id: number;
@@ -245,18 +246,18 @@ export default function PosTerminalClient({ terminal, universityId }: Props) {
                       <td className="py-1 font-mono text-slate-700">{tx.stan}</td>
                       <td className="py-1 font-bold text-slate-800">{fa(Number(tx.amount))}</td>
                       <td className="py-1">
-                        <span className={`inline-block px-1 py-0.5 rounded text-[9px] font-medium ${
+                        <span className={`inline-block px-1 py-0.5 rounded text-2xs font-medium ${
                           tx.txnType === 'SALE' ? 'bg-emerald-50 text-emerald-700' :
                           tx.txnType === 'REFUND' ? 'bg-amber-50 text-amber-700' :
                           'bg-rose-50 text-rose-700'
-                        }`}>{tx.txnType}</span>
+                        }`}>{posLabel(POS_TXN_TYPE_FA, tx.txnType)}</span>
                       </td>
-                      <td className="py-1 text-slate-600">{tx.entryMode}</td>
+                      <td className="py-1 text-slate-600">{posLabel(POS_ENTRY_MODE_FA, tx.entryMode)}</td>
                       <td className="py-1">
-                        <span className={`inline-block px-1 py-0.5 rounded text-[9px] font-medium ${
+                        <span className={`inline-block px-1 py-0.5 rounded text-2xs font-medium ${
                           tx.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
                           'bg-rose-50 text-rose-700'
-                        }`}>{tx.status}</span>
+                        }`}>{posLabel(POS_TXN_STATUS_FA, tx.status)}</span>
                       </td>
                       <td className="py-1 text-slate-600">{tx.studentCode}</td>
                       <td className="py-1 text-slate-500">{new Date(tx.createdAt).toLocaleTimeString('fa-IR')}</td>

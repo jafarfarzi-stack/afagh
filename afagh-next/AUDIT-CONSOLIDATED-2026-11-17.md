@@ -191,3 +191,49 @@ dropdown ورودی = ۵۲ms، base students = ۴۴ms. چهار جدول جان�
 3. **نمرات جزئی:** افزودن جدول `grade_components` (migration) — تأیید؟
 4. **چاپ:** حذف کامل «چاپ ناقص» و اجبار به واکشی کامل، یا حفظ با برچسب؟
 5. **MinIO:** مهاجرت به service account + bucket جدا برای بکاپ — پنجرهٔ زمانی؟
+
+---
+
+## ۱۲) تکمیل ممیزی — یافته‌های تازه و وضعیت تولید
+
+### ۱۲/۱) یکپارچگی دادهٔ انتخاب واحد (ممیزی نهایی)
+
+- **`cart_items` قید یکتایی نداشت** ولی کد `ON CONFLICT ("studentId","offeringId")` می‌زد ⇒ افزودن به سبد با `42P10` شکست می‌خورد. **اصلاح شد روی تولید** (`uq_cart_items_student_offering`) + `drizzle/0140_cart_items_unique.sql`.
+- `enrolledCount` پنج نویسنده با سه تعریف متفاوت دارد (`REGISTERED` / `<> DROPPED` / `REGISTERED+PENDING_COUNCIL`) ⇒ باید یک تابع/تریگر واحد شود.
+- یک درس می‌تواند در دو گروه هم‌زمان ثبت شود: تنها قید `uq_enrollments(studentId, offeringId)` است و بررسی «تکراری بودن درس» بیرون از تراکنش انجام می‌شود. **در تولید ۴۱۹ گروه (دانشجو×ترم×درس) تکراری وجود دارد** — پاک‌سازی لازم است قبل از افزودن قید `(studentId, termId, courseId)`.
+- شهریه در «افزودن» شارژ و در «حذف» اصلاح نمی‌شود؛ `chargeTermTuition` فقط از مسیر معادل‌سازی صدا زده می‌شود ⇒ بدهی با واقعیت هم‌گام نیست.
+- `dropCourseAction` هیچ گیتی ندارد (نه مهلت، نه ترم جاری) و رزرو صندلی/لیست انتظار را در چند استیتمنت غیراتمیک انجام می‌دهد.
+- `PENDING_COUNCIL` هیچ صندلی‌ای رزرو نمی‌کند ولی در سقف واحد و صورت‌جلسات شمرده می‌شود ⇒ فروش بیش از ظرفیت.
+- دانشجوی حذف‌شده صندلی آزمون و ردیف حضور خود را نگه می‌دارد (`seat_allocations` پاک نمی‌شود؛ `issueExamAttendance` فیلتر وضعیت ندارد).
+- `r-class` در «ادغام گروه» و «حذف گروهی» ردیف‌های ثبت‌نام را **hard delete** می‌کند (نمره/حضور/اعتراض بی‌تاریخ می‌شود).
+
+### ۱۲/۲) برچسب‌های خام باقی‌مانده (اولویت اصلاح)
+
+1. `ON_HOLD` در کارتابل فارغ‌التحصیلی خام چاپ می‌شود (در `WORKFLOW_STEPS` نیست) — `GraduationClient.tsx:221,425`.
+2. سه ستون POS: `txnType` / `entryMode` / `status` — `finance/pos/page.tsx:81-89` و `PosTerminalClient.tsx:252-259`.
+3. وضعیت تحویل اوراق: `PENDING_GRADING` / `GRADES_SUBMITTED` / `ARCHIVED` — `exams/handover/HandoverClient.tsx:197`.
+4. پذیرش/سنجش: `admissionSource`, `sanjesh/[id]/enrolled` (`status`, `onboardingStatus`), `SaminClient`, `printStatus` کارت دانشجویی.
+5. حقوق: `offeringType` / `professorRole` / `courseType` / `category` خام در فرمول‌ها و selectها (`LivePayrollClient`, `CoefficientsRulesTab`, `MultipliersTab`).
+6. چیپ خام `{g.status}` کنار عنوان فارسی در `DefenseSchedulingClient.tsx:162` و `sessionStatus` در `:316`.
+
+### ۱۲/۳) باگ‌های زندهٔ اصلاح‌شده روی تولید (بدون دیپلوی)
+
+- ایندکس یکتای سبد انتخاب واحد (بالا).
+
+### ۱۲/۴) ایندکس‌های تأییدشده برای تولید (فاز بعد)
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clearance_checklist_audit ON clearance_checklist ("auditId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_defense_sessions_student   ON defense_sessions ("studentId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_graduation_audits_uni_status_event
+  ON graduation_audits ("universityId","workflowStatus","lastEventAt" DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_thesis_progress_uni_updated
+  ON thesis_progress ("universityId","updatedAt" DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_course_rules_syllabus ON course_rules ("syllabusId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_curriculum_courses_course
+  ON curriculum_courses ("courseId") INCLUDE ("curriculumVersionId","recommendedSemester");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_student_documents_person
+  ON student_documents ("personUserId","id" DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_students_status_active
+  ON students ("status") WHERE "status" IN ('ACTIVE','PENDING_GRADUATION');
+```

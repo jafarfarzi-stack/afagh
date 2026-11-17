@@ -210,6 +210,22 @@ export async function adminSetGradeAction(
       return { ok: false, error: 'شناسه ارائه درس یا درس و ترم مربوطه یافت نشد.' };
     }
 
+    // 🔒 سخت‌سازی چند-مستأجری (fail-closed): اگر ردیف ثبت‌نام از قبل وجود دارد،
+    //    ارائهٔ آن هم باید متعلق به دانشگاه فعال باشد. پیش‌تر فقط خودِ دانشجو
+    //    بررسی می‌شد؛ یعنی ادمین دانشگاه A می‌توانست نمرهٔ داخل ارائهٔ دانشگاه B را
+    //    نهایی کند. universityId خالی (NULL) = انکار، نه اجازه.
+    if (existingEnrollment) {
+      const [offOwner] = await db
+        .select({ universityId: course_offerings.universityId })
+        .from(course_offerings)
+        .where(eq(course_offerings.id, existingEnrollment.offeringId))
+        .limit(1);
+      if (!offOwner) return { ok: false, error: 'ارائهٔ درس یافت نشد.' };
+      if (offOwner.universityId == null || offOwner.universityId !== uni.id) {
+        return { ok: false, error: 'ارائهٔ این درس متعلق به دانشگاه فعال نیست.' };
+      }
+    }
+
     // 🔒 قفل نمرهٔ نهایی‌شده: نوشتن روی ردیف FINALIZED فقط با درخواست
     //    بازگشاییِ تأییدشده (معاون آموزشی) مجاز است. پیش از این، این مسیر
     //    نمرهٔ قطعی را مستقیم بازنویسی می‌کرد و درخواست بازگشایی بی‌اثر بود.
@@ -785,7 +801,8 @@ export async function getUniversityId(): Promise<{ universityId: number | null }
 //  بررسی دومرحله‌ای درخواست بازگشایی نمرات نهایی‌شده
 //  مرحلهٔ ۱ (PENDING → REVIEWED|REJECTED): ADMIN / GRADUATEAFFAIRS
 //  مرحلهٔ ۲ (REVIEWED → APPROVED|REJECTED): فقط VICE_EDU (معاون آموزشی)
-//  با APPROVED: gradesFinalizedAt=NULL + بازگشت به TEMPORARY + لاگ UNFINALIZE
+//  با APPROVED: gradesFinalizedAt=NULL + ردیف‌های نمره → TEMPORARY + درخواست → APPLIED
+//  (APPLIED = وضعیت پایانیِ مصرف‌شده؛ همان مقداری که finalize-lock و UI استاد می‌شناسند)
 // ═══════════════════════════════════════════════════════════════════
 
 export async function reviewUnfinalizeAction(
@@ -827,10 +844,12 @@ export async function reviewUnfinalizeAction(
         return { ok: false, error: 'بررسی مرحلهٔ اول فقط با مدیر یا کارشناس فارغ‌التحصیلان است.' };
       }
     } else if (req.status === 'REVIEWED') {
-      // REVIEWED → APPROVED|REJECTED: فقط VICE_EDU (انحصاری)
-      try {
-        await requireRole(['VICE_EDU']);
-      } catch {
+      // REVIEWED → APPROVED|REJECTED: فقط VICE_EDU (انحصاری).
+      // ⚠ `requireRole(['VICE_EDU'])` به‌تنهایی کافی نیست: در `src/lib/auth.ts`
+      //    نقش ADMIN از هر فهرست نقشی عبور می‌کند، پس تفکیک وظایف شکسته می‌شد و
+      //    همان ادمین مرحلهٔ اول می‌توانست تأیید نهایی را هم انجام دهد. نقش باید
+      //    صریح بررسی شود.
+      if (!user.roles.includes('VICE_EDU')) {
         return { ok: false, error: 'تأیید نهایی فقط با معاون آموزشی است.' };
       }
     } else {
@@ -843,11 +862,11 @@ export async function reviewUnfinalizeAction(
       return { ok: false, error: 'STEPUP_REQUIRED:برای بررسی درخواست بازگشایی، ابتدا رمز عبور خود را تأیید کنید (تأیید دومرحله‌ای — ۱۰ دقیقه معتبر است).' };
     }
 
-    // اسکوپ دانشگاه (همان الگوی لاگ: cookie uni)
+    // اسکوپ دانشگاه (همان الگوی لاگ: cookie uni) — NULL = انکار (fail-closed)
     const { getCurrentUniversity } = await import('@/lib/university-scope');
     const uni = await getCurrentUniversity().catch(() => null);
     if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
-    if (req.universityId !== null && req.universityId !== uni.id) {
+    if (req.universityId == null || req.universityId !== uni.id) {
       return { ok: false, error: 'درخواست متعلق به دانشگاه دیگری است.' };
     }
     // دفاع‌عمقی NULL-uni: مالکیت دانشگاهی خود ارائه هم راستی‌آزمایی شود
@@ -855,10 +874,9 @@ export async function reviewUnfinalizeAction(
     const [offUni] = await db.select({ universityId: course_offerings.universityId })
       .from(course_offerings).where(eq(course_offerings.id, req.offeringId)).limit(1);
     if (!offUni) return { ok: false, error: 'ارائهٔ درخواست یافت نشد.' };
-    if (offUni.universityId !== null && offUni.universityId !== uni.id) {
+    if (offUni.universityId == null || offUni.universityId !== uni.id) {
       return { ok: false, error: 'ارائه متعلق به دانشگاه دیگری است.' };
     }
-    const offUniId = offUni.universityId ?? null;
 
     if (decision === 'APPROVED') {
       // اعتبارسنجی مهلت اختصاصی (اختیاری): فقط تاریخ واقعی با now < ext < now+60days
@@ -878,26 +896,53 @@ export async function reviewUnfinalizeAction(
           const locked = await tx
             .select({ status: grade_unfinalize_requests.status })
             .from(grade_unfinalize_requests)
-            .where(eq(grade_unfinalize_requests.id, requestId))
+            .where(and(
+              eq(grade_unfinalize_requests.id, requestId),
+              eq(grade_unfinalize_requests.universityId, uni.id),
+            ))
             .for('update');
           if (!locked[0] || locked[0].status !== 'REVIEWED') throw new Error('UNFINALIZE_STALE');
+          // ردیف درخواست به وضعیت پایانیِ «اعمال‌شده» می‌رود تا یک تأیید فقط
+          // یک‌بار قابل استفاده باشد (APPROVEDِ کهنه = کلید دائمی نشود).
           const updated = await tx
             .update(grade_unfinalize_requests)
-            .set({ status: 'APPROVED', reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
-            .where(and(eq(grade_unfinalize_requests.id, requestId), eq(grade_unfinalize_requests.status, 'REVIEWED')))
+            .set({ status: 'APPLIED', reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
+            .where(and(
+              eq(grade_unfinalize_requests.id, requestId),
+              eq(grade_unfinalize_requests.status, 'REVIEWED'),
+              eq(grade_unfinalize_requests.universityId, uni.id),
+            ))
             .returning({ id: grade_unfinalize_requests.id });
           if (updated.length === 0) throw new Error('UNFINALIZE_STALE');
+          // 🔓 بازگشایی واقعی: ردیف‌های نمره باید از FINALIZED به TEMPORARY برگردند.
+          //    در تولید ۶۶۱٬۰۰۶ ردیف FINALIZED بدون gradesFinalizedAt وجود دارد؛
+          //    قفل واقعی همین gradeStatus ردیف است و UI استاد isFinalized را از
+          //    روی همین ردیف‌ها مشتق می‌کند. پیش‌تر فقط پرچم ارائه پاک می‌شد و
+          //    تأیید عملاً هیچ اثری نداشت.
           await tx
+            .update(enrollments)
+            .set({ gradeStatus: 'TEMPORARY' })
+            .where(and(
+              eq(enrollments.offeringId, req.offeringId),
+              eq(enrollments.gradeStatus, 'FINALIZED'),
+            ));
+          const offUpd = await tx
             .update(course_offerings)
             .set({
               gradesFinalizedAt: null,
               gradesTemporaryAt: new Date(),
               ...(extDate ? { customGradeDeadline: extDate } : {}),
             })
-            // قید دانشگاهی فقط وقتی معلوم است (رکورد legacy با NULL همان id را می‌گیرد)
-            .where(offUniId !== null
-              ? and(eq(course_offerings.id, req.offeringId), eq(course_offerings.universityId, offUniId))
-              : eq(course_offerings.id, req.offeringId));
+            // مالکیت دانشگاهی ارائه پیش‌تر به‌صورت سخت (fail-closed) راستی‌آزمایی
+            // شده است؛ قید دانشگاهی برای دفاع‌عمقی باقی می‌ماند.
+            .where(and(
+              eq(course_offerings.id, req.offeringId),
+              eq(course_offerings.universityId, uni.id),
+            ))
+            .returning({ id: course_offerings.id });
+          // اگر ردیف ارائه در همین فاصله حذف/جابه‌جا شده باشد، تراکنش کامل برمی‌گردد
+          // تا نه ردیف نمره به TEMPORARY برگردد و نه درخواست APPLIED شود.
+          if (offUpd.length === 0) throw new Error('UNFINALIZE_STALE');
         });
       } catch (err) {
         if ((err as Error)?.message === 'UNFINALIZE_STALE') {
@@ -908,11 +953,15 @@ export async function reviewUnfinalizeAction(
       const { logBulkGradeChange } = await import('@/lib/grade-change-log');
       await logBulkGradeChange(req.offeringId, 'UNFINALIZE', user.id, 'ADMIN', cleanNote ?? 'تأیید بازگشایی نمرات توسط معاون آموزشی').catch(() => null);
     } else {
-      // REVIEWED یا REJECTED: فقط به‌روزرسانی ردیف درخواست
+      // REVIEWED یا REJECTED: فقط به‌روزرسانی ردیف درخواست (با قید دانشگاهیِ همان
+      // درخواستی که بالاتر مالکیتش راستی‌آزمایی شد)
       await db
         .update(grade_unfinalize_requests)
         .set({ status: decision, reviewedByUserId: user.id, reviewNote: cleanNote, reviewedAt: new Date() })
-        .where(eq(grade_unfinalize_requests.id, requestId));
+        .where(and(
+          eq(grade_unfinalize_requests.id, requestId),
+          eq(grade_unfinalize_requests.universityId, uni.id),
+        ));
     }
 
     revalidatePath('/admin/grades/audit');

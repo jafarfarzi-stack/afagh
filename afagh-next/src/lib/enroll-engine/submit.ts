@@ -10,6 +10,7 @@ import { offeringVisible } from '../offering-targeting';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
 import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
+import { assertEnrollmentWrite } from '../enrollment-window';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -121,6 +122,17 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     stuUni == null ? sql`1 = 0` : eq(academic_terms.universityId, stuUni),
   ));
   if (!term || !term.isEnrollmentOpen) { out.ok = false; out.hardErrors.push('پنجرهٔ انتخاب واحد بسته است.'); return out; }
+
+  // ⏳ گیت سروری پنجرهٔ انتخاب واحد — کارگر صف نباید به UI اعتماد کند.
+  //    همین تابع، همان قواعد action‌ها را اعمال می‌کند (پرچم + کلید سراسری + بازهٔ زمانی).
+  {
+    const gate = await assertEnrollmentWrite(term.id, 'ADD', D as any);
+    if (!gate.ok) {
+      out.ok = false;
+      out.hardErrors.push(gate.error);
+      return out;
+    }
+  }
 
   // گیت «فعال‌سازی ترم» (اختیاری — تنظیم ENFORCE_TERM_ACTIVATION)
   if (await import('../settings').then(m => m.getBool('ENFORCE_TERM_ACTIVATION')).catch(() => false)) {
@@ -401,8 +413,16 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     excluded: boolean;
     failMessage: string | null;
   };
+  // 🛡 ردیف تکراری سبد (offeringId یکسان) نباید دو صندلی claim کند و
+  //    enrolledCount را باد کند؛ پیش از claim/درج یکتا می‌شود.
+  const plannedOfferingIds = new Set<number>();
   const plans: SubmitPlan[] = activeOffs
     .filter(o => !already.has(o.id) && !softSet.has(o.id))
+    .filter(o => {
+      if (plannedOfferingIds.has(o.id)) return false;
+      plannedOfferingIds.add(o.id);
+      return true;
+    })
     .map(o => ({ o, gotSeat: false, redisSeatTaken: false, waitlisted: false, wlPos: null, excluded: false, failMessage: null }));
 
   const doSeat = deps.atomicSeat ?? atomicSeat;
@@ -495,6 +515,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
               studentId, offeringId: p.o.id, status: p.waitlisted ? 'WAITLISTED' : 'REGISTERED',
               waitlistPosition: p.waitlisted ? (p.wlPos ?? 1) : null,
               hasAcceptedSameDayExam: acceptSameDayRisk && examSoft.has(p.o.id) ? 1 : 0,
+              universityId: stuUni,
             })
             .onConflictDoUpdate({
               target: [enrollments.studentId, enrollments.offeringId],

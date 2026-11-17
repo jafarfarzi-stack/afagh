@@ -154,7 +154,7 @@ export default function EnrollClient(props: {
   /** شمارهٔ ترم جاریِ تحصیلیِ دانشجو (برای نمایش در بنر چارت) */
   studentTermOrdinal?: number | null;
   student: { id: number; status: string };
-  term: { id: number | null; title: string; open: boolean; isSummer?: boolean };
+  term: { id: number | null; title: string; open: boolean; isSummer?: boolean; windowState?: 'OPEN' | 'BEFORE' | 'AFTER' | 'CLOSED' | 'NO_TERM'; windowLabel?: string };
   offerings: OfferingItem[];
   cart: CartItem[];
   cartStartedAt: number | null;
@@ -196,6 +196,9 @@ export default function EnrollClient(props: {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const effectiveMaxUnits = props.regulationStatus?.effectiveMaxUnits ?? (props.term.isSummer ? 6 : 20);
+  const minAllowedUnits = props.regulationStatus?.minAllowedUnits ?? 0;
+  // یک منبع حقیقت برای «پنجره باز است؟» — همان مقداری که سرور محاسبه کرده
+  const windowOpen = props.term.open;
   const isBlockedCommission = props.student.status === 'BLOCKED_COMMISSION';
 
   // ⏱ مهلت ۱۵ دقیقه‌ای سبد (§۲۲۴۳)
@@ -263,6 +266,20 @@ export default function EnrollClient(props: {
 
   const expired = props.cart.length > 0 && remain <= 0;
   const totalUnits = props.cart.reduce((s, c) => s + c.units, 0);
+  // ── وضعیت واحدها بر پایهٔ سقف/کفِ آیین‌نامه (نه عدد ثابت ۲۰) ──
+  const overMaxUnits = totalUnits > effectiveMaxUnits;
+  const underMinUnits = minAllowedUnits > 0 && totalUnits > 0 && totalUnits < minAllowedUnits;
+  const unitStateLabel = overMaxUnits ? 'بیش از سقف' : underMinUnits ? 'کمتر از حداقل' : 'مجاز';
+  const windowClosedMessage = props.term.windowLabel?.trim()
+    || `پنجرهٔ انتخاب واحد برای «${props.term.title || '—'}» بسته است.`;
+  // عنوان بنر از وضعیتِ محاسبه‌شدهٔ سرور (BEFORE | OPEN | AFTER | CLOSED | NO_TERM)
+  const windowHeading = props.term.windowState === 'BEFORE'
+    ? 'پنجرهٔ انتخاب واحد هنوز باز نشده است.'
+    : props.term.windowState === 'AFTER'
+    ? 'مهلت انتخاب واحد پایان یافته است.'
+    : props.term.windowState === 'NO_TERM'
+    ? 'ترم جاری تعریف نشده است.'
+    : 'پنجرهٔ انتخاب واحد بسته است.';
   const mm = String(Math.floor(remain / 60)).padStart(2, '0');
   const ss = String(remain % 60).padStart(2, '0');
 
@@ -326,10 +343,22 @@ export default function EnrollClient(props: {
     return Object.values(cartConflicts).some(c => c.classConflicts.length > 0 || c.examConflicts.length > 0);
   }, [cartConflicts]);
 
+  // عملیاتِ سبد: نتیجهٔ سرور (از جمله گیتِ پنجرهٔ انتخاب واحد) باید دیده شود —
+  // پیش از این پیام موفقیت بی‌قید چاپ می‌شد، حتی وقتی سرور خطا برگردانده بود.
+  function failMsg(e: unknown) {
+    return `⛔ ${e instanceof Error && e.message ? e.message : 'ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.'}`;
+  }
+
   async function add(id: number) {
+    if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
     setBusy(true);
     setMsg('');
-    await addToCartAction(id);
+    try {
+      const r = await addToCartAction(id);
+      if (r && r.ok === false) setMsg(`⛔ ${r.error || 'افزودن به سبد ناموفق بود.'}`);
+    } catch (e) {
+      setMsg(failMsg(e));
+    }
     router.refresh();
     setBusy(false);
   }
@@ -343,6 +372,7 @@ export default function EnrollClient(props: {
   }
 
   async function requestBypass(id: number, kind: 'PREREQ' | 'EXAM_CONFLICT') {
+    if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
     setBusy(true);
     setMsg('در حال ثبت درخواست…');
     const res = await requestBypassAction(id, kind);
@@ -364,22 +394,33 @@ export default function EnrollClient(props: {
   }
 
   async function switchGroup(newOfferingId: number) {
+    if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
     setBusy(true);
     setMsg('در حال جابجایی به گروه بدون تداخل...');
-    await addToCartAction(newOfferingId);
+    try {
+      const r = await addToCartAction(newOfferingId);
+      setMsg(r && r.ok === false
+        ? `⛔ ${r.error || 'جابجایی به گروه دیگر ناموفق بود.'}`
+        : '✅ درس به گروه بدون تداخل جابجا گردید.');
+    } catch (e) {
+      setMsg(failMsg(e));
+    }
     router.refresh();
     setBusy(false);
-    setMsg('✅ درس به گروه بدون تداخل جابجا گردید.');
   }
 
   async function clearAll() {
     if (!(await askConfirm({ title: 'تأیید عملیات', body: 'آیا از خالی کردن تمام دروس موجود در سبد انتخاب واحد مطمئن هستید؟', confirmText: 'تأیید', cancelText: 'انصراف', danger: true }))) return;
     setBusy(true);
     setMsg('');
-    await clearCartAction();
+    try {
+      const r = await clearCartAction();
+      setMsg(r && r.ok === false ? `⛔ ${r.error || 'خالی کردن سبد ناموفق بود.'}` : 'سبد انتخاب واحد کاملاً خالی گردید.');
+    } catch (e) {
+      setMsg(failMsg(e));
+    }
     router.refresh();
     setBusy(false);
-    setMsg('سبد انتخاب واحد کاملاً خالی گردید.');
   }
 
   // ── فاز ۱۰: گارد تداخل امتحان (HARD مسدود / SOFT با تأییدیهٔ دیجیتال) ──
@@ -391,6 +432,10 @@ export default function EnrollClient(props: {
   const [submittingRisk, setSubmittingRisk] = useState(false);
 
   async function submit() {
+    if (!windowOpen) {
+      setMsg(`⛔ ${windowClosedMessage}`);
+      return;
+    }
     if (totalUnits > effectiveMaxUnits) {
       toast(`مجموع واحدهای انتخابی (${totalUnits} واحد) از سقف مجاز آیین‌نامه برای شما (${effectiveMaxUnits} واحد) بیشتر است.`, 'error');
       return;
@@ -413,6 +458,10 @@ export default function EnrollClient(props: {
 
     const res = await submitCartAction();
     setBusy(false);
+    if (res.error) {
+      setMsg(`⛔ ${res.error}`);
+      return;
+    }
     if (res.limited) {
       setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).');
       return;
@@ -431,6 +480,11 @@ export default function EnrollClient(props: {
   }
 
   async function submitWithRisk() {
+    if (!windowOpen) {
+      setConflictModal(null);
+      setMsg(`⛔ ${windowClosedMessage}`);
+      return;
+    }
     setSubmittingRisk(true);
     setConflictModal(null);
     setBusy(true);
@@ -439,6 +493,7 @@ export default function EnrollClient(props: {
     const res = await submitCartAction(true);
     setBusy(false);
     setSubmittingRisk(false);
+    if (res.error) { setMsg(`⛔ ${res.error}`); return; }
     if (res.limited) { setMsg('سرعت درخواست‌ها بیش از حد مجاز است — چند لحظه صبر کنید (سپر نرخ).'); return; }
     if (res.direct && res.result) { setResult(res.result); router.refresh(); return; }
     if (!res.queued) { setMsg('ورود به صف ناموفق بود.'); return; }
@@ -454,13 +509,14 @@ export default function EnrollClient(props: {
   }
 
   async function autoFill() {
+    if (!windowOpen) { setMsg(`⛔ ${windowClosedMessage}`); return; }
     setBusy(true);
     setMsg('در حال چیدمان هوشمند و خودکار دروس ترم با کنترل ظرفیت و عدم تداخل...');
     const res = await autoFillCartFromChartAction();
     if (res.ok) {
       setMsg(`✅ ${res.message}`);
     } else {
-      setMsg('خطا در چیدمان دروس چارت.');
+      setMsg(`⛔ ${res.message || 'خطا در چیدمان دروس چارت.'}`);
     }
     router.refresh();
     setBusy(false);
@@ -663,11 +719,11 @@ export default function EnrollClient(props: {
       </Link>
 
       {/* دکمه انتخاب هوشمند و سریع از روی چارت — فقط در زمان باز‌بودن پنجرهٔ انتخاب واحد */}
-      {props.term.open && (
+      {windowOpen && (
         <div className="card !p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-2xl border-0 shadow-lg flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-extrabold text-white text-sm sm:text-base flex items-center gap-2">
-              <span>🤖</span>
+              <span aria-hidden="true">🤖</span>
               <span>انتخاب واحد هوشمند بر اساس چارت سرفصل و کنترل تداخل</span>
             </h3>
             <p className="text-xs text-emerald-200 mt-0.5">
@@ -677,20 +733,32 @@ export default function EnrollClient(props: {
           <div className="flex items-center gap-2">
             <button
               onClick={autoFill}
-              disabled={busy || isBlockedCommission}
+              disabled={busy || isBlockedCommission || !windowOpen}
               className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              <span>⚡</span>
+              <span aria-hidden="true">⚡</span>
               <span>چیدمان خودکار دروس ترم (بدون تداخل)</span>
             </button>
           </div>
         </div>
       )}
 
-      {!props.term.open && (
-        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
-          پنجرهٔ انتخاب واحد برای «{props.term.title || '—'}» بسته است.
-        </p>
+      {!windowOpen && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 border border-amber-200 space-y-1"
+        >
+          <p className="font-extrabold">
+            ⛔ {windowHeading}
+          </p>
+          <p className="text-xs leading-relaxed">
+            «{props.term.title || '—'}» — {windowClosedMessage}
+          </p>
+          <p className="text-2xs text-amber-800">
+            تا بازشدن پنجره، دکمه‌های افزودن به سبد، چیدمان خودکار، درخواست بدون رعایت محدودیت و ثبت نهایی غیرفعال است.
+          </p>
+        </div>
       )}
 
       {/* مهلت تکمیل سبد */}
@@ -706,22 +774,12 @@ export default function EnrollClient(props: {
         >
           <div className="flex items-center gap-2 text-xs font-bold">
             <span>⏱️</span>
-            <span>مهلت نهایی‌سازی و رزرو صندلی در سبد:</span>
+            <span>زمان تقریبی ساخت سبد (صندلی فقط هنگام «ثبت نهایی» رزرو می‌شود):</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="font-mono text-base font-extrabold tracking-wider" dir="ltr">
-              {expired ? 'منقضی شده' : `${faNum(mm)}:${faNum(ss)}`}
+              {expired ? 'بیش از ۱۵ دقیقه' : `${faNum(mm)}:${faNum(ss)}`}
             </span>
-            {expired && (
-              <button
-                onClick={() => {
-                  setRemain(15 * 60);
-                }}
-                className="text-2xs bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg"
-              >
-                🔄 تمدید مهلت
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -760,17 +818,19 @@ export default function EnrollClient(props: {
           <div className="flex items-center gap-3">
             <h2 className="font-extrabold text-base text-slate-900">🛒 سبد انتخاب واحد</h2>
             <span
-              className={`text-xs px-3 py-1 rounded-full font-bold inline-flex items-center gap-1.5 ${
-                totalUnits > 20
+              className={`text-xs px-3 py-1 rounded-full font-bold inline-flex flex-wrap items-center gap-1.5 ${
+                overMaxUnits
                   ? 'bg-rose-100 text-rose-800'
-                  : totalUnits >= 12
-                  ? 'bg-emerald-100 text-emerald-900'
-                  : 'bg-amber-100 text-amber-900'
+                  : underMinUnits
+                  ? 'bg-amber-100 text-amber-900'
+                  : 'bg-emerald-100 text-emerald-900'
               }`}
             >
               <span>{faNum(totalUnits)} واحد</span>
               <span>({faNum(props.cart.length)} درس)</span>
-              <span>— سقف مجاز: {faNum(20)} واحد</span>
+              <span>— سقف مجاز: {faNum(effectiveMaxUnits)} واحد</span>
+              {minAllowedUnits > 0 && <span>· حداقل: {faNum(minAllowedUnits)} واحد</span>}
+              <span className="font-black">· {unitStateLabel}</span>
             </span>
           </div>
 
@@ -839,14 +899,15 @@ export default function EnrollClient(props: {
                       })()}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {conf?.alternateGroup && (
                         <button
                           onClick={() => switchGroup(conf.alternateGroup!.id)}
-                          disabled={busy}
-                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-sm transition-all flex items-center gap-1"
+                          disabled={busy || !windowOpen}
+                          aria-label={`تغییر «${c.title}» به گروه ${faNum(conf.alternateGroup.group)} بدون تداخل`}
+                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
                         >
-                          <span>🔄</span>
+                          <span aria-hidden="true">🔄</span>
                           <span>انتقال به گروه {faNum(conf.alternateGroup.group)} (بدون تداخل)</span>
                         </button>
                       )}
@@ -854,9 +915,10 @@ export default function EnrollClient(props: {
                       <button
                         className="text-xs bg-white hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-300 px-3 py-1.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 flex items-center gap-1"
                         disabled={busy}
+                        aria-label={`حذف «${c.title}» از سبد`}
                         onClick={() => remove(c.id)}
                       >
-                        <span>✕</span>
+                        <span aria-hidden="true">✕</span>
                         <span>حذف از سبد</span>
                       </button>
                     </div>
@@ -910,17 +972,24 @@ export default function EnrollClient(props: {
           </div>
         )}
 
-        {totalUnits > 20 && (
+        {overMaxUnits && (
           <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
             <span>⛔</span>
-            <span>تعداد واحدهای سبد ({faNum(totalUnits)} واحد) بیش از سقف مجاز ترمیک ({faNum(20)} واحد) است. لطفاً حداقل {faNum(totalUnits - 20)} واحد را حذف کنید.</span>
+            <span>تعداد واحدهای سبد ({faNum(totalUnits)} واحد) بیش از سقف مجاز ترمیک ({faNum(effectiveMaxUnits)} واحد) است. لطفاً حداقل {faNum(totalUnits - effectiveMaxUnits)} واحد را حذف کنید.</span>
+          </div>
+        )}
+
+        {underMinUnits && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 font-bold flex items-center gap-2">
+            <span>⚠️</span>
+            <span>تعداد واحدهای سبد ({faNum(totalUnits)} واحد) کمتر از حداقل مجاز این ترم ({faNum(minAllowedUnits)} واحد) است؛ حداقل {faNum(minAllowedUnits - totalUnits)} واحد دیگر اضافه کنید.</span>
           </div>
         )}
 
         {props.cart.length > 0 && (
           <button
             className="btn-primary mt-3 w-full py-3 text-sm font-extrabold shadow-lg rounded-xl"
-            disabled={busy || totalUnits > 20 || queuePos !== null || processing}
+            disabled={busy || overMaxUnits || !windowOpen || queuePos !== null || processing}
             onClick={submit}
           >
             {busy ? 'در حال ارسال و رزرو…' : `ثبت نهایی و اخذ قطعی (${faNum(totalUnits)} واحد)`}
@@ -975,13 +1044,17 @@ export default function EnrollClient(props: {
       )}
 
       {msg && (
-        <div className="rounded-xl bg-slate-900 text-white p-3 text-center text-xs font-bold animate-fade-in shadow-md">
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-xl bg-slate-900 text-white p-3 text-center text-xs font-bold animate-fade-in shadow-md"
+        >
           {msg}
         </div>
       )}
 
       {result && (
-        <div className="space-y-2">
+        <div className="space-y-2" role="status" aria-live="polite">
           {result.ok && result.registered.length > 0 && (
             <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 border border-emerald-300 font-bold space-y-2 shadow-sm">
               <div className="flex items-center justify-between">
@@ -1023,7 +1096,7 @@ export default function EnrollClient(props: {
                 {e.msg.startsWith('تداخل نرم امتحان') && (
                   <button
                     className="bg-white hover:bg-amber-100 text-amber-800 border border-amber-400 rounded-lg !py-1 !px-2 text-xs font-bold disabled:opacity-50"
-                    disabled={busy}
+                    disabled={busy || !windowOpen}
                     onClick={() => requestBypass(e.offeringId, 'EXAM_CONFLICT')}
                   >
                     درخواست بدون رعایت تداخل امتحانی
@@ -1172,37 +1245,41 @@ export default function EnrollClient(props: {
                     <button
                       className="bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-300 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
                       disabled={busy}
+                      aria-label={`حذف «${o.title}» از سبد`}
                       onClick={() => remove(o.id)}
                     >
-                      <span>✕</span>
+                      <span aria-hidden="true">✕</span>
                       <span>حذف از سبد</span>
                     </button>
                   ) : otherGroupInCart ? (
                     <button
                       className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      disabled={busy || !props.term.open}
+                      disabled={busy || !windowOpen}
+                      aria-label={`تغییر «${o.title}» به گروه ${faNum(o.group)}`}
                       onClick={() => add(o.id)}
                     >
-                      <span>🔄</span>
+                      <span aria-hidden="true">🔄</span>
                       <span>تغییر به گروه {faNum(o.group)}</span>
                     </button>
                   ) : full ? (
                     <button
                       className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      disabled={busy || !props.term.open}
+                      disabled={busy || !windowOpen}
+                      aria-label={`افزودن «${o.title}» به سبد و ورود به اتاق انتظار`}
                       onClick={() => add(o.id)}
                       title="ظرفیت این گروه تکمیل است؛ با افزودن، در اتاق انتظار قرار می‌گیرید و به محض آزادشدن صندلی، خودکار ثبت و اعلان می‌شوید"
                     >
-                      <span>⏳</span>
+                      <span aria-hidden="true">⏳</span>
                       <span>ورود به اتاق انتظار</span>
                     </button>
                   ) : (
                     <button
                       className="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      disabled={busy || !props.term.open}
+                      disabled={busy || !windowOpen}
+                      aria-label={`افزودن «${o.title}» به سبد`}
                       onClick={() => add(o.id)}
                     >
-                      <span>➕</span>
+                      <span aria-hidden="true">➕</span>
                       <span>افزودن به سبد</span>
                     </button>
                   )}
@@ -1210,11 +1287,12 @@ export default function EnrollClient(props: {
                   {o.prereqMet === false && !inCart && !openPrereqRequest && (
                     <button
                       className="bg-white hover:bg-amber-100 text-amber-800 border border-amber-400 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-                      disabled={busy || !props.term.open}
+                      disabled={busy || !windowOpen}
+                      aria-label={`درخواست اخذ «${o.title}» بدون رعایت پیش‌نیاز`}
                       onClick={() => requestBypass(o.id, 'PREREQ')}
                       title="درخواست ثبت این درس بدون رعایت پیش‌نیاز؛ ظرفیت برای شما رزرو و به مدیر گروه ارجاع می‌شود"
                     >
-                      <span>📝</span>
+                      <span aria-hidden="true">📝</span>
                       <span>درخواست بدون رعایت پیش‌نیاز</span>
                     </button>
                   )}

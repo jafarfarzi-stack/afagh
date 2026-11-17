@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { course_offerings, grade_unfinalize_requests } from '@/db/schema';
+import { course_offerings, enrollments, grade_unfinalize_requests } from '@/db/schema';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -72,6 +72,68 @@ export async function assertGradeWriteAllowed(
       ok: false,
       allowed: false,
       error: 'نمرات این درس نهایی شده است. برای هر تغییر، ابتدا درخواست بازگشایی نمره ثبت و پس از تأیید معاون آموزشی اقدام کنید.',
+    };
+  }
+  return { ok: true, allowed: true };
+}
+
+/**
+ * مهلت ثبت نمرهٔ یک ارائه.
+ *
+ * مهلت اختصاصیِ ارائه (`customGradeDeadline`) بر مهلت کل ترم
+ * (`academic_terms.gradeEntryDeadline`) اولویت دارد؛ اگر هیچ‌کدام تعیین نشده
+ * باشد، ثبت نمره بدون محدودیت زمانی مجاز است. مقایسه در خودِ SQL و با
+ * `now()` انجام می‌شود تا ساعت سرورِ برنامه ملاک نباشد.
+ *
+ * ⚠️ امروز `gradeEntryDeadline` ترم جاری NULL است؛ این تابع در آن حالت
+ * «مجاز» برمی‌گرداند و رفتار فعلی را تغییر نمی‌دهد.
+ */
+export async function assertGradeDeadline(offeringId: number): Promise<FinalizedWriteGate> {
+  const res = await db.execute(sql`
+    SELECT (
+      COALESCE(o."customGradeDeadline", t."gradeEntryDeadline") IS NULL
+      OR now() <= COALESCE(o."customGradeDeadline", t."gradeEntryDeadline")
+    ) AS allowed
+      FROM course_offerings o
+      JOIN academic_terms t ON t.id = o."termId"
+     WHERE o.id = ${offeringId}
+     LIMIT 1`);
+  const row = res.rows[0] as { allowed: boolean } | undefined;
+  // ارائه/ترم یافت نشد ⇒ بستنِ مسیر (fail closed)
+  if (!row) return { ok: false, allowed: false, error: 'ارائهٔ درس یافت نشد.' };
+
+  if (!row.allowed) {
+    return {
+      ok: false,
+      allowed: false,
+      error: 'مهلت ثبت نمرهٔ این درس به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.',
+    };
+  }
+  return { ok: true, allowed: true };
+}
+
+/**
+ * آیا نمرهٔ همین ردیف (دانشجو × ارائه) قابل نوشتن است؟
+ *
+ * قفلِ سطحِ ارائه (که با `gradesFinalizedAt` کار می‌کند) عملاً در داده‌های
+ * فعلی چیزی را محافظت نمی‌کند؛ ردیف‌های `FINALIZED` باید مستقل بررسی شوند.
+ * نبودِ ردیف مجاز است: فراخوان خودش می‌داند که ردیفی وجود ندارد و
+ * ساخت/رد کردن آن را جداگانه تصمیم می‌گیرد.
+ */
+export async function assertRowGradeWritable(
+  studentId: number,
+  offeringId: number,
+): Promise<FinalizedWriteGate> {
+  const [row] = await db
+    .select({ gradeStatus: enrollments.gradeStatus })
+    .from(enrollments)
+    .where(and(eq(enrollments.studentId, studentId), eq(enrollments.offeringId, offeringId)))
+    .limit(1);
+  if (row?.gradeStatus === 'FINALIZED') {
+    return {
+      ok: false,
+      allowed: false,
+      error: 'نمرهٔ این دانشجو قطعی شده است؛ برای تغییر آن درخواست بازگشایی ثبت کنید.',
     };
   }
   return { ok: true, allowed: true };

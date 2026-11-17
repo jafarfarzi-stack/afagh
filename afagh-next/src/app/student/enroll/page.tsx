@@ -24,6 +24,7 @@ import { offeringVisible } from '@/lib/offering-targeting';
 import { evaluateStudentRegulationStatus, type StudentAcademicSummary } from '@/lib/regulations-engine';
 import { getBool, getSetting } from '@/lib/settings';
 import { toShamsi } from '@/lib/shamsi';
+import { windowStatus } from '@/lib/enrollment-window';
 import EnrollClient from './EnrollClient';
 import { emergencyDropFormAction } from './actions';
 import { resolveTuitionRule, type TuitionRuleContext } from '@/lib/tuition-resolver';
@@ -316,16 +317,20 @@ export default async function EnrollPage() {
     };
   });
 
-  // ── وضعیت پنجرهٔ انتخاب واحد: پرچم ترم + کلید سراسری مدیر + مهلت حذف و اضافه ──
-  // پیش از این فقط isEnrollmentOpen ترم بررسی می‌شد؛ اگر تاریخ مهلت گذشته
-  // یا مدیر کلید سراسری را خاموش کرده بود، صفحه هنوز باز نشان داده می‌شد.
+  // ── وضعیت پنجرهٔ انتخاب واحد: پرچم ترم + کلید سراسری مدیر + مهلت‌ها ──
+  // پیش از این فقط isEnrollmentOpen ترم بررسی می‌شد و مقدار محاسبه‌شده هم
+  // به کلاینت پاس نمی‌شد (`open: !!term.isEnrollmentOpen`)؛ اکنون «وضعیت واقعی»
+  // و برچسب انسانیِ «کِی باز/بسته می‌شود» به کلاینت می‌رود.
   const [enrollmentWindowOpen, emergencyWithdrawOpen] = await Promise.all([
     getBool('ENROLLMENT_WINDOW_OPEN').catch(() => true),
     getBool('EMERGENCY_WITHDRAW_OPEN').catch(() => false),
   ]);
-  const addDropEnd = term?.addDropEndDate ?? null;
-  const addDropTimeOpen = !addDropEnd || addDropEnd.getTime() >= Date.now();
-  const enrollOpen = !!term?.isEnrollmentOpen && enrollmentWindowOpen && addDropTimeOpen;
+  const win = windowStatus(term);
+  // کلید سراسری مدیر هم شرط است — هم‌راستا با assertEnrollmentWrite
+  const enrollOpen = win.state === 'OPEN' && enrollmentWindowOpen;
+  const windowLabel = win.open && !enrollmentWindowOpen
+    ? 'انتخاب واحد موقتاً توسط آموزش بسته شده است.'
+    : win.label;
 
   // ── دروس ثبت‌شدهٔ همین نیمسال (از داشبورد به اینجا منتقل شد) ──
   const studentEnrollments = term
@@ -392,7 +397,7 @@ export default async function EnrollPage() {
       <EnrollClient
         sajjadPortalUrl={await getSetting('SAJJAD_PORTAL_URL')}
         student={{ id: me.id, status: me.status }}
-        term={{ id: term?.id ?? null, title: term?.title ?? '', open: !!term?.isEnrollmentOpen, isSummer: !!term?.isSummer }}
+        term={{ id: term?.id ?? null, title: term?.title ?? '', open: enrollOpen, isSummer: !!term?.isSummer, windowState: win.state, windowLabel }}
         offerings={offerings}
         cart={cartList}
         cartStartedAt={cart.length ? cart.map(c => c.createdAt?.getTime?.() ?? 0).filter(Boolean).sort((a, b) => a - b)[0] || null : null}
