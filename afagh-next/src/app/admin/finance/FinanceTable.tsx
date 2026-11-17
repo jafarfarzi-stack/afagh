@@ -24,7 +24,10 @@ export type FinanceStudent = {
 };
 
 const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
-const faYear = (y: number | null) => (y ? fa(y) : '—');
+/** ارقام فارسی بدون جداکنندهٔ هزارگان — برای «شناسه»ها (سال ورود، کد، شماره). */
+const faDigits = (v: string | number) => String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+// 🔒 سال ورود شناسه است نه کمیت: «۱۳۹۴» نباید «۱٬۳۹۴» شود.
+const faYear = (y: number | null) => (y != null && y > 0 ? faDigits(y) : '-');
 const money = (n: number) => (n > 0 ? fa(n) : '—');
 
 export default function FinanceTable({ students }: { students: FinanceStudent[] }) {
