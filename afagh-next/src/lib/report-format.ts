@@ -37,8 +37,19 @@ export function formatReportCell(value: unknown, format?: string): string {
   switch (format) {
     case 'DATE': return jalaliSmart(value);
     case 'DATETIME': return jalaliSmart(value, true);
-    case 'MONEY': return `${faNum(Math.round(Number(value) || 0).toLocaleString('en-US'))} ریال`;
-    case 'NUMBER': return faNum(Number(value).toLocaleString('en-US'));
+    case 'MONEY': {
+      /* 🔒 علامت منفی باید پیش از رقم بیاید؛ قبلاً «۱٬۰۰۰-» چاپ می‌شد
+         (dash در RTL به سمت راست عدد می‌رفت) و با ستون‌های NUMBER ناهمخوان بود.
+         مقدار غیرعددی هم «—» می‌شود، نه صفرِ خاموش. */
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      const r = Math.round(n);
+      return `${r < 0 ? '−' : ''}${faNum(Math.abs(r).toLocaleString('en-US'))} ریال`;
+    }
+    case 'NUMBER': {
+      const n = Number(value);
+      return Number.isFinite(n) ? faNum(n.toLocaleString('en-US')) : '—';
+    }
     /* سال (۱۴۰۳، ۱۴۰۵…) — «شناسه» است نه «کمیت»؛ جداکنندهٔ هزارگان نباید بگیرد.
        قبلاً همین ستون‌ها با NUMBER رندر می‌شدند و «۱۴۰۳» به «۱٬۴۰۳» تبدیل می‌شد. */
     case 'YEAR': return faNum(String(value).trim());

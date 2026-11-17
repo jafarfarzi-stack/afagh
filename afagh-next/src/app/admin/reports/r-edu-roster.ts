@@ -169,8 +169,10 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
       const ranked = topN > 0 ? withGpa.slice(0, topN) : withGpa;
 
       const page = Math.max(1, Number(f.page) || 1);
-      const start = (page - 1) * PER;
-      const rows = ranked.slice(start, start + PER).map(s => ({
+      // 🔒 سقف صفحه از درخواست (چاپ/CSV pageSize=500 می‌فرستد)
+      const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
+      const start = (page - 1) * per;
+      const rows = ranked.slice(start, start + per).map(s => ({
         rank: s.rank,
         code: s.code,
         name: s.name,
@@ -190,8 +192,8 @@ export async function run(kind: string, f: ReportFilters & Record<string, unknow
         rows,
         total: ranked.length,
         page,
-        per: PER,
-        totalPages: Math.max(1, Math.ceil(ranked.length / PER)),
+        per,
+        totalPages: Math.max(1, Math.ceil(ranked.length / per)),
         summary: `${ranked.length.toLocaleString('fa-IR')} دانشجو دارای ${gpaLabel} — مرتب‌شده نزولی با رتبه`
           + (topN > 0 ? ` (برترین‌های انتخاب‌شده: ${topN.toLocaleString('fa-IR')} نفر)` : '')
           + (capped ? ` · توجه: جمعیت واجد شرایط از سقف ${CAP.toLocaleString('fa-IR')} نفر بیشتر بود؛ برای رتبه‌بندی دقیق‌تر رشته/مقطع/سال و نیمسال ورود را فیلتر کنید.` : ''),

@@ -279,12 +279,14 @@ async function prereqViolations(f: ExtFilters): Promise<ReportResult> {
   rows.sort((a, b) => String(a.code).localeCompare(String(b.code), 'fa') || String(a.course).localeCompare(String(b.course), 'fa'));
 
   const page = Math.max(1, f.page || 1);
-  const totalPages = Math.max(1, Math.ceil(rows.length / PER));
+  // 🔒 سقف صفحه از درخواست (چاپ/CSV pageSize=500 می‌فرستد)
+  const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
+  const totalPages = Math.max(1, Math.ceil(rows.length / per));
   const safe = Math.min(page, totalPages);
   const note = badRules ? ` — ${badRules} قاعدهٔ خراب نادیده گرفته شد` : '';
   return {
-    columns, rows: rows.slice((safe - 1) * PER, safe * PER),
-    total: rows.length, page: safe, per: PER, totalPages,
+    columns, rows: rows.slice((safe - 1) * per, safe * per),
+    total: rows.length, page: safe, per, totalPages,
     summary: `${rows.length.toLocaleString('fa-IR')} مورد عدم رعایت پیش‌نیاز/هم‌نیاز در ترم ${term} (مبنای قبولی: نمرهٔ نهایی ۱۰ به بالا در ترم‌های قبل طبق sortOrder؛ هم‌نیاز با اخذ هم‌زمان هم پوشش داده می‌شود)${note}`,
   };
 }

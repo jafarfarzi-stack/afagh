@@ -29,10 +29,12 @@ const GRAD_ROLES = ['ADMIN', 'GRADUATEAFFAIRS'];
 
 function pageOf<T>(columns: ReportResult['columns'], all: T[], f: ReportFilters, summary?: string): ReportResult {
   const total = all.length;
-  const totalPages = Math.max(1, Math.ceil(total / PER));
+  // 🔒 اندازهٔ صفحه را از درخواست بگیر (مسیر چاپ/CSV مقدار بزرگ‌تری می‌فرستد).
+  const per = Math.min(Math.max(1, Number(f.pageSize) || PER), 1000);
+  const totalPages = Math.max(1, Math.ceil(total / per));
   const page = Math.min(Math.max(1, f.page || 1), totalPages);
-  const rows = all.slice((page - 1) * PER, page * PER) as unknown as Record<string, unknown>[];
-  return { columns, rows, total, page, per: PER, totalPages, summary };
+  const rows = all.slice((page - 1) * per, page * per) as unknown as Record<string, unknown>[];
+  return { columns, rows, total, page, per, totalPages, summary };
 }
 
 async function resolveTermId(code: string, universityId?: number): Promise<number | undefined> {

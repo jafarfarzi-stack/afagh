@@ -484,6 +484,12 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
   };
 
   const doExport = async () => {
+    // 🔒 خروجی باید همان چیزی باشد که روی صفحه است؛ با فیلترِ تغییریافته و
+    //    بدون اجرا، فایل با جدول ناهمخوان می‌شد.
+    if (staleResult) {
+      setErr('نتیجهٔ نمایش‌داده‌شده با فیلترهای فعلی هم‌خوان نیست؛ ابتدا «▶ اجرای گزارش» را بزنید.');
+      return;
+    }
     setExporting(true);
     setErr('');
     try {
@@ -580,7 +586,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
           </button>
           {res && res.rows.length > 0 && (
             <>
-              <button onClick={doExport} disabled={exporting} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded disabled:opacity-50 mr-auto">
+              <button onClick={doExport} disabled={exporting || staleResult} title={staleResult ? 'ابتدا گزارش را اجرا کنید' : undefined} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded disabled:opacity-50 mr-auto">
                 {exporting ? '⏳...' : '📥 خروجی Excel (CSV)'}
               </button>
               <ReportPrint
@@ -603,7 +609,9 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 universityTitle={opts.universityTitle}
                 universityLogoUrl={opts.universityLogoUrl}
                 signers={opts.signers}
-                fetchAll={() => fetchReportForPrint(kind, { ...filters })}
+                fetchAll={staleResult
+                  ? async () => ({ rows: res.rows, total: res.total, truncated: false })
+                  : () => fetchReportForPrint(kind, { ...filters })}
               />
             </>
           )}
