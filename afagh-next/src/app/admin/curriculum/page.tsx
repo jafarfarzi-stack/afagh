@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { departments, faculties, majors } from '@/db/schema';
@@ -79,7 +80,18 @@ export default async function AdminCurriculumPage({
   });
 
   return (
-    <CurriculumManagerClient
+    <>
+      {/* میان‌بر به تابلوی «پوشش چارت رشته‌ها» — فقط یک پیوند در نوار بالای صفحه،
+          بدون هیچ تغییری در ساختار یا وضعیت خودِ ماژول برنامهٔ درسی. */}
+      <div dir="rtl" className="flex items-center justify-end px-3 pt-3 sm:px-6 sm:pt-5 print:hidden">
+        <Link
+          href="/admin/curriculum/coverage"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-2xs font-extrabold text-indigo-900 shadow-sm hover:bg-indigo-50 transition"
+        >
+          🧭 پوشش چارت رشته‌ها
+        </Link>
+      </div>
+      <CurriculumManagerClient
       tab={tabParam}
       version={versionId}
       detail={detailRes?.ok ? (detailRes.data as unknown as VersionDetail) : null}
@@ -102,6 +114,7 @@ export default async function AdminCurriculumPage({
         tracks: ov.tracks.map((t) => ({ id: t.id, code: null, title: t.title })),
         terms: (ov.terms ?? []).map((t) => ({ id: t.id, termCode: t.termCode, title: t.title })),
       }}
-    />
+      />
+    </>
   );
 }
