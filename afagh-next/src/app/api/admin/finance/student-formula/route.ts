@@ -8,7 +8,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
-import { assertCsrf } from '@/lib/security';
+import { assertCsrf, requireStudentUniversity } from '@/lib/security';
 import { escapeLikeChars } from '@/lib/persian-search';
 
 
@@ -187,6 +187,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'zero_formula' }, { status: 400 });
     }
 
+    // 🔒 مرز دانشگاه: با studentId دلخواه نمی‌توان برای دانشجوی دانشگاه دیگر
+    //    override نوشت (قبلاً فقط «وجود» دانشجو چک می‌شد).
+    const gate = await requireStudentUniversity(studentId);
+    if (!gate.ok) return NextResponse.json({ error: 'forbidden', detail: gate.error }, { status: 403 });
+
     const [student] = await db
       .select({ id: students.id })
       .from(students)
@@ -255,11 +260,15 @@ export async function PATCH(req: NextRequest) {
     if (Object.keys(parsed.data).length === 0) {
       return NextResponse.json({ error: 'empty_patch' }, { status: 400 });
     }
+    const uniId = Number((await getCurrentUniversity().catch(() => null))?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return NextResponse.json({ error: 'university_required' }, { status: 403 });
+    }
     const result = await db.transaction(async (tx) => {
       const [before] = await tx
         .select()
         .from(student_tuition_overrides)
-        .where(eq(student_tuition_overrides.id, id))
+        .where(and(eq(student_tuition_overrides.id, id), universityEq(student_tuition_overrides.universityId, uniId)))
         .for('update')
         .limit(1);
       if (!before) return null;
@@ -280,7 +289,7 @@ export async function PATCH(req: NextRequest) {
       const [row] = await tx
         .update(student_tuition_overrides)
         .set(values)
-        .where(eq(student_tuition_overrides.id, id))
+        .where(and(eq(student_tuition_overrides.id, id), universityEq(student_tuition_overrides.universityId, uniId)))
         .returning({ id: student_tuition_overrides.id });
       await appendAudit(tx, {
         actorUserId: user.id,
@@ -315,10 +324,14 @@ export async function DELETE(req: NextRequest) {
     if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
+    const uniId = Number((await getCurrentUniversity().catch(() => null))?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return NextResponse.json({ error: 'university_required' }, { status: 403 });
+    }
     const deleted = await db.transaction(async (tx) => {
       const [row] = await tx
         .delete(student_tuition_overrides)
-        .where(eq(student_tuition_overrides.id, id))
+        .where(and(eq(student_tuition_overrides.id, id), universityEq(student_tuition_overrides.universityId, uniId)))
         .returning({ id: student_tuition_overrides.id });
       if (!row) return null;
       await appendAudit(tx, {

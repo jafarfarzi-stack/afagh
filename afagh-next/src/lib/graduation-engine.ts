@@ -23,6 +23,7 @@ import { buildEquivalenceIndex, expandPassedCourseIds } from '@/lib/course-equiv
 import { safeRials } from '@/lib/money';
 import { appendAudit } from '@/lib/audit';
 import { getStudentCompliance } from '@/lib/compliance-policy-server';
+import { isRealUniversityId } from '@/lib/university-scope';
 import { comprehensiveExamGraduationReasons, thesisQualitativeGraduationReasons } from '@/lib/compliance-integrations';
 import {
   loadAuditStudentRow, loadCourseEquivalenceRows, loadCurriculumRequirementRows, loadGradedEnrollments,
@@ -355,7 +356,33 @@ export async function triggerGraduationCheck(studentIds: number[]): Promise<Scan
 
 // ───────────────────── مرحله: تأیید مدیر گروه ─────────────────────
 
+/**
+ * 🔒 مرز دانشگاهیِ پروندهٔ فراغت‌التحصیلی.
+ *
+ * چرا: همهٔ کنش‌های زیر با `auditId` خام کار می‌کنند و تنها گاردشان `requireRole`
+ * بود؛ کارشناسِ یک دانشگاه می‌توانست با پیمایش شناسه، پروندهٔ دانشگاه دیگر را
+ * بخواند، متوقف کند یا تأیید کند (IDOR بین‌مستأجری).
+ *
+ * برای مسیرهای پس‌زمینه (کران/اسکن بدون کاربر) این تابع صدا زده **نمی‌شود**؛
+ * فقط نقاط ورودیِ کاربر آن را لازم دارند.
+ */
+export async function assertDossierTenant(auditId: number): Promise<void> {
+  if (!Number.isFinite(auditId) || auditId <= 0) throw new Error('شناسهٔ پرونده نامعتبر است.');
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uid = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('دانشگاه فعال نامشخص است — دسترسی رد شد.');
+  const [row] = await db.select({ universityId: students.universityId })
+    .from(graduation_audits)
+    .innerJoin(students, eq(students.id, graduation_audits.studentId))
+    .where(eq(graduation_audits.id, auditId))
+    .limit(1);
+  if (!row) throw new Error('پرونده یافت نشد.');
+  if (Number(row.universityId) !== uid) throw new Error('این پرونده متعلق به دانشگاه دیگری است.');
+}
+
 export async function approveByHead(auditId: number, userId: number, note?: string) {
+  await assertDossierTenant(auditId);
   const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
   if (!a) throw new Error('پرونده یافت نشد.');
   await db.update(graduation_audits).set({
@@ -366,6 +393,7 @@ export async function approveByHead(auditId: number, userId: number, note?: stri
 }
 
 export async function holdDossier(auditId: number, reason: string) {
+  await assertDossierTenant(auditId);
   await db.update(graduation_audits).set({ workflowStatus: 'ON_HOLD', note: reason, lastEventAt: new Date() })
     .where(eq(graduation_audits.id, auditId));
   const [a] = await db.select({ studentId: graduation_audits.studentId }).from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
@@ -378,6 +406,7 @@ export async function holdDossier(auditId: number, reason: string) {
 
 /** رفع توقف: پرونده دوباره وارد چرخهٔ خودکار می‌شود */
 export async function resumeDossier(auditId: number) {
+  await assertDossierTenant(auditId);
   await db.update(graduation_audits).set({ workflowStatus: 'CATALOG_REVIEW', note: null, lastEventAt: new Date() })
     .where(eq(graduation_audits.id, auditId));
   return advanceDossier(auditId);
@@ -677,6 +706,9 @@ export async function setFinalPhoto(auditId: number, documentId: number) {
  * تراکنش اتمیک، قفل ردیف و ممیزی.
  */
 export async function settleStampFeeByFinance(auditId: number, actorUserId: number) {
+  // 🔒 مرز دانشگاه: کارشناس مالی هر دانشگاه فقط پروندهٔ دانشگاه خودش را تسویه کند.
+  //    قبلاً با auditId دلخواه، ردیف PAYMENT در دفتر مالی دانشگاه دیگر نوشته می‌شد.
+  await assertDossierTenant(auditId);
   return db.transaction(async (tx) => {
     // 🔒 قفل ردیف: دو کارشناس همزمان نتوانند دو بار ثبت کنند
     const rows = await tx.execute(sql`
@@ -907,6 +939,17 @@ export async function verifyDegree(verifyCode: string) {
 export type DossierView = Awaited<ReturnType<typeof getDossier>>;
 
 export async function getDossier(auditId: number) {
+  // 🔒 خواندنِ پرونده هم مرز دانشگاهی دارد (قبلاً با auditId دلخواه، پروندهٔ
+  //    دانشگاه دیگر — با نام/کد دانشجو و مبالغ — خوانده می‌شد).
+  await assertDossierTenant(auditId);
+  return dossierView(auditId);
+}
+
+/**
+ * نمای پرونده **بدون** گارد دانشگاهی — فقط برای مسیرهایی که پیش‌تر خودشان
+ * مالکیت را ثابت کرده‌اند (نمای دانشجوی خودش). هرگز از actions فراخوانی نشود.
+ */
+async function dossierView(auditId: number) {
   const [a] = await db.select().from(graduation_audits).where(eq(graduation_audits.id, auditId)).limit(1);
   if (!a) return null;
   const [s] = await db.select({
@@ -961,7 +1004,10 @@ export async function getDossier(auditId: number) {
 export async function listDossiers(filter: { status?: string; q?: string; universityId?: number } = {}) {
   const conds = [];
   if (filter.status && filter.status !== 'ALL') conds.push(eq(graduation_audits.workflowStatus, filter.status));
-  if (filter.universityId) conds.push(eq(students.universityId, filter.universityId));
+  // 🔒 همیشه شرط دانشگاه را بگذار؛ `0`/خالی یعنی «هیچ پرونده‌ای»، نه «همهٔ دانشگاه‌ها».
+  conds.push(isRealUniversityId(filter.universityId)
+    ? eq(students.universityId, filter.universityId)
+    : sql`1 = 0`);
   const rows = await db.select({
     id: graduation_audits.id, studentId: graduation_audits.studentId,
     workflowStatus: graduation_audits.workflowStatus, gpa: graduation_audits.gpa,
@@ -994,7 +1040,10 @@ export async function listDossiers(filter: { status?: string; q?: string; univer
 }
 
 export async function pipelineStats({ universityId }: { universityId?: number } = {}) {
-  const whereCond = universityId ? eq(students.universityId, universityId) : undefined;
+  // 🔒 بدون دانشگاه معتبر هیچ آماری برنگردان (قبلاً undefined یعنی همهٔ دانشگاه‌ها)
+  const whereCond = isRealUniversityId(universityId)
+    ? eq(students.universityId, universityId)
+    : sql`1 = 0`;
   const rows = await db.select({
     status: graduation_audits.workflowStatus, n: sql<number>`count(*)::int`,
   }).from(graduation_audits)
@@ -1019,7 +1068,7 @@ export async function getStudentTracker(studentId: number) {
     const audit = await auditStudent(studentId);
     return { open: false as const, audit };
   }
-  const full = await getDossier(a.id);
+  const full = await dossierView(a.id);
   const needPhoto = await getBool('GRAD_REQUIRE_PHOTO');
   const sajjadRequired = await getBool('GRAD_REQUIRE_SAJJAD') && a.sajjadStatus !== 'SKIPPED';
   const steps = stepsFor({ thesisRequired: a.thesisRequired === 1, sajjadRequired });

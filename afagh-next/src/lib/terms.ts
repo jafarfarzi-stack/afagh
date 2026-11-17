@@ -49,7 +49,7 @@ async function loadTermRowScoped(id: number, universityId?: number | null): Prom
   const rows = await db
     .select()
     .from(academic_terms)
-    .where(and(eq(academic_terms.id, id), universityId ? eq(academic_terms.universityId, universityId) : undefined))
+    .where(and(eq(academic_terms.id, id), universityId && universityId > 0 ? eq(academic_terms.universityId, universityId) : sql`1 = 0`))
     .limit(1);
   return rows[0];
 }
@@ -65,6 +65,7 @@ export type AcademicTermRow = typeof academic_terms.$inferSelect;
 
 /** همهٔ ترم‌های یک دانشگاه (برای انتخاب‌گرها) — مرتب‌شده از قدیمی به جدید */
 export async function termsFor(universityId?: number | null) {
-  const where = universityId ? eq(academic_terms.universityId, universityId) : undefined;
+  // 🔒 بدون دانشگاه معتبر، «همهٔ ترم‌های همهٔ دانشگاه‌ها» برنگردد.
+  const where = universityId && universityId > 0 ? eq(academic_terms.universityId, universityId) : sql`1 = 0`;
   return db.select().from(academic_terms).where(where).orderBy(asc(academic_terms.id));
 }

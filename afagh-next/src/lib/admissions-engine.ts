@@ -547,7 +547,7 @@ const maskNc = (nc: string) => {
   return s.length <= 4 ? '[REDACTED]' : `${s.slice(0, 3)}*******${s.slice(-1)}`;
 };
 
-export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405) {
+export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405, universityId: number | null = null) {
   await ensureDefaultSanjeshMappings();
 
   const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -624,6 +624,9 @@ export async function parseAndStageSanjeshData(rawText: string, entryYear = 1405
         mobile: mobile || null,
         status,
         onboardingStatus: 'IMPORTED',
+        // 🔒 بدون دانشگاه، ردیفِ stage بعداً دانشجوی `universityId = NULL`
+        //    می‌سازد و آن دانشجو به همهٔ دانشگاه‌ها نمایش داده می‌شود.
+        universityId,
       })
       .returning();
 

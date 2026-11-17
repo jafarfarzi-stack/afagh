@@ -8,7 +8,7 @@ import { requireRole } from '@/lib/auth';
 import { assertSafeUrl } from '@/lib/ssrf-guard';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import {
-  advanceDossier, approveByHead, getDossier, holdDossier, issueDegree, listDossiers,
+  advanceDossier, approveByHead, assertDossierTenant, getDossier, holdDossier, issueDegree, listDossiers,
   markDelivered, pipelineStats, requestMinistryCode, runAutoClearance, runGraduationScan,
   runIrandoc, setClearance, startClearance, resumeDossier, waiveSajjad,
 } from '@/lib/graduation-engine';
@@ -18,6 +18,16 @@ import { allRequests, resolveRequest } from '@/lib/alumni';
 
 async function guard() {
   return requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
+}
+
+/**
+ * گاردِ پروندهٔ مشخص: نقش **و** تعلق پرونده به دانشگاه فعال.
+ * بدون این، `auditId` خام اجازهٔ خواندن/تغییر پروندهٔ دانشگاه دیگر را می‌داد.
+ */
+async function guardDossier(auditId: number) {
+  const user = await guard();
+  await assertDossierTenant(auditId);
+  return user;
 }
 
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'خطای نامشخص' });
@@ -49,13 +59,15 @@ export async function refreshListAction(filter: { status?: string; q?: string })
 
 export async function dossierAction(auditId: number) {
   await guard();
-  const d = await getDossier(auditId);
-  return d ? { ok: true as const, dossier: d } : { ok: false as const, error: 'پرونده یافت نشد.' };
+  try {
+    const d = await getDossier(auditId); // گاردِ دانشگاه داخل خودش
+    return d ? { ok: true as const, dossier: d } : { ok: false as const, error: 'پرونده یافت نشد.' };
+  } catch (e) { return fail(e); }
 }
 
 export async function headApproveAction(auditId: number, note?: string) {
-  const user = await guard();
   try {
+    const user = await guardDossier(auditId);
     await approveByHead(auditId, user.id, note);
     revalidatePath('/admin/graduation');
     return { ok: true as const, dossier: await getDossier(auditId) };
@@ -63,8 +75,8 @@ export async function headApproveAction(auditId: number, note?: string) {
 }
 
 export async function holdAction(auditId: number, reason: string) {
-  await guard();
   try {
+    await guardDossier(auditId);
     if (!reason.trim()) return { ok: false as const, error: 'دلیل توقف را بنویسید.' };
     await holdDossier(auditId, reason.trim());
     revalidatePath('/admin/graduation');
@@ -73,8 +85,8 @@ export async function holdAction(auditId: number, reason: string) {
 }
 
 export async function resumeAction(auditId: number) {
-  await guard();
   try {
+    await guardDossier(auditId);
     await resumeDossier(auditId);
     revalidatePath('/admin/graduation');
     return { ok: true as const, dossier: await getDossier(auditId) };
@@ -82,8 +94,8 @@ export async function resumeAction(auditId: number) {
 }
 
 export async function irandocAction(auditId: number, trackingCode: string, thesisTitle: string) {
-  await guard();
   try {
+    await guardDossier(auditId);
     const r = await runIrandoc(auditId, { trackingCode, thesisTitle });
     revalidatePath('/admin/graduation');
     return { ok: true as const, result: r, dossier: await getDossier(auditId) };
@@ -91,16 +103,16 @@ export async function irandocAction(auditId: number, trackingCode: string, thesi
 }
 
 export async function startClearanceAction(auditId: number) {
-  await guard();
   try {
+    await guardDossier(auditId);
     await startClearance(auditId);
     return { ok: true as const, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }
 }
 
 export async function autoClearanceAction(auditId: number) {
-  await guard();
   try {
+    await guardDossier(auditId);
     const r = await runAutoClearance(auditId);
     return { ok: true as const, autoCleared: r.autoCleared, withDebt: r.withDebt, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }
@@ -110,8 +122,8 @@ export async function setClearanceAction(input: {
   checklistId: number; auditId: number; status: 'CLEARED' | 'HAS_DEBT' | 'WAIVED' | 'PENDING';
   detail?: string; amountDue?: number;
 }) {
-  const user = await guard();
   try {
+    const user = await guardDossier(input.auditId);
     await setClearance({ ...input, userId: user.id });
     revalidatePath('/admin/graduation');
     return { ok: true as const, dossier: await getDossier(input.auditId) };
@@ -119,16 +131,16 @@ export async function setClearanceAction(input: {
 }
 
 export async function advanceAction(auditId: number) {
-  await guard();
   try {
+    await guardDossier(auditId);
     const r = await advanceDossier(auditId);
     return { ok: true as const, status: r.status, changed: r.changed, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }
 }
 
 export async function ministryCodeAction(auditId: number) {
-  await guard();
   try {
+    await guardDossier(auditId);
     const r = await requestMinistryCode(auditId);
     return { ok: true as const, code: r.code, online: r.online, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }
@@ -136,8 +148,8 @@ export async function ministryCodeAction(auditId: number) {
 
 /** معاف‌کردن پرونده از گام «درخواست کد صحت در سجاد» (موارد استثنا) */
 export async function waiveSajjadAction(auditId: number, note?: string) {
-  await guard();
   try {
+    await guardDossier(auditId);
     await waiveSajjad(auditId, note);
     revalidatePath('/admin/graduation');
     return { ok: true as const, dossier: await getDossier(auditId) };
@@ -147,8 +159,8 @@ export async function waiveSajjadAction(auditId: number, note?: string) {
 export async function issueAction(input: {
   auditId: number; degreeType: 'TEMPORARY' | 'PERMANENT' | 'TRANSCRIPT'; ministryVerificationCode?: string;
 }) {
-  const user = await guard();
   try {
+    const user = await guardDossier(input.auditId);
     const deg = await issueDegree({ ...input, userId: user.id });
     revalidatePath('/admin/graduation');
     return { ok: true as const, serialNo: deg.serialNo, verifyCode: deg.verifyCode, dossier: await getDossier(input.auditId) };
@@ -156,8 +168,8 @@ export async function issueAction(input: {
 }
 
 export async function deliverAction(degreeId: number, auditId: number, deliveredTo: string) {
-  await guard();
   try {
+    await guardDossier(auditId);
     await markDelivered(degreeId, deliveredTo || 'شخص دانش‌آموخته');
     return { ok: true as const, dossier: await getDossier(auditId) };
   } catch (e) { return fail(e); }

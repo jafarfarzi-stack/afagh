@@ -22,6 +22,42 @@ import { normalizeExamDate } from '@/lib/shamsi';
 
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
 
+/**
+ * 🔒 مرز دانشگاه برای کنش‌های مبتنی بر `sessionId`/`offeringId`.
+ *
+ * چرا: اکشن‌ها فقط `requireRole` داشتند و موتور هم (به‌صراحت در کامنت خودش)
+ * هویتِ دانشگاهِ فراخواننده را نمی‌داند؛ نتیجه این بود که کارشناسِ یک دانشگاه
+ * با شناسهٔ خام می‌توانست برای سانس/ارائهٔ دانشگاه دیگر حضور صادر کند یا
+ * صورت‌جلسه امضا کند.
+ */
+async function assertSessionTenant(sessionId: number): Promise<number> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uid = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('دانشگاه فعال نامشخص است — دسترسی رد شد.');
+  const [row] = await db
+    .select({ universityId: exam_sessions.universityId })
+    .from(exam_sessions)
+    .where(eq(exam_sessions.id, sessionId))
+    .limit(1);
+  if (!row) throw new Error('سانس امتحان یافت نشد.');
+  if (Number(row.universityId) !== uid) throw new Error('این سانس متعلق به دانشگاه دیگری است.');
+  return uid;
+}
+
+async function assertOfferingTenant(offeringId: number): Promise<number> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uid = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('دانشگاه فعال نامشخص است — دسترسی رد شد.');
+  const [row] = await db
+    .select({ universityId: course_offerings.universityId })
+    .from(course_offerings)
+    .where(eq(course_offerings.id, offeringId))
+    .limit(1);
+  if (!row) throw new Error('ارائه یافت نشد.');
+  if (Number(row.universityId) !== uid) throw new Error('این ارائه متعلق به دانشگاه دیگری است.');
+  return uid;
+}
+
 /** نرمال‌سازی تاریخ سشن به شمسی YYYY/MM/DD (ردیف قدیمی میلادی → تبدیل) */
 function normSessionDate(v: unknown): string {
   return normalizeExamDate(v) ?? String(v ?? '');
@@ -256,6 +292,7 @@ export async function getExamWorkspaceAction(termId?: number, universityId?: num
 export async function issueExamAttendanceAction(sessionId: number) {
   try {
     const user = await requireRole(EDITORS);
+    await assertSessionTenant(sessionId);
     const out = await engine.issueExamAttendance(user.id, sessionId);
     revalidatePath('/admin/exams');
     return { ok: true, issued: Number((out as any).issued ?? 0), skipped: Number((out as any).skipped ?? 0) };
@@ -274,6 +311,7 @@ export async function signExamMinutesAction(px: {
 }) {
   try {
     const user = await requireRole(EDITORS);
+    await assertSessionTenant(px.sessionId);
     const out = await engine.signHallMinutes(user.id, px);
     revalidatePath('/admin/exams');
     return { ok: true, ...(out as object) };
@@ -286,6 +324,7 @@ export async function signExamMinutesAction(px: {
 export async function deliverToInstructorAction(px: { offeringId: number; instructorId: number; vaultManagerId: number }) {
   try {
     const user = await requireRole(EDITORS);
+    await assertOfferingTenant(px.offeringId);
     const out = await engine.deliverToInstructor(user.id, px);
     revalidatePath('/admin/exams');
     return { ok: true, ...(out as object) };

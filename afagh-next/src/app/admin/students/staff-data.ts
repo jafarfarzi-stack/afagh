@@ -59,7 +59,8 @@ export async function loadStaffBundle(opts: {
     : [];
 
   const where = and(
-    universityId ? eq(staff.universityId, universityId) : undefined,
+    // 🔒 بدون دانشگاه معتبر هیچ استادی برنگردان (قبلاً undefined یعنی «همهٔ دانشگاه‌ها»).
+    universityId && universityId > 0 ? eq(staff.universityId, universityId) : sql`1 = 0`,
     ...(await staffScopeConds(roles)),
     qConds.length ? or(...qConds) : undefined,
   );

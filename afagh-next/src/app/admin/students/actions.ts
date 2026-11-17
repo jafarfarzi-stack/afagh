@@ -65,6 +65,9 @@ export async function getCohortStats(studentId: number, scope: 'year' | 'term' =
   avgPassed: number | null;
 } | null> {
   await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'GRADUATEAFFAIRS']);
+  // 🔒 مثل getTranscriptRegulation: نقش کافی نیست؛ دانشجو باید در دانشگاه مجاز باشد.
+  const uniGate = await requireStudentUniversity(studentId);
+  if (!uniGate.ok) return null;
   const [me] = await db
     .select({ id: students.id, majorId: students.majorId, entryYear: students.entryYear, entryTerm: students.entryTerm, universityId: students.universityId })
     .from(students)

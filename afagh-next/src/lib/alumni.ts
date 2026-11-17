@@ -131,6 +131,20 @@ export async function payRequest(requestId: number, studentId: number) {
  * تسویهٔ هزینهٔ خدمت دانش‌آموختگان — فقط واحد مالی (قفل ردیف + تراکنش + ممیزی).
  */
 export async function confirmAlumniFeeByFinance(requestId: number, actorUserId: number) {
+  // 🔒 مرز دانشگاه: کارشناس مالی فقط برای دانش‌آموختهٔ دانشگاه خودش پرداخت ثبت کند
+  //    (قبلاً با requestId دلخواه، PAYMENT در دفتر مالی دانشگاه دیگر نوشته می‌شد).
+  const { getCurrentUniversity } = await import('@/lib/university-scope');
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uid = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('دانشگاه فعال نامشخص است — دسترسی رد شد.');
+  const [owner] = await db
+    .select({ universityId: students.universityId })
+    .from(alumni_requests)
+    .innerJoin(students, eq(students.id, alumni_requests.studentId))
+    .where(eq(alumni_requests.id, requestId))
+    .limit(1);
+  if (!owner) throw new Error('درخواست یافت نشد.');
+  if (Number(owner.universityId) !== uid) throw new Error('این درخواست متعلق به دانشگاه دیگری است.');
   return db.transaction(async (tx) => {
     const rows = await tx.execute(sql`
       SELECT id, "studentId", fee, "trackingCode", status

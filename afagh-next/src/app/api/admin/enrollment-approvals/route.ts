@@ -14,7 +14,7 @@ import { appendAudit } from '@/lib/audit';
 import { createLogger } from '@/lib/logger';
 import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { z } from 'zod';
-import { assertCsrf } from '@/lib/security';
+import { assertCsrf, requireStudentUniversity } from '@/lib/security';
 import { escapeLikeChars } from '@/lib/persian-search';
 
 
@@ -219,21 +219,34 @@ export async function POST(req: NextRequest) {
     }
     const { studentId, offeringId, note } = parsed.data;
 
+    // 🔒 مرز دانشگاه: هم درس و هم دانشجو باید متعلق به دانشگاه فعال باشند.
+    //    قبلاً فقط «وجود» چک می‌شد و با studentId دانشگاه دیگر، تأییدِ ثبت‌نام
+    //    ساخته می‌شد و GET بعدی نام/کد آن دانشجو را برمی‌گرداند.
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uniId = Number(uni?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return NextResponse.json({ error: 'university_required' }, { status: 403 });
+    }
+    const studentGate = await requireStudentUniversity(studentId);
+    if (!studentGate.ok) {
+      return NextResponse.json({ error: 'forbidden', detail: studentGate.error }, { status: 403 });
+    }
+
     const [offering] = await db
       .select({ id: course_offerings.id, universityId: course_offerings.universityId })
       .from(course_offerings)
-      .where(eq(course_offerings.id, offeringId))
+      .where(and(eq(course_offerings.id, offeringId), universityEq(course_offerings.universityId, uniId)))
       .limit(1);
     if (!offering) return NextResponse.json({ error: 'offering_not_found' }, { status: 404 });
 
     const [student] = await db
       .select({ id: students.id })
       .from(students)
-      .where(eq(students.id, studentId))
+      .where(and(eq(students.id, studentId), universityEq(students.universityId, uniId)))
       .limit(1);
     if (!student) return NextResponse.json({ error: 'student_not_found' }, { status: 404 });
 
-    const universityId = (await getCurrentUniversity().catch(() => null))?.id ?? offering.universityId ?? null;
+    const universityId = uniId;
 
     const created = await db.transaction(async (tx) => {
       const [row] = await tx
@@ -288,11 +301,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'empty_patch' }, { status: 400 });
     }
 
+    // 🔒 فقط تأییدهای دانشگاه فعال قابل تغییرند
+    const uniId = Number((await getCurrentUniversity().catch(() => null))?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return NextResponse.json({ error: 'university_required' }, { status: 403 });
+    }
     const result = await db.transaction(async (tx) => {
       const [before] = await tx
         .select({ id: english_enrollment_approvals.id, status: english_enrollment_approvals.status })
         .from(english_enrollment_approvals)
-        .where(eq(english_enrollment_approvals.id, id))
+        .where(and(eq(english_enrollment_approvals.id, id), universityEq(english_enrollment_approvals.universityId, uniId)))
         .for('update')
         .limit(1);
       if (!before) return null;
@@ -308,7 +326,7 @@ export async function PATCH(req: NextRequest) {
       const [row] = await tx
         .update(english_enrollment_approvals)
         .set(values)
-        .where(eq(english_enrollment_approvals.id, id))
+        .where(and(eq(english_enrollment_approvals.id, id), universityEq(english_enrollment_approvals.universityId, uniId)))
         .returning({ id: english_enrollment_approvals.id, status: english_enrollment_approvals.status });
 
       await appendAudit(tx, {
@@ -346,10 +364,15 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
     }
 
+    // 🔒 فقط تأییدهای دانشگاه فعال قابل حذف‌اند
+    const uniId = Number((await getCurrentUniversity().catch(() => null))?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return NextResponse.json({ error: 'university_required' }, { status: 403 });
+    }
     const deleted = await db.transaction(async (tx) => {
       const [row] = await tx
         .delete(english_enrollment_approvals)
-        .where(eq(english_enrollment_approvals.id, id))
+        .where(and(eq(english_enrollment_approvals.id, id), universityEq(english_enrollment_approvals.universityId, uniId)))
         .returning({ id: english_enrollment_approvals.id });
       if (!row) return null;
       await appendAudit(tx, {

@@ -24,7 +24,14 @@ export async function stageSanjeshDataAction(rawText: string, entryYear = 1405) 
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
   try {
-    const staged = await parseAndStageSanjeshData(rawText, entryYear);
+    // 🔒 دانشگاه فعال روی هر ردیف stage می‌خورد (قبلاً NULL می‌ماند و دانشجوی
+    //    حاصل به همهٔ دانشگاه‌ها نمایش داده می‌شد).
+    const uni = await getCurrentUniversity().catch(() => null);
+    const uniId = Number(uni?.id ?? 0);
+    if (!Number.isFinite(uniId) || uniId <= 0) {
+      return { ok: false, error: 'دانشگاه فعال نامشخص است — ورود فایل سنجش رد شد.' };
+    }
+    const staged = await parseAndStageSanjeshData(rawText, entryYear, uniId);
     revalidatePath('/admin/admissions');
     revalidatePath('/admin/students');
     return { ok: true, count: staged.length, items: staged };

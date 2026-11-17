@@ -108,7 +108,10 @@ export function studentWhere(f: ReportFilters, alias = 's') {
   // تفکیک دانشگاه اجباری (fail-closed): بدون دانشگاهِ معتبر هیچ ردیفی برنگردان
   // ⚠ پیش‌تر وقتی runReport برای دانشگاه نامشخص مقدار -1 می‌گذاشت، شرط
   //   «= -1 OR IS NULL» می‌شد و ردیف‌های بدون دانشگاه به‌جای «هیچ»، همه برمی‌گشتند.
-  if (isRealUniversityId(f.universityId)) c.push(sql`(${a}."universityId" = ${f.universityId} OR ${a}."universityId" IS NULL)`);
+  // 🔒 شاخهٔ `OR IS NULL` حذف شد: دانشجوی بدون دانشگاه (مثلاً خروجی ایمپورت سنجش)
+  //   به همهٔ دانشگاه‌ها نمایش داده می‌شد. صفر/نامعتبر = هیچ ردیف؛ دادهٔ بدون
+  //   دانشگاه باید با backfill اصلاح شود، نه با بازکردن مرز بین دانشگاه‌ها.
+  if (isRealUniversityId(f.universityId)) c.push(sql`${a}."universityId" = ${f.universityId}`);
   else c.push(sql`1 = 0`);
   // مقطع: عنوان‌ها در کاتالوگ تکراری‌اند (SAMA/HAMAVA) — با عنوان تطبیق بده تا همهٔ شناسه‌های هم‌عنوان بیایند
   if (f.degreeId) c.push(sql`${a}."degreeLevelId" IN (SELECT id FROM degree_level_configs WHERE title = (SELECT title FROM degree_level_configs WHERE id = ${f.degreeId}))`);
