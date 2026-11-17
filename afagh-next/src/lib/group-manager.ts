@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db';
 import { courses, departments, staff as staffTable } from '@/db/schema';
 import { getStaffByUser, requireRole, type SessionUser } from '@/lib/auth';
+import { isRealUniversityId } from '@/lib/university-scope';
 import type { staff } from '@/db/schema';
 
 /** یک گروه در دامنهٔ اختیار مدیر */
@@ -42,12 +43,28 @@ const asKind = (k: string | null): 'ACADEMIC' | 'GENERAL' => (k === 'GENERAL' ? 
  * تخصصی خودش + گروه دروس عمومی) و در سربرگ بین آن‌ها جابه‌جا می‌شود.
  */
 export async function headedDepartments(staffId: number, ownDeptId: number | null): Promise<HeadedDept[]> {
+  /* 🔒 مرز دانشگاه: پیش‌تر فقط `headStaffId` بررسی می‌شد؛ اگر یک نفر در دو
+     دانشگاه مدیر گروه بود (یا پروندهٔ کارمندی‌اش دانشگاه نداشت)، گروه‌های
+     دانشگاه دیگر هم باز می‌شد. حالا دانشگاهِ خودِ کارمند شرط است و بدون آن
+     هیچ گروهی برنمی‌گردد (fail-closed). */
+  const [owner] = await db
+    .select({ universityId: staffTable.universityId })
+    .from(staffTable)
+    .where(eq(staffTable.id, staffId))
+    .limit(1);
+  const uniId = owner?.universityId ?? null;
+  if (!isRealUniversityId(uniId)) return [];
+
   // فقط گروه‌های فعال (isActive=1 یا NULL که پیش‌فرض ۱ است). پیش از این شرط
   // به‌اشتباه or(eq(1), eq(1)) بود — یعنی بدون فیلتر واقعی.
   const led = await db
     .select({ id: departments.id, name: departments.name, kind: departments.kind })
     .from(departments)
-    .where(and(eq(departments.headStaffId, staffId), or(eq(departments.isActive, 1), isNull(departments.isActive))))
+    .where(and(
+      eq(departments.headStaffId, staffId),
+      eq(departments.universityId, uniId),
+      or(eq(departments.isActive, 1), isNull(departments.isActive)),
+    ))
     .orderBy(departments.name);
 
   const out: HeadedDept[] = led.map(d => ({ id: d.id, name: d.name, kind: asKind(d.kind), via: 'HEAD' as const }));
@@ -57,7 +74,7 @@ export async function headedDepartments(staffId: number, ownDeptId: number | nul
     const [own] = await db
       .select({ id: departments.id, name: departments.name, kind: departments.kind })
       .from(departments)
-      .where(eq(departments.id, ownDeptId))
+      .where(and(eq(departments.id, ownDeptId), eq(departments.universityId, uniId)))
       .limit(1);
     if (own) return [{ id: own.id, name: own.name, kind: asKind(own.kind), via: 'MEMBER' }];
   }

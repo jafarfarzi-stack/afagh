@@ -1,7 +1,8 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   courses,
+  majors,
   process_definitions,
   process_steps,
   students,
@@ -9,12 +10,20 @@ import {
   users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
+import { requireDepHead } from '@/lib/group-manager';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import EquivalenceMapperClient from './EquivalenceMapperClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function GroupManagerEquivalencePage() {
   await requireRole(['DEP_HEAD', 'ADMIN']);
+  /* 🔒 مرز گروه/دانشگاه: قبلاً هر درخواست COURSE_TRANSFER در گام «مدیر گروه»
+     — از هر گروه و هر دانشگاه — با نام و کد دانشجو نمایش داده می‌شد. */
+  const { depts } = await requireDepHead();
+  const deptIds = depts.map(d => d.id);
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = uni?.id ?? 0;
 
   // درخواست‌های معادل‌سازی که در گام «بررسی مدیر گروه» هستند
   const pending = await db
@@ -29,16 +38,25 @@ export default async function GroupManagerEquivalencePage() {
     })
     .from(student_requests)
     .innerJoin(students, eq(students.id, student_requests.studentId))
+    .innerJoin(majors, eq(majors.id, students.majorId))
     .innerJoin(users, eq(users.id, students.userId))
     .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
     .leftJoin(process_steps, eq(process_steps.id, student_requests.currentStepId))
-    .where(and(eq(process_definitions.code, 'COURSE_TRANSFER'), eq(process_steps.roleCode, 'DEPARTMENT_HEAD')));
+    .where(and(
+      eq(process_definitions.code, 'COURSE_TRANSFER'),
+      eq(process_steps.roleCode, 'DEPARTMENT_HEAD'),
+      uniId > 0 ? eq(students.universityId, uniId) : eq(students.universityId, -1),
+      deptIds.length ? inArray(majors.departmentId, deptIds) : eq(majors.departmentId, -1),
+    ));
 
-  // دروس چارت دانشگاه آفاق برای جستجو و نگاشت
-  const ourCourses = await db
-    .select({ code: courses.code, title: courses.title, units: courses.units })
-    .from(courses)
-    .orderBy(courses.code);
+  // دروس قابل انتخاب به‌عنوان مقصد: فقط دروس همان دانشگاه (نه کل جدول دروس)
+  const ourCourses = (uniId > 0
+    ? await db
+        .select({ code: courses.code, title: courses.title, units: courses.units })
+        .from(courses)
+        .where(eq(courses.universityId, uniId))
+        .orderBy(courses.code)
+    : []);
 
   const formatted = pending.map(r => {
     let fd: any = {};

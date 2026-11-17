@@ -1,12 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
-import { majors, student_requests, students } from '@/db/schema';
+import { majors, process_definitions, process_steps, student_requests, students } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { requireDepHead } from '@/lib/group-manager';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { advanceWorkflowStep } from '@/lib/workflow-engine';
 import { EQUIV_MIN_GRADE } from '@/lib/enroll-engine';
 import { effectiveEquivMinGrade } from '@/lib/compliance-integrations';
@@ -54,6 +55,37 @@ export async function submitEquivalenceMappingAction(
 
   const [req] = await db.select().from(student_requests).where(eq(student_requests.id, args.requestId)).limit(1);
   if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
+
+  /* 🔒 درخواست باید «همان فرایند معادل‌سازی» و «همان گام مدیر گروه» باشد.
+     قبلاً هر requestId (هر فرایند/هر گام) پذیرفته می‌شد و اکشن آن را جلو می‌برد. */
+  const [proc] = await db
+    .select({ code: process_definitions.code })
+    .from(process_definitions)
+    .where(eq(process_definitions.id, req.processId))
+    .limit(1);
+  if (proc?.code !== 'COURSE_TRANSFER') {
+    return { ok: false, error: 'این درخواست از نوع معادل‌سازی دروس نیست.' };
+  }
+  if (req.currentStepId == null) {
+    return { ok: false, error: 'این درخواست در گام قابل‌اقدام نیست.' };
+  }
+  const [step] = await db
+    .select({ roleCode: process_steps.roleCode })
+    .from(process_steps)
+    .where(and(eq(process_steps.id, req.currentStepId), eq(process_steps.processId, req.processId)))
+    .limit(1);
+  if (step?.roleCode !== 'DEPARTMENT_HEAD') {
+    return { ok: false, error: 'این درخواست در گام «بررسی مدیر گروه» نیست.' };
+  }
+  const [stuUni] = await db
+    .select({ universityId: students.universityId })
+    .from(students)
+    .where(eq(students.id, req.studentId))
+    .limit(1);
+  const curUni = await getCurrentUniversity().catch(() => null);
+  if (!isRealUniversityId(curUni?.id) || Number(stuUni?.universityId) !== curUni.id) {
+    return { ok: false, error: 'این درخواست متعلق به دانشگاه شما نیست.' };
+  }
 
   // مادهٔ ۱۲ (الف): کف نمره ۱۲ / ۱۴ / ۱۶ بر حسب مقطع، از لایهٔ سیاست (قابل اورراید)
   const equivMin = await effectiveEquivMinGrade(Number(req.studentId ?? 0)).catch(() => EQUIV_MIN_GRADE);

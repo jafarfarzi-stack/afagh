@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { db } from '@/db';
 import { academic_terms, courses, majors, students, users } from '@/db/schema';
 import { requireDepHead } from '@/lib/group-manager';
+import { getCurrentUniversity } from '@/lib/university-scope';
 import { resolveStudentCurriculumScope } from '@/lib/enroll-curriculum-scope';
 import { termOrdinalForEntry } from '@/lib/term-scope';
 import { grantCourseAction, revokeGrantAction } from './actions';
@@ -29,6 +30,8 @@ export default async function GrantsPage({
   const { depts } = await requireDepHead();
   const deptIds = depts.map(d => d.id);
   const sp = (await searchParams) ?? {};
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = uni?.id ?? 0;
 
   const majorsInScope = deptIds.length
     ? await db.select({ id: majors.id, name: majors.name, departmentId: majors.departmentId })
@@ -53,7 +56,11 @@ export default async function GrantsPage({
 
   const firstMajorWithStudents = majorsInScope.find(m => pairs.some(p => p.majorId === m.id)) ?? majorsInScope[0];
 
-  const majorId = sp.major ? Number(sp.major) : (firstMajorWithStudents?.id ?? 0);
+  const requestedMajorId = sp.major ? Number(sp.major) : 0;
+  // 🔒 `?major=` فقط اگر در گروه‌های تحت مدیریت باشد پذیرفته می‌شود
+  const majorId = requestedMajorId && majorsInScope.some(m => m.id === requestedMajorId)
+    ? requestedMajorId
+    : (firstMajorWithStudents?.id ?? 0);
 
   const yearOptions = yearsFor(majorId);
   const year = sp.year ? Number(sp.year) : (yearOptions[0] ?? 0);
@@ -73,12 +80,18 @@ export default async function GrantsPage({
       .from(students)
       .innerJoin(majors, eq(majors.id, students.majorId))
       .innerJoin(users, eq(users.id, students.userId))
-      .where(and(eq(students.majorId, majorId), eq(students.entryYear, year)))
+      .where(and(
+        eq(students.majorId, majorId),
+        eq(students.entryYear, year),
+        uniId > 0 ? eq(students.universityId, uniId) : eq(students.universityId, -1),
+      ))
       .orderBy(users.lastName, users.firstName)
     : [];
 
   // ── جزئیات دانشجوی انتخاب‌شده ──
   const selectedStudentId = sp.student ? Number(sp.student) : 0;
+  /* 🔒 `?student=` دلخواه ممنوع: فقط دانشجویانِ همان گروه‌های تحت مدیریت.
+     قبلاً با یک شناسهٔ دلخواه، نام/کد و کل چارت هر دانشجوی هر دانشگاه باز می‌شد. */
   const selected = selectedStudentId
     ? (studentRows.find(s => s.id === selectedStudentId)
        ?? (await db.select({
@@ -89,7 +102,11 @@ export default async function GrantsPage({
           .from(students)
           .innerJoin(majors, eq(majors.id, students.majorId))
           .innerJoin(users, eq(users.id, students.userId))
-          .where(eq(students.id, selectedStudentId)).limit(1))[0] ?? null)
+          .where(and(
+            eq(students.id, selectedStudentId),
+            majorsInScope.length ? inArray(majors.departmentId, majorsInScope.map(m => m.departmentId).filter((v): v is number => v != null)) : eq(majors.departmentId, -1),
+            uniId > 0 ? eq(students.universityId, uniId) : eq(students.universityId, -1),
+          )).limit(1))[0] ?? null)
     : null;
 
   // شمارهٔ ترم جاریِ دانشجو (برای تشخیص درس ترم بالاتر)
