@@ -754,8 +754,8 @@ export async function runBackfillAction(input: BackfillActionInput): Promise<
   try {
     const result = await rebuildGlFromLedger({
       universityId: c.universityId,
-      fromVoucherDate,
-      toVoucherDate,
+      fromVoucherDate: fromVoucherDate ?? undefined,
+      toVoucherDate: toVoucherDate ?? undefined,
       termCode,
       dryRun,
       batchSize: 500,
