@@ -212,7 +212,7 @@ const CARDS: Card[] = [
   { kind: 'income-statement', cat: 'finance', icon: '📈', title: 'صورت سود و زیان', needsTerm: true },
   { kind: 'costing-report', cat: 'finance', icon: '🧮', title: 'بهای تمام‌شده و حاشیه', needsTerm: true },
   { kind: 'budget-variance', cat: 'finance', icon: '🎯', title: 'انحراف بودجه', needsTerm: true },
-  { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)', needsTerm: true },
+  { kind: 'balance-sheet', cat: 'finance', icon: '⚖️', title: 'ترکیب مطالبات و تعهدات', needsTerm: true },
   // cashFlowRows فیلتر ترم را پشتیبانی میکند — پس کارت آن هم needsTerm میگیرد
   { kind: 'cash-flow', cat: 'finance', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)', needsTerm: true },
   { kind: 'contractor-report', cat: 'finance-ops', icon: '🏗️', title: 'پیمانکاران و قراردادها', needsTerm: true },

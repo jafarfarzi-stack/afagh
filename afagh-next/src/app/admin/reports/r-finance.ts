@@ -15,6 +15,15 @@ import { faNum } from '@/lib/report-format';
 const faAmount = (n: number): string =>
   faNum(Math.round(Number(n) || 0).toLocaleString('en-US'));
 
+/**
+ * برچسبِ «نمایش N از M» برای فهرست‌های صفحه‌بندی‌شده.
+ *
+ * جمع‌ها روی کلِ مجموعهٔ فیلترشده محاسبه می‌شوند؛ این برچسب جلوی این توهم را
+ * می‌گیرد که «جمع» باید با تعدادِ ردیف‌های دیده‌شده بخواند (fix d).
+ */
+const pagedNote = (r: ReportResult): string =>
+  r.rows.length < r.total ? ` — نمایش ${faAmount(r.rows.length)} از ${faAmount(r.total)}` : '';
+
 const ROLES = ['ADMIN', 'EDU_EXPERT', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'];
 
 /**
@@ -33,6 +42,24 @@ const inTypes = (types: readonly string[]) => typesIn('sl', types);
 const CHARGE = inTypes(DEBT_LEDGER_TYPES);
 const DISC = inTypes(DISCOUNT_LEDGER_TYPES);
 const PAID = inTypes(PAID_LEDGER_TYPES);
+/**
+ * طرفِ بستانکارِ سند = تخفیف‌ها + پرداخت‌ها (همان `CREDIT_LEDGER_TYPES`
+ * کانونی، بدون تکرار). با `CHARGE` (بدهکار) مکملِ کاملِ ۲۰ نوعِ واژگان است؛
+ * هر نوعی که در هیچ‌کدام نباشد در ستون «طبقه‌بندی‌نشده» می‌آید.
+ */
+const CREDIT = inTypes([...DISCOUNT_LEDGER_TYPES, ...PAID_LEDGER_TYPES]);
+/** واژگانِ کاملِ کانونی — مبنای تشخیصِ نوعِ خارج از واژگان. */
+const KNOWN_TXN_TYPES = [
+  ...new Set<string>([...DEBT_LEDGER_TYPES, ...DISCOUNT_LEDGER_TYPES, ...PAID_LEDGER_TYPES]),
+];
+const KNOWN_TXN_CSV = ledgerTypesCsv(KNOWN_TXN_TYPES);
+
+/** شرطِ «نوعِ خارج از واژگان» برای هر نامِ مستعار (فقط از کد می‌آید). */
+const unmappedIn = (alias: string) =>
+  sql.raw(`("${alias}"."transactionType" IS NULL OR "${alias}"."transactionType" NOT IN (${KNOWN_TXN_CSV}))`);
+
+/** هر ردیفی که نه بدهکار است نه بستانکار — نباید بی‌صدا حذف شود. */
+const UNCLASSIFIED = unmappedIn('sl');
 
 /**
  * جمعِ دفترِ مالیِ یک دانشجو با **سقفِ تخفیف در سطح (دانشجو × ترم)**.
@@ -44,7 +71,7 @@ const PAID = inTypes(PAID_LEDGER_TYPES);
  *   `ledgerCte()` صورت‌های مالی (r-finance-statements.ts) و در منبعِ
  *   `finance-balance` گزارش‌ساز (catalog/finance.ts) پیاده شده است.
  *
- * ستون‌های خروجی (با نامِ مستعارِ `sl`): charge، discount، paid، txnCount.
+ * ستون‌های خروجی (با نامِ مستعارِ `sl`): charge، discount، paid، unmapped، txnCount.
  * اگر دانشجو هیچ ردیفِ دفتری نداشته باشد، یک ردیفِ صفر برمی‌گردد (رفتارِ
  * LEFT JOIN LATERAL با تجمیعِ بدون GROUP BY).
  */
@@ -60,12 +87,14 @@ function ledgerSumJoin(opts: { term?: string; uni?: number } = {}) {
         COALESCE(SUM(t."charge"), 0)::bigint AS "charge",
         COALESCE(SUM(LEAST(t."discount", t."charge")), 0)::bigint AS "discount",
         COALESCE(SUM(t."paid"), 0)::bigint AS "paid",
+        COALESCE(SUM(t."unmapped"), 0)::bigint AS "unmapped",
         COALESCE(SUM(t."txnCount"), 0)::int AS "txnCount"
       FROM (
         SELECT sl2."termId",
           COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DEBT_LEDGER_TYPES)}), 0) AS "charge",
           COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DISCOUNT_LEDGER_TYPES)}), 0) AS "discount",
           COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', PAID_LEDGER_TYPES)}), 0) AS "paid",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${unmappedIn('sl2')}), 0) AS "unmapped",
           COUNT(sl2.id)::int AS "txnCount"
         FROM student_ledger sl2
         WHERE sl2."studentId" = s.id ${termCond} ${uniCond}
@@ -149,7 +178,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       ],
       from, conds, cols, sql`ORDER BY tr.priority, tr.id`, f,
     );
-    r.summary = `${faAmount(r.total)} قاعده تعرفه`;
+    r.summary = `${faAmount(r.total)} قاعده تعرفه` + pagedNote(r);
     return r;
   }
 
@@ -164,6 +193,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sl."charge"::bigint AS charge,
       sl."discount"::bigint AS discount,
       sl."paid"::bigint AS paid,
+      sl."unmapped"::bigint AS unmapped,
       (sl."charge" - sl."discount" - sl."paid")::bigint AS balance,
       sl."txnCount" AS txns`;
     const r = await paged(
@@ -173,11 +203,12 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'y', title: 'ورودی', format: 'YEAR' },
         { key: 'charge', title: 'بدهی شهریه', format: 'MONEY' },
         { key: 'discount', title: 'تخفیف', format: 'MONEY' }, { key: 'paid', title: 'پرداختی', format: 'MONEY' },
+        { key: 'unmapped', title: 'طبقه‌بندی‌نشده', format: 'MONEY' },
         { key: 'balance', title: 'مانده بدهی', format: 'MONEY' }, { key: 'txns', title: 'تراکنش', format: 'NUMBER' },
       ],
       from, studentWhere(f), cols, sql`ORDER BY balance DESC`, f,
     );
-   r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — ترم ${f.term}` : ' — همه ترم‌ها'} (مانده = بدهی − تخفیف − پرداختی)`;
+   r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — ترم ${f.term}` : ' — همه ترم‌ها'} (مانده = بدهی − تخفیف − پرداختی)` + pagedNote(r);
     return r;
   }
 
@@ -202,7 +233,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     const cols = sql`s."studentCode" AS code, u."firstName" || ' ' || u."lastName" AS name,
       m.name AS major, d.title AS degree,
       (sl."charge" - sl."discount" - sl."paid")::bigint AS balance,
-      sl."paid"::bigint AS paid`;
+      sl."paid"::bigint AS paid,
+      sl."unmapped"::bigint AS unmapped`;
     /**
      * فقط دانشجویانی که در بازهٔ انتخابی ردیفِ دفتر مالی دارند.
      * پیش‌تر همهٔ ۳۹٬۹۵۴ دانشجو (حتی آن‌ها که هیچ ردیف مالی نداشتند) با
@@ -216,6 +248,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'major', title: 'رشته' },
         { key: 'balance', title: 'مانده حساب', format: 'MONEY' },
         { key: 'paid', title: 'کل پرداختی', format: 'MONEY' },
+        { key: 'unmapped', title: 'طبقه‌بندی‌نشده', format: 'MONEY' },
       ],
       from, conds, cols, sql`ORDER BY paid DESC, s."studentCode"`, f,
     );
@@ -227,7 +260,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         ${from} ${joinAnd(conds)}
       ) x`);
     const totalPaid = Number(agg.rows[0]?.paid ?? 0);
-    r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ نیمسال‌ها'}`;
+    r.summary = `${faAmount(r.total)} دانشجو — جمع پرداختی: ${faAmount(totalPaid)} ریال${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ نیمسال‌ها'}` + pagedNote(r);
     return r;
   }
 
@@ -271,8 +304,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       const k = String(x.paytype ?? '');
       return { ...x, paytype: DEPOSIT_FA[k] ?? TXN_FA[k] ?? (k || '—') };
     });
-    const sum = r.rows.reduce((a, x) => a + Number(x.amount ?? 0), 0);
-    r.summary = `${faAmount(r.total)} فیش پرداخت — جمع صفحهٔ جاری: ${faAmount(sum)} ریال`;
+    // جمع از **کلِ** مجموعهٔ فیلترشده (همان from/conds) گرفته می‌شود، نه از
+    // ردیف‌های صفحه؛ قبلاً «جمع صفحهٔ جاری» بود و با صفحه‌بندی تغییر می‌کرد.
+    const agg = await db.execute<{ amount: string }>(sql`
+      SELECT COALESCE(SUM(sl.amount), 0)::bigint AS amount
+      ${from} ${joinAnd(conds)}
+    `);
+    const sum = Number(agg.rows[0]?.amount ?? 0);
+    r.summary = `${faAmount(r.total)} فیش پرداخت — جمع کل: ${faAmount(sum)} ریال` + pagedNote(r);
     return r;
   }
 
@@ -309,7 +348,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       from, [...studentWhere(f), uniCond], cols, sql`ORDER BY s."studentCode"`, f,
       sql`s.id, s."studentCode", u."firstName", u."lastName", m.name`,
     );
-    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ''} (پرداختی / شهریه / تخفیف / مانده)`;
+    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ''} (پرداختی / شهریه / تخفیف / مانده)` + pagedNote(r);
     return r;
   }
 
@@ -328,7 +367,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       MIN(sl."description") AS descr,
       COALESCE(MAX(sl."depositDate"), MAX(sl."createdAt")) AS vdate,
       COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)::bigint AS debit,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC} OR ${PAID}), 0)::bigint AS credit,
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${CREDIT}), 0)::bigint AS credit,
+      COALESCE(SUM(sl.amount) FILTER (WHERE ${UNCLASSIFIED}), 0)::bigint AS other,
       COUNT(sl.id)::int AS lines`;
     const r = await paged(
       [
@@ -337,25 +377,40 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'vdate', title: 'تاریخ', format: 'DATE' },
         { key: 'debit', title: 'مبلغ جزء بدهکار', format: 'MONEY' },
         { key: 'credit', title: 'مبلغ جزء بستانکار', format: 'MONEY' },
+        { key: 'other', title: 'طبقه‌بندی‌نشده', format: 'MONEY' },
         { key: 'lines', title: 'تعداد ردیف', format: 'NUMBER' },
       ],
       from, conds, cols, sql`ORDER BY COALESCE(MAX(sl."depositDate"), MAX(sl."createdAt")) DESC NULLS LAST, COALESCE(sl."voucherNo", '—')`, f,
       sql`COALESCE(sl."voucherNo", '—')`,
     );
-    // جمع سند باید روی **همهٔ** اسناد باشد، نه ۵۰ سند صفحهٔ جاری؛ قبلاً
-    // «جمع بدهکار/بستانکار» فقط از ردیف‌های صفحه ساخته می‌شد.
-    const agg = await db.execute<{ debit: string; credit: string }>(sql`
+    // جمعِ سند روی **همهٔ** اسناد (همان `from` + همان `conds`) است، نه صفحهٔ
+    // جاری. هر دو طرف از یک مجموعهٔ ردیف و یک طبقه‌بندیِ مکمل (`CHARGE` /
+    // `CREDIT`) می‌آیند؛ بنابراین «بدهکار» و «بستانکار» دیگر با فیلترهای
+    // مختلف (که یک نوع را در یک طرف جا می‌انداخت) ساخته نمی‌شوند.
+    // جدولِ سندِ دوطرفه در schema وجود ندارد؛ منبع فقط `student_ledger` است.
+    const agg = await db.execute<{ debit: string; credit: string; other: string }>(sql`
       SELECT COALESCE(SUM(x.debit), 0)::bigint AS debit,
-             COALESCE(SUM(x.credit), 0)::bigint AS credit
+             COALESCE(SUM(x.credit), 0)::bigint AS credit,
+             COALESCE(SUM(x.other), 0)::bigint AS other
       FROM (
         SELECT COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0) AS debit,
-               COALESCE(SUM(sl.amount) FILTER (WHERE ${DISC} OR ${PAID}), 0) AS credit
+               COALESCE(SUM(sl.amount) FILTER (WHERE ${CREDIT}), 0) AS credit,
+               COALESCE(SUM(sl.amount) FILTER (WHERE ${UNCLASSIFIED}), 0) AS other
         ${from} ${joinAnd(conds)}
         GROUP BY COALESCE(sl."voucherNo", '—')
       ) x`);
     const debit = Number(agg.rows[0]?.debit ?? 0);
     const credit = Number(agg.rows[0]?.credit ?? 0);
-    r.summary = `${faAmount(r.total)} سند — جمع بدهکار ${faAmount(debit)} / جمع بستانکار ${faAmount(credit)} ریال`;
+    const other = Number(agg.rows[0]?.other ?? 0);
+    r.rows = r.rows.map((x) => ({
+      ...x,
+      voucher: String(x.voucher ?? '—') === '—' ? 'بدون شماره سند' : x.voucher,
+    }));
+    r.summary = `${faAmount(r.total)} سند — جمع بدهکار ${faAmount(debit)} / جمع بستانکار ${faAmount(credit)}`
+      + ` · اختلاف (ماندهٔ دفتری) ${faAmount(debit - credit)} ریال`
+      + (other ? ` · طبقه‌بندی‌نشده ${faAmount(other)} ریال` : '')
+      + ' · منبع: دفتر دانشجو (جدولِ سندِ دوطرفه در schema نیست)'
+      + pagedNote(r);
     return r;
   }
 
@@ -395,7 +450,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       from, [...studentWhere(f), uniCond], cols, sql`ORDER BY COALESCE(t."termCode", '—') DESC, s."studentCode"`, f,
       sql`t."termCode", s.id, s."studentCode", u."firstName", u."lastName", m.name`,
     );
-    r.summary = `${faAmount(r.total)} ردیف مالی${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
+    r.summary = `${faAmount(r.total)} ردیف مالی${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}` + pagedNote(r);
     return r;
   }
 
@@ -405,6 +460,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   //    شهریه ثابت   = TUITION_FIXED | TUITION_CHARGE | CHARGE
   //    شهریه متغیر  = TUITION_VARIABLE | SUBJECT_ADDITIVE
   //    تعدیل کاهشی  = TUITION_ADJUST_DEC   (به بدهی اضافه می‌شود)
+  //    برگشت کارتخوان = POS_REFUND          (به بدهی اضافه می‌شود)
   //    تخفیف متفرقه = DISCOUNT_FIXED | DISCOUNT_VARIABLE | SUBJECT_DEDUCTIVE | TUITION_ADJUST_INC
   //    تخفیف پرداخت = TUITION_BATES + سه زیرنوعِ تفکیک‌شدهٔ آن
   //    مساعده       = LOAN
@@ -434,6 +490,9 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     const advance = SUM(ADVANCE);
     const paid = SUM(PAY_ONLY);
     const refund = SUM(REFUND);
+    // انواعِ خارج از واژگان در هیچ ستونِ مالی نمی‌آیند؛ یک ستونِ جدا برایشان
+    // تا جمعِ ستون‌ها با کلِ دفتر قابل‌مقایسه بماند و چیزی بی‌صدا حذف نشود.
+    const unmapped = SUM(UNCLASSIFIED);
     const charge = sql`(${fixed} + ${variable} + ${adjDec} + ${refund})`;
     const disc = sql`(${discMisc} + ${discPay})`;
     const balance = sql`(${charge} - ${disc} - ${paid} - ${advance})`;
@@ -442,6 +501,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         ${discMisc} AS discmisc, ${discPay} AS discpay, ${disc}::bigint AS disctotal,
         ${advance} AS advanceamt,
         ${charge}::bigint AS charge, ${paid} AS paid,
+        ${unmapped} AS unmapped,
         ${balance}::bigint AS balance,
         GREATEST(${balance}, 0)::bigint AS debtor,
         GREATEST(-(${balance}), 0)::bigint AS creditor`,
@@ -459,6 +519,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     { key: 'advanceamt', title: 'مبالغ مساعده', format: 'MONEY' as const },
     { key: 'charge', title: 'جمع بدهکار', format: 'MONEY' as const },
     { key: 'paid', title: f.term ? 'پرداختی این نیمسال' : 'پرداختی همهٔ نیمسال‌ها', format: 'MONEY' as const },
+    { key: 'unmapped', title: 'طبقه‌بندی‌نشده', format: 'MONEY' as const },
     { key: 'debtor', title: 'بدهکار', format: 'MONEY' as const },
     { key: 'creditor', title: 'بستانکار', format: 'MONEY' as const },
     { key: 'balance', title: 'مانده کل', format: 'MONEY' as const },
@@ -492,7 +553,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY fc.name NULLS LAST, s."entryYear", s."studentCode"`, f,
       sql`s.id, s."studentCode", fc.name, d.title, s."entryYear"`,
     );
-    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}`;
+    r.summary = `${faAmount(r.total)} دانشجو${f.term ? ` — نیمسال ${f.term}` : ' — همهٔ ترم‌ها'}` + pagedNote(r);
     return r;
   }
 
@@ -518,7 +579,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(fc.name, '—'), COALESCE(d.title, '—')`, f,
       sql`fc.name, d.title`,
     );
-    r.summary = `${faAmount(r.total)} ردیف (دانشکده × مقطع)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (دانشکده × مقطع)${f.term ? ` — نیمسال ${f.term}` : ''}` + pagedNote(r);
     return r;
   }
 
@@ -547,7 +608,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(fc.name, '—'), s."entryYear"`, f,
       sql`fc.name, s."entryYear", t."termCode"`,
     );
-    r.summary = `${faAmount(r.total)} ردیف (دانشکده × ورودی × ترم)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (دانشکده × ورودی × ترم)${f.term ? ` — نیمسال ${f.term}` : ''}` + pagedNote(r);
     return r;
   }
 
@@ -576,7 +637,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY COALESCE(d.title, '—'), COALESCE(fc.name, '—'), COALESCE(m.name, '—'), s."entryYear"`, f,
       sql`d.title, fc.name, m.name, s."entryYear"`,
     );
-    r.summary = `${faAmount(r.total)} ردیف (مقطع × رشته × ورودی)${f.term ? ` — نیمسال ${f.term}` : ''}`;
+    r.summary = `${faAmount(r.total)} ردیف (مقطع × رشته × ورودی)${f.term ? ` — نیمسال ${f.term}` : ''}` + pagedNote(r);
     return r;
   }
 

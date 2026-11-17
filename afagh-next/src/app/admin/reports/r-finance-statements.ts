@@ -96,6 +96,16 @@ const faEnum = (map: Record<string, string>, v: unknown): string =>
 const faAmount = (n: number): string =>
   faNum(Math.round(Number(n) || 0).toLocaleString('en-US'));
 
+/**
+ * برچسبِ «نمایش N از M» برای گزارش‌های فهرستیِ صفحه‌بندی‌شده.
+ *
+ * چرا لازم است؟ جمع‌ها/درصدها روی کلِ مجموعه محاسبه می‌شوند، اما کاربر فقط
+ * یک صفحه می‌بیند؛ بدون این برچسب، عددِ جمع با تعدادِ ردیف‌های دیده‌شده
+ * ناسازگار به نظر می‌رسد (fix d).
+ */
+const pagedNote = (r: ReportResult): string =>
+  r.rows.length < r.total ? ` — نمایش ${faAmount(r.rows.length)} از ${faAmount(r.total)}` : '';
+
 export const CARDS = [
   // ── B) فروش مالی ──
   { kind: 'sales-report', icon: '🧾', title: 'فروش مالی (خدمات آموزشی)' },
@@ -103,8 +113,10 @@ export const CARDS = [
   { kind: 'income-statement', icon: '📈', title: 'صورت سود و زیان' },
   { kind: 'costing-report', icon: '🧮', title: 'بهای تمام‌شده و حاشیه' },
   { kind: 'budget-variance', icon: '🎯', title: 'انحراف بودجه' },
-  // ── D) ترازنامه ──
-  { kind: 'balance-sheet', icon: '⚖️', title: 'صورت وضعیت مالی (ترازنامه)' },
+  // ── D) ترکیب مطالبات/تعهدات ──
+  // عنوان عمداً «ترازنامه» نیست: این پایگاه‌داده حسابِ نقد/بانک/داراییِ ثابت/
+  // سرمایه ندارد، پس ترازِ حسابداری (دارایی = بدهی + حقوق) قابل تولید نیست.
+  { kind: 'balance-sheet', icon: '⚖️', title: 'ترکیب مطالبات و تعهدات (گزارش کمکی)' },
   // ── E) نقدینگی ──
   { kind: 'cash-flow', icon: '💧', title: 'صورت جریان نقدی (دریافت و پرداخت)' },
   // ── F) پیمانکاری ──
@@ -133,14 +145,85 @@ const SPON_TYPES = ledgerTypesCsv(['SPONSORSHIP']);
 const LOAN_TYPES = ledgerTypesCsv(['LOAN']);
 const CREDIT_TYPES = ledgerTypesCsv(['CREDIT']);
 
+/**
+ * نقشهٔ صریحِ «نوع تراکنش → سبدِ صورت مالی».
+ *
+ * منبعِ واژگان: `src/lib/ledger-balance.ts` = همان ۲۰ نوعِ مجازِ
+ * `ck_student_ledger_txn_type` (DB). هیچ نوعی نباید بی‌صدا حذف شود؛ هر نوعی که
+ * در سبدهای زیر نباشد در سبدِ «سایر/طبقه‌بندی‌نشده» ظاهر می‌شود و شمارش و
+ * مبلغش در `unmappedTxnTypes()` گزارش می‌شود.
+ *
+ * | نوع | سبدِ صورت‌ها |
+ * |---|---|
+ * | TUITION_FIXED / TUITION_VARIABLE / TUITION_CHARGE / CHARGE / SUBJECT_ADDITIVE | شهریهٔ بدهکار (غیرنقدی) |
+ * | TUITION_ADJUST_DEC | تعدیل کاهشیِ شهریه (بدهکار، غیرنقدی) |
+ * | POS_REFUND | **خروج نقد**: برگشت وجه به دانشجو |
+ * | DISCOUNT_FIXED / DISCOUNT_VARIABLE / SUBJECT_DEDUCTIVE | تخفیف (غیرنقدی) |
+ * | TUITION_BATES + TUITION_BATES_FIXED/VARIABLE/AMOUNT | تخفیف/اعتبارِ بیتس (غیرنقدی) |
+ * | TUITION_ADJUST_INC | تعدیل افزایشی (تخفیف، غیرنقدی) |
+ * | PAYMENT / POS_PAYMENT | **ورود نقد**: شهریه |
+ * | CREDIT | **ورود نقد**: پرداختیِ دادهٔ مهاجرت |
+ * | SPONSORSHIP | **ورود نقد**: پوشش بنیاد/خیرین |
+ * | LOAN | **ورود نقد**: وامِ تأمین‌شده برای شهریه |
+ *
+ * نکته: LOAN در `PAID_LEDGER_TYPES` است (کاهش بدهیِ دانشجو) و واژگان هیچ نوعِ
+ * جداگانه‌ای برای «بازپرداخت وام» ندارد؛ بنابراین بازپرداخت در دفتر ثبت نمی‌شود
+ * و در گزارش‌ها به‌عنوان صفر/بدون‌طبقه نمایش داده می‌شود، نه اختراعِ نوعِ تازه.
+ */
+const TUITION_RECEIPT_TYPES = ['PAYMENT', 'POS_PAYMENT', 'CREDIT'] as const;
+const REFUND_OUTFLOW_TYPES = ['POS_REFUND'] as const;
+/** سبدهای نقدی — بقیهٔ انواعِ بدهکار/تخفیف عمداً «غیرنقدی» هستند. */
+const NONCASH_CHARGE_TYPES = DEBT_LEDGER_TYPES.filter((t) => t !== 'POS_REFUND');
+
+const TUITION_RECEIPT_CSV = ledgerTypesCsv(TUITION_RECEIPT_TYPES);
+const REFUND_OUTFLOW_CSV = ledgerTypesCsv(REFUND_OUTFLOW_TYPES);
+
+/** همهٔ انواعِ شناخته‌شده — مبنای تشخیصِ «طبقه‌بندی‌نشده» (بدون تکرار). */
+const ALL_KNOWN_TXN_TYPES = [
+  ...new Set<string>([
+    ...DEBT_LEDGER_TYPES,
+    ...DISCOUNT_LEDGER_TYPES,
+    ...PAID_LEDGER_TYPES,
+  ]),
+];
+const ALL_KNOWN_TXN_CSV = ledgerTypesCsv(ALL_KNOWN_TXN_TYPES);
+
 const isCharge = sql.raw(`sl."transactionType" IN (${CHARGE_TYPES})`);
 const isDisc = sql.raw(`sl."transactionType" IN (${DISC_TYPES})`);
-const isPay = sql.raw(`sl."transactionType" IN (${PAY_TYPES})`);
 const isSpon = sql.raw(`sl."transactionType" IN (${SPON_TYPES})`);
-const isLoan = sql.raw(`sl."transactionType" IN (${LOAN_TYPES})`);
-const isCredit = sql.raw(`sl."transactionType" IN (${CREDIT_TYPES})`);
 /** دریافتِ واقعی = پرداخت/کارت‌خوان + بستانکاریِ دادهٔ مهاجرت */
 const isReceived = sql.raw(`sl."transactionType" IN (${PAY_TYPES},${CREDIT_TYPES})`);
+/** نوعی که در واژگانِ کانونی نیست (یا NULL است) — باید «سایر» شود، نه حذف. */
+const isUnmapped = sql.raw(
+  `(sl."transactionType" IS NULL OR sl."transactionType" NOT IN (${ALL_KNOWN_TXN_CSV}))`,
+);
+/** طرفِ بستانکارِ دفتر = تخفیف‌ها + پرداخت‌ها (همان تعریفِ CREDIT_LEDGER_TYPES). */
+const STATEMENT_CREDIT_TYPES = ledgerTypesCsv([
+  ...DISCOUNT_LEDGER_TYPES,
+  ...PAID_LEDGER_TYPES,
+]);
+const isStatementCredit = sql.raw(`sl."transactionType" IN (${STATEMENT_CREDIT_TYPES})`);
+/** طرفِ حسابِ هر ردیف — یک CASE انحصاری با سبدِ سوم برای انواعِ ناشناخته. */
+const LEDGER_SIDE_EXPR = sql`CASE
+  WHEN ${isCharge} THEN 'بدهکار (بدهی دانشجو)'
+  WHEN ${isStatementCredit} THEN 'بستانکار (کاهش بدهی)'
+  ELSE 'طبقه‌بندی‌نشده (خارج از واژگان)'
+END`;
+
+/**
+ * سبدِ نقدیِ هر ردیف — **یک** CASE با ترتیبِ انحصاری، تا هر ردیف دقیقاً در یک
+ * سبد بیفتد. سبدهای بدهکار/تخفیف عمداً «غیرنقدی» هستند و در جمع دریافت/پرداخت
+ * نمی‌آیند (فقط در یادداشتِ صورت نمایش داده می‌شوند).
+ */
+const CASH_BUCKET = sql.raw(`CASE
+  WHEN sl."transactionType" IN (${TUITION_RECEIPT_CSV}) THEN 'TUITION'
+  WHEN sl."transactionType" = 'SPONSORSHIP' THEN 'SPONSOR'
+  WHEN sl."transactionType" = 'LOAN' THEN 'LOAN'
+  WHEN sl."transactionType" IN (${REFUND_OUTFLOW_CSV}) THEN 'REFUND'
+  WHEN sl."transactionType" IN (${ledgerTypesCsv(NONCASH_CHARGE_TYPES)}) THEN 'NONCASH_CHARGE'
+  WHEN sl."transactionType" IN (${DISC_TYPES}) THEN 'NONCASH_DISCOUNT'
+  ELSE 'OTHER'
+END`);
 
 /**
  * عبارتِ «نوع تراکنش» برای یک نامِ مستعارِ دلخواه.
@@ -186,6 +269,35 @@ function ledgerConds(f: ReportFilters, alias = 'sl') {
     c.push(sql`${a}."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)`);
   }
   return c;
+}
+
+/**
+ * انواعِ تراکنشی که در واژگانِ کانونی نیستند — با تعداد و جمعِ مبلغ.
+ *
+ * چرا لازم است؟ اگر دادهٔ مهاجرت/قدیمی نوعی خارج از ۲۰ نوعِ مجاز داشته باشد،
+ * جمع‌های SQL (که با `IN (...)` فیلتر می‌شوند) آن را بی‌صدا دور می‌ریزند و
+ * «صورت» تراز نمی‌شود. این تابع همان ردیف‌ها را برای نمایش در سبدِ «سایر»
+ * برمی‌گرداند؛ هیچ مبلغی حذف نمی‌شود.
+ */
+async function unmappedTxnTypes(uni: number, f: ReportFilters) {
+  const termFilter = f.term
+    ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)`
+    : sql``;
+  const data = await db.execute<{ type: string | null; cnt: string; amount: string }>(sql`
+    SELECT COALESCE(sl."transactionType", '—') AS type,
+      COUNT(*)::int AS cnt,
+      COALESCE(SUM(sl.amount), 0)::text AS amount
+    FROM student_ledger sl
+    WHERE sl."universityId" = ${uni} ${termFilter}
+      AND ${isUnmapped}
+    GROUP BY 1
+    ORDER BY 3 DESC, 1
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
+  return data.rows.map((r) => ({
+    type: String(r.type ?? '—'),
+    count: R(r.cnt),
+    amount: R(r.amount),
+  }));
 }
 
 /** ساختِ خروجیِ یک گزارشِ «صورت» (سطرهای قلم/مبلغ) */
@@ -284,7 +396,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         avg: Math.round((gross - discount) / students),
       };
     });
-    r.summary = 'فروش خالص = فروش ناخالص − تخفیف‌ها (به ریال)';
+    r.summary = 'فروش خالص = فروش ناخالص − تخفیف‌ها (به ریال)' + pagedNote(r);
     return r;
   }
 
@@ -438,37 +550,61 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   }
 
   // ══════════════════════════════════════════════════════════════════
-  //  D) صورت وضعیت مالی (ترازنامه)
+  //  D) ترکیب مطالبات و تعهدات (ترازنامهٔ صادق)
   // ══════════════════════════════════════════════════════════════════
   if (kind === 'balance-sheet') {
     const b = await balanceSheetData(uni, f);
     const bs = buildBalanceSheet(b);
+    const unmapped = await unmappedTxnTypes(uni, f);
+    const netBook = bs.assets.receivables - bs.liabilities.studentPayables;
     const rows: ReportResult['rows'] = [
-      { label: '── دارایی‌ها ──', value: 0, kind: 'HEAD', note: '' },
-      { label: 'مطالبات از دانشجویان (ماندهٔ بدهی)', value: bs.assets.receivables, kind: 'ITEM', note: '' },
-      { label: 'وام‌های پرداختی به دانشجو', value: bs.assets.loansReceivable, kind: 'ITEM', note: '' },
-      { label: 'جمع دارایی‌ها', value: bs.assets.total, kind: 'TOTAL', note: '' },
-      { label: '── بدهی‌ها ──', value: 0, kind: 'HEAD', note: '' },
-      { label: 'بستانکاری دانشجویان', value: bs.liabilities.studentPayables, kind: 'ITEM', note: '' },
+      { label: '── مطالبات ──', value: 0, kind: 'HEAD', note: '' },
+      { label: 'مطالبات از دانشجویان (ماندهٔ بدهی)', value: bs.assets.receivables, kind: 'ITEM', note: 'جمعِ ماندهٔ مثبتِ هر دانشجو در دفتر' },
+      { label: 'جمع مطالبات', value: bs.assets.receivables, kind: 'TOTAL', note: '' },
+      { label: '── وام‌ها (اطلاعاتی) ──', value: 0, kind: 'HEAD', note: '' },
+      { label: 'وامِ ثبت‌شده در دفتر دانشجو (کل)', value: bs.assets.loansReceivable, kind: 'ITEM', note: 'نوع LOAN — در ماندهٔ دانشجو لحاظ شده، نه داراییِ جدا' },
+      { label: 'بازپرداخت وام', value: 0, kind: 'ITEM', note: 'واژگان دفتر نوعِ بازپرداخت وام ندارد؛ بازپرداخت در این schema ثبت نمی‌شود' },
+      { label: '── تعهدات ──', value: 0, kind: 'HEAD', note: '' },
+      { label: 'بستانکاری دانشجویان (ماندهٔ اعتبار)', value: bs.liabilities.studentPayables, kind: 'ITEM', note: 'جمعِ ماندهٔ منفیِ هر دانشجو' },
       { label: 'تعهداتِ حق‌التدریسِ پرداخت‌نشده', value: bs.liabilities.payrollPayable, kind: 'ITEM', note: '' },
       { label: 'بدهی به پیمانکاران/تأمین‌کنندگان', value: bs.liabilities.supplierPayable, kind: 'ITEM', note: '' },
-      { label: 'جمع بدهی‌ها', value: bs.liabilities.total, kind: 'TOTAL', note: '' },
-      { label: '── حقوق و سرمایه ──', value: 0, kind: 'HEAD', note: '' },
-      { label: 'سود/زیان انباشته', value: bs.equity.retainedSurplus, kind: 'ITEM', note: '' },
-      { label: 'جمع حقوق و سرمایه', value: bs.equity.total, kind: 'TOTAL', note: '' },
-      { label: 'اختلاف تراز (دارایی − بدهی − حقوق)', value: bs.difference, kind: 'TOTAL', note: bs.isBalanced ? 'تراز است' : 'نیازمند بررسی' },
+      { label: 'جمع تعهدات', value: bs.liabilities.total, kind: 'TOTAL', note: '' },
+      { label: '── یادآوری ──', value: 0, kind: 'HEAD', note: '' },
+      { label: 'ماندهٔ خالص دفتری (مطالبات − بستانکاری دانشجو)', value: netBook, kind: 'TOTAL', note: 'برابر با جمعِ خالصِ ردیف‌های دفتر؛ نه یک معادلهٔ ترازنامه' },
+      { label: 'سود/زیان عملیاتیِ انباشته (یادآوری)', value: bs.equity.retainedSurplus, kind: 'ITEM', note: 'درآمد − هزینهٔ ثبت‌شده؛ جزءِ حقوق/سرمایهٔ حسابداری نیست' },
     ];
+    if (unmapped.length) {
+      rows.push({ label: '── سایر (طبقه‌بندی‌نشده) ──', value: 0, kind: 'HEAD', note: 'خارج از واژگان کانونیِ دفتر' });
+      for (const u of unmapped) {
+        rows.push({
+          label: 'سایر (طبقه‌بندی‌نشده)',
+          value: u.amount,
+          kind: 'ITEM',
+          note: `کد نوع: ${u.type} · ${faAmount(u.count)} ردیف — در هیچ سبدِ نام‌دارِ صورت نیامده است`,
+        });
+      }
+    }
     // «پیش‌دریافت بابتِ نیمسال‌های آینده» حذف شد: مقدارش همیشه صفرِ هاردکد
     // بود (پایگاه داده مفهوم deferred را ثبت نمیکند) و ردیفِ همیشه‌صفر فقط
     // ترازنامه را شلوغ میکرد. جمع بدهی‌ها در lib با deferredRevenue=0 دقیق میماند.
-    return statement('صورت وضعیت مالی', rows as never, `تا پایان ${b.period}`);
+    // ⚠ عمداً ردیفِ «اختلاف تراز» چاپ نمی‌شود. `difference` در lib از
+    //   دارایی − بدهی − حقوق ساخته می‌شد، اما schema حساب‌های نقد/بانک/
+    //   داراییِ ثابت/سرمایه را ندارد؛ عددِ حاصل یک «اختلاف» واقعی نبود و
+    //   کاربر را به اشتباه می‌انداخت. اجزای واقعی + یادداشتِ صادق جای آن را
+    //   گرفته‌اند.
+    return statement(
+      'ترکیب مطالبات و تعهدات',
+      rows as never,
+      `تا پایان ${b.period} — این گزارش ترازنامهٔ حسابداری نیست: schema فقط دفتر یک‌طرفهٔ دانشجو دارد `
+        + '(بدون حساب نقد/بانک، دارایی ثابت و سرمایه)؛ بنابراین «دارایی = بدهی + حقوق» قابل محاسبه نیست.',
+    );
   }
 
   // ══════════════════════════════════════════════════════════════════
   //  E) صورت جریان نقدی (نقدینگی)
   // ══════════════════════════════════════════════════════════════════
   if (kind === 'cash-flow') {
-    const rows = await cashFlowRows(uni, f);
+    const { rows, unmapped } = await cashFlowRows(uni, f);
     if (!rows.length) {
       return statement('صورت جریان نقدی', [{
         label: 'گردش نقدی ثبت نشده است',
@@ -477,7 +613,17 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         note: 'واریزها باید تاریخِ واریز (depositDate) داشته باشند.',
       }]);
     }
-    return statement('صورت جریان نقدی', rows as never, 'بر پایهٔ تاریخ واقعی واریز/پرداخت');
+    const unmappedNote = unmapped.length
+      ? ` — ${faAmount(unmapped.length)} نوعِ خارج از واژگان (${unmapped
+          .slice(0, 5)
+          .map((u) => u.type)
+          .join('، ')}${unmapped.length > 5 ? '، …' : ''}) در «سایر دریافت‌های طبقه‌بندی‌نشده» آمده است.`
+      : '';
+    return statement(
+      'صورت جریان نقدی',
+      rows as never,
+      'بر پایهٔ تاریخِ واقعیِ دریافت/پرداخت؛ اقلام غیرنقدی (شهریه و تخفیف) در گردش نقد نیامده‌اند' + unmappedNote,
+    );
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -512,7 +658,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     );
     // وضعیتِ خام انگلیسی (DRAFT/ACTIVE/SETTLED/TERMINATED) فارسی میشود
     r.rows = r.rows.map((x) => ({ ...x, status: faEnum(CONTRACT_STATUS_FA, x.status) }));
-    r.summary = 'مانده = مبلغ قرارداد − پرداخت‌شده';
+    r.summary = 'مانده = مبلغ قرارداد − پرداخت‌شده' + pagedNote(r);
     return r;
   }
 
@@ -548,7 +694,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY i."invoiceDate" DESC NULLS LAST`,
       f,
     );
-    r.summary = 'ماه‌حساب = صورتحساب − پرداخت‌شده (با احتساب مالیات ارزش افزوده)';
+    r.summary = 'ماه‌حساب = صورتحساب − پرداخت‌شده (با احتساب مالیات ارزش افزوده)' + pagedNote(r);
     return r;
   }
 
@@ -581,7 +727,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     );
     // وضعیتِ خام انگلیسی (DRAFT/MID_TERM_PAID/…) فارسی میشود
     r.rows = r.rows.map((x) => ({ ...x, status: faEnum(PAYROLL_STATUS_FA, x.status) }));
-    r.summary = 'کسورات = بیمهٔ پیش‌پرداخت و کسوراتِ قانونیِ حق‌التدریس';
+    r.summary = 'کسورات = بیمهٔ پیش‌پرداخت و کسوراتِ قانونیِ حق‌التدریس' + pagedNote(r);
     return r;
   }
 
@@ -613,7 +759,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     // وضعیتِ خام انگلیسی (OPEN/IN_PROGRESS/CLOSED/SUSPENDED) فارسی میشود؛
     // «نوع» (caseType) متنِ آزاد است و ممکن است از قبل فارسی باشد — دست نمیخورد.
     r.rows = r.rows.map((x) => ({ ...x, status: faEnum(LEGAL_STATUS_FA, x.status) }));
-    r.summary = 'پرونده‌های حقوقیِ در جریان و مختومه';
+    r.summary = 'پرونده‌های حقوقیِ در جریان و مختومه' + pagedNote(r);
     return r;
   }
 
@@ -646,7 +792,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     );
     // منبعِ خام انگلیسی (INVOICE/CONTRACT/EXPENSE) فارسی میشود
     r.rows = r.rows.map((x) => ({ ...x, source: faEnum(VAT_SOURCE_FA, x.source) }));
-    r.summary = 'مالیات بر ارزش افزودهٔ اسناد (فاکتورها و صورتحساب پیمانکاران)';
+    r.summary = 'مالیات بر ارزش افزودهٔ اسناد (فاکتورها و صورتحساب پیمانکاران)' + pagedNote(r);
     return r;
   }
 
@@ -664,17 +810,35 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`FROM student_ledger sl`,
       ledgerConds(f),
       sql`sl."transactionType" AS type,
-        CASE WHEN ${isCharge} THEN 'بدهکار (بدهی دانشجو)' ELSE 'بستانکار (کاهش بدهی)' END AS side,
+        ${LEDGER_SIDE_EXPR} AS side,
         COUNT(*)::int AS count,
         COALESCE(SUM(sl.amount), 0)::bigint AS amount`,
       sql`ORDER BY side, SUM(sl.amount) DESC`,
       f,
-      sql`sl."transactionType", CASE WHEN ${isCharge} THEN 'بدهکار (بدهی دانشجو)' ELSE 'بستانکار (کاهش بدهی)' END`,
+      sql`sl."transactionType", ${LEDGER_SIDE_EXPR}`,
     );
     r.rows = r.rows.map((x) => ({ ...x, type: LEDGER_TYPE_FA[String(x.type)] ?? String(x.type) }));
     // برچسب جمعِ پیشتر ناخوانا بود («جمع دو طرف باید برابر باشد (دفتر دوطرفه)»)
     // و شبهه ایجاد میکرد که ستون «تعداد» هم در جمع مبلغ نقش دارد؛ متنِ صریح:
     r.summary = 'جمعِ ستون «مبلغ» در دو طرف باید برابر باشد (ترازِ دفتر دوطرفه) — ستون «تعداد» فقط شمارش ردیفهاست، نه مبلغ.';
+    // جمعِ هر طرف از **کلِ مجموعهٔ فیلترشده** (همان WHERE) گرفته می‌شود، نه
+    // از ردیف‌های صفحه. دفتر یک‌طرفه است؛ برابریِ دو طرف الزامی نیست و
+    // اختلاف همان ماندهٔ دفتری است (fix c/d).
+    const gc = await db.execute<{ debit: string; credit: string; other: string }>(sql`
+      SELECT
+        COALESCE(SUM(sl.amount) FILTER (WHERE ${isCharge}), 0)::text AS debit,
+        COALESCE(SUM(sl.amount) FILTER (WHERE ${isStatementCredit}), 0)::text AS credit,
+        COALESCE(SUM(sl.amount) FILTER (WHERE NOT (${isCharge}) AND NOT (${isStatementCredit})), 0)::text AS other
+      FROM student_ledger sl
+      WHERE ${sql.join(ledgerConds(f), sql` AND `)}
+    `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
+    const debit = R(gc.rows[0]?.debit);
+    const credit = R(gc.rows[0]?.credit);
+    const other = R(gc.rows[0]?.other);
+    r.summary = `جمع بدهکار ${faAmount(debit)} / جمع بستانکار ${faAmount(credit)} — ماندهٔ دفتری `
+      + `${faAmount(debit - credit)} ریال (دفتر یک‌طرفه است؛ برابریِ دو طرف الزامی نیست)`
+      + (other ? ` · طبقه‌بندی‌نشده: ${faAmount(other)} ریال` : '')
+      + pagedNote(r);
     return r;
   }
 
@@ -690,6 +854,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'count', title: 'تعداد', format: 'NUMBER' },
         { key: 'debit', title: 'بدهکار', format: 'MONEY' },
         { key: 'credit', title: 'بستانکار', format: 'MONEY' },
+        { key: 'other', title: 'طبقه‌بندی‌نشده', format: 'MONEY' },
         // «خالص» نام گمراه‌کننده بود؛ این ستون جمعِ گردش (بدهکار + بستانکار) است
         { key: 'net', title: 'جمع گردش', format: 'MONEY' },
       ],
@@ -699,14 +864,15 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         sl."transactionType" AS type,
         COUNT(*)::int AS count,
         COALESCE(SUM(sl.amount) FILTER (WHERE ${isCharge}), 0)::bigint AS debit,
-        COALESCE(SUM(sl.amount) FILTER (WHERE NOT (${isCharge})), 0)::bigint AS credit,
+        COALESCE(SUM(sl.amount) FILTER (WHERE ${isStatementCredit}), 0)::bigint AS credit,
+        COALESCE(SUM(sl.amount) FILTER (WHERE NOT (${isCharge}) AND NOT (${isStatementCredit})), 0)::bigint AS other,
         COALESCE(SUM(sl.amount), 0)::bigint AS net`,
       sql`ORDER BY day DESC, SUM(sl.amount) DESC`,
       f,
       sql`TO_CHAR(COALESCE(sl."depositDate", sl."createdAt")::date, 'YYYY-MM-DD'), sl."transactionType"`,
     );
     r.rows = r.rows.map((x) => ({ ...x, type: LEDGER_TYPE_FA[String(x.type)] ?? String(x.type) }));
-    r.summary = 'دفتر روزنامه به تفکیک روز و نوع تراکنش';
+    r.summary = 'دفتر روزنامه به تفکیک روز و نوع تراکنش — هر ردیف دقیقاً در یک طرف؛ انواعِ خارج از واژگان در ستون «طبقه‌بندی‌نشده»' + pagedNote(r);
     return r;
   }
 
@@ -738,7 +904,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY it.name`,
       f,
     );
-    r.summary = 'موجودی = ورودی − خروجی · ارزش = موجودی × بهای واحد';
+    r.summary = 'موجودی = ورودی − خروجی · ارزش = موجودی × بهای واحد' + pagedNote(r);
     return r;
   }
 
@@ -770,7 +936,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       sql`ORDER BY e."expenseDate" DESC NULLS LAST`,
       f,
     );
-    r.summary = 'هزینه‌های عمومی/شرکتی به تفکیک گروه و نیمسال';
+    r.summary = 'هزینه‌های عمومی/شرکتی به تفکیک گروه و نیمسال' + pagedNote(r);
     return r;
   }
 
@@ -815,6 +981,22 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   //  I) درآمد به تفکیک سلسله‌مراتب
   // ══════════════════════════════════════════════════════════════════
   if (kind === 'revenue-hierarchy') {
+    // from/conds یک‌بار ساخته می‌شوند تا هم صفحهٔ نمایش و هم جمعِ کاملِ
+    // مخرجِ «سهم (٪)» دقیقاً روی همان مجموعهٔ فیلترشده اجرا شوند (fix d).
+    const from = sql`FROM students s
+        JOIN users u ON u.id = s."userId"
+        LEFT JOIN majors m ON m.id = s."majorId"
+        LEFT JOIN faculties fc ON fc.id = m."facultyId"
+        LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+        LEFT JOIN student_ledger sl ON sl."studentId" = s.id
+        ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
+        LEFT JOIN academic_terms at ON at.id = sl."termId"`;
+    const conds = [
+      sql`s."universityId" = ${uni}`,
+      ...(studentCodeCond(f) ? [studentCodeCond(f)!] : []),
+      ...(f.facultyId ? [sql`fc.id = ${f.facultyId}`] : []),
+      ...(f.majorId ? [sql`m.id = ${f.majorId}`] : []),
+    ];
     const r = await runPaged(
       [
         { key: 'level', title: 'سطح' },
@@ -828,33 +1010,31 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         { key: 'balance', title: 'مانده', format: 'MONEY' },
         { key: 'percent', title: 'سهم (٪)', format: 'NUMBER' },
       ],
-      sql`FROM students s
-        JOIN users u ON u.id = s."userId"
-        LEFT JOIN majors m ON m.id = s."majorId"
-        LEFT JOIN faculties fc ON fc.id = m."facultyId"
-        LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-        LEFT JOIN student_ledger sl ON sl."studentId" = s.id
-        ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}
-        LEFT JOIN academic_terms at ON at.id = sl."termId"`,
-      [
-        sql`s."universityId" = ${uni}`,
-        ...(studentCodeCond(f) ? [studentCodeCond(f)!] : []),
-        ...(f.facultyId ? [sql`fc.id = ${f.facultyId}`] : []),
-        ...(f.majorId ? [sql`m.id = ${f.majorId}`] : []),
-      ],
+      from,
+      conds,
       sql`CASE WHEN fc.id IS NULL THEN 'بدون دانشکده' ELSE 'دانشکده' END AS level,
         COALESCE(fc.name, m.name, d.title, '—') AS name,
         COALESCE(at."termCode", '—') AS term,
         COUNT(DISTINCT s.id) AS students,
         COALESCE(SUM(sl.amount) FILTER (WHERE ${isCharge}), 0)::bigint AS gross,
         COALESCE(SUM(sl.amount) FILTER (WHERE ${isDisc}), 0)::bigint AS discount,
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${isPay}), 0)::bigint AS received`,
+        COALESCE(SUM(sl.amount) FILTER (WHERE ${isReceived}), 0)::bigint AS received`,
       sql`ORDER BY level, name, at."sortOrder" NULLS LAST`,
       f,
       sql`CASE WHEN fc.id IS NULL THEN 'بدون دانشکده' ELSE 'دانشکده' END,
         COALESCE(fc.name, m.name, d.title, '—'), COALESCE(at."termCode", '—'), at."id"`,
     );
-    const totalNet = r.rows.reduce((a, x) => a + (R(x.gross) - R(x.discount)), 0);
+    // مخرجِ «سهم» از **کلِ مجموعهٔ فیلترشده** می‌آید، نه از ردیف‌های صفحه؛
+    // پیش‌تر جمعِ همین ۵۰ ردیف بود و درصدها با صفحه‌بندی/جابه‌جایی می‌شکست.
+    const agg = await db.execute<{ net: string }>(sql`
+      SELECT (
+        COALESCE(SUM(sl.amount) FILTER (WHERE ${isCharge}), 0)
+        - COALESCE(SUM(sl.amount) FILTER (WHERE ${isDisc}), 0)
+      )::text AS net
+      ${from}
+      WHERE ${sql.join(conds, sql` AND `)}
+    `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
+    const totalNet = R(agg.rows[0]?.net);
     r.rows = r.rows.map((x) => {
       const net = R(x.gross) - R(x.discount);
       return {
@@ -864,7 +1044,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         percent: totalNet === 0 ? 0 : Number(((net / totalNet) * 100).toFixed(2)),
       };
     });
-    r.summary = 'درآمد خالص = ناخالص − تخفیف · سهم بر پایهٔ درآمد خالصِ کل ردیف‌های همین صفحه';
+    r.summary = `درآمد خالص = ناخالص − تخفیف · سهم بر پایهٔ درآمد خالصِ کلِ مجموعهٔ فیلترشده (${faAmount(totalNet)} ریال)`
+      + (r.rows.length < r.total ? ` — نمایش ${faAmount(r.rows.length)} از ${faAmount(r.total)}` : '');
     return r;
   }
 
@@ -1087,7 +1268,13 @@ async function unitsByTerm(uni: number, f: ReportFilters) {
   return m;
 }
 
-/** دادهٔ ترازنامه در یک تاریخ (پایان ترم) */
+/**
+ * اجزای «ترکیب مطالبات و تعهدات» در پایان دورهٔ انتخابی.
+ *
+ * ⚠ این تابع ترازنامهٔ حسابداری نمی‌سازد: فقط ماندهٔ دفترِ یک‌طرفهٔ دانشجو،
+ * تعهداتِ حق‌التدریس و بدهیِ پیمانکاران را جمع می‌زند. داراییِ نقد/ثابت و
+ * سرمایه در schema وجود ندارند (به همین دلیل کارت هم «ترازنامه» نام ندارد).
+ */
 async function balanceSheetData(uni: number, f: ReportFilters) {
   const period = f.term || 'همهٔ دوره';
   const termFilter = f.term
@@ -1126,7 +1313,10 @@ async function balanceSheetData(uni: number, f: ReportFilters) {
     )
     SELECT
       COALESCE(SUM(GREATEST(chg - dsc - spo - pay - ln - cr, 0)), 0)::text AS recv,
-      COALESCE(SUM(GREATEST(ln - pay, 0)), 0)::text AS loans,
+      -- ⚠ پیش‌تر «وام» = GREATEST(ln - pay, 0) بود: تمام پرداخت‌های دانشجو از
+      -- وام کم می‌شد، در حالی که این دو مقولهٔ جدا هستند و نتیجه بی‌معنا می‌شد.
+      -- اکنون فقط جمعِ ردیف‌های نوع LOAN (وامِ ثبت‌شده در دفتر) است.
+      COALESCE(SUM(ln), 0)::text AS loans,
       COALESCE(SUM(GREATEST(-(chg - dsc - spo - pay - ln - cr), 0)), 0)::text AS payables
     FROM per_student
   `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
@@ -1204,63 +1394,156 @@ function jalaliMonthLabel(gregKey: string): string {
 }
 
 /** ردیف‌های صورت جریان نقدی — به تفکیک ماه */
-async function cashFlowRows(uni: number, f: ReportFilters): Promise<ReportResult['rows']> {
+async function cashFlowRows(
+  uni: number,
+  f: ReportFilters,
+): Promise<{ rows: ReportResult['rows']; unmapped: { type: string; count: number; amount: number }[] }> {
   const termFilter = f.term
     ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)`
     : sql``;
+  const termIdFilter = f.term
+    ? sql`(SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)`
+    : null;
   const data = await db.execute<{
-    month: string; tuition: string; sponsor: string; other: string;
+    month: string; tuition: string; sponsor: string; loan: string; other: string;
+    refund: string; noncash_charge: string; noncash_discount: string;
   }>(sql`
-    SELECT TO_CHAR(COALESCE(sl."depositDate", sl."createdAt")::date, 'YYYY-MM') AS month,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isReceived}), 0)::text AS tuition,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isSpon}), 0)::text AS sponsor,
-      COALESCE(SUM(sl.amount) FILTER (WHERE ${isLoan}), 0)::text AS other
-    FROM student_ledger sl
-    WHERE sl."universityId" = ${uni} ${termFilter}
-      AND COALESCE(sl."depositDate", sl."createdAt") IS NOT NULL
-    GROUP BY 1 ORDER BY 1 DESC
+    WITH b AS (
+      SELECT TO_CHAR(COALESCE(sl."depositDate", sl."createdAt")::date, 'YYYY-MM') AS month,
+        ${CASH_BUCKET} AS bucket,
+        sl.amount
+      FROM student_ledger sl
+      WHERE sl."universityId" = ${uni} ${termFilter}
+        AND COALESCE(sl."depositDate", sl."createdAt") IS NOT NULL
+    )
+    SELECT month,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'TUITION'), 0)::text AS tuition,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'SPONSOR'), 0)::text AS sponsor,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'LOAN'), 0)::text AS loan,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'OTHER'), 0)::text AS other,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'REFUND'), 0)::text AS refund,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'NONCASH_CHARGE'), 0)::text AS noncash_charge,
+      COALESCE(SUM(amount) FILTER (WHERE bucket = 'NONCASH_DISCOUNT'), 0)::text AS noncash_discount
+    FROM b
+    GROUP BY month
+    ORDER BY month DESC
   `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
   // پرداختِ حق‌التدریس — عمداً با همان کلیدِ 'YYYY-MM'ِ کوئریِ دریافتها
   // گروه‌بندی میشود تا joinِ دریافت/پرداختِ هر ماه دقیق بماند؛ برچسب شمسی
   // فقط در jalaliMonthLabel() (لایهٔ نمایش) ساخته میشود.
   const pay = await db.execute<{ month: string; amount: string }>(sql`
-    SELECT TO_CHAR(m.month, 'YYYY-MM') AS month, COALESCE(SUM(m.amount), 0)::text AS amount
+    SELECT TO_CHAR(x.paid_at, 'YYYY-MM') AS month,
+      COALESCE(SUM(x.amount), 0)::text AS amount
     FROM (
-      SELECT COALESCE(ps."midtermPaidAt", ps."finalPaidAt") AS month, ps."netAmount" AS amount
-      FROM payroll_statements ps WHERE ps."universityId" = ${uni}
-    ) m
-    WHERE m.month IS NOT NULL GROUP BY 1
+      SELECT ps."midtermPaidAmount" AS amount, ps."midtermPaidAt" AS paid_at
+      FROM payroll_statements ps
+      JOIN professor_term_contracts c ON c.id = ps."contractId"
+      WHERE ps."universityId" = ${uni}
+        ${termIdFilter ? sql`AND c."termId" = ${termIdFilter}` : sql``}
+      UNION ALL
+      SELECT ps."finalPaidAmount", ps."finalPaidAt"
+      FROM payroll_statements ps
+      JOIN professor_term_contracts c ON c.id = ps."contractId"
+      WHERE ps."universityId" = ${uni}
+        ${termIdFilter ? sql`AND c."termId" = ${termIdFilter}` : sql``}
+    ) x
+    WHERE x.paid_at IS NOT NULL AND COALESCE(x.amount, 0) <> 0
+    GROUP BY 1
   `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
 
+  const exp = await db.execute<{ month: string; amount: string }>(sql`
+    SELECT TO_CHAR(e."expenseDate", 'YYYY-MM') AS month,
+      COALESCE(SUM(e."paidAmount"), 0)::text AS amount
+    FROM financial_expenses e
+    WHERE e."universityId" = ${uni}
+      ${termIdFilter ? sql`AND e."termId" = ${termIdFilter}` : sql``}
+      AND e."expenseDate" IS NOT NULL
+    GROUP BY 1
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
+
+  const invoicePay = await db.execute<{ month: string; amount: string }>(sql`
+    SELECT TO_CHAR(i."invoiceDate", 'YYYY-MM') AS month,
+      COALESCE(SUM(i."paidAmount"), 0)::text AS amount
+    FROM financial_contract_invoices i
+    JOIN financial_contracts c ON c.id = i."contractId"
+    WHERE i."universityId" = ${uni}
+      ${termIdFilter ? sql`AND c."termId" = ${termIdFilter}` : sql``}
+      AND i."invoiceDate" IS NOT NULL
+    GROUP BY 1
+  `).catch((e: unknown) => { console.error('[finance-statements] query failed', e); throw e; });
+
+  const unmapped = await unmappedTxnTypes(uni, f);
+  const unmappedAmount = unmapped.reduce((a, x) => a + x.amount, 0);
+
+  const byMonth = new Map(data.rows.map((x) => [x.month, x]));
   const payMap = new Map(pay.rows.map((x) => [x.month, R(x.amount)]));
+  const expMap = new Map(exp.rows.map((x) => [x.month, R(x.amount)]));
+  const invMap = new Map(invoicePay.rows.map((x) => [x.month, R(x.amount)]));
   const rows: ReportResult['rows'] = [];
   let cumulative = 0;
   // کلیدِ هر دو منبع داده 'YYYY-MM' میلادی است (join امن) — فقط برچسبِ نمایشی
   // شمسی میشود. ترتیب: قدیم به جدید تا «ماندهٔ انباشته» درست جمع بخورد.
-  const months = data.rows.map((x) => x.month).filter(Boolean);
-  for (const m of [...months].reverse()) {
-    const d = data.rows.find((x) => x.month === m)!;
+  const keys = new Set<string>([
+    ...data.rows.map((x) => x.month).filter(Boolean),
+    ...payMap.keys(),
+    ...expMap.keys(),
+    ...invMap.keys(),
+  ]);
+  const months = [...keys].sort();
+  for (const m of months) {
+    const d = byMonth.get(m);
     const faMonth = jalaliMonthLabel(m);
+    const tuition = R(d?.tuition);
+    const sponsor = R(d?.sponsor);
+    const loan = R(d?.loan);
+    const other = R(d?.other);
+    const refund = R(d?.refund);
+    const teaching = payMap.get(m) ?? 0;
+    const expenses = expMap.get(m) ?? 0;
+    const contractors = invMap.get(m) ?? 0;
+    const noncash = R(d?.noncash_charge) + R(d?.noncash_discount);
+
     const cf = buildCashFlow({
       period: faMonth,
-      tuitionReceipts: R(d.tuition),
-      sponsorshipReceipts: R(d.sponsor),
-      otherReceipts: R(d.other),
-      teachingPayments: payMap.get(m) ?? 0,
-      otherPayments: 0,
+      tuitionReceipts: tuition,
+      sponsorshipReceipts: sponsor,
+      // `buildCashFlow` فیلدِ جداگانهٔ وام ندارد؛ وام در نمایش ردیفِ نام‌دارِ
+      // مستقل دارد و اینجا فقط برای اینکه «جمع دریافت‌ها» و «خالص حرکت نقد»
+      // کامل بمانند به otherReceipts اضافه می‌شود. `other` هم دقیقاً
+      // باقی‌ماندهٔ سبدِ OTHER (انواعِ خارج از واژگان) است.
+      otherReceipts: loan + other,
+      teachingPayments: teaching,
+      otherPayments: expenses + contractors + refund,
     });
     cumulative += cf.netMovement;
+
+    const otherNote = other === 0 && unmappedAmount === 0
+      ? ''
+      : 'شامل انواعِ خارج از واژگانِ دفتر (بدون حذف)';
     rows.push(
       { label: `── ${faMonth} ──`, value: 0, kind: 'HEAD', note: '' },
-      { label: 'دریافت از شهریه', value: cf.receipts.tuition, kind: 'ITEM', note: '' },
+      { label: 'دریافت از شهریه', value: cf.receipts.tuition, kind: 'ITEM', note: 'پرداخت/کارت‌خوان + بستانکاریِ مهاجرت' },
       { label: 'دریافت از بنیاد/خیرین', value: cf.receipts.sponsorship, kind: 'ITEM', note: '' },
-      { label: 'سایر دریافت‌ها', value: cf.receipts.other, kind: 'ITEM', note: '' },
+      { label: 'دریافت وام', value: loan, kind: 'ITEM', note: 'وامِ تأمین‌شده برای شهریه (نوع LOAN)' },
+      { label: 'سایر دریافت‌های طبقه‌بندی‌نشده', value: other, kind: 'ITEM', note: otherNote },
       { label: 'جمع دریافت‌ها', value: cf.receipts.total, kind: 'TOTAL', note: '' },
-      { label: 'پرداخت حق‌التدریس', value: -cf.payments.teaching, kind: 'ITEM', note: '' },
-      { label: 'خالص حرکت نقد', value: cf.netMovement, kind: 'TOTAL', note: '' },
+      { label: 'پرداخت حق‌التدریس (واقعی)', value: -cf.payments.teaching, kind: 'ITEM', note: 'میان‌ترم + پایان‌ترمِ پرداخت‌شده' },
+      { label: 'پرداخت هزینه‌های شرکت', value: -expenses, kind: 'ITEM', note: 'بر پایهٔ مبلغ پرداخت‌شده' },
+      { label: 'پرداخت به پیمانکاران', value: -contractors, kind: 'ITEM', note: 'بر پایهٔ مبلغ پرداخت‌شدهٔ صورت‌حساب' },
+      { label: 'برگشت وجه به دانشجو', value: -refund, kind: 'ITEM', note: 'نوع POS_REFUND — خروج نقد' },
+      { label: 'جمع پرداخت‌ها', value: -cf.payments.total, kind: 'TOTAL', note: '' },
+      { label: 'خالص حرکت نقد', value: cf.netMovement, kind: 'TOTAL', note: 'جمع دریافت‌ها − جمع پرداخت‌ها' },
       { label: 'ماندهٔ انباشتهٔ نقد', value: cumulative, kind: 'TOTAL', note: '' },
     );
+    if (noncash !== 0) {
+      rows.push({
+        label: 'یادآوری: اقلام غیرنقدی (شهریه/تخفیف)',
+        value: noncash,
+        kind: 'ITEM',
+        note: 'در جمع دریافت/پرداخت نیامده است — فقط برای شفافیتِ پوششِ واژگان',
+      });
+    }
   }
-  return rows;
+  return { rows, unmapped };
 }
