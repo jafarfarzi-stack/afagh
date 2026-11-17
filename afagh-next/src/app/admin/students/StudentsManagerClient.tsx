@@ -7,45 +7,26 @@ import { backfillRolesAction, bulkForcePasswordChangeAction, bulkResetPasswordsA
 import { requestStepUpAction } from '@/lib/step-up-actions';
 import type { RegulationConfig } from '@/lib/regulations-engine';
 import { ClientTh, ServerTh, useClientTable, type ColumnDef } from '@/components/DataTable';
-import { QUOTA_FA, STUDENT_STATUS_FA, gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa} from '@/lib/student-labels';
+import { gradeStatusChip, gradeStatusFa, studentStatusChip, studentStatusFa } from '@/lib/student-labels';
 import MobileCardList from '@/components/MobileCardList';
 import { useConfirm } from '@/components/ui/Confirm';
 
 // ── هستهٔ خالص و قرارداد داده از ماژول‌های جدا (ریفکتور دور ۱۱) ──
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
 import { DEFAULT_PRINT_OPTIONS } from './types';
-import PersonPhoto from './components/PersonPhoto';
-import { regThresholds, groupTranscript, faNum, dateToJalali} from './transcript-utils';
+import { regThresholds, groupTranscript, faNum } from './transcript-utils';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
 import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
-import { normalizeFa, faIncludes } from '@/lib/persian-search';
+import { faIncludes } from '@/lib/persian-search';
 
-// ── لوک‌آپ‌های سما: کد خام ← عنوان فارسی (فایل‌های «دوره.txt»، «شيوه آموزش.txt»، «نحوه ورود به دانشگاه.txt») ──
-const COURSE_TYPE_FA: Record<string, string> = {
-  '0': 'نامشخص', '1': 'روزانه', '2': 'شبانه', '3': 'نیمه حضوری', '4': 'غیرانتفاعی',
-  '5': 'دانشجویان خارجی', '6': 'روزانه - موارد خاص', '7': 'پیام نور',
-  '8': 'دوره‌های آموزش عالی آزاد', '10': 'مجازی', '202': 'مهمانی',
-};
-const TRAINING_METHOD_FA: Record<string, string> = {
-  '0': 'نامشخص', '1': 'آموزشی', '2': 'آموزشی - تغییر رشته دارای مغایرت', '3': 'آموزشی و پژوهشی',
-  '4': 'آموزشی پژوهشی', '8': 'آموزشی - تغییر رشته', '11': 'پژوهش محور',
-};
-// نحوهٔ ورود (فایل «نحوه ورود به دانشگاه.txt» کد ۰..۱۷ — عنوان‌ها نرمال‌شده با normalizeFa)
-const ACCEPT_TYPE_FA: [string, string][] = [
-  ['0', 'نامشخص'], ['1', 'قبولی کنکور سراسری'], ['2', 'دانشجوی علامه خویی'], ['3', 'دانشجوی زرینه خوی'],
-  ['4', 'دانشجوی شمس خوی'], ['5', 'بدون آزمون - سوابق تحصیلی'], ['6', 'کنکور سراسری'], ['7', 'دانشجوی نژند'],
-  ['8', 'انتقال از خارج'], ['9', 'استعداد درخشان'], ['10', 'ممتاز'], ['11', 'نفر اول دوره قبلی'],
-  ['12', 'مهمان از دانشگاه دیگر'], ['13', 'انتقالی'], ['14', 'کنکور فنی و حرفه‌ای'],
-  ['15', 'کنکور کاردانی به کارشناسی ناپیوسته'], ['16', 'آموزش عالی آزاد'],
-  ['17', 'صرفاً بر اساس سوابق تحصیلی (کاردانی به کارشناسی)'],
-];
-/** عنوان نرمال‌شدهٔ نحوهٔ ورود — مقدار DB را هم نرمال می‌کند تا گزینهٔ متناظر پیدا شود */
-const acceptTypeTitle = (raw?: string | null) => {
-  const n = normalizeFa(raw || '');
-  if (!n) return '';
-  return ACCEPT_TYPE_FA.find(([, t]) => normalizeFa(t) === n)?.[1] || raw || '';
-};
+// ── پنل‌های پرونده (ریفکتور UI/UX): فرم دانشجو و فرم استاد از این فایل جدا شدند ──
+import StudentProfilePanel from './profile/StudentProfilePanel';
+import StaffProfilePanel from './profile/StaffProfilePanel';
+import {
+  buildStaffDraft, buildStudentDraft, isDraftDirty, staffPatchFromDraft, studentPatchFromDraft,
+  type ProfileDraft,
+} from './profile/profile-draft';
 
 import { doPrintTranscript } from '@/components/print-transcript';
 
@@ -75,6 +56,10 @@ export default function StudentsManagerClient(props: {
   geoPlaces?: { title: string; ministryCode: string | null }[];
   statusCounts?: { status: string; n: number }[];
   canEditGrades?: boolean;
+  /** فقط ADMIN — ویرایش/ذخیرهٔ پروندهٔ دانشجو و استاد (سمت سرور هم همین است) */
+  canEditProfile?: boolean;
+  /** ADMIN / EDU_EXPERT / GRADUATEAFFAIRS — اکشن تغییر آیین‌نامهٔ دانشجو */
+  canEditRegulation?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
   userRoleIds?: Record<number, number[]>;
   universities?: { id: number; code: string; title: string; kind: string; saminCode?: string | null }[];
@@ -82,10 +67,12 @@ export default function StudentsManagerClient(props: {
 }) {
   // انتخاب بخش اصلی (دانشجویان / اساتید / عملیات سریع)
   const [mainView, setMainView] = useState<'students' | 'professors' | 'quick_menu'>('students');
+  // مجوزها (از صفحهٔ سرور می‌آید؛ اکشن‌ها هم مستقلاً همین را بررسی می‌کنند)
+  const canEditProfile = props.canEditProfile ?? false;
+  const canEditRegulation = props.canEditRegulation ?? false;
 
   // تب‌های فرم دانشجو — لیست اول است و ۴ تب اطلاعات در یک تب ادغام شده‌اند
   const [stuTab, setStuTab] = useState<'list' | 'info_combined' | 'transcript'>('list');
-  const [stuSubTab, setStuSubTab] = useState<'extra' | 'alumni'>('extra');
 
   // تب‌های فرم استاد — لیست اول است و ۳ تب اطلاعات در یک تب ادغام شده‌اند
   const [profTab, setProfTab] = useState<'list' | 'info_combined'>('list');
@@ -192,42 +179,24 @@ export default function StudentsManagerClient(props: {
     showToast(r.ok ? (next ? '✅ حساب کامل فعال شد.' : '⛔ حساب کامل غیرفعال شد (ورود/کارتابل/برنامه‌ریزی/نشست‌ها قطع شدند).') : (r.error || 'انجام نشد.'));
     if (r.ok) router.refresh();
   };
-  // ── ذخیرهٔ واقعی ویرایش پروندهٔ استاد (F2) — خواندن ورودی‌های data-f و ارسال به سرور ──
-  const staffFormRef = useRef<HTMLDivElement>(null);
+  // ── ذخیرهٔ پروندهٔ استاد: از پیش‌نویس فرم (به‌جای خواندن DOM با data-f) ──
   const [staffSaving, setStaffSaving] = useState(false);
   const handleSaveStaff = async () => {
-    const root = staffFormRef.current;
     if (!currentStaff) { showToast('پروندهٔ استادی انتخاب نشده است.'); return; }
-    if (!root) { showToast('فرم ویرایش باز نیست.'); return; }
-    const get = (f: string) => (root.querySelector(`[data-f="${f}"]`) as HTMLInputElement | HTMLSelectElement | null)?.value ?? '';
-    const patch: Record<string, unknown> = {};
-    const put = (k: string, v: string) => {
-      const s = (v ?? '').trim();
-      if (s !== '' && s !== '—') patch[k] = s;
-    };
-    // نام: «نام خانوادگی - نام»
-    const full = get('fullname');
-    if (full.trim() !== '' && full.trim() !== '—') {
-      const parts = full.split('-').map(s => s.trim()).filter(Boolean);
-      if (parts.length >= 2) { patch.lastName = parts[0]; patch.firstName = parts.slice(1).join(' '); }
-    }
-    for (const k of ['nationalCode', 'mobile', 'email', 'address', 'birthDate', 'academicRank', 'degree', 'cooperationType', 'staffType', 'personnelNo', 'hireDate', 'bankAccountNo', 'academicBase', 'fieldOfStudy', 'lastDegreeUniversity', 'lastDegreeCountryCode', 'phone']) {
-      put(k, get(k));
-    }
-    const marriedEl = root.querySelector('input[name="prof_married"]:checked') as HTMLInputElement | null;
-    if (marriedEl) {
-      const label = marriedEl.parentElement?.textContent || '';
-      patch.maritalStatus = label.includes('متأهل') ? 'متأهل' : 'مجرد';
-    }
-    const st = get('status');
-    if (st === 'فعال') patch.isActive = 1;
-    else if (st === 'غیرفعال') patch.isActive = 0;
-    if (!Object.keys(patch).length) { showToast('تغییری برای ذخیره نیست.'); return; }
+    if (!canEditProfile) { showToast('فقط مدیر سیستم (ADMIN) اجازهٔ ویرایش پروندهٔ استاد را دارد.'); return; }
+    const built = staffPatchFromDraft(staffDraft, JSON.parse(staffDraftInitRef.current || '{}') as ProfileDraft);
+    if ('error' in built) { showToast(built.error); return; }
+    if (!Object.keys(built.patch).length) { showToast('تغییری برای ذخیره نیست.'); return; }
     setStaffSaving(true);
     try {
-      const r = await updateStaffProfileAction(currentStaff.id, patch as Parameters<typeof updateStaffProfileAction>[1]);
+      const r = await updateStaffProfileAction(currentStaff.id, built.patch as Parameters<typeof updateStaffProfileAction>[1]);
       showToast(r.ok ? '✅ اطلاعات استاد با موفقیت ذخیره شد.' : (r.error || 'انجام نشد.'));
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        // مقادیر ذخیره‌شده مبنای مقایسهٔ بعدی می‌شوند تا شاخص «تغییرات ذخیره‌نشده» پاک شود
+        staffDraftInitRef.current = JSON.stringify(staffDraft);
+        setStaffEditing(false);
+        router.refresh();
+      }
     } catch {
       showToast('خطا در ارتباط با سرور.');
     } finally {
@@ -448,6 +417,45 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
   const currentStudent = props.students[selectedStuIdx] || props.students[0];
   const currentStaff = staffList[selectedProfIdx] || staffList[0];
 
+  // ── پیش‌نویس پروندهٔ استاد — همان الگوی «یک ویرایش + یک ذخیره» ──
+  const [staffDraft, setStaffDraft] = useState<ProfileDraft>({});
+  const staffDraftInitRef = useRef<string>('{}');
+  const [staffEditing, setStaffEditing] = useState(false);
+  const syncStaffProfile = (s: StaffItem) => {
+    const d = buildStaffDraft(s);
+    setStaffDraft(d);
+    staffDraftInitRef.current = JSON.stringify(d);
+  };
+  useEffect(() => {
+    if (currentStaff) syncStaffProfile(currentStaff);
+    setStaffEditing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStaff?.id]);
+  const sf = (k: string, v: string | number) => setStaffDraft(p => ({ ...p, [k]: v }));
+  const staffDirty = isDraftDirty(staffDraft, staffDraftInitRef.current);
+  const cancelStaffEdit = () => {
+    if (currentStaff) syncStaffProfile(currentStaff);
+    setStaffEditing(false);
+  };
+  /** اگر فرم استاد تغییر ذخیره‌نشده دارد، تأیید بگیر */
+  const confirmDiscardStaffEdits = async (): Promise<boolean> => {
+    if (!(staffEditing && staffDirty)) return true;
+    return confirmDialog({
+      title: 'تغییر پروندهٔ استاد با تغییرات ذخیره‌نشده',
+      body: 'تغییرات این پرونده ذخیره نشده است و از دست می‌رود. ادامه می‌دهید؟',
+      confirmText: 'ادامه',
+      danger: true,
+    });
+  };
+
+  /** انتخاب رکورد استاد — محافظت از تغییرات ذخیره‌نشده */
+  const selectStaff = async (idx: number) => {
+    if (idx < 0 || idx >= staffList.length) return;
+    if (idx !== selectedProfIdx && !(await confirmDiscardStaffEdits())) return;
+    setSelectedProfIdx(idx);
+    setProfTab('info_combined');
+  };
+
   /** دانشگاه مبدا دانشجو برای درج در کارنامه (برجسته اگر منحله باشد) */
   const originUniversity: OriginUniversity | null = (() => {
     const st = currentStudent;
@@ -505,67 +513,47 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
   }, [stuTab, currentStudent?.id]);
 
   // ── فرم ویرایش پروندهٔ دانشجو (هویت + تکمیلی سما) — فقط ADMIN ──
-  const [profile, setProfile] = useState<Record<string, string | number | null>>({});
+  // یک پیش‌نویس برای کل فرم؛ «✏️ ویرایش» آن را فعال و «💾 ذخیره» فقط
+  // کلیدهای تغییرکرده را در یک وصله می‌فرستد.
+  const [profile, setProfile] = useState<ProfileDraft>({});
+  const profileInitRef = useRef<string>('{}');
   const [profileSaving, setProfileSaving] = useState(false);
-  // کد ورود ۵ رقمی (سال ۴رقمی + ترم ۱رقمی) — ویرایش مستقل از فرم هویت
-  const [entryCode, setEntryCode] = useState('');
-  const [entrySaving, setEntrySaving] = useState(false);
+  const [studentEditing, setStudentEditing] = useState(false);
   const syncProfile = (s: StudentItem) => {
-    setProfile({
-      fatherName: s.fatherName || '', birthCertNo: s.birthCertNo || '',
-      placeOfBirth: s.placeOfBirth || '', placeOfIssue: s.placeOfIssue || '',
-      gender: s.gender || '', mobile: s.mobile || '', email: s.email || '',
-      postalCode: s.postalCode || '', address: s.address || '',
-      passportNumber: s.passportNumber || '',
-      advisorCode: s.advisorCode || '', documentStatus: s.documentStatus || '',
-      scholarshipType: s.scholarshipType || '', militaryStatus: s.militaryStatus || '',
-      militaryExemptionNo: s.militaryExemptionNo || '', homeTell: s.homeTell || '',
-      studentCardStatus: s.studentCardStatus || '',
-      archiveNo: s.archiveNo || '', parvandehNo: s.parvandehNo || '',
-      dormName: s.dormName || '', dormRoom: s.dormRoom || '', hasDorm: s.hasDorm ?? 0,
-      guardianJobTitle: s.guardianJobTitle || '', guardianPhone: s.guardianPhone || '',
-      guardianAddress: s.guardianAddress || '', guardianEmail: s.guardianEmail || '',
-      diplomaType: s.diplomaType || '', diplomaPlace: s.diplomaPlace || '',
-      diplomaYear: s.diplomaYear || '', diplomaGrade: s.diplomaGrade || '',
-      pishdPlace: s.pishdPlace || '', pishdYear: s.pishdYear || '', pishdGrade: s.pishdGrade || '',
-      tuitionType: s.tuitionType || '', tuitionPayer: s.tuitionPayer ?? 0,
-      englishExamType: s.englishExamType || '', englishScore: s.englishScore || '',
-      certIssued3m: s.certIssued3m ?? 0, documentDeficiency: s.documentDeficiency || '',
-      unitsRemaining: s.unitsRemaining ?? '', eqSemesters: s.eqSemesters ?? 0,
-    });
+    const d = buildStudentDraft(s);
+    setProfile(d);
+    profileInitRef.current = JSON.stringify(d);
   };
   useEffect(() => {
-    if (currentStudent) {
-      syncProfile(currentStudent);
-      setEntryCode(`${currentStudent.entryYear}${currentStudent.entryTerm}`);
-    }
+    if (currentStudent) syncProfile(currentStudent);
+    setStudentEditing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStudent?.id]);
   const pf = (k: string, v: string | number) => setProfile(p => ({ ...p, [k]: v }));
-  // گزینه‌های محل تولد/صدور از geo — مقدار ذخیره‌شده همان عنوان است
-  const geoPlaceOptions: string[] = (props.geoPlaces ?? []).map(g => g.title).filter(Boolean);
-  const geoPlaceSet = new Set(geoPlaceOptions.map(t => normalizeFa(t)));
-  const geoValue = (v: string | number | null | undefined) => {
-    const s = String(v ?? '');
-    if (!s) return '';
-    return geoPlaceSet.has(normalizeFa(s)) ? (geoPlaceOptions.find(t => normalizeFa(t) === normalizeFa(s)) ?? s) : s;
-  };
-  const geoExtraOption = (v: string | number | null | undefined) => {
-    const s = String(v ?? '');
-    return !!s && !geoPlaceSet.has(normalizeFa(s));
-  };
+  const profileDirty = isDraftDirty(profile, profileInitRef.current);
   // کد دانشگاه از روی شناسه — برای استثناهای دانشگاهی نگاشت وضعیت سما
   const uniCodeOf = (id: number | null | undefined) =>
     props.universities?.find(u => u.id === id)?.code ?? null;
-  const saveProfile = async (keys: string[]) => {
+
+  /**
+   * ذخیرهٔ یکجای پروندهٔ دانشجو: فقط کلیدهای تغییرکرده و فقط کلیدهای
+   * مجاز اکشن (`studentProfilePatchSchema.strict()`) ارسال می‌شوند.
+   */
+  const saveProfile = async () => {
     if (!currentStudent) return;
+    if (!canEditProfile) { showToast('فقط مدیر سیستم (ADMIN) اجازهٔ ویرایش پروندهٔ دانشجو را دارد.'); return; }
+    const built = studentPatchFromDraft(profile, JSON.parse(profileInitRef.current || '{}') as ProfileDraft);
+    if ('error' in built) { showToast(built.error); return; }
+    if (!Object.keys(built.patch).length) { showToast('تغییری برای ذخیره نیست.'); return; }
     setProfileSaving(true);
     try {
-      const patch: Record<string, string | number | null> = {};
-      for (const k of keys) if (profile[k] !== undefined) patch[k] = profile[k] ?? '';
-      const r = await updateStudentProfileAction(currentStudent.id, patch as StudentProfilePatch);
+      const r = await updateStudentProfileAction(currentStudent.id, built.patch as StudentProfilePatch);
       showToast(r.ok ? '✅ پروندهٔ دانشجو ذخیره شد.' : (r.error || 'انجام نشد.'));
-      if (r.ok) router.refresh();
+      if (r.ok) {
+        profileInitRef.current = JSON.stringify(profile);
+        setStudentEditing(false);
+        router.refresh();
+      }
     } catch (err: any) {
       showToast(err?.message || 'خطا در ارتباط با سرور.');
     } finally {
@@ -573,34 +561,60 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
     }
   };
 
-  const saveEntry = async () => {
-    if (!currentStudent) return;
-    const code = entryCode.trim();
-    if (!/^\d{5}$/.test(code)) { showToast('کد ورود باید ۵ رقم باشد (مثل 14032).'); return; }
-    const entryYear = Number(code.slice(0, 4));
-    const entryTerm = Number(code.slice(4));
-    if (entryYear < 1300 || entryYear > 1500) { showToast('سال ورود باید بین ۱۳۰۰ تا ۱۵۰۰ باشد.'); return; }
-    if (entryTerm < 1 || entryTerm > 3) { showToast('ترم ورود باید ۱ (مهر)، ۲ (بهمن) یا ۳ (تابستان) باشد.'); return; }
-    setEntrySaving(true);
+  const cancelProfileEdit = () => {
+    if (currentStudent) syncProfile(currentStudent);
+    setStudentEditing(false);
+  };
+
+  /**
+   * تغییر آیین‌نامه — عمداً جدا از فرم است: کدهای وضعیت نمرات بازمحاسبه
+   * می‌شوند و به تأیید صریح نیاز دارد. خروجی: آیا تغییر اعمال شد؟
+   */
+  const handleRegulationChange = async (regulationId: number): Promise<boolean> => {
+    if (!currentStudent || !regulationId) return false;
+    const ok = await confirmDialog({
+      title: 'تغییر آیین‌نامهٔ ملاک',
+      body: 'با تغییر آیین‌نامه، کدهای وضعیت نمرات این دانشجو بازمحاسبه می‌شوند. ادامه می‌دهید؟',
+      confirmText: 'تغییر و بازمحاسبه',
+    });
+    if (!ok) return false;
+    showToast('⏳ در حال تغییر آیین‌نامه و بازمحاسبه کدهای نمرات...');
     try {
-      const r = await updateStudentProfileAction(currentStudent.id, { entryYear, entryTerm });
-      showToast(r.ok ? '✅ سال/ترم ورود ذخیره شد.' : (r.error || 'انجام نشد.'));
-      if (r.ok) router.refresh();
-    } catch (err: any) {
-      showToast(err?.message || 'خطا در ارتباط با سرور.');
-    } finally {
-      setEntrySaving(false);
+      const r = await setStudentRegulationAction(currentStudent.id, regulationId);
+      showToast(r.ok ? `آیین‌نامه تغییر کرد — ${r.scanned ?? 0} نمره بررسی، ${r.updated ?? 0} کد اصلاح شد.` : (r.error || 'انجام نشد.'));
+      if (!r.ok) return false;
+      router.refresh();
+      return true;
+    } catch {
+      showToast('انجام نشد.');
+      return false;
     }
   };
-  // تاریخ شروع بر اساس کد ورود تایپ‌شده (ترم ۲ → ۱۱/۰۱، بقیه → ۰۷/۰۱)
-  const entryStartDate = (() => {
-    const code = entryCode.trim();
-    if (!/^\d{5}$/.test(code)) return null;
-    const y = Number(code.slice(0, 4));
-    const t = Number(code.slice(4));
-    if (y < 1300 || y > 1500 || t < 1 || t > 3) return null;
-    return `${faNum(y, 0)}/${t === 2 ? '۱۱' : '۰۷'}/۰۱`;
-  })();
+
+  /** اگر فرم دانشجو تغییر ذخیره‌نشده دارد، تأیید بگیر */
+  const confirmDiscardStudentEdits = async (): Promise<boolean> => {
+    if (!(studentEditing && profileDirty)) return true;
+    return confirmDialog({
+      title: 'تغییر پرونده با تغییرات ذخیره‌نشده',
+      body: 'تغییرات این پرونده ذخیره نشده است و از دست می‌رود. ادامه می‌دهید؟',
+      confirmText: 'ادامه',
+      danger: true,
+    });
+  };
+
+  /** انتخاب رکورد دانشجو — اگر فرم تغییر ذخیره‌نشده داشته باشد اول تأیید می‌گیرد */
+  const selectStudent = async (idx: number): Promise<boolean> => {
+    if (idx < 0 || idx >= props.students.length) return false;
+    if (idx !== selectedStuIdx && !(await confirmDiscardStudentEdits())) return false;
+    setSelectedStuIdx(idx);
+    return true;
+  };
+
+  /** باز کردن پرونده از لیست (با همان محافظت تغییرات ذخیره‌نشده) */
+  const openStudent = async (studentId: number) => {
+    const realIdx = props.students.findIndex(x => x.id === studentId);
+    if (await selectStudent(realIdx >= 0 ? realIdx : 0)) setStuTab('info_combined');
+  };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -637,7 +651,14 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
   };
-  const nav = (patch: Record<string, string>) => { router.push(buildUrl(patch)); };
+  const nav = (patch: Record<string, string>) => {
+    // تغییر فهرست/فیلتر با فرم نیمه‌ویرایش‌شده → اول تأیید
+    if (studentEditing && profileDirty) {
+      void confirmDiscardStudentEdits().then(ok => { if (ok) router.push(buildUrl(patch)); });
+      return;
+    }
+    router.push(buildUrl(patch));
+  };
   // سورت ستونی دانشجویان (سروری): key -> asc -> desc -> بدون سورت
   const [stuSortKey, stuSortDir] = (pg?.sort ?? '').split(':') as [string, string?];
   const toggleStuSort = (key: string) => {
@@ -653,6 +674,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
   // نمی‌شود، پس برای خوانده‌شدن کوکی صریحاً رفرش می‌کنیم تا فیلتر
   // بعد از رفرش/بازگشت به‌طور گیج‌کننده از دست نرود.
   const applyStuFilters = async () => {
+    if (!(await confirmDiscardStudentEdits())) return;
     const nc = stuFilters.f_nc.trim();
     try {
       await props.setNationalCodeFilter(nc);
@@ -670,6 +692,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
 
   // پاک‌سازی همهٔ فیلترها؛ کوکی کد ملی هم باید پاک شود
   const clearStuFilters = async () => {
+    if (!(await confirmDiscardStudentEdits())) return;
     setSearchQuery('');
     setStuFilters({ f_code: '', f_name: '', f_nc: '', f_major: '', f_year: '' });
     try {
@@ -789,604 +812,35 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             </button>
           </div>
 
-          {/* نوار سربرگ شماره دانشجویی و ناوبری رکورد */}
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2 border border-slate-300 rounded">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => selectedStuIdx > 0 && setSelectedStuIdx(selectedStuIdx - 1)}
-                disabled={selectedStuIdx === 0}
-                className="px-2 py-1 bg-white border border-slate-400 rounded hover:bg-slate-50 disabled:opacity-40"
-              >
-                قبلی ▶
-              </button>
-              <button
-                onClick={() => selectedStuIdx < props.students.length - 1 && setSelectedStuIdx(selectedStuIdx + 1)}
-                disabled={selectedStuIdx === props.students.length - 1}
-                className="px-2 py-1 bg-white border border-slate-400 rounded hover:bg-slate-50 disabled:opacity-40"
-              >
-                ◀ بعدی
-              </button>
-              <span className="text-2xs text-slate-500 mr-2 font-mono">
-                پرونده {selectedStuIdx + 1} از {props.students.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-red-700">* شماره دانشجویی:</span>
-              <input
-                type="text"
-                value={currentStudent?.studentCode || ''}
-                readOnly
-                className="bg-yellow-300 text-slate-950 font-mono font-bold text-sm px-3 py-1 border border-slate-500 rounded text-center w-36 tracking-wider shadow-inner"
-              />
-              <span className="text-2xs text-slate-600 mr-2">نام و نام خانوادگی:</span>
-              <b className="text-slate-900 bg-white px-3 py-1 border border-slate-300 rounded font-bold">
-                {currentStudent ? `${currentStudent.lastName} - ${currentStudent.firstName}` : '—'}
-              </b>
-            </div>
-          </div>
-
-          {/* ── تب ادغام‌شده: اطلاعات دانشجو (۴ بخش) — بخش ۱: اطلاعات دانشجویان ── */}
+          {/* ── پروندهٔ دانشجو: سربرگ چسبان + کارت‌ها + تب‌های داخلی پرونده ── */}
           {stuTab === 'info_combined' && currentStudent && (
-            <div key={`stu-a-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* ستون ۱ */}
-                <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50/50">
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* کد ترم ورود:</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={entryCode}
-                        onChange={e => setEntryCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                        placeholder="مثل 14032"
-                        disabled={entrySaving}
-                        className="bg-white border border-slate-300 px-2 py-1 rounded font-mono w-28 text-center tracking-wider placeholder:text-slate-300 disabled:opacity-50"
-                        title="سال ورود (۴ رقم) + ترم ورود (۱ رقم) — مثل 14032 یعنی سال 1403 ترم 2"
-                      />
-                      <button
-                        onClick={saveEntry}
-                        disabled={entrySaving}
-                        className="px-2 py-1 rounded bg-blue-700 text-white font-bold text-2xs hover:bg-blue-800 disabled:opacity-50"
-                        title="ذخیرهٔ سال/ترم ورود (فقط مدیر سیستم)"
-                      >
-                        {entrySaving ? 'در حال ذخیره…' : '💾 ذخیرهٔ ورود'}
-                      </button>
-                    </div>
-                    <span className="text-slate-500 text-3xs">
-                      {entryStartDate ? `* شروع: ${entryStartDate}` : null}
-                      {currentStudent.entryDate ? ` — تاریخ ورود: ${dateToJalali(currentStudent.entryDate)}` : null}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* نام خانوادگی و نام:</span>
-                    <input type="text" defaultValue={`${currentStudent.lastName} - ${currentStudent.firstName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>نام پدر:</span>
-                    <input type="text" value={profile.fatherName ?? ''} onChange={e => pf('fatherName', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" />
-                    <div className="flex items-center gap-1">
-                      <span>جنس:</span>
-                      <select
-                        value={profile.gender ?? ''}
-                        onChange={e => pf('gender', e.target.value)}
-                        className="bg-white border border-slate-300 px-1 py-1 rounded"
-                      >
-                        <option value="">—</option>
-                        <option value="MALE">مرد</option>
-                        <option value="FEMALE">زن</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* تاریخ تولد:</span>
-                    <input type="text" defaultValue={dateToJalali(currentStudent.birthDate)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" title={currentStudent.birthDate ? `میلادی: ${currentStudent.birthDate}` : undefined} />
-                    <div className="flex items-center gap-1">
-                      <span>ش. شناسنامه:</span>
-                      <input type="text" value={profile.birthCertNo ?? ''} onChange={e => pf('birthCertNo', e.target.value)} className="bg-white border border-slate-300 px-1 py-1 rounded font-mono w-full" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* کد ملی:</span>
-                    <input type="text" defaultValue={currentStudent.nationalCode} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>محل صدور:</span>
-                    <select value={geoValue(profile.placeOfIssue)} onChange={e => pf('placeOfIssue', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" title="از فهرست geo — کد وزارت خودکار ثبت می‌شود">
-                      <option value="">—</option>
-                      {geoPlaceOptions.map(t => <option key={`i-${t}`} value={t}>{t}</option>)}
-                      {geoExtraOption(profile.placeOfIssue) && <option value={profile.placeOfIssue ?? ''}>{profile.placeOfIssue} (قدیمی)</option>}
-                    </select>
-                    <div className="flex items-center gap-1">
-                      <span>محل تولد:</span>
-                      <select value={geoValue(profile.placeOfBirth)} onChange={e => pf('placeOfBirth', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" title="از فهرست geo — کد وزارت خودکار ثبت می‌شود">
-                        <option value="">—</option>
-                        {geoPlaceOptions.map(t => <option key={`b-${t}`} value={t}>{t}</option>)}
-                        {geoExtraOption(profile.placeOfBirth) && <option value={profile.placeOfBirth ?? ''}>{profile.placeOfBirth} (قدیمی)</option>}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>وضعیت تحصیلی:</span>
-                    <select key={currentStudent.id} defaultValue={currentStudent.status} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
-                      {Object.entries(STUDENT_STATUS_FA).map(([v, fa]) => (
-                        <option key={v} value={v}>{fa}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {currentStudent.samaStatusCode && (
-                    <div className="grid grid-cols-3 gap-2 items-center text-2xs text-slate-500">
-                      <span>وضعیت در سما:</span>
-                      <span className="col-span-2">کد {currentStudent.samaStatusCode} — {studentStatusFa(currentStudent.status, currentStudent.samaStatusCode, uniCodeOf(currentStudent.universityId))}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ستون ۲ */}
-                <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50/50">
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* نوع دوره:</span>
-                    <select key={currentStudent.id + '-sm'} defaultValue={currentStudent.studyingMode || ''} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
-                      <option value="">—</option>
-                      {Object.entries(COURSE_TYPE_FA).map(([v, fa]) => <option key={v} value={v}>{fa}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>شیوه آموزشی:</span>
-                    <span className="col-span-2 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-semibold text-slate-700">
-                      {TRAINING_METHOD_FA[currentStudent.trainingMethod || ''] || currentStudent.trainingMethod || '—'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* مقطع:</span>
-                    <select key={currentStudent.id + '-dl'} defaultValue={currentStudent.degreeLevelId} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold">
-                      {(props.degrees ?? []).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* کد و نام رشته:</span>
-                    <input type="text" defaultValue={`${currentStudent.majorCode} — ${currentStudent.majorName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" readOnly />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>دانشکده:</span>
-                    <input type="text" defaultValue={currentStudent.facultyName || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" readOnly />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* سهمیه نهایی:</span>
-                    <select key={currentStudent.id + '-q'} defaultValue={currentStudent.quotaType} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
-                      {Object.entries(QUOTA_FA).map(([v, fa]) => (
-                        <option key={v} value={v}>{fa}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* نحوه ورود:</span>
-                    <select key={currentStudent.id + '-at'} defaultValue={acceptTypeTitle(currentStudent.acceptanceType)} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded">
-                      <option value="">—</option>
-                      {ACCEPT_TYPE_FA.map(([c, fa]) => fa !== 'نامشخص' && <option key={c} value={fa}>{fa}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>شماره همراه:</span>
-                    <input type="text" value={profile.mobile ?? ''} onChange={e => pf('mobile', e.target.value)} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>شماره ثابت منزل:</span>
-                    <input type="text" value={profile.homeTell ?? ''} onChange={e => pf('homeTell', e.target.value)} placeholder="—" className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>آیین‌نامه ملاک:</span>
-                    <div className="col-span-2 flex gap-1.5">
-                      <select
-                        value={currentStudent.regulationId ?? 0}
-                        onChange={e => {
-                          const rid = Number(e.target.value);
-                          if (!rid || !currentStudent) return;
-                          showToast('⏳ در حال تغییر آیین‌نامه و بازمحاسبه کدهای نمرات...');
-                          setStudentRegulationAction(currentStudent.id, rid).then(r => {
-                            showToast(r.ok ? `آیین‌نامه تغییر کرد — ${r.scanned ?? 0} نمره بررسی، ${r.updated ?? 0} کد اصلاح شد.` : (r.error || 'انجام نشد.'));
-                            if (r.ok) router.refresh();
-                          }).catch(() => showToast('انجام نشد.'));
-                        }}
-                        className="flex-1 bg-white border border-slate-300 px-2 py-1 rounded font-semibold text-indigo-950"
-                      >
-                        <option value={0} disabled>{currentStudent.regulationTitle}</option>
-                        {(props.regulations ?? []).map(r => (
-                          <option key={r.id} value={r.id}>{r.title}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {/* ── حساب وب دانشجو: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
-                  <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-2">
-                    <span className="font-bold">🔐 حساب وب:</span>
-                    <span className={`text-2xs font-bold px-2 py-0.5 rounded-full text-center ${currentStudent.isActive === 0 ? 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
-                      {currentStudent.isActive === 0 ? '⛔ غیرفعال' : '✅ فعال'}
-                    </span>
-                    <div className="flex gap-1.5 justify-end">
-                      <button
-                        onClick={() => handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
-                        className={`px-2.5 py-1 rounded text-2xs font-bold border ${currentStudent.isActive === 0 ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900'}`}
-                        title="فعال/غیرفعال‌سازی کامل حساب (ورود، کارتابل، برنامه‌ریزی، نشست‌ها، OTPها) — فقط مدیر سیستم"
-                      >
-                        {currentStudent.isActive === 0 ? 'فعال‌سازی کامل' : 'غیرفعال‌سازی کامل'}
-                      </button>
-                      <button
-                        onClick={() => { setPwModalFor({ userId: currentStudent.userId ?? 0, name: `${currentStudent.firstName} ${currentStudent.lastName}` }); setPwInput(''); }}
-                        className="px-2.5 py-1 rounded text-2xs font-bold bg-slate-700 text-white hover:bg-slate-800"
-                        title="تغییر رمز عبور دانشجو (فقط مدیر سیستم)"
-                      >
-                        🔑 تغییر رمز
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-slate-300 flex items-center gap-2">
-                <button
-                  onClick={() => saveProfile(['fatherName', 'birthCertNo', 'placeOfBirth', 'placeOfIssue', 'gender', 'mobile', 'homeTell', 'nationality'])}
-                  disabled={profileSaving}
-                  className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
-                  title="ذخیرهٔ تغییرات هویت این دانشجو (فقط مدیر سیستم)"
-                >
-                  💾 ذخیرهٔ اطلاعات هویت
-                </button>
-                {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
-              </div>
-            </div>
-          )}
-
-          {/* ── بخش ۲: اطلاعات تکمیلی دانشجو ── */}
-          {stuTab === 'info_combined' && currentStudent && (
-            <div key={`stu-b-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* کادر عکس پرسنلی — از مسیر امن /api/photo/[userId]؛ بدون عکس همان جای‌نگهدار */}
-                <div className="border border-slate-300 p-3 rounded bg-slate-50 flex flex-col items-center justify-center space-y-2">
-                  <PersonPhoto userId={currentStudent.userId} hasPhoto={!!currentStudent.photoKey} className="w-28 h-36" icon="👤" label="عکس پرسنلی" />
-                  <div className="flex flex-col gap-1 w-full max-w-[140px]">
-                    <button onClick={() => showToast('📁 کادر انتخاب تصویر باز شد')} className="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 font-bold text-2xs">فایل تصویر</button>
-                    <button onClick={() => showToast('تصویر حذف گردید')} className="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 text-red-700 text-2xs">حذف تصویر</button>
-                    <button onClick={() => showToast('کپی تصویر انجام شد')} className="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 text-2xs">کپی تصویر به فایل</button>
-                  </div>
-                </div>
-
-                {/* فیلدهای تکمیلی */}
-                <div className="md:col-span-2 space-y-2 border border-slate-300 p-3 rounded bg-slate-50">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">استاد راهنما:</span>
-                      <input type="text" value={profile.advisorCode ?? ''} onChange={e => pf('advisorCode', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded w-full font-bold dark:text-slate-900" placeholder="کد/نام استاد راهنما —" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">وضعیت نظام وظیفه:</span>
-                      <select value={profile.militaryStatus ?? ''} onChange={e => pf('militaryStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
-                        <option value="">—</option>
-                        <option value="خانم است و وضعیت نظام وظیفه ندارد">خانم است و وضعیت نظام وظیفه ندارد</option>
-                        <option value="مشمول است و دفترچه دارد">مشمول است و دفترچه دارد</option>
-                        <option value="مشمول است ولی دفترچه ندارد">مشمول است ولی دفترچه ندارد</option>
-                        <option value="معافیت پزشکی یا کفالت">معافیت پزشکی یا کفالت</option>
-                        <option value="کارت پایان خدمت">کارت پایان خدمت</option>
-                        <option value="سرباز ترخیصی">سرباز ترخیصی</option>
-                        <option value="معافیت تحصیلی فعال">معافیت تحصیلی فعال</option>
-                        <option value="معافیت دائم">معافیت دائم</option>
-                        <option value="کارمند آموزش و پرورش">کارمند آموزش و پرورش</option>
-                        <option value="کارمند">کارمند</option>
-                        <option value="دانشجوی سال آخر مقطع قبل">دانشجوی سال آخر مقطع قبل</option>
-                        <option value="فارغ‌التحصیل بدون غیبت">فارغ‌التحصیل بدون غیبت</option>
-                        <option value="دانشجوی انصرافی">دانشجوی انصرافی</option>
-                        <option value="متولد ماقبل ۱۳۵۲">متولد ماقبل ۱۳۵۲</option>
-                        <option value="کارکنان متعهد خدمت ارگان‌ها">کارکنان متعهد خدمت ارگان‌ها</option>
-                        <option value="مشمول نیست">مشمول نیست</option>
-                        <option value="فاقد معافیت">فاقد معافیت</option>
-                        <option value="در حال تحصیل (معافیت موقت)">در حال تحصیل (معافیت موقت)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">وضعیت مدارک:</span>
-                      <select value={profile.documentStatus ?? ''} onChange={e => pf('documentStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full">
-                        <option value="">—</option>
-                        <option value="تکمیل و تأییدشده ✓">تکمیل و تأییدشده ✓</option>
-                        <option value="دارای نقص مدرک">دارای نقص مدرک</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">نوع بورسیه:</span>
-                      <input type="text" value={profile.scholarshipType ?? ''} onChange={e => pf('scholarshipType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">Full Name:</span>
-                      <input type="text" defaultValue={[currentStudent.firstNameEn, currentStudent.lastNameEn].filter(Boolean).join(' ') || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" readOnly />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">Father Name:</span>
-                      <input type="text" defaultValue={currentStudent.fatherName || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono text-left" dir="ltr" readOnly />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">شماره پاسپورت:</span>
-                      <input type="text" defaultValue={currentStudent.passportNumber || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" readOnly />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-24">تاریخ فارغ‌التحصیلی:</span>
-                      <input type="text" defaultValue={currentStudent.graduateDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded w-full font-mono" readOnly />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-1 border-t border-slate-200">
-                    <label className="flex items-center gap-1.5 cursor-pointer font-bold">
-                      <input
-                        type="checkbox"
-                        checked={profile.nationality === '120001'}
-                        onChange={e => pf('nationality', e.target.checked ? '120001' : '')}
-                        className="w-4 h-4 text-emerald-600 rounded"
-                      />
-                      <span>تابعیت ایرانی دارد</span>
-                    </label>
-                    <span className="text-slate-500">سال‌های استفاده از آموزش رایگان:</span>
-                    <input type="number" defaultValue="۰" className="w-16 bg-white border border-slate-300 px-2 py-0.5 rounded font-mono text-center" />
-                  </div>
-                </div>
-              </div>
-
-              {/* کادر نمره آزمون زبان و ممیزی ثبت‌کننده */}
-              <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-2">
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-slate-800">وضعیت نمره آزمون زبان انگلیسی:</span>
-                  <span>نوع آزمون:</span>
-                  <select value={profile.englishExamType ?? ''} onChange={e => pf('englishExamType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded">
-                    <option value="">—</option>
-                    <option value="MSRT">MSRT</option>
-                    <option value="Tolimo">Tolimo</option>
-                    <option value="IELTS">IELTS</option>
-                    <option value="TOEFL">TOEFL</option>
-                  </select>
-                  <span>نمره آزمون:</span>
-                  <input type="text" value={profile.englishScore ?? ''} onChange={e => pf('englishScore', e.target.value)} className="w-20 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-center font-bold" placeholder="—" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 text-2xs text-slate-600">
-                  <div className="bg-white p-1.5 border border-slate-200 rounded">
-                    <span>اولین ثبت‌کننده: </span>
-                    <b className="text-slate-800">{(profile.insertDate || profile.insertTime) ? 'سما' : '—'}</b>
-                    {(profile.insertDate || profile.insertTime) && (
-                      <span> | ساعت: {profile.insertTime || '—'} | تاریخ: {profile.insertDate || '—'}</span>
-                    )}
-                  </div>
-                  <div className="bg-white p-1.5 border border-slate-200 rounded">
-                    <span>آخرین تغییرات: </span>
-                    <b className="text-slate-800">—</b>
-                  </div>
-                </div>
-                <div className="pt-1 border-t border-slate-200 flex items-center gap-2">
-                  <button
-                    onClick={() => saveProfile(['advisorCode', 'militaryStatus', 'documentStatus', 'scholarshipType', 'englishExamType', 'englishScore'])}
-                    disabled={profileSaving}
-                    className="px-3 py-1 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
-                    title="ذخیرهٔ اطلاعات تکمیلی این دانشجو (فقط مدیر سیستم)"
-                  >
-                    💾 ذخیرهٔ اطلاعات تکمیلی
-                  </button>
-                  {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── بخش ۳: سایر اطلاعات ── */}
-          {stuTab === 'info_combined' && currentStudent && (
-            <div key={`stu-c-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              {/* بخش خوابگاه و آدرس */}
-              <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1.5">
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>نام خوابگاه و شماره اتاق:</span>
-                  <input type="text" value={profile.dormName ?? ''} onChange={e => pf('dormName', e.target.value)} className="bg-yellow-100 border border-slate-300 px-2 py-1 rounded font-bold dark:text-slate-900" placeholder="—" />
-                  <input type="text" value={profile.dormRoom ?? ''} onChange={e => pf('dormRoom', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded text-center" placeholder="—" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>عنوان و شغل ولی/قیم:</span>
-                  <input type="text" value={profile.guardianJobTitle ?? ''} onChange={e => pf('guardianJobTitle', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded" placeholder="—" />
-                  <div className="flex items-center gap-1">
-                    <span>تلفن ولی:</span>
-                    <input type="text" value={profile.guardianPhone ?? ''} onChange={e => pf('guardianPhone', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono w-full" placeholder="—" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>کد پستی و ایمیل:</span>
-                  <input type="text" value={profile.postalCode ?? ''} onChange={e => pf('postalCode', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" placeholder="—" />
-                  <input type="email" value={profile.email ?? ''} onChange={e => pf('email', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" placeholder="ایمیل دانشجو" />
-                </div>
-              </div>
-
-              {/* ماتریس سوابق مقاطع قبلی */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1">
-                  <h4 className="font-bold text-slate-800 border-b pb-1">سوابق دوره پیش‌دانشگاهی / دیپلم:</h4>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">محل اخذ دیپلم:</span>
-                    <input type="text" value={profile.diplomaPlace ?? ''} onChange={e => pf('diplomaPlace', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="—" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">سال اخذ:</span>
-                    <input type="text" value={profile.diplomaYear ?? ''} onChange={e => pf('diplomaYear', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-16 font-mono" placeholder="—" />
-                    <span className="text-slate-500">معدل کتبی دیپلم:</span>
-                    <b className="text-emerald-800">{profile.diplomaGrade || '—'}</b>
-                    <input type="text" value={profile.diplomaGrade ?? ''} onChange={e => pf('diplomaGrade', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-14 font-mono" placeholder="—" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">پیش‌دانشگاهی:</span>
-                    <input type="text" value={profile.pishdPlace ?? ''} onChange={e => pf('pishdPlace', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="محل —" />
-                    <input type="text" value={profile.pishdYear ?? ''} onChange={e => pf('pishdYear', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-16 font-mono" placeholder="سال" />
-                    <input type="text" value={profile.pishdGrade ?? ''} onChange={e => pf('pishdGrade', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded w-14 font-mono" placeholder="معدل" />
-                  </div>
-                </div>
-                <div className="border border-slate-300 p-2.5 rounded bg-slate-50 space-y-1">
-                  <h4 className="font-bold text-slate-800 border-b pb-1">اطلاعات وضعیت شهریه‌پرداز:</h4>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">نوع دوره:</span>
-                    <input type="text" value={profile.tuitionType ?? ''} onChange={e => pf('tuitionType', e.target.value)} className="bg-white border border-slate-300 px-2 py-0.5 rounded flex-1" placeholder="روزانه (آموزش رایگان دولتی) —" />
-                  </div>
-                  <label className="flex items-center gap-1.5 font-bold mt-1">
-                    <input
-                      type="checkbox"
-                      checked={(profile.tuitionPayer ?? 0) === 1}
-                      onChange={e => pf('tuitionPayer', e.target.checked ? 1 : 0)}
-                      className="w-4 h-4 text-emerald-600 rounded"
-                    />
-                    <span>دانشجوی شهریه‌پرداز است (نوبت دوم/پردیس)</span>
-                  </label>
-                </div>
-              </div>
-              <div className="pt-1 border-t border-slate-300 flex items-center gap-2">
-                <button
-                  onClick={() => saveProfile(['dormName', 'dormRoom', 'guardianJobTitle', 'guardianPhone', 'postalCode', 'email', 'diplomaPlace', 'diplomaYear', 'diplomaGrade', 'pishdPlace', 'pishdYear', 'pishdGrade', 'tuitionType', 'tuitionPayer'])}
-                  disabled={profileSaving}
-                  className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
-                  title="ذخیرهٔ سایر اطلاعات این دانشجو (فقط مدیر سیستم)"
-                >
-                  💾 ذخیرهٔ سایر اطلاعات
-                </button>
-                {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
-              </div>
-            </div>
-          )}
-
-          {/* ── بخش ۴: اطلاعات اضافی و دانش‌آموختگان ── */}
-          {stuTab === 'info_combined' && currentStudent && (
-            <div key={`stu-d-${currentStudent.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              {/* زیرتب‌ها */}
-              <div className="flex items-center gap-2 border-b border-slate-300 pb-2">
-                <button
-                  onClick={() => setStuSubTab('extra')}
-                  className={`px-3 py-1 rounded font-bold ${
-                    stuSubTab === 'extra' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  📄 اطلاعات اضافی و پرونده
-                </button>
-                <button
-                  onClick={() => setStuSubTab('alumni')}
-                  className={`px-3 py-1 rounded font-bold ${
-                    stuSubTab === 'alumni' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  🎓 اطلاعات دانش‌آموختگان و تسویه‌ها
-                </button>
-              </div>
-
-              {stuSubTab === 'extra' && (
-                <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">نوع دیپلم پایه:</span>
-                        <input type="text" value={profile.diplomaType ?? ''} onChange={e => pf('diplomaType', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">کد صحت مدارک / آرشیو:</span>
-                        <input type="text" value={profile.archiveNo ?? ''} onChange={e => pf('archiveNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">ابطال نظام وظیفه:</span>
-                        <input type="text" value={profile.militaryStatus ?? ''} onChange={e => pf('militaryStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="در حال تحصیل (معافیت موقت)" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">شمارهٔ معافیت:</span>
-                        <input type="text" value={profile.militaryExemptionNo ?? ''} onChange={e => pf('militaryExemptionNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">تعداد صدور گواهی ۳ ماهه:</span>
-                        <input type="number" value={profile.certIssued3m ?? 0} onChange={e => pf('certIssued3m', Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
-                        <span>فقره</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">شمارهٔ پرونده:</span>
-                        <input type="text" value={profile.parvandehNo ?? ''} onChange={e => pf('parvandehNo', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="—" />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">تعداد ترم معادل‌سازی:</span>
-                        <input type="number" value={profile.eqSemesters ?? 0} onChange={e => pf('eqSemesters', Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
-                        <span>ترم</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">وضعیت صدور کارت دانشجویی:</span>
-                        <input type="text" value={profile.studentCardStatus ?? ''} onChange={e => pf('studentCardStatus', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="صادر و تحویل شده" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">نواقص پرونده:</span>
-                        <input type="text" value={profile.documentDeficiency ?? ''} onChange={e => pf('documentDeficiency', e.target.value)} className="bg-white border border-slate-300 px-2 py-1 rounded w-full" placeholder="فاقد نقص پرونده" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-40">واحد مانده تا فارغ‌التحصیلی:</span>
-                        <input type="number" value={profile.unitsRemaining ?? ''} onChange={e => pf('unitsRemaining', e.target.value === '' ? '' : Number(e.target.value) || 0)} className="bg-white border border-slate-300 px-2 py-1 rounded w-20 font-mono" />
-                        <span>واحد</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-1 border-t border-slate-200 flex items-center gap-2">
-                    <button
-                      onClick={() => saveProfile(['diplomaType', 'archiveNo', 'militaryStatus', 'militaryExemptionNo', 'certIssued3m', 'parvandehNo', 'eqSemesters', 'studentCardStatus', 'documentDeficiency', 'unitsRemaining'])}
-                      disabled={profileSaving}
-                      className="px-3 py-1.5 rounded bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 disabled:opacity-50"
-                      title="ذخیرهٔ اطلاعات اضافی این دانشجو (فقط مدیر سیستم)"
-                    >
-                      💾 ذخیرهٔ اطلاعات اضافی
-                    </button>
-                    {profileSaving && <span className="text-slate-500">در حال ذخیره…</span>}
-                  </div>
-                </div>
-              )}
-
-              {stuSubTab === 'alumni' && (
-                <div className="space-y-3 border border-slate-300 p-3 rounded bg-slate-50">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="border border-slate-200 p-2 rounded bg-white">
-                      <p className="font-bold text-slate-800">📜 دانشنامه رسمی</p>
-                      <p className="text-2xs text-slate-500 mt-1">تاریخ صدور: —</p>
-                      <p className="text-2xs text-slate-500">شماره دبیرخانه: —</p>
-                    </div>
-                    <div className="border border-slate-200 p-2 rounded bg-white">
-                      <p className="font-bold text-slate-800">📑 ریزنمرات رسمی</p>
-                      <p className="text-2xs text-slate-500 mt-1">تاریخ صدور: —</p>
-                      <p className="text-2xs text-slate-500">شماره دبیرخانه: —</p>
-                    </div>
-                    <div className="border border-slate-200 p-2 rounded bg-white">
-                      <p className="font-bold text-slate-800">📄 گواهی موقت پایان تحصیلات</p>
-                      <p className="text-2xs text-slate-500 mt-1">تاریخ صدور: —</p>
-                      <p className="text-2xs text-slate-500">شماره دبیرخانه: —</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-around bg-slate-100 p-2 rounded border border-slate-200 font-semibold text-2xs">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                      <span>تسویه حساب داخلی دانشکده</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                      <span>نامه لغو تعهد آموزش رایگان</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                      <span>نامه عدم بدهی صندوق رفاه دانشجویان</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                      <span>تأیید اصالت و صدور QRCode دانشنامه</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
+            <StudentProfilePanel
+              student={currentStudent}
+              profile={profile}
+              onField={pf}
+              editing={studentEditing}
+              canEditProfile={canEditProfile}
+              canEditRegulation={canEditRegulation}
+              saving={profileSaving}
+              dirty={profileDirty}
+              onEdit={() => setStudentEditing(true)}
+              onSave={saveProfile}
+              onCancel={cancelProfileEdit}
+              onPrev={() => void selectStudent(selectedStuIdx - 1)}
+              onNext={() => void selectStudent(selectedStuIdx + 1)}
+              canPrev={selectedStuIdx > 0}
+              canNext={selectedStuIdx < props.students.length - 1}
+              positionLabel={`پروندهٔ ${faNum(selectedStuIdx + 1, 0)} از ${faNum(props.students.length, 0)}`}
+              geoPlaces={(props.geoPlaces ?? []).map(g => g.title).filter(Boolean)}
+              regulations={props.regulations ?? []}
+              uniCode={uniCodeOf(currentStudent.universityId)}
+              onRegulationChange={handleRegulationChange}
+              onToggleActive={() => void handleToggleActive(currentStudent.userId, currentStudent.isActive === 0, `${currentStudent.firstName} ${currentStudent.lastName}`)}
+              onChangePassword={() => {
+                setPwModalFor({ userId: currentStudent.userId ?? 0, name: `${currentStudent.firstName} ${currentStudent.lastName}` });
+                setPwInput('');
+              }}
+            />
           )}
 
           {/* ── تب ۵: کارنامهٔ رسمی + جدول نمرات ── */}
@@ -1589,7 +1043,14 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             <div className="bg-white p-4 border border-slate-400 rounded-b-md space-y-3">
               <form
                 className="flex flex-wrap items-center gap-2"
-                onSubmit={e => { e.preventDefault(); setSelectedStuIdx(0); nav({ q: searchQuery }); }}
+                onSubmit={e => {
+                  e.preventDefault();
+                  void (async () => {
+                    if (!(await confirmDiscardStudentEdits())) return;
+                    setSelectedStuIdx(0);
+                    router.push(buildUrl({ q: searchQuery }));
+                  })();
+                }}
               >
                 <input
                   type="text"
@@ -1677,11 +1138,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       <tr key={s.id} className="border-b border-slate-200 hover:bg-slate-50">
                         <td className="p-2 text-right whitespace-nowrap">
                           <button
-                            onClick={() => {
-                              const realIdx = props.students.findIndex(x => x.id === s.id);
-                              setSelectedStuIdx(realIdx >= 0 ? realIdx : 0);
-                              setStuTab('info_combined');
-                            }}
+                            onClick={() => void openStudent(s.id)}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-2xs px-2.5 py-1 rounded font-bold whitespace-nowrap"
                           >
                             مشاهده پرونده 🔍
@@ -1725,11 +1182,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 getKey={(s) => s.id}
                 renderActions={(s) => (
                   <button
-                    onClick={() => {
-                      const realIdx = props.students.findIndex(x => x.id === s.id);
-                      setSelectedStuIdx(realIdx >= 0 ? realIdx : 0);
-                      setStuTab('info_combined');
-                    }}
+                    onClick={() => void openStudent(s.id)}
                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-2xs px-2.5 py-1 rounded font-bold whitespace-nowrap"
                   >
                     مشاهده پرونده 🔍
@@ -1766,7 +1219,12 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
           {/* تب‌های بالای فرم معرفی استاد — لیست اول + اطلاعات ادغام‌شده */}
           <div className="flex flex-wrap items-center gap-1 border-b border-slate-400 pb-1 text-slate-800">
             <button
-              onClick={() => setProfTab('list')}
+              onClick={() => {
+                void (async () => {
+                  if (!(await confirmDiscardStaffEdits())) return;
+                  setProfTab('list');
+                })();
+              }}
               className={`px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors ${
                 profTab === 'list' ? 'bg-white border-slate-400 text-indigo-950 shadow-sm' : 'bg-slate-300 border-transparent hover:bg-slate-100'
               }`}
@@ -1783,248 +1241,34 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             </button>
           </div>
 
-          {/* نوار سربرگ کد استاد و جستجو */}
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2 border border-slate-300 rounded">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-red-700">* کد استاد:</span>
-              <input
-                type="text"
-                value={currentStaff?.staffCode || ''}
-                readOnly
-                className="bg-yellow-300 text-slate-950 font-mono font-bold text-sm px-3 py-1 border border-slate-500 rounded text-center w-28 shadow-inner"
-              />
-              <span className="text-2xs text-slate-500 mr-2">(برای جستجو کد استاد را وارد کنید)</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-2xs text-slate-600">نام و نام خانوادگی استاد:</span>
-              <b className="text-slate-900 bg-white px-3 py-1 border border-slate-300 rounded font-bold">
-                {currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : '—'}
-              </b>
-              <span className="mr-auto"></span>
-              {currentStaff && currentStaff.userId ? (
-                <button
-                  onClick={() => openRoleModalFor(currentStaff)}
-                  className="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold whitespace-nowrap"
-                  title={(`نقش‌های «${currentStaff.firstName} ${currentStaff.lastName}»: ${((staffRoleIds?.[currentStaff.userId ?? 0] ?? []).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
-                >
-                  {((staffRoleIds?.[currentStaff.userId ?? 0] ?? []).length > 0)
-                    ? `⚙ ${(staffRoleIds?.[currentStaff.userId ?? 0] ?? []).length} نقش`
-                    : '⚙ نقش‌ها'}
-                </button>
-              ) : null}
-              <button
-                onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }}
-                className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold"
-                title="ثبت حساب کاربری استاد یا کارکن جدید (کارشناس/همکار اداری) — فقط مدیر سیستم"
-              >
-                ＋ استاد / کارمند جدید
-              </button>
-            </div>
-          </div>
-
-          {/* ── بخش ۱ استاد: اطلاعات آموزشی (ادغام‌شده) ── */}
+          {/* ── پروندهٔ استاد: سربرگ چسبان + کارت‌ها (فرم ادغام‌شده) ── */}
           {profTab === 'info_combined' && !currentStaff && (
             <div className="rounded-b-md border border-slate-400 bg-white p-6 text-center text-xs font-bold text-slate-600">
               {staffLoading ? 'در حال بارگذاری دوسیهٔ استاد…' : 'استادی برای نمایش انتخاب نشده است.'}
             </div>
           )}
           {profTab === 'info_combined' && currentStaff && (
-            <div ref={staffFormRef}>
-            <div key={`prof-a-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* کادرهای عکس و امضای الکترونیک استاد */}
-                <div className="space-y-3">
-                  <div className="border border-slate-300 p-2.5 rounded bg-slate-50 flex flex-col items-center space-y-1.5">
-                    <PersonPhoto userId={currentStaff.userId} hasPhoto={!!currentStaff.photoKey} className="w-24 h-28" icon="👨‍🏫" label="تصویر پرسنلی" />
-                    <div className="flex gap-1">
-                      <button onClick={() => showToast('فایل تصویر پرسنلی استاد انتخاب شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-3xs">فایل تصویر</button>
-                      <button onClick={() => showToast('تصویر حذف شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-red-700 text-3xs">حذف</button>
-                    </div>
-                  </div>
-
-                  <div className="border border-slate-300 p-2.5 rounded bg-slate-50 flex flex-col items-center space-y-1.5">
-                    <span className="font-bold text-red-700 text-2xs">تصویر امضای الکترونیک استاد:</span>
-                    <div className="w-full h-16 bg-white border border-dashed border-slate-400 rounded flex items-center justify-center font-mono text-slate-400 text-3xs">
-                      [نمونه امضای دیجیتال]
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => showToast('فایل امضای الکترونیک بارگذاری شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-3xs">بارگذاری امضا</button>
-                      <button onClick={() => showToast('امضا حذف شد')} className="px-2 py-0.5 bg-white border border-slate-300 rounded text-red-700 text-3xs">حذف</button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ماتریس مشخصات آموزشی استاد */}
-                <div className="md:col-span-2 space-y-2 border border-slate-300 p-3 rounded bg-slate-50">
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* نام خانوادگی و نام:</span>
-                    <input type="text" data-f="fullname" defaultValue={`${currentStaff.lastName} - ${currentStaff.firstName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-slate-600">Full Name:</span>
-                    <input type="text" defaultValue={`${currentStaff.firstName} ${currentStaff.lastName}`} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* دانشکده:</span>
-                    <input type="text" defaultValue={currentStaff.facultyName && currentStaff.facultyName !== '—' ? `${currentStaff.facultyName}${currentStaff.facultyCode ? ` (کد ${currentStaff.facultyCode})` : ''}` : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* گروه آموزشی:</span>
-                    <input type="text" defaultValue={currentStaff.departmentName && currentStaff.departmentName !== '—' ? `${currentStaff.departmentName}${currentStaff.departmentCode ? ` (کد ${currentStaff.departmentCode})` : ''}` : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span className="text-red-700 font-bold">* وضعیت کلی:</span>
-                    <select data-f="status" defaultValue={currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'} className="col-span-2 bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-1 rounded font-bold">
-                      <option value="فعال">{staffEngageLabel(currentStaff)}</option>
-                      <option value="غیرفعال">غیرفعال</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>رشته و گرایش تخصصی:</span>
-                    <input type="text" data-f="fieldOfStudy" defaultValue={currentStaff.fieldOfStudy || currentStaff.fieldMain || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>آخرین دانشگاه دانش‌آموختگی:</span>
-                    <input type="text" data-f="lastDegreeUniversity" defaultValue={currentStaff.lastDegreeUniversity || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>کشور اخذ آخرین مدرک:</span>
-                    <input type="text" data-f="lastDegreeCountryCode" defaultValue={currentStaff.lastDegreeCountryCode || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded" />
-                    <span>رشته: <b>{currentStaff.fieldMain || '—'}</b></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          {/* ── بخش ۲ استاد: اطلاعات استخدامی ── */}
-            <div key={`prof-b-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              <div className="space-y-2 border border-slate-300 p-3 rounded bg-slate-50 max-w-2xl mx-auto">
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span className="font-bold">مدرک تحصیلی:</span>
-                  <input type="text" data-f="degree" defaultValue={currentStaff.degree || 'دکتری تخصصی (Ph.D)'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span className="font-bold">نوع همکاری:</span>
-                  <input type="text" data-f="cooperationType" defaultValue={currentStaff.cooperationType || currentStaff.staffType || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-semibold" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span className="font-bold">مرتبه علمی:</span>
-                  <input type="text" data-f="academicRank" defaultValue={currentStaff.academicRank || 'استادیار'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-bold text-indigo-950" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>شماره مستخدم:</span>
-                  <input type="text" data-f="personnelNo" defaultValue={currentStaff.personnelNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>تاریخ استخدام:</span>
-                  <input type="text" data-f="hireDate" defaultValue={currentStaff.hireDate || '—'} className="bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  <span>پایه: <b className="font-mono">{currentStaff.academicBase || '—'}</b></span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>سمت اجرایی:</span>
-                  <input type="text" data-f="staffType" defaultValue={currentStaff.staffType && currentStaff.staffType !== '—' ? currentStaff.staffType : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 items-center">
-                  <span>شماره حساب بانکی:</span>
-                  <input type="text" data-f="bankAccountNo" defaultValue={currentStaff.bankAccountNo || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
-                </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>پایه استادی:</span>
-                    <input type="text" data-f="academicBase" defaultValue={currentStaff.academicBase || '—'} className="w-24 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold text-center" />
-                    <span>وضعیت: <b>{currentStaff.isActive === 0 ? 'غیرفعال' : 'فعال'}</b></span>
-                  </div>
-                </div>
-              </div>
-
-          {/* ── بخش ۳ استاد: اطلاعات فردی ── */}
-            <div key={`prof-c-${currentStaff.id}`} className="bg-white p-3 sm:p-5 border border-slate-400 rounded-b-md space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>کد ملی:</span>
-                    <input type="text" data-f="nationalCode" defaultValue={currentStaff.nationalCode} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono font-bold" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>تاریخ تولد:</span>
-                    <input type="text" data-f="birthDate" defaultValue={dateToJalali(currentStaff.birthDate)} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>تلفن همراه:</span>
-                    <input type="text" data-f="mobile" defaultValue={currentStaff.mobile && currentStaff.mobile !== '—' ? currentStaff.mobile : '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>تلفن دفتر / ثابت:</span>
-                    <input type="text" data-f="phone" defaultValue={currentStaff.phone || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono" />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 border border-slate-300 p-2.5 rounded bg-slate-50">
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>پست الکترونیکی:</span>
-                    <input type="email" data-f="email" defaultValue={currentStaff.email || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-left" dir="ltr" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>وضعیت تأهل:</span>
-                    <div className="col-span-2 flex items-center gap-4">
-                      <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="prof_married" defaultChecked={currentStaff.maritalStatus !== 'مجرد'} /> متأهل</label>
-                      <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="prof_married" defaultChecked={currentStaff.maritalStatus === 'مجرد'} /> مجرد</label>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 items-center">
-                    <span>آدرس محل سکونت:</span>
-                    <input type="text" data-f="address" defaultValue={currentStaff.address || '—'} className="col-span-2 bg-white border border-slate-300 px-2 py-1 rounded" />
-                  </div>
-                  {/* ── حساب وب استاد: فعال/غیرفعال + تغییر رمز (فقط ADMIN) ── */}
-                  <div className="grid grid-cols-3 gap-2 items-center border-t border-slate-200 pt-2 mt-1">
-                    <span className="font-bold">🔐 حساب وب:</span>
-                    <span className={`text-2xs font-bold px-2 py-0.5 rounded-full text-center ${(currentStaff.userIsActive ?? 1) === 0 ? 'bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
-                      {(currentStaff.userIsActive ?? 1) === 0 ? '⛔ غیرفعال' : '✅ فعال'}
-                    </span>
-                    <div className="flex gap-1.5 justify-end">
-                      <button
-                        onClick={() => handleToggleActive(currentStaff.userId, (currentStaff.userIsActive ?? 1) === 0, `${currentStaff.firstName} ${currentStaff.lastName}`)}
-                        className="px-2 py-1 rounded text-2xs font-bold bg-white border border-slate-300 hover:bg-slate-100"
-                        title="فعال/غیرفعال‌سازی کامل حساب (ورود، کارتابل، برنامه‌ریزی، نشست‌ها، OTPها) — فقط مدیر سیستم"
-                      >
-                        {(currentStaff.userIsActive ?? 1) === 0 ? 'فعال‌سازی کامل' : 'غیرفعال‌سازی کامل'}
-                      </button>
-                      <button
-                        onClick={() => { setPwModalFor({ userId: currentStaff.userId ?? 0, name: `${currentStaff.firstName} ${currentStaff.lastName}` }); setPwInput(''); }}
-                        className="px-2 py-1 rounded text-2xs font-bold bg-slate-700 text-white hover:bg-slate-800"
-                        title="تغییر رمز عبور استاد (فقط مدیر سیستم)"
-                      >
-                        🔑 تغییر رمز
-                      </button>
-                      {currentStaff.userId ? (
-                        <button
-                          onClick={() => {
-                            const uid = currentStaff.userId;
-                            if (!uid) { showToast('شناسه کاربری یافت نشد.'); return; }
-                            setRoleMsg('');
-                            setRoleSel(new Set(staffRoleIds?.[uid] ?? []));
-                            setRoleModalFor({ userId: uid, name: `${currentStaff.firstName} ${currentStaff.lastName}` });
-                          }}
-                          className="px-2 py-1 rounded text-2xs font-bold bg-indigo-700 text-white hover:bg-indigo-800"
-                          title={(`نقش‌های فعلی: ${(((staffRoleIds?.[currentStaff.userId] ?? [])).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`)}
-                        >
-                          {(staffRoleIds?.[currentStaff.userId] ?? []).length > 0 ? `⚙ ${(staffRoleIds?.[currentStaff.userId] ?? []).length} نقش` : '⚙ نقش‌ها'}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            </div>
+            <StaffProfilePanel
+              staff={currentStaff}
+              draft={staffDraft}
+              onField={sf}
+              editing={staffEditing}
+              canEdit={canEditProfile}
+              saving={staffSaving}
+              dirty={staffDirty}
+              onEdit={() => setStaffEditing(true)}
+              onSave={handleSaveStaff}
+              onCancel={cancelStaffEdit}
+              engageLabel={staffEngageLabel(currentStaff)}
+              roleCount={(staffRoleIds?.[currentStaff.userId ?? 0] ?? []).length}
+              rolesTitle={`نقش‌های «${currentStaff.firstName} ${currentStaff.lastName}»: ${((staffRoleIds?.[currentStaff.userId ?? 0] ?? []).map(id => roleTitle(props.rolesAll?.find(r => r.id === id) ?? { id, code: '؟', title: '' }))).join('، ') || 'هیچ'}`}
+              onOpenRoles={() => openRoleModalFor(currentStaff)}
+              onToggleActive={() => void handleToggleActive(currentStaff.userId, (currentStaff.userIsActive ?? 1) === 0, `${currentStaff.firstName} ${currentStaff.lastName}`)}
+              onChangePassword={() => {
+                setPwModalFor({ userId: currentStaff.userId ?? 0, name: `${currentStaff.firstName} ${currentStaff.lastName}` });
+                setPwInput('');
+              }}
+            />
           )}
 
           {/* ── تب ۴ استاد: لیست اساتید ── */}
@@ -2111,11 +1355,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       <tr key={st.id} className="border-b border-slate-200 hover:bg-slate-50">
                         <td className="p-2 text-right whitespace-nowrap">
                           <button
-                            onClick={() => {
-                              const realIdx = staffList.findIndex(x => x.id === st.id);
-                              setSelectedProfIdx(realIdx >= 0 ? realIdx : 0);
-                              setProfTab('info_combined');
-                            }}
+                            onClick={() => void selectStaff(staffList.findIndex(x => x.id === st.id))}
                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-2xs px-2.5 py-1 rounded font-bold whitespace-nowrap"
                           >
                             مشاهده پرونده 🔍
@@ -2142,23 +1382,6 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
               )}
             </div>
           )}
-
-          {/* دکمه‌های استاندارد پایین فرم استاد (Ins اضافه / F2 ذخیره / F4 ویرایش / حذف / انصراف / خروج) */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-300">
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' }); setCreateStaffMsg(''); setCreateStaffOpen(true); }} className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded shadow flex items-center gap-1">
-                <span>➕</span> <span>اضافه (Ins)</span>
-              </button>
-              <button onClick={handleSaveStaff} disabled={staffSaving} className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded shadow flex items-center gap-1">
-                <span>✔️</span> <span>{staffSaving ? 'در حال ذخیره…' : 'F2 ذخیره'}</span>
-              </button>
-              {/* دکمه‌های «F4 ویرایش» و «حذف» حذف شدند: عملیات واقعی نداشتند و فقط توست موفقیت می‌دادند. */}
-            </div>
-
-            <button onClick={() => setProfTab('list')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-400 rounded">
-              <span>📋 لیست اساتید</span>
-            </button>
-          </div>
 
         </div>
       )}

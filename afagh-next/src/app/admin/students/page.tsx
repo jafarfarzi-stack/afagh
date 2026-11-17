@@ -139,6 +139,7 @@ export default async function AdminStudentsPage({
       studentCode: students.studentCode,
       entryYear: students.entryYear,
       entryTerm: students.entryTerm,
+      entryDate: students.entryDate,
       status: students.status,
       samaStatusCode: students.samaStatusCode,
       quotaType: students.quotaType,
@@ -241,6 +242,40 @@ export default async function AdminStudentsPage({
     ? await baseQuery.where(where as never).orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
     : await baseQuery.orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
 
+  // ── شماره‌های دانشجویی قبلیِ همین اشخاص (بدون مایگریشن) ──
+  // هر شخص ممکن است چند رکورد در جدول students داشته باشد (انتقالی، تغییر
+  // رشته، ورود مجدد). رکوردهای دیگرِ همان userId — با رشته/سال/وضعیت —
+  // به‌عنوان «شمارهٔ قبلی» در سربرگ پرونده نمایش داده می‌شوند.
+  const previousByUser = new Map<number, { code: string; major: string; entryYear: number; status: string }[]>();
+  try {
+    const userIds = [...new Set(studentRows.map(s => s.userId).filter((v): v is number => typeof v === 'number'))];
+    if (userIds.length) {
+      const prevRows = await db
+        .select({
+          userId: students.userId,
+          code: students.studentCode,
+          entryYear: students.entryYear,
+          status: students.status,
+          major: majors.name,
+        })
+        .from(students)
+        .leftJoin(majors, eq(majors.id, students.majorId))
+        .where(inArray(students.userId, userIds))
+        .orderBy(desc(students.entryYear), desc(students.id));
+      for (const r of prevRows) {
+        if (r.userId == null || !r.code) continue;
+        const list = previousByUser.get(r.userId) ?? [];
+        list.push({
+          code: r.code,
+          major: r.major || '—',
+          entryYear: r.entryYear ?? 0,
+          status: r.status || '',
+        });
+        previousByUser.set(r.userId, list);
+      }
+    }
+  } catch { /* رکورد قبلی اجباری نیست — خطای آن نباید صفحه را بشکند */ }
+
   // ── فهرست آیین‌نامه‌ها برای تغییر آیین‌نامه دانشجو در پرونده ──
   let regulationPicks: RegulationPick[] = [];
   try {
@@ -327,6 +362,8 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
           mobile: s.mobile || '—',
           entryYear: s.entryYear,
           entryTerm: s.entryTerm || 1,
+          entryDate: s.entryDate ? String(s.entryDate).slice(0, 10) : null,
+          previousCodes: (previousByUser.get(s.userId) ?? []).filter(p => p.code !== s.studentCode),
           status: s.status,
           samaStatusCode: s.samaStatusCode,
           quotaType: s.quotaType || 'NORMAL',
@@ -402,6 +439,8 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
         statusCounts={statusCounts.map(r => ({ status: r.status, n: Number(r.n) }))}
         staffList={undefined}
         canEditGrades={canEditGrades}
+        canEditProfile={user.roles.includes('ADMIN')}
+        canEditRegulation={user.roles.some(r => r === 'ADMIN' || r === 'EDU_EXPERT' || r === 'GRADUATEAFFAIRS')}
         rolesAll={roleRows}
         userRoleIds={undefined}
         universities={allUniversities.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind, saminCode: u.saminCode }))}

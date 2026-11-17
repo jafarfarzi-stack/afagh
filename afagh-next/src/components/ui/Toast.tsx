@@ -35,7 +35,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = useCallback((text: string, kind: ToastKind = 'info') => {
     const id = Date.now() + Math.random();
     setItems(prev => [...prev.slice(-3), { id, kind, text }]);
-    window.setTimeout(() => setItems(prev => prev.filter(i => i.id !== id)), 6000);
+    // خطا باید بماند تا کاربر بخواند (۶ ثانیه برای خطای عملیات مالی کافی نبود)
+    const ttl = kind === 'error' ? 15000 : 6000;
+    window.setTimeout(() => setItems(prev => prev.filter(i => i.id !== id)), ttl);
   }, []);
 
   const remove = useCallback((id: number) => {

@@ -5,6 +5,18 @@
 // ═══════════════════════════════════════════════════════════════════════
 import type { TranscriptRow } from './actions';
 
+/**
+ * شمارهٔ دانشجویی قبلیِ همان شخص: رکوردهای دیگر جدول `students` با همان
+ * `userId` (مثلاً انتقالی/تغییر رشته). سمت سرور در page.tsx محاسبه می‌شود؛
+ * نیازی به ستون یا مایگریشن جدید نیست.
+ */
+export type PreviousStudentCode = {
+  code: string;
+  major: string;
+  entryYear: number;
+  status: string;
+};
+
 export type StudentItem = {
   id: number;
   studentCode: string;
@@ -14,7 +26,10 @@ export type StudentItem = {
   mobile: string;
   entryYear: number;
   entryTerm: number;
+  /** تاریخ ورود — ارقام همین ستون در DB «شمسی» است (YYYY-MM-DD) */
   entryDate?: string | null;
+  /** شماره‌های دانشجویی قبلی همین شخص (رکوردهای دیگر با همان userId) */
+  previousCodes?: PreviousStudentCode[];
   status: string;
   samaStatusCode?: string | null;
   quotaType: string;

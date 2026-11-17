@@ -1,5 +1,7 @@
 node_modules
 .next
+.next-bak*
+.next-standalone*
 .git
 .gitignore
 .env
@@ -9,3 +11,8 @@ npm-debug.log*
 *.tsbuildinfo
 Dockerfile
 .dockerignore
+# فایل‌های موقت/پشتیبانِ محلی که نباید وارد build context شوند
+tmp-*.png
+tmp-*.jpg
+*.bak
+coverage
