@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════
 //  لایهٔ مشترک اکشن‌های برنامهٔ درسی — تایپ‌های نتیجه، فهرست نقش‌ها و
-//  helperهای DB‌دار (بارگذاری نسخه، گارد DRAFT، یکتایی کد نسخه، ورودی
-//  موتور اعتبارسنجی، کپی عمیق، revalidate).
+//  helperهای DB‌دار (بارگذاری نسخه + گاردِ دانشگاهی/چندمؤسسه‌ای، گارد DRAFT،
+//  یکتایی کد نسخه، ورودی موتور اعتبارسنجی، کپی عمیق، revalidate).
 //  «use server» ندارد: عمداً این‌جا هیچ اکشنی export نمی‌شود تا فایل‌های
 //  اکشن فقط «تابع async» export کنند (قانون Next) و ممیز CI (audit-actions)
 //  هم هر اکشن را با گارد مستقیم خودش ببیند.
@@ -33,11 +33,63 @@ export const PHASE = 'curriculum';
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
 
-// ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
+// ─────────────────────────── گاردِ چندمؤسسه‌ای (تنها درِ ورود) ───────────────────────────
+//
+// چرا این‌جاست: شناسهٔ نسخه از کلاینت می‌آید و پیش‌تر فقط با کلید اصلی خوانده
+// می‌شد؛ یعنی ADMIN/EDU_EXPERT دانشگاه A می‌توانست با حدسِ id، چارت دانشگاه B
+// را ویرایش/تأیید/منتشر/بایگانی/حذف کند. حالا هر مسیری که به یک نسخه دست
+// می‌زند از `getVersionOrThrow` می‌گذرد و آن هم این گارد را اعمال می‌کند —
+// یک در، نه چند تکهٔ پراکنده.
+
+/**
+ * دانشگاهِ مالکِ یک نسخه.
+ * اولویت: `universityId` خودِ نسخه؛ اگر NULL بود، `universityId` رشتهٔ مالک.
+ * خروجی `null` یعنی «مالک نامشخص» و هرگز نباید به «همهٔ دانشگاه‌ها» ترجمه شود.
+ */
+export async function resolveVersionUniversityId(
+  version: { universityId: number | null; majorId: number },
+): Promise<number | null> {
+  const { isRealUniversityId } = await import('@/lib/university-scope');
+  if (isRealUniversityId(version.universityId)) return version.universityId;
+  const [m] = await db
+    .select({ universityId: majors.universityId })
+    .from(majors)
+    .where(eq(majors.id, version.majorId))
+    .limit(1);
+  return isRealUniversityId(m?.universityId) ? m.universityId : null;
+}
+
+/**
+ * گاردِ مالکیتِ دانشگاهی — در صورت تخلف **throw** می‌کند (نه خروجیِ boolean)،
+ * چون همهٔ اکشن‌های این ماژول خطا را از catch خودشان به پیام فارسی تبدیل
+ * می‌کنند و شکل خروجی‌شان تغییر نمی‌کند.
+ *
+ * @returns شناسهٔ دانشگاهِ مالک (واقعی) — برای کوئری‌های هم‌دامنه در ادامهٔ اکشن
+ */
+export async function assertVersionTenant(
+  version: { universityId: number | null; majorId: number },
+): Promise<number> {
+  const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
+  const actingUniId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
+  if (!isRealUniversityId(actingUniId)) {
+    throw new Error('دانشگاه فعال مشخص نیست.');
+  }
+  const ownerUniId = await resolveVersionUniversityId(version);
+  if (!isRealUniversityId(ownerUniId)) {
+    throw new Error('دانشگاهِ مالکِ این نسخهٔ چارت مشخص نیست؛ نسخه باید به یک دانشگاه تعلق داشته باشد.');
+  }
+  if (ownerUniId !== actingUniId) {
+    throw new Error('این نسخهٔ چارت متعلق به دانشگاه دیگری است.');
+  }
+  return ownerUniId;
+}
 
 export async function getVersionOrThrow(versionId: number) {
   const [v] = await db.select().from(curriculum_versions).where(eq(curriculum_versions.id, versionId)).limit(1);
   if (!v) throw new Error('نسخهٔ برنامهٔ درسی یافت نشد.');
+  // 🔒 گارد چندمؤسسه‌ای — همهٔ اکشن‌ها (ویرایش، تأیید، انتشار، بایگانی، حذف، خواندن)
+  // از همین‌جا ارث می‌برند؛ هیچ مسیری نباید جداگانه و بی‌گارد نسخه بخواند.
+  await assertVersionTenant(v);
   return v;
 }
 

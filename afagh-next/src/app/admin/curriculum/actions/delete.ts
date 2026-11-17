@@ -71,6 +71,16 @@ export type UndoableTransfersResult =
 export async function listUndoableTransfersAction(): Promise<UndoableTransfersResult> {
   await requireRole(EDITORS);
   try {
+    // 🔒 هم‌دامنه‌سازی: فهرست «انتقال‌های اخیر» فقط نسخه‌های دانشگاه فعال را
+    // نشان می‌دهد. پیش‌تر DRAFTهای همهٔ دانشگاه‌ها برمی‌گشتند و دکمهٔ «لغو
+    // انتقال» می‌توانست نسخهٔ دانشگاه دیگر را هدف بگیرد. فرعِ NULL عمداً
+    // وجود ندارد: دانشگاهِ نامشخص = هیچ ردیفی (fail-closed، نه fail-open).
+    const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
+    const actingUniId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
+    if (!isRealUniversityId(actingUniId)) {
+      return { ok: false, error: 'دانشگاه فعال مشخص نیست.' };
+    }
+
     const rows = await db
       .select({
         id: curriculum_versions.id,
@@ -92,6 +102,7 @@ export async function listUndoableTransfersAction(): Promise<UndoableTransfersRe
       .from(curriculum_versions)
       .innerJoin(majors, eq(majors.id, curriculum_versions.majorId))
       .where(and(
+        eq(curriculum_versions.universityId, actingUniId),
         eq(curriculum_versions.status, 'DRAFT'),
         sql`exists (
           select 1 from curriculum_approvals ca2

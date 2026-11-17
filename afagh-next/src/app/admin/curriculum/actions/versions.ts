@@ -19,14 +19,30 @@ export async function createCurriculumVersionAction(input: CreateVersionInput): 
   try {
     const [majorRow] = await db.select().from(majors).where(eq(majors.id, input.majorId)).limit(1);
     if (!majorRow) return { ok: false, error: 'رشتهٔ انتخابی یافت نشد.' };
+
+    // ── گارد چندمؤسسه‌ای روی «رشتهٔ مقصد» ──
+    // نسخه دانشگاهِ خودش را از رشتهٔ مالک می‌گیرد؛ پس رشتهٔ دانشگاه دیگر نباید
+    // پذیرفته شود (وگرنه چارت با universityId دانشگاه فعال در سبد دانشگاه دیگر
+    // ثبت می‌شد). پیش‌تر fallback «?? 1» این تخلف را پنهان می‌کرد.
+    const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
+    const actingUniId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
+    if (!isRealUniversityId(actingUniId)) {
+      return { ok: false, error: 'دانشگاه فعال مشخص نیست.' };
+    }
+    if (!isRealUniversityId(majorRow.universityId)) {
+      return { ok: false, error: 'رشتهٔ انتخابی به هیچ دانشگاهی تعلق ندارد؛ ابتدا مالکیت دانشگاهی رشته را مشخص کنید.' };
+    }
+    if (majorRow.universityId !== actingUniId) {
+      return { ok: false, error: 'رشتهٔ انتخابی متعلق به دانشگاه دیگری است.' };
+    }
+
     const degreeLevelId = input.degreeLevelId ?? majorRow.degreeLevelId;
     const trackId = input.trackId ?? null;
     const versionCode = input.versionCode.trim();
     const title = input.title?.trim() || `برنامهٔ ${majorRow.name} ${versionCode}`;
     await assertUniqueVersionCode(input.majorId, degreeLevelId, trackId, versionCode);
     const user = await requireRole(EDITORS);
-    const { getCurrentUniversity } = await import('@/lib/university-scope');
-    const uniId = (await getCurrentUniversity().catch(() => null))?.id ?? 1;
+    const uniId = actingUniId;
 
     return await db.transaction(async (tx) => {
       const [created] = await tx.insert(curriculum_versions).values({
@@ -155,15 +171,28 @@ export async function updateCurriculumMetaAction(
 export async function createCurriculumRevisionAction(versionId: number): Promise<Act<{ message: string; data: { id: number; versionCode: string } }>> {
   await requireRole(EDITORS);
   try {
-    const src = await getVersionOrThrow(versionId);
+    const src = await getVersionOrThrow(versionId);   // ← گارد چندمؤسسه‌ای همین‌جا اعمال می‌شود
     if (!['APPROVED', 'PUBLISHED'].includes(src.status)) {
       return { ok: false, error: `ساخت ویرایش فقط از نسخهٔ تأییدشده/منتشرشده ممکن است (وضعیت فعلی: ${src.status}).` };
     }
     const user = await requireRole(EDITORS);
     const newCode = nextRevisionCode(src.versionCode);
     await assertUniqueVersionCode(src.majorId, src.degreeLevelId, src.trackId, newCode);
-    const { getCurrentUniversity } = await import('@/lib/university-scope');
-    const uniId = (await getCurrentUniversity().catch(() => null))?.id ?? 1;
+
+    // ── گارد چندمؤسسه‌ای روی «رشتهٔ مالکِ نسخهٔ مبدأ» ──
+    // نسخهٔ مبدأ از getVersionOrThrow گذشته است؛ این چک دوم، مسیرِ کپی را هم
+    // مستقل از universityId (که ممکن است NULL باشد) به دانشگاه فعال می‌بندد.
+    const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
+    const actingUniId = (await getCurrentUniversity().catch(() => null))?.id ?? null;
+    if (!isRealUniversityId(actingUniId)) {
+      return { ok: false, error: 'دانشگاه فعال مشخص نیست.' };
+    }
+    const [srcMajor] = await db.select({ universityId: majors.universityId })
+      .from(majors).where(eq(majors.id, src.majorId)).limit(1);
+    if (isRealUniversityId(srcMajor?.universityId) && srcMajor.universityId !== actingUniId) {
+      return { ok: false, error: 'نسخهٔ مبدأ متعلق به دانشگاه دیگری است.' };
+    }
+    const uniId = actingUniId;
 
     return await db.transaction(async (tx) => {
       const [created] = await tx.insert(curriculum_versions).values({

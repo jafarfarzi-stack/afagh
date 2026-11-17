@@ -13,7 +13,7 @@ import { appendAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/auth';
 import { CheckResult, CurriculumVersionStatus, assertTransition } from '@/lib/curriculum-types';
 import { hasBlockingErrors } from '@/lib/curriculum-validator';
-import { APPROVERS, type Act, EDITORS, PHASE, type SubmitForApprovalResult, getVersionOrThrow, requireActorStaff, revalidateCurriculumPaths, runChecks } from './shared';
+import { APPROVERS, type Act, EDITORS, PHASE, type SubmitForApprovalResult, getVersionOrThrow, requireActorStaff, resolveVersionUniversityId, revalidateCurriculumPaths, runChecks } from './shared';
 
 // ─────────────────────────── اعتبارسنجی و چرخهٔ حیات ───────────────────────────
 
@@ -42,7 +42,7 @@ export async function submitCurriculumForApprovalAction(versionId: number, note?
       return {
         ok: false,
         checks,
-        error: `برنامهٔ درسی ${blocking.length} مانع جدی دارد و قابل ارجاع به تأیید نیست: ${blocking.map((c) => c.check).join('، ')}`,
+        error: `برنامهٔ درسی ${blocking.length} مانع جدی دارد و قابل ارجاع به تأیید نیست: ${blocking.map((c) => c.message).join('؛ ')}`,
       };
     }
 
@@ -142,20 +142,46 @@ export async function rejectCurriculumAction(versionId: number, note: string): P
 export async function publishCurriculumAction(versionId: number, note?: string): Promise<Act<{ message: string; data: { superseded: string[] } }>> {
   await requireRole(APPROVERS);
   try {
-    const version = await getVersionOrThrow(versionId);
+    const version = await getVersionOrThrow(versionId);   // ← گارد چندمؤسسه‌ای
     assertTransition(version.status as CurriculumVersionStatus, 'PUBLISHED', 'publish');
+
+    // ── انتشار بدون اعتبارسنجی ممنوع ──
+    // پیش‌تر فقط مسیر «ارجاع به تأیید» چک‌ها را اجرا می‌کرد و می‌شد با فراخوانی
+    // مستقیم publish یک نسخهٔ APPROVEDِ معیوب (یا ویرایش‌شده پس از تأیید) را
+    // منتشر کرد. همان موتور، همان آستانه (ERROR = مانع)، ولی متنِ فارسیِ یافته‌ها.
+    const checks = await runChecks(versionId);
+    const blocking = checks.filter((c) => c.severity === 'ERROR');
+    if (blocking.length > 0) {
+      return {
+        ok: false,
+        error: `برنامهٔ درسی ${blocking.length} مانع جدی دارد و قابل انتشار نیست: ${blocking.map((c) => c.message).join('؛ ')}`,
+      };
+    }
+
     const user = await requireRole(APPROVERS);
     const staffId = await requireActorStaff(user);
+    // دانشگاهِ مالک (از همان درِ گارد؛ برای هم‌دامنه‌کردن کوئری رقبا)
+    const tenantUniId = await resolveVersionUniversityId(version);
+    if (tenantUniId == null) throw new Error('دانشگاهِ مالکِ این نسخهٔ چارت مشخص نیست.');
 
     return await db.transaction(async (tx) => {
-      // ⚠ قید «فقط یک PUBLISHED فعال» (ایندکس جزئی): اگر رقیبی هست، اول آرشیو می‌شود
+      // ⚠ قید «فقط یک PUBLISHED فعال»: رقیب فقط وقتی بایگانی می‌شود که
+      //   ۱) همان دانشگاه باشد — هرگز چارت دانشگاه دیگر بایگانی نمی‌شود،
+      //   ۲) همان نوع کاتالوگ باشد — انتشار کاتالوگ جبرانی، عادی را بایگانی نمی‌کند،
+      //   ۳) پنجرهٔ ورودی‌اش با این نسخه **هم‌پوشانی** داشته باشد — چارت ۱۴۰۵
+      //      نباید چارت ۱۴۰۲ (کوهورت قدیمی که هنوز دانشجوی شاغل دارد) را بایگانی کند.
+      //      «تا» خالی = به‌بعد (۹۹۹۹).
       const rivals = await tx.select({ id: curriculum_versions.id, versionCode: curriculum_versions.versionCode })
         .from(curriculum_versions)
         .where(and(
+          eq(curriculum_versions.universityId, tenantUniId),
           eq(curriculum_versions.majorId, version.majorId),
           eq(curriculum_versions.degreeLevelId, version.degreeLevelId),
           sql`coalesce(${curriculum_versions.trackId}, 0) = ${version.trackId ?? 0}`,
+          eq(curriculum_versions.catalogKind, version.catalogKind),
           eq(curriculum_versions.status, 'PUBLISHED'),
+          sql`${curriculum_versions.entryYearFrom} <= coalesce(${version.entryYearTo}::int, 9999)`,
+          sql`coalesce(${curriculum_versions.entryYearTo}, 9999) >= ${version.entryYearFrom}`,
           sql`${curriculum_versions.id} <> ${versionId}`,
         ));
       for (const r of rivals) {
@@ -194,6 +220,21 @@ export async function publishCurriculumAction(versionId: number, note?: string):
     });
   } catch (err: any) {
     console.error('publishCurriculumAction:', err);
+    // قیدِ یکتاییِ جزئیِ فعلی پایگاه‌داده (`uq_curriculum_versions_published` از
+    // مهاجرت ۰۱۳۷: رشته/مقطع/گرایش/نوع — **بدون** پنجرهٔ ورودی) با مدلِ
+    // «یک چارت منتشرشده به ازای هر کوهورت» هم‌خوان نیست. حالا که رقیبِ
+    // خارج از پنجرهٔ ورودی عمداً بایگانی نمی‌شود، ممکن است UPDATE با
+    // «duplicate key» (SQLSTATE 23505) بخورد. به‌جای پیام خامِ پایگاه‌داده،
+    // کاربر را به بایگانیِ آگاهانهٔ نسخهٔ قبلی هدایت می‌کنیم (هیچ داده‌ای
+    // خودکار بایگانی نمی‌شود). رفع کاملِ این ناسازگاری نیاز به مهاجرت دارد و
+    // خارج از دامنهٔ این تغییر است.
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (pgCode === '23505') {
+      return {
+        ok: false,
+        error: 'انتشار انجام نشد: برای همین رشته/مقطع/گرایش نسخهٔ منتشرشدهٔ دیگری وجود دارد و قید یکتایی پایگاه‌داده انتشار هم‌زمان را نمی‌پذیرد؛ ابتدا نسخهٔ منتشرشدهٔ قبلی را بایگانی کنید و سپس دوباره منتشر کنید.',
+      };
+    }
     return { ok: false, error: err.message || 'خطا در انتشار نسخه' };
   }
 }

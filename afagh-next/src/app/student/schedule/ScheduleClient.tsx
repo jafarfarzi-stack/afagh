@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
+import DropCourseButton from './DropCourseButton';
 import ProfessorCalendarGrid, { type ProfessorCalendarEntry } from '../../professor/professor-calendar-grid';
 import {
   collapseCalendarEntries,
@@ -354,13 +355,20 @@ export default function ScheduleClient({
                     </td>
                     <td className="p-2 border-l border-slate-200 font-extrabold text-slate-900">
                       {c.title}
-                      <div className="mt-1">
+                      {/* خوشهٔ عملیاتِ ردیف — flex-wrap تا در ۳۶۰px دکمه زیرِ
+                          لینک برود و ستون را به اسکرول افقی نکشد. */}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <Link prefetch={false}
                           href={`/student/lesson-plan/${c.offeringId}`}
                           className="inline-block px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-3xs transition"
                         >
                           📋 مشاهده طرح درس
                         </Link>
+                        <DropCourseButton
+                          enrollmentId={c.enrollmentId}
+                          courseTitle={c.title}
+                          status={c.status}
+                        />
                       </div>
                     </td>
                     <td className="p-2 border-l border-slate-200 text-center font-bold">

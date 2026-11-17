@@ -6,7 +6,7 @@
 //  همه فقط‌خواندنی‌اند و گاردشان requireRole(EDITORS) است.
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { courses, curriculum_approvals, curriculum_courses, curriculum_tracks, curriculum_versions, degree_level_configs, departments, financial_terms, majors } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
@@ -17,8 +17,9 @@ import { type CourseBankResult, type CurriculumOverviewResult, type CurriculumVe
 export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewResult> {
   await requireRole(EDITORS);
   try {
-    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
     const uni = await getCurrentUniversity().catch(() => null);
+    const uniId = uni?.id ?? null;
     const uw = uni ? eq(majors.universityId, uni.id) : undefined;
     const [majorRows, versionRows, trackRows, termRows, countRows] = await Promise.all([
       db.select({
@@ -54,8 +55,17 @@ export async function getCurriculumOverviewAction(): Promise<CurriculumOverviewR
         .orderBy(desc(financial_terms.termCode))
         .limit(40),
       // تعداد درس هر نسخه — یک کوئری گروهی (به‌جای زیرکوئری هم‌بسته که عدد اشتباه می‌داد)
+      // 🔒 فقط نسخه‌های دانشگاه فعال: پیش‌تر این شمارش سراسری بود و چارت‌های
+      //    همهٔ دانشگاه‌ها را می‌شمرد (نشتِ داده + هزینهٔ اضافی).
       db.select({ versionId: curriculum_courses.curriculumVersionId, n: sql<number>`count(*)::int` })
         .from(curriculum_courses)
+        .where(isRealUniversityId(uniId)
+          ? inArray(
+              curriculum_courses.curriculumVersionId,
+              db.select({ id: curriculum_versions.id }).from(curriculum_versions)
+                .where(eq(curriculum_versions.universityId, uniId)),
+            )
+          : sql`1 = 0`)
         .groupBy(curriculum_courses.curriculumVersionId),
     ]);
     const countByVersion = new Map<number, number>(
@@ -135,6 +145,8 @@ export async function listDepartmentsAction(): Promise<DepartmentListResult> {
 export async function getCurriculumVersionDetailAction(versionId: number): Promise<CurriculumVersionDetailResult> {
   await requireRole(EDITORS);
   try {
+    // گارد چندمؤسسه‌ای از همین‌جا ارث می‌رسد: loadVersionData اولین کارش
+    // getVersionOrThrow(versionId) است، پس نسخهٔ دانشگاه دیگر خوانده نمی‌شود.
     const data = await loadVersionData(versionId);
     const approvals = await db
       .select({ id: curriculum_approvals.id, approvalType: curriculum_approvals.approvalType, fromStatus: curriculum_approvals.fromStatus, toStatus: curriculum_approvals.toStatus, decisionNote: curriculum_approvals.decisionNote, approvedAt: curriculum_approvals.approvedAt })

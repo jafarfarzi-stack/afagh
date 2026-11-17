@@ -25,9 +25,11 @@ export default async function AdminCurriculumPage({
 }) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
+  // دامنهٔ دانشگاهی: خودِ اکشن‌های خواندن (getCurriculumOverviewAction و
+  // getCurriculumVersionDetailAction) و همهٔ اکشن‌های نوشتن با
+  // getCurrentUniversity/گاردِ getVersionOrThrow محدود شده‌اند؛ این‌جا فقط
+  // عنوان دانشگاه برای سرصفحه لازم است.
   const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
 
   const overview = await getCurriculumOverviewAction();
   if (!overview.ok) {

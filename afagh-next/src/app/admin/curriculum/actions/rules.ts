@@ -12,7 +12,7 @@ import { appendAudit } from '@/lib/audit';
 import { requireRole } from '@/lib/auth';
 import { normalizeLogicNode } from '@/lib/curriculum-types';
 import { describeSyncStats, syncRequisiteRulesFromCourses, type SyncStats } from '@/lib/requisite-sync';
-import { EDITORS, PHASE, assertEditable, revalidateCurriculumPaths, type Act } from './shared';
+import { EDITORS, PHASE, assertEditable, getVersionOrThrow, revalidateCurriculumPaths, type Act } from './shared';
 
 // ─────────────────────────── قواعد (پیش‌نیاز/هم‌نیاز/نمره) — D2 ───────────────────────────
 
@@ -150,6 +150,10 @@ export async function setCourseGradeStatusCodesAction(
 export async function syncRequisiteRulesAction(versionId: number, overwrite = false): Promise<Act<{ message: string; stats: SyncStats }>> {
   const user = await requireRole(EDITORS);
   try {
+    // 🔒 مرز دانشگاه: این مسیر به‌تنهایی نسخه را لود نمی‌کرد و می‌شد برای
+    //    versionId هر دانشگاه دیگری قواعد را بازنویسی کرد. گیت مالکیت از
+    //    getVersionOrThrow می‌آید (همان مسیر بقیهٔ اکشن‌های چارت).
+    await getVersionOrThrow(versionId);
     const stats = await syncRequisiteRulesFromCourses({ versionId, overwrite });
     await db.transaction(async (tx) => {
       await appendAudit(tx, {
