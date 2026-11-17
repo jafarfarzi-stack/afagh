@@ -69,6 +69,7 @@ const SUB: Record<string, string> = {
   'income-statement': 'صورت‌های مالی', 'balance-sheet': 'صورت‌های مالی', 'cash-flow': 'صورت‌های مالی',
   'costing-report': 'صورت‌های مالی', 'budget-variance': 'صورت‌های مالی', 'sales-report': 'صورت‌های مالی',
   'revenue-hierarchy': 'صورت‌های مالی', 'vat-report': 'حسابداری', 'company-expenses': 'هزینه‌ها',
+  'gl-trial-balance': 'صورت‌های مالی', 'gl-balance-sheet': 'صورت‌های مالی', 'gl-income-statement': 'صورت‌های مالی',
   'allocation-report': 'هزینه‌ها',
   'contractor-report': 'قرارداد و انبار', 'contractor-settlement': 'قرارداد و انبار',
   'insurance-report': 'قرارداد و انبار', 'legal-report': 'قرارداد و انبار', 'inventory-report': 'قرارداد و انبار',
@@ -126,6 +127,9 @@ const DESC: Record<string, string> = {
   'graduation-dossiers': 'وضعیت پروندهٔ فراغت‌التحصیلی',
   payesh: 'پاسخ‌های طرح پایش',
   jame: 'واجدان شرایط آزمون جامع',
+  'gl-trial-balance': 'جمع بدهکار/بستانکار هر حساب از اسناد ثبت‌شده',
+  'gl-balance-sheet': 'دارایی = بدهی + حقوق صاحبان سهام + سود/زیان دوره',
+  'gl-income-statement': 'درآمدها، کاهنده‌ها و هزینه‌های دوره از دفتر کل',
 };
 
 const CARDS: Card[] = [
@@ -226,6 +230,12 @@ const CARDS: Card[] = [
   { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت', needsTerm: true },
   { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک', needsTerm: true },
   { kind: 'revenue-hierarchy', cat: 'finance', icon: '🏛️', title: 'درآمد به تفکیک سلسله‌مراتب دانشکده/رشته', needsTerm: true },
+  // ── دفتر کلِ دوطرفه (r-gl): تراز آزمایشی، ترازنامه، صورت سود و زیان ──
+  // ترازنامه نیمسال الزامی ندارد (تاریخِ «تا پایان» می‌گیرد)، اما انتخاب ترم
+  // تاریخِ as-of را تعیین می‌کند؛ به همین دلیل فیلتر ترم برایش نمایش داده می‌شود.
+  { kind: 'gl-trial-balance', cat: 'finance', icon: '🧮', title: 'تراز آزمایشی دفتر کل', needsTerm: true },
+  { kind: 'gl-balance-sheet', cat: 'finance', icon: '⚖️', title: 'ترازنامه' },
+  { kind: 'gl-income-statement', cat: 'finance', icon: '📈', title: 'صورت سود و زیان', needsTerm: true },
   // پژوهش
   { kind: 'proposal-cap', cat: 'research', icon: '🎓', title: 'ظرفیت پروپوزال استادان', soon: true },
   { kind: 'defenses', cat: 'research', icon: '🎤', title: 'لیست دفاعیات' },
@@ -677,7 +687,9 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 </select>
               </label>
             )}
-            {card?.needsTerm && (
+            {/* ترازنامه نیمسال «لازم» ندارد، اما ترمِ انتخابی تاریخِ as-of را
+                تعیین می‌کند؛ پس فیلتر ترم برایش هم نمایش داده می‌شود. */}
+            {(card?.needsTerm || card?.kind === 'gl-balance-sheet') && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-bold text-slate-600">ترم:</span>
                 <select
@@ -1125,11 +1137,21 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 <tbody>
                   {res.rows.map((r, i) => (
                     <tr key={i} className="border-b border-slate-200 hover:bg-slate-50">
-                      {res.columns.map(c => (
-                        <td key={c.key} className="p-2 font-mono print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
-                          {fmtCell(r[c.key], c.format)}
-                        </td>
-                      ))}
+                      {res.columns.map(c => {
+                        const shown = fmtCell(r[c.key], c.format);
+                        // ✓/✗ فقط در خطِ «کنترل این‌همانیِ» ترازنامهٔ دفتر کل می‌آید
+                        // (r-gl)؛ سبز/سرخ‌کردنش بدون افزودن ستونِ تازه به داده است.
+                        const tone = shown.startsWith('✓')
+                          ? ' text-emerald-700 font-extrabold'
+                          : shown.startsWith('✗')
+                            ? ' text-rose-700 font-extrabold'
+                            : '';
+                        return (
+                          <td key={c.key} className={`p-2 font-mono print:whitespace-normal print:break-words${tone}`} dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
+                            {shown}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

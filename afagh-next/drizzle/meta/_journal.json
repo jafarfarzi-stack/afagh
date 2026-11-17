@@ -1002,6 +1002,41 @@
       "when": 1795900000000,
       "tag": "0137_compensatory_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1796000000000,
+      "tag": "0138_finance_base_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1796100000000,
+      "tag": "0139_widen_ledger_txn_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1796200000000,
+      "tag": "0140_cart_items_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1796300000000,
+      "tag": "0141_thesis_curriculum_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1796400000000,
+      "tag": "0142_gl_accounting",
+      "breakpoints": true
     }
   ]
 }

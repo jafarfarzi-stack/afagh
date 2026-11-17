@@ -32,6 +32,7 @@ import { run as runEduSchedule } from './r-edu-schedule';
 import { run as runExam } from './r-exam';
 import { run as runFinance } from './r-finance';
 import { run as runFinanceStatements } from './r-finance-statements';
+import { run as runGl } from './r-gl';
 import { run as runStaff } from './r-staff';
 import { run as runProfClass } from './r-prof-class';
 import { run as runStatusOps } from './r-status-ops';
@@ -83,7 +84,21 @@ const FINANCE_KINDS = new Set([
   'company-expenses',
   'allocation-report',
   'revenue-hierarchy',
+  // دفتر کلِ دوطرفه (r-gl) — تراز آزمایشی، ترازنامه و صورت سود و زیان
+  'gl-trial-balance',
+  'gl-balance-sheet',
+  'gl-income-statement',
 ]);
+
+/**
+ * kindهای دفتر کلِ جدید (r-gl).
+ *
+ * چرا جدا؟ فهرستِ کانونیِ `ALL_REPORT_KINDS` در `report-helpers.ts` هنوز این سه
+ * را ندارد و `page.tsx` فقط همان فهرست را به `allowedReportKinds` می‌دهد؛
+ * بدونِ این اتحاد، کارشناس مالی کارت‌ها را نمی‌دید. گیتِ واقعی همچنان
+ * `assertReportPermission` است (مرکزشان «مالی» است).
+ */
+const GL_KINDS = ['gl-trial-balance', 'gl-balance-sheet', 'gl-income-statement'] as const;
 
 /** نگاشت kind → مرکز: فقط «مالی» جدا می‌شود؛ مابقی آموزشی‌اند */
 function reportCenter(kind: string): 'finance' | 'edu' {
@@ -181,7 +196,9 @@ export async function allowedReportKinds(kinds: string[]): Promise<string[] | nu
   const perms = await getUserPermissions(user.id);
   const hasEdu = perms.has('reports:edu');
   const hasFinance = perms.has('reports:finance');
-  return kinds.filter(k =>
+  // کارت‌های دفتر کل هم در فهرستِ مجاز می‌آیند (توضیح در GL_KINDS).
+  const all = [...new Set([...kinds, ...GL_KINDS])];
+  return all.filter(k =>
     perms.has(`reports:${k}`) ||
     (reportCenter(k) === 'finance' ? hasFinance : hasEdu),
   );
@@ -208,6 +225,11 @@ const MULTI_TERM_CAP = 3000;
  */
 export async function runReport(kind: string, f: ReportFilters): Promise<ReportResult> {
   const terms = parseTermList(f);
+  // ترازنامه «تا تاریخ» است، نه دورهبه دوره؛ با چند ترم، جدیدترین ترم مبنای
+  // as-of میشود (کدها صعودیاند) و ردیفهای چند تراکنش با هم ادغام نمیشوند.
+  if (kind === 'gl-balance-sheet' && terms.length > 1) {
+    return executeReport(kind, { ...f, terms: undefined, term: terms[terms.length - 1] });
+  }
   if (terms.length > 1) return runReportMultiTerm(kind, f, terms);
   return executeReport(kind, f);
 }
@@ -738,6 +760,17 @@ async function executeReport(kind: string, f: ReportFilters): Promise<ReportResu
     }
 
     default: {
+      // ── گزارش‌های دفتر کلِ دوطرفه (r-gl) ──
+      // تراز آزمایشی و صورت سود و زیان «گردشِ یک دوره»اند و بدون نیمسال
+      // بی‌معنا می‌شوند؛ ترازنامه «تا تاریخ» است و نیمسال الزامی ندارد.
+      if (kind === 'gl-trial-balance' || kind === 'gl-income-statement') {
+        if (!term) {
+          return {
+            columns: [], rows: [], total: 0, page: 1, per: PER, totalPages: 1,
+            summary: 'برای این گزارش انتخاب نیمسال الزامی است؛ ابتدا نیمسال را انتخاب و گزارش را دوباره اجرا کنید.',
+          };
+        }
+      }
       // واگذاری به ماژول‌های خانواده‌ها (r-*.ts) — اولین پاسخی که null نیست
       const delegated =
         (await runClass(kind, f)) ??
@@ -748,6 +781,7 @@ async function executeReport(kind: string, f: ReportFilters): Promise<ReportResu
         (await runExam(kind, f)) ??
         (await runFinance(kind, f)) ??
         (await runFinanceStatements(kind, f)) ??
+        (await runGl(kind, f)) ??
         (await runStaff(kind, f)) ??
         (await runProfClass(kind, f)) ??
         (await runStatusOps(kind, f)) ??

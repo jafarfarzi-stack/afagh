@@ -275,6 +275,8 @@ export const ALL_REPORT_KINDS: string[] = [
   'insurance-report', 'legal-report', 'vat-report',
   'general-ledger', 'daily-journal', 'inventory-report', 'company-expenses',
   'allocation-report', 'revenue-hierarchy',
+  // دفتر کل دوطرفه (r-gl) — تراز آزمایشی، ترازنامهٔ واقعی، صورت سود و زیان
+  'gl-trial-balance', 'gl-balance-sheet', 'gl-income-statement',
 ];
 
 /** گیت ماتریس دسترسی برای هر گزارش: ADMIN آزاد، بقیه نیازمند reports:<kind> */

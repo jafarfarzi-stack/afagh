@@ -635,6 +635,21 @@ export const ADMIN_MODULES: AdminModule[] = [
     inNav: true,
     inGrid: true,
   },
+  {
+    // نقش‌ها عیناً همان گاردِ صفحهٔ مقصد است (requireRole در page.tsx)؛
+    // صندوق‌دار در حسابداری و دفتر کل دسترسی ندارد، پس کارت هم نمی‌بیند.
+    href: '/admin/accounting',
+    icon: <Icon emoji="📒" />,
+    title: 'حسابداری و دفتر کل',
+    desc: 'کدینگ حساب، قواعد نگاشت رویدادها، دوره‌های مالی، اسناد و بازسازی دفتر کل',
+    group: 'fin',
+    subgroup: 'rules',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-indigo-900 to-slate-950 border-indigo-600/50',
+    iconBg: 'bg-indigo-700/80 border-indigo-500/50',
+    inNav: true,
+    inGrid: true,
+  },
 
   /* ── زیردستهٔ ۳: ابزارها و گزارشها ── */
   {

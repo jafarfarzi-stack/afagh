@@ -4,7 +4,7 @@
 //  SQLite→PG مستقیم باشد. لایهٔ سخت‌سازی (ایندکس/پارتیشن/RLS — سند §۲۰۹۳–۲۲۴۰)
 //  → src/db/pg-hardening.sql
 // ══════════════════════════════════════════════════════════════════════
-import { pgTable, serial, integer, varchar, text, timestamp, date, time, numeric, jsonb, boolean, unique, uniqueIndex, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, bigint, smallint, varchar, text, timestamp, date, time, numeric, jsonb, boolean, unique, uniqueIndex, primaryKey, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const roles = pgTable('roles', {
@@ -4226,4 +4226,118 @@ export const legal_cases = pgTable('legal_cases', {
 }, (t) => [
   check('ck_legal_cases_status', sql`"status" IN ('OPEN','IN_PROGRESS','CLOSED','SUSPENDED')`),
   index('idx_legal_cases_uni').on(t.universityId),
+]);
+
+// ══════════════════════════════════════════════════════════════════════
+//  حسابداریِ دوبل — دفتر کل (مهاجرت 0142_gl_accounting.sql)
+//
+//  بدونِ دفترِ کل، «ترازنامه» فقط یک عددِ مشتق از ماندهٔ دانشجویان است و
+//  سندِ متوازن (بدهکار = بستانکار) وجود ندارد. این پنج جدول اسکلتِ
+//  حسابداریِ دوبل را می‌سازند: کدینگ، دورهٔ مالی، سند، ردیفِ سند و
+//  قاعدهٔ ثبت. پول همیشه ریال و numeric(18,0) است.
+// ══════════════════════════════════════════════════════════════════════
+
+/** کدینگ حساب‌ها (درختِ حساب) — type/normalSide واژگانِ ثابت دارند */
+export const gl_accounts = pgTable('gl_accounts', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id),
+  /** کدِ حساب (مثلاً 1101) — در هر دانشگاه یکتا */
+  code: varchar('code', { length: 20 }).notNull(),
+  name: varchar('name', { length: 120 }).notNull(),
+  /** حسابِ والد در همان درخت (NULL = حسابِ سطحِ اول) */
+  parentId: integer('parentId').references((): AnyPgColumn => gl_accounts.id),
+  /** ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE */
+  type: varchar('type', { length: 12 }).notNull(),
+  /** DEBIT | CREDIT — طرفِ طبیعیِ حساب */
+  normalSide: varchar('normalSide', { length: 6 }).notNull(),
+  level: smallint('level').notNull().default(1),
+  isActive: integer('isActive').notNull().default(1),
+  /** آیا می‌توان روی این حساب سند زد؟ (حساب‌های تجمیعی: 0) */
+  isPostable: integer('isPostable').notNull().default(1),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check('ck_gl_accounts_type', sql`"type" IN ('ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE')`),
+  check('ck_gl_accounts_normal_side', sql`"normalSide" IN ('DEBIT','CREDIT')`),
+  uniqueIndex('uq_gl_accounts_uni_code').on(t.universityId, t.code),
+  index('idx_gl_accounts_uni_type').on(t.universityId, t.type),
+]);
+
+/** دوره‌های مالی (ماهانه) — سند فقط در دورهٔ OPEN قابل ثبت است */
+export const gl_periods = pgTable('gl_periods', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id),
+  /** عنوانِ دوره، مثل 2025-11 (میلادی) */
+  title: varchar('title', { length: 60 }).notNull(),
+  startDate: date('startDate').notNull(),
+  endDate: date('endDate').notNull(),
+  /** OPEN | CLOSED */
+  status: varchar('status', { length: 8 }).notNull().default('OPEN'),
+  closedAt: timestamp('closedAt', { withTimezone: true }),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check('ck_gl_periods_status', sql`"status" IN ('OPEN','CLOSED')`),
+  uniqueIndex('uq_gl_periods_uni_title').on(t.universityId, t.title),
+]);
+
+/** سندِ حسابداری (سرسند) — همیشه باید متوازن باشد */
+export const gl_vouchers = pgTable('gl_vouchers', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id),
+  voucherNo: bigint('voucherNo', { mode: 'number' }).notNull(),
+  voucherDate: date('voucherDate').notNull(),
+  periodId: integer('periodId').references(() => gl_periods.id),
+  /** LEDGER | MANUAL | OPENING | PAYROLL | EXPENSE | CONTRACTOR | BACKFILL */
+  source: varchar('source', { length: 20 }).notNull(),
+  /** مرجعِ یکتا در مبدأ (مثلاً شناسهٔ ردیفِ student_ledger) — ضدِ ثبتِ تکراری */
+  sourceRef: varchar('sourceRef', { length: 80 }).notNull(),
+  description: varchar('description', { length: 300 }),
+  /** DRAFT | POSTED | REVERSED */
+  status: varchar('status', { length: 10 }).notNull().default('POSTED'),
+  totalDebit: numeric('totalDebit', { precision: 18, scale: 0 }).notNull().default('0'),
+  totalCredit: numeric('totalCredit', { precision: 18, scale: 0 }).notNull().default('0'),
+  createdByUserId: integer('createdByUserId').references(() => users.id),
+  postedAt: timestamp('postedAt', { withTimezone: true }),
+  /** سندِ برگشتی که این سند را خنثی کرده است */
+  reversedByVoucherId: integer('reversedByVoucherId').references((): AnyPgColumn => gl_vouchers.id),
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check('ck_gl_voucher_balanced', sql`"totalDebit" >= 0 AND "totalCredit" >= 0`),
+  check('ck_gl_vouchers_status', sql`"status" IN ('DRAFT','POSTED','REVERSED')`),
+  check('ck_gl_vouchers_source', sql`"source" IN ('LEDGER','MANUAL','OPENING','PAYROLL','EXPENSE','CONTRACTOR','BACKFILL')`),
+  uniqueIndex('uq_gl_vouchers_uni_no').on(t.universityId, t.voucherNo),
+  uniqueIndex('uq_gl_vouchers_source_ref').on(t.universityId, t.source, t.sourceRef),
+  index('idx_gl_vouchers_uni_date').on(t.universityId, sql`"voucherDate" DESC`),
+  index('idx_gl_vouchers_period').on(t.periodId),
+]);
+
+/** ردیف‌های سند — هر ردیف دقیقاً یک طرف (بدهکار یا بستانکار) و بزرگ‌تر از صفر */
+export const gl_voucher_lines = pgTable('gl_voucher_lines', {
+  id: serial('id').primaryKey(),
+  voucherId: integer('voucherId').notNull().references(() => gl_vouchers.id, { onDelete: 'cascade' }),
+  accountId: integer('accountId').notNull().references(() => gl_accounts.id),
+  debit: numeric('debit', { precision: 18, scale: 0 }).notNull().default('0'),
+  credit: numeric('credit', { precision: 18, scale: 0 }).notNull().default('0'),
+  description: varchar('description', { length: 200 }),
+  /** ابعادِ تحلیلی: دانشجو و نیمسال (اختیاری، برای گزارشِ تفصیلی) */
+  studentId: integer('studentId').references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+}, (t) => [
+  check('ck_gl_line_one_side', sql`"debit" >= 0 AND "credit" >= 0 AND ("debit" = 0 OR "credit" = 0) AND ("debit" + "credit") > 0`),
+  index('idx_gl_lines_voucher').on(t.voucherId),
+  index('idx_gl_lines_account').on(t.accountId),
+  index('idx_gl_lines_student').on(t.studentId),
+]);
+
+/** قواعدِ ثبت — نگاشتِ رویداد به حسابِ بدهکار/بستانکار (کدها، نه id) */
+export const gl_posting_rules = pgTable('gl_posting_rules', {
+  id: serial('id').primaryKey(),
+  universityId: integer('universityId').notNull().references(() => universities.id),
+  /** عیناً همان student_ledger."transactionType" */
+  eventKey: varchar('eventKey', { length: 40 }).notNull(),
+  debitAccountCode: varchar('debitAccountCode', { length: 20 }).notNull(),
+  creditAccountCode: varchar('creditAccountCode', { length: 20 }).notNull(),
+  isActive: integer('isActive').notNull().default(1),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_gl_rules_uni_event').on(t.universityId, t.eventKey),
 ]);
