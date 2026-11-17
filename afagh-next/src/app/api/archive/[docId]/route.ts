@@ -104,6 +104,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
       );
     }
 
+    // ⚠️ دست‌نیافتنی: مسیر catch بالا همیشه با 503 برمی‌گردد؛ این بلوک فقط
+    //    برای تاریخچه نگه داشته شده و هرگز رندر نمی‌شود (قبلاً SVG «سند معتبر» می‌ساخت).
     // ۳. پیش‌نمایش استاندارد سند با واترمارک رسمی دانشگاه
     //    🔒 XML-escape تمام مقادیر interpolate‌شده (fileName از کلاینت می‌آید → ضد تزریق SVG)
     const xmlEscape = (s: string) =>
@@ -126,14 +128,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
   <text x="350" y="330" font-family="sans-serif" font-size="13" font-weight="bold" fill="#047857" text-anchor="middle">وضعیت تأیید: ${doc.verificationStatus === 'VERIFIED' ? 'تأییدشده ✓' : 'در انتظار بررسی'}</text>
   
   <line x1="60" y1="365" x2="640" y2="365" stroke="#e2e8f0" stroke-dasharray="6 4"/>
-  <text x="350" y="395" font-family="sans-serif" font-size="11" fill="#dc2626" text-anchor="middle">🔒 واترمارک امنیتی: بازبینی‌شده توسط کارشناس (${xmlEscape(user.name)}) در تاریخ ${new Date().toLocaleDateString('fa-IR')}</text>
+  <text x="350" y="395" font-family="sans-serif" font-size="11" fill="#dc2626" text-anchor="middle">🔒 واترمارک امنیتی: بازبینی‌شده توسط کارشناس (${xmlEscape(user?.name ?? '')}) در تاریخ ${new Date().toLocaleDateString('fa-IR')}</text>
   <text x="350" y="415" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">سامانه جامع بایگانی الکترونیک دانشگاه — سند معتبر دیجیتال</text>
 </svg>`;
 
     return new NextResponse(fallbackSvg, {
       headers: {
         'Content-Type': 'image/svg+xml; charset=utf-8',
-        'X-Watermark': encodeURIComponent(`${user.name} | ${new Date().toISOString()}`),
+        'X-Watermark': encodeURIComponent(`${user?.name ?? ''} | ${new Date().toISOString()}`),
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
         'Cache-Control': 'no-store',
