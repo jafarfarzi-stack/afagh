@@ -12,6 +12,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { releaseSeat, takeSeat } from '@/lib/waitingRoom';
 import { getBool } from '@/lib/settings';
 import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { recountOffering } from '@/lib/enrollment-count';
 
 export async function dropCourseAction(enrollmentId: number): Promise<{ ok: boolean; error?: string; promotedTo?: string | null }> {
   const user = await requireRole(['STUDENT']);
@@ -34,7 +35,8 @@ export async function dropCourseAction(enrollmentId: number): Promise<{ ok: bool
 
   // ۱) حذف (ردیف خود دانشجو → تحت RLS §۲۱۷۰) + آزادسازی صندلی
   await withUserRls(user.id, tx => tx.update(enrollments).set({ status: 'DROPPED' }).where(and(eq(enrollments.id, row.id), eq(enrollments.studentId, me.id))));
-  await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - 1, 0)` }).where(eq(course_offerings.id, row.offeringId));
+  // شمارندهٔ صندلی از یک منبع واحد بازمحاسبه می‌شود (نه ±۱ دستی)
+  await recountOffering(row.offeringId);
   await releaseSeat(row.offeringId);
 
   // ۲) رویداد ارتقا (اقدام سیستم روی ردیف «دانشجوی دیگر» → نقش مالک): نفر اول لیست انتظار همین درس
@@ -54,6 +56,7 @@ export async function dropCourseAction(enrollmentId: number): Promise<{ ok: bool
       .where(and(eq(enrollments.offeringId, row.offeringId), eq(enrollments.status, 'WAITLISTED')));
     await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` }).where(eq(course_offerings.id, row.offeringId));
     await takeSeat(row.offeringId);
+    await recountOffering(row.offeringId);
 
     // §۱۰۲۶: اطلاع‌رسانی لحظه‌ای — «درس ساختمان داده برای شما ثبت قطعی شد.»
     const [promoted] = await db
@@ -120,6 +123,7 @@ export async function emergencyDropAction(enrollmentId: number): Promise<{ ok: b
     .where(and(eq(enrollments.id, row.id), eq(enrollments.studentId, me.id))));
   await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - 1, 0)` }).where(eq(course_offerings.id, row.offeringId));
   await releaseSeat(row.offeringId);
+  await recountOffering(row.offeringId);
 
   // ارتقای لیست انتظار (مشابه حذف معمولی)
   const [firstWait] = await db
@@ -137,6 +141,7 @@ export async function emergencyDropAction(enrollmentId: number): Promise<{ ok: b
       .where(and(eq(enrollments.offeringId, row.offeringId), eq(enrollments.status, 'WAITLISTED')));
     await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` }).where(eq(course_offerings.id, row.offeringId));
     await takeSeat(row.offeringId);
+    await recountOffering(row.offeringId);
 
     const [promoted] = await db
       .select({ userId: students.userId, firstName: users.firstName })

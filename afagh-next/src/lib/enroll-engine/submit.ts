@@ -11,6 +11,7 @@ import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from 
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
 import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
 import { assertEnrollmentWrite } from '../enrollment-window';
+import { recountOfferings } from '../enrollment-count';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
 // هر درخواست انتخاب واحد از ۵ فیلتر می‌گذرد:
@@ -55,6 +56,15 @@ export function buildClaimSeatsQuery(exec: any, ids: number[]) {
     .returning({ id: course_offerings.id });
 }
 
+/**
+ * رزروِ اتمیِ صندلی برای درخواستِ در جریان.
+ *
+ * این `+1` **قفلِ ظرفیت** است، نه شمارشِ نهایی: لحظه‌ای که ردیفِ enrollment
+ * هنوز ساخته نشده، همین افزایش جلوی ثبتِ هم‌زمانِ بیش از ظرفیت را می‌گیرد.
+ * پس از درج/به‌روزرسانیِ ردیف، `enrolledCount` از تعریفِ یکتا
+ * (`recountOfferings`) بازشماری می‌شود و این `+1` جای خود را به عددِ واقعی
+ * می‌دهد؛ آزادسازی هم با بازشماری انجام می‌شود (پایین‌تر).
+ */
 export async function claimSeatsBatch(exec: any, ids: number[]): Promise<Set<number>> {
   if (ids.length === 0) return new Set<number>();
   const rows = await buildClaimSeatsQuery(exec, ids) as { id: number }[];
@@ -70,8 +80,9 @@ export async function readFreshCapacities(exec: any, ids: number[]): Promise<Map
   return new Map(rows.map(r => [Number(r.id), { enrolled: Number(r.enrolled), capacity: Number(r.capacity) }]));
 }
 
+/** آزادسازیِ صندلیِ رزروشده — با بازشماریِ کامل، نه `-1` دستی */
 export async function compensateSeatDb(exec: any, id: number): Promise<void> {
-  await exec.execute(sql`UPDATE course_offerings SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${id}`).catch(() => {});
+  await recountOfferings([id], exec).catch(() => {});
 }
 
 /**
@@ -466,6 +477,9 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
   }
 
   let txError: unknown = null;
+  /** ارائه‌هایی که ردیفشان در تراکنش نوشته شد — برای بازشماریِ شمارنده */
+  const seatRecountIds: number[] = [];
+  let recountedInTx = false;
   try {
     await doRls(userId, async (tx: any) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('enroll:' || ${String(studentId)}))`);
@@ -531,6 +545,21 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
           continue;
         }
         await tx.execute(sql.raw('RELEASE SAVEPOINT enroll_sp')).catch(() => {});
+        seatRecountIds.push(Number(p.o.id));
+      }
+      // ── شمارندهٔ صندلی: از تعریفِ یکتا بازشماری می‌شود، نه +1/−1 دستی ──
+      // داخل همان تراکنش تا شمارنده و ردیف‌های ثبت‌نام با هم commit شوند.
+      // SAVEPOINT: اگر نقشِ RLS اجازهٔ UPDATE روی course_offerings را ندهد،
+      // تراکنش مسموم نشود و بازشماری پس از commit روی اتصال اصلی انجام گیرد.
+      if (seatRecountIds.length > 0) {
+        await tx.execute(sql.raw('SAVEPOINT seat_recount'));
+        try {
+          await recountOfferings(seatRecountIds, tx);
+          await tx.execute(sql.raw('RELEASE SAVEPOINT seat_recount')).catch(() => {});
+          recountedInTx = true;
+        } catch {
+          await tx.execute(sql.raw('ROLLBACK TO SAVEPOINT seat_recount')).catch(() => {});
+        }
       }
       const winners = plans.filter(p => !p.excluded && !p.failMessage);
       if (winners.length > 0) {
@@ -552,6 +581,9 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     for (const p of plans) {
       if (!p.excluded && !p.failMessage) p.failMessage = 'خطا در ثبت «' + p.o.title + '»: ' + msg;
     }
+  } else if (!recountedInTx && seatRecountIds.length > 0) {
+    // بازشماریِ پس از commit (مسیرِ جایگزین وقتی tx اجازهٔ UPDATE نداشت)
+    await recountOfferings(seatRecountIds, D).catch(() => {});
   }
   for (const p of plans) {
     if (p.failMessage && !p.excluded && !p.waitlisted) {

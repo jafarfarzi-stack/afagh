@@ -1304,6 +1304,17 @@ export const enrollments = pgTable('enrollments', {
   sourceUniversityId: integer('sourceUniversityId').references((): AnyPgColumn => universities.id),
   /** ردیف enrollments مبدأ — کلید idempotency: هر نمرهٔ خارجی فقط یک‌بار قابل اعمال است. */
   sourceEnrollmentId: integer('sourceEnrollmentId').references((): AnyPgColumn => enrollments.id),
+  // ── اجزای نمره (مهاجرت ۰۱۴۳) ──
+  // هر جزء ستون مستقل خود را دارد تا ثبت میان‌ترم، پایان‌ترم را بازنویسی نکند.
+  // gradeValue تنها مرجع «نمرهٔ نهایی» است و پس از هر ثبت جزء، از روی همین
+  // ستون‌ها با calculateFinalScore بازمحاسبه و به‌صورت DRAFT ذخیره می‌شود.
+  midtermScore: numeric('midtermScore', { precision: 4, scale: 2 }),
+  finalExamScore: numeric('finalExamScore', { precision: 4, scale: 2 }),
+  homeworkScore: numeric('homeworkScore', { precision: 4, scale: 2 }),
+  participationScore: numeric('participationScore', { precision: 4, scale: 2 }),
+  theoryProfScore: numeric('theoryProfScore', { precision: 4, scale: 2 }),
+  labProfScore: numeric('labProfScore', { precision: 4, scale: 2 }),
+  practicalScore: numeric('practicalScore', { precision: 4, scale: 2 }),
 }, (t) => ({ uq: unique('uq_enrollments').on(t.studentId, t.offeringId) }));
 
 /**

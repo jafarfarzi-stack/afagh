@@ -148,11 +148,15 @@ export async function getCurriculumVersionDetailAction(versionId: number): Promi
     // گارد چندمؤسسه‌ای از همین‌جا ارث می‌رسد: loadVersionData اولین کارش
     // getVersionOrThrow(versionId) است، پس نسخهٔ دانشگاه دیگر خوانده نمی‌شود.
     const data = await loadVersionData(versionId);
-    const approvals = await db
-      .select({ id: curriculum_approvals.id, approvalType: curriculum_approvals.approvalType, fromStatus: curriculum_approvals.fromStatus, toStatus: curriculum_approvals.toStatus, decisionNote: curriculum_approvals.decisionNote, approvedAt: curriculum_approvals.approvedAt })
-      .from(curriculum_approvals)
-      .where(eq(curriculum_approvals.curriculumVersionId, versionId))
-      .orderBy(desc(curriculum_approvals.approvedAt));
+    // تاریخچهٔ تأیید و ورودی اعتبارسنجی (خواندن مقطع) مستقل‌اند ⇒ موازی، نه سریالی
+    const [approvals, checkInput] = await Promise.all([
+      db
+        .select({ id: curriculum_approvals.id, approvalType: curriculum_approvals.approvalType, fromStatus: curriculum_approvals.fromStatus, toStatus: curriculum_approvals.toStatus, decisionNote: curriculum_approvals.decisionNote, approvedAt: curriculum_approvals.approvedAt })
+        .from(curriculum_approvals)
+        .where(eq(curriculum_approvals.curriculumVersionId, versionId))
+        .orderBy(desc(curriculum_approvals.approvedAt)),
+      buildCheckInput(data),
+    ]);
     return {
       ok: true,
       data: {
@@ -160,7 +164,7 @@ export async function getCurriculumVersionDetailAction(versionId: number): Promi
         courses: data.courses,
         rules: data.rules,
         approvals,
-        checks: validateCurriculumCore(await buildCheckInput(data)),
+        checks: validateCurriculumCore(checkInput),
         extraTitles: data.extraTitles ?? {},
       },
     };

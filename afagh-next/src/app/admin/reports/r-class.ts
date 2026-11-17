@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { recountOfferings } from '@/lib/enrollment-count';
 
 const READ_ROLES = ['ADMIN', 'EDU_EXPERT'];
 
@@ -227,14 +228,15 @@ export async function mergeGroups(fromOfferingId: number, toOfferingId: number):
       AND NOT EXISTS (SELECT 1 FROM enrollments d WHERE d."studentId" = e."studentId" AND d."offeringId" = ${toOfferingId})
       RETURNING e.id`,
   );
-  // باقی‌مانده‌های A (دانشجویانی که هم‌زمان در B بودند) حذف می‌شوند تا رکورد یتیم نماند
-  await db.execute(sql`DELETE FROM enrollments WHERE "offeringId" = ${fromOfferingId}`);
+  // باقی‌مانده‌های A (دانشجویانی که هم‌زمان در B بودند) حذف نمی‌شوند:
+  // حذفِ سخت تاریخچهٔ نمره/حضور/اعتراض را نابود می‌کند، پس soft-drop می‌شوند.
+  await db.execute(sql`UPDATE enrollments SET status = 'DROPPED',
+      "enrollOverrideReason" = 'ادغام گروه (سیستم)'
+    WHERE "offeringId" = ${fromOfferingId}
+      AND status IN ('REGISTERED', 'WAITLISTED', 'PENDING_COUNCIL')`);
   await db.execute(sql`UPDATE course_offerings SET "isActive" = 0 WHERE id = ${fromOfferingId}`);
-  await db.execute(
-    sql`UPDATE course_offerings AS o SET "enrolledCount" =
-      (SELECT COUNT(*) FROM enrollments e WHERE e."offeringId" = o.id AND e.status <> 'DROPPED')
-      WHERE o.id IN (${fromOfferingId}, ${toOfferingId})`,
-  );
+  // شمارنده از تعریفِ یکتا بازشماری می‌شود (نه «status <> DROPPED»)
+  await recountOfferings([fromOfferingId, toOfferingId]);
   revalidatePath('/admin/reports');
   return { ok: true, updated: moved.rows.length };
 }
@@ -259,16 +261,12 @@ export async function bulkEnroll(offeringId: number, studentIds: number[]): Prom
       ON CONFLICT ("studentId", "offeringId") DO NOTHING
       RETURNING id`,
   );
-  await db.execute(
-    sql`UPDATE course_offerings AS o SET "enrolledCount" =
-      (SELECT COUNT(*) FROM enrollments e WHERE e."offeringId" = o.id AND e.status <> 'DROPPED')
-      WHERE o.id = ${offeringId}`,
-  );
+  await recountOfferings([offeringId]);
   revalidatePath('/admin/reports');
   return { ok: true, updated: ins.rows.length };
 }
 
-// حذف واحد جمعی: حذف enrollments بر اساس شناسه‌ها
+// حذف واحد جمعی: soft-drop ردیف‌های enrollments (هرگز حذفِ سخت — تاریخچه حفظ می‌شود)
 export async function bulkDrop(enrollmentIds: number[]): Promise<ClassMutationResult> {
   await requireRole(['ADMIN']);
   const ids = [...new Set((enrollmentIds ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, 500);
@@ -278,15 +276,14 @@ export async function bulkDrop(enrollmentIds: number[]): Promise<ClassMutationRe
     sql`SELECT DISTINCT "offeringId" FROM enrollments WHERE id IN (${list})`,
   );
   const del = await db.execute<{ id: number }>(
-    sql`DELETE FROM enrollments WHERE id IN (${list}) RETURNING id`,
+    sql`UPDATE enrollments SET status = 'DROPPED',
+        "enrollOverrideReason" = 'حذف واحد توسط کارشناس آموزش (سیستم)'
+      WHERE id IN (${list})
+        AND status IN ('REGISTERED', 'WAITLISTED', 'PENDING_COUNCIL')
+      RETURNING id`,
   );
   if (aff.rows.length > 0) {
-    const olist = sql.join(aff.rows.map(r => sql`${Number(r.offeringId)}`), sql`, `);
-    await db.execute(
-      sql`UPDATE course_offerings AS o SET "enrolledCount" =
-        (SELECT COUNT(*) FROM enrollments e WHERE e."offeringId" = o.id AND e.status <> 'DROPPED')
-        WHERE o.id IN (${olist})`,
-    );
+    await recountOfferings(aff.rows.map(r => Number(r.offeringId)));
   }
   revalidatePath('/admin/reports');
   return { ok: true, updated: del.rows.length };

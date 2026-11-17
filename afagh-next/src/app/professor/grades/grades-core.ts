@@ -98,6 +98,52 @@ export const SCORE_FIELDS: StudentGradeField[] = [
   'finalExamScore', 'theoryProfScore', 'labProfScore',
 ];
 
+/**
+ * هفت «جزء» نمره که هر یک ستون مستقل خود را در `enrollments` دارند
+ * (مهاجرت ۰۱۴۳). این فهرست همان SCORE_FIELDS است، ولی نام‌گذاری جدا
+ * می‌کند که این‌ها «جزء» هستند نه «نمرهٔ نهایی».
+ *
+ * قرارداد ذخیره (اصلاح‌شده): ثبت یک جزء، ابتدا ستون خودش را می‌نویسد و سپس
+ * نمرهٔ نهایی را از «همهٔ» اجزا با calculateFinalFromComponents بازمحاسبه
+ * می‌کند تا gradeValue هرگز «آخرین فیلد تایپ‌شده» نباشد. نتیجه فقط DRAFT
+ * است و هرگز FINALIZED نمی‌شود.
+ */
+export const COMPONENT_SCORE_FIELDS = [
+  'midtermScore', 'finalExamScore', 'homeworkScore', 'participationScore',
+  'theoryProfScore', 'labProfScore', 'practicalScore',
+] as const;
+
+export type ComponentScoreField = typeof COMPONENT_SCORE_FIELDS[number];
+
+/** نگاشت جزء نمره → ستون متناظر آن در `enrollments` (منبع واحد نام ستون‌ها) */
+export const COMPONENT_SCORE_COLUMN: Record<ComponentScoreField, ComponentScoreField> = {
+  midtermScore: 'midtermScore',
+  finalExamScore: 'finalExamScore',
+  homeworkScore: 'homeworkScore',
+  participationScore: 'participationScore',
+  theoryProfScore: 'theoryProfScore',
+  labProfScore: 'labProfScore',
+  practicalScore: 'practicalScore',
+};
+
+/** آیا این فیلد یکی از هفت جزء نمره است؟ (type guard روی رشتهٔ ورودی کلاینت) */
+export function isComponentScoreField(field: string): field is ComponentScoreField {
+  return (COMPONENT_SCORE_FIELDS as readonly string[]).includes(field);
+}
+
+/**
+ * فیلد «نمرهٔ نهاییِ دستی» — تنها فیلدی که طبق رفتار امروز روی
+ * `enrollments.gradeValue` + `gradeStatus='DRAFT'` می‌نویسد.
+ *
+ * UI نمرهٔ کل را با نام `calculatedFinalScore` می‌شناسد؛ اگر مسیر ورود
+ * دستیِ نمرهٔ نهایی از همین فیلد استفاده کند، رفتار پیشین حفظ می‌شود.
+ */
+export const EXPLICIT_FINAL_SCORE_FIELD = 'calculatedFinalScore';
+
+export function isExplicitFinalScoreField(field: string): boolean {
+  return field === EXPLICIT_FINAL_SCORE_FIELD;
+}
+
 /** سقف مجاز یک فیلد نمره بر اساس بارم درس */
 export function rubricFieldMax(field: StudentGradeField, rubric: RubricWeights): number {
   switch (field) {
@@ -174,6 +220,86 @@ export function calculateFinalScore(st: StudentGradeItem, offering: GradingCours
   const pr = Math.min(offering.rubric.practical, st.practicalScore ?? 0);
   const f = Math.min(offering.rubric.finalExam, st.finalExamScore ?? 0);
   return Math.min(20, Math.round((m + h + p + pr + f) * 100) / 100);
+}
+
+/** کلمپ نهایی به بازهٔ ۰..۲۰ و گِرد به دو رقم اعشار (تابع خالص) */
+export function normalizeFinalScore(score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(20, Math.round(score * 100) / 100));
+}
+
+/** هفت جزء نمرهٔ قابل‌ذخیره (هم‌نام با ستون‌های enrollments) */
+export interface ComponentScores {
+  midtermScore?: number;
+  finalExamScore?: number;
+  homeworkScore?: number;
+  participationScore?: number;
+  theoryProfScore?: number;
+  labProfScore?: number;
+  practicalScore?: number;
+}
+
+/**
+ * زمینهٔ سروریِ محاسبهٔ نمرهٔ نهایی.
+ * `coTaughtRatios` باید همیشه از پایگاه داده (offering_professors.sharePercentage)
+ * بیاید، هرگز از کلاینت. null/undefined ⇒ درس تک‌استادی (جمع بارم).
+ */
+export interface FinalScoreContext {
+  rubric: RubricWeights;
+  coTaughtRatios?: { theoryWeightRatio: number; labWeightRatio: number } | null;
+}
+
+/**
+ * تنها نقطهٔ محاسبهٔ نمرهٔ نهایی از اجزا — هم برای ثبت هر جزء در
+ * saveGradeAction و هم برای دکمهٔ صریح computeFinalFromComponentsAction.
+ *
+ * خروجی همان چیزی است که UI با calculateFinalScore نمایش می‌دهد (کلمپ‌شده،
+ * دو رقم اعشار). جزء غایب (undefined) مانند صفر رفتار می‌شود، همان قرارداد
+ * calculateFinalScore؛ پس پاک‌کردن یک جزء، نمرهٔ نهایی را بدون آن بازمحاسبه
+ * می‌کند.
+ */
+export function calculateFinalFromComponents(
+  components: ComponentScores,
+  context: FinalScoreContext
+): number {
+  const student: StudentGradeItem = {
+    studentId: 0,
+    studentCode: '',
+    fullName: '',
+    ...components,
+    status: 'DRAFT',
+  };
+  const ratios = context.coTaughtRatios;
+  const offering: GradingCourseOffering = {
+    id: 0,
+    code: '',
+    title: '',
+    groupNumber: 0,
+    units: 0,
+    courseType: 'اصلی',
+    isCoTaught: !!ratios,
+    rubric: context.rubric,
+    students: [student],
+    appeals: [],
+    ...(ratios
+      ? {
+          coTaughtDetails: {
+            theoryProfName: '',
+            theoryProfStaffCode: '',
+            theoryWeightRatio: ratios.theoryWeightRatio,
+            theoryWeightMarks: Math.round(ratios.theoryWeightRatio * 20),
+            theorySigned: false,
+            labProfName: '',
+            labProfStaffCode: '',
+            labWeightRatio: ratios.labWeightRatio,
+            labWeightMarks: Math.round(ratios.labWeightRatio * 20),
+            labSigned: false,
+            currentProfRole: 'THEORY' as const,
+          },
+        }
+      : {}),
+  };
+  return normalizeFinalScore(calculateFinalScore(student, offering));
 }
 
 /** اعمال یک نمره روی دانشجو → بازگرداندن دانشجوی به‌روز شده (با محاسبهٔ مجدد نهایی) */

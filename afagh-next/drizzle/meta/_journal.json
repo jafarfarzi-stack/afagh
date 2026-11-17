@@ -1037,6 +1037,13 @@
       "when": 1796400000000,
       "tag": "0142_gl_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1796500000000,
+      "tag": "0143_grade_components",
+      "breakpoints": true
     }
   ]
 }

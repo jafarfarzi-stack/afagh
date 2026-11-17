@@ -9,6 +9,7 @@ import {
 } from '@/db/schema';
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
+import { recountOffering } from '@/lib/enrollment-count';
 import {
   BYPASS_KIND_LABEL,
   BYPASS_REASON_LABEL,
@@ -34,14 +35,19 @@ function hoursOf(value: number | null | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-/** آزادسازی صندلی رزروشده (هرگز منفی نمی‌شود) */
+/** آزادسازی صندلی رزروشده — با بازشماریِ کامل (هرگز منفی نمی‌شود) */
 export async function releaseReservedSeat(offeringId: number): Promise<void> {
-  await db.execute(sql`UPDATE "course_offerings" SET "enrolledCount" = GREATEST("enrolledCount" - 1, 0) WHERE id = ${offeringId}`);
+  await recountOffering(offeringId).catch(() => {});
 }
 
-/** رزرو اتمی صندلی؛ false یعنی ظرفیت پر است */
-async function claimSeat(offeringId: number): Promise<boolean> {
-  const rows = await db.update(course_offerings)
+/**
+ * رزرو اتمی صندلی؛ false یعنی ظرفیت پر است.
+ *
+ * این `+1` قفلِ ظرفیت است (ردیفِ درخواست هنوز ساخته نشده)؛ بلافاصله پس از
+ * درجِ ردیفِ bypass، شمارنده از تعریفِ یکتا بازشماری می‌شود (`recountOffering`).
+ */
+async function claimSeat(offeringId: number, exec?: any): Promise<boolean> {
+  const rows = await (exec ?? db).update(course_offerings)
     .set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` })
     .where(and(
       eq(course_offerings.id, offeringId),
@@ -228,34 +234,47 @@ export async function createBypassRequest(input: {
     }
   }
 
-  if (!(await claimSeat(input.offeringId))) {
-    return { ok: false, error: 'ظرفیت این درس پر است.' };
-  }
-
   const managerHours = hoursOf(term.bypassManagerHours, 48);
   const managerDeadlineAt = new Date(Date.now() + managerHours * HOUR);
 
+  // رزرو + درجِ درخواست + بازشماری در **یک تراکنش**: هیچ لحظه‌ای رزروِ
+  // بی‌ردیف یا شمارندهٔ ناهمگام باقی نمی‌ماند و در صورت خطا هر دو برمی‌گردند.
+  let insertedId = 0;
   try {
-    const [ins] = await db.insert(enroll_bypass_requests).values({
-      studentId: input.studentId,
-      offeringId: input.offeringId,
-      termId: off.termId,
-      universityId: stu.universityId ?? term.universityId ?? null,
-      kind: input.kind,
-      status: 'PENDING_MANAGER',
-      managerDeadlineAt,
-      seatReserved: 1,
-    }).returning({ id: enroll_bypass_requests.id });
-
-    const managers = await managerUserIdsForCourse(off.courseId);
-    await notify(managers, 'BYPASS_SUBMITTED',
-      `درخواست ${stu.firstName ?? ''} ${stu.lastName ?? ''} برای ثبت درس «${off.courseTitle}» بدون رعایت ${BYPASS_KIND_LABEL[input.kind]} ثبت شد. مهلت بررسی: ${faDate(managerDeadlineAt)}.`);
-
-    return { ok: true, id: ins.id };
+    await db.transaction(async (tx) => {
+      if (!(await claimSeat(input.offeringId, tx))) {
+        const err = new Error('SEAT_FULL') as Error & { code?: string };
+        err.code = 'SEAT_FULL';
+        throw err;
+      }
+      const [ins] = await tx.insert(enroll_bypass_requests).values({
+        studentId: input.studentId,
+        offeringId: input.offeringId,
+        termId: off.termId,
+        universityId: stu.universityId ?? term.universityId ?? null,
+        kind: input.kind,
+        status: 'PENDING_MANAGER',
+        managerDeadlineAt,
+        seatReserved: 1,
+      }).returning({ id: enroll_bypass_requests.id });
+      insertedId = ins.id;
+      // شمارنده = REGISTERED + رزروهای معتبر؛ نه یک «+1» کورِ دیگر
+      await recountOffering(input.offeringId, tx);
+    });
   } catch (e) {
+    if ((e as { code?: string })?.code === 'SEAT_FULL') {
+      return { ok: false, error: 'ظرفیت این درس پر است.' };
+    }
+    // بهترین تلاش: شمارنده را با واقعیت هم‌تراز کن (اگر چیزی نیمه‌کاره مانده باشد)
     await releaseReservedSeat(input.offeringId);
     return { ok: false, error: `ثبت درخواست ناموفق بود: ${(e as Error).message}` };
   }
+
+  const managers = await managerUserIdsForCourse(off.courseId);
+  await notify(managers, 'BYPASS_SUBMITTED',
+    `درخواست ${stu.firstName ?? ''} ${stu.lastName ?? ''} برای ثبت درس «${off.courseTitle}» بدون رعایت ${BYPASS_KIND_LABEL[input.kind]} ثبت شد. مهلت بررسی: ${faDate(managerDeadlineAt)}.`);
+
+  return { ok: true, id: insertedId };
 }
 
 /** درخواست‌های بازِ یک دانشجو (برای نمایش در صفحهٔ انتخاب واحد) */
@@ -397,6 +416,10 @@ export async function approveBypassRequest(input: {
     seatReserved: 0,
     updatedAt: new Date(),
   }).where(eq(enroll_bypass_requests.id, input.requestId));
+
+  // تبدیلِ رزرو به ثبت‌نام: هم ردیفِ REGISTERED ساخته شد و هم seatReserved=0 شد.
+  // بازشماری پس از هر دو نوشتن، شمارشِ مضاعفِ همان صندلی را قطعی حذف می‌کند.
+  await recountOffering(req.offeringId);
 
   const stu = await studentNameAndMajor(req.studentId);
   const [off] = await db.select({ courseTitle: courses.title })

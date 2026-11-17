@@ -1,8 +1,9 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms, course_offerings, courses, enrollments } from '@/db/schema';
 import { parseGrade, parseUnits } from '../regulations-engine';
 import { computeGradeStatus } from '@/lib/grade-utils';
+import { recountOffering } from '@/lib/enrollment-count';
 import { EQUIV_MIN_GRADE } from './constants';
 
 // ══════════════════════════════════════════════════════════════════════
@@ -161,12 +162,9 @@ export async function applyCourseTransfer(input: {
         .values({ studentId: input.studentId, offeringId: offering.id, isDirectedReading: 0, ...payload })
         .returning({ id: enrollments.id }))[0];
 
-  if (createdOffering) {
-    await db
-      .update(course_offerings)
-      .set({ enrolledCount: sql`(select count(*)::int from enrollments where "offeringId" = ${offering.id} and status <> 'DROPPED')` })
-      .where(eq(course_offerings.id, offering.id));
-  }
+  // شمارندهٔ صندلیِ همان تعریفِ یکتا بازشماری می‌شود (REGISTERED + رزروهای bypass).
+  // پیش‌تر فقط برای ارائهٔ تازه‌ساخته و با تعریفِ «status <> DROPPED» نوشته می‌شد.
+  await recountOffering(offering.id);
 
   return {
     ok: true,

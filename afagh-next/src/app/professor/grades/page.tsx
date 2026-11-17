@@ -1,6 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { academic_terms, course_offerings, courses, grade_unfinalize_requests, universities } from '@/db/schema';
+import { academic_terms, course_offerings, courses, enrollments, grade_unfinalize_requests, universities } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
@@ -47,6 +47,13 @@ function faDateTime(d: Date | string | null | undefined): string {
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('fa-IR');
+}
+
+/** اجزای نمره: numeric درایور به‌صورت رشته می‌آید؛ خالی/نامعتبر ⇒ undefined */
+function componentScore(v: string | null): number | undefined {
+  if (v === null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 export default async function ProfessorGradesPage({
@@ -135,6 +142,44 @@ export default async function ProfessorGradesPage({
     list.push(e);
     enrollByOffering.set(e.offeringId, list);
   }
+
+  // ── اجزای نمره (مهاجرت ۰۱۴۳): فقط خواندن و انتقال به کلاینت ──
+  // هیچ محاسبه‌ای این‌جا انجام نمی‌شود؛ نمرهٔ نهایی همچنان gradeValue است.
+  const componentsByEnrollment = new Map<number, {
+    midtermScore?: number;
+    finalExamScore?: number;
+    homeworkScore?: number;
+    participationScore?: number;
+    theoryProfScore?: number;
+    labProfScore?: number;
+    practicalScore?: number;
+  }>();
+  if (offeringIds.length > 0) {
+    const componentRows = await db
+      .select({
+        id: enrollments.id,
+        midtermScore: enrollments.midtermScore,
+        finalExamScore: enrollments.finalExamScore,
+        homeworkScore: enrollments.homeworkScore,
+        participationScore: enrollments.participationScore,
+        theoryProfScore: enrollments.theoryProfScore,
+        labProfScore: enrollments.labProfScore,
+        practicalScore: enrollments.practicalScore,
+      })
+      .from(enrollments)
+      .where(inArray(enrollments.offeringId, offeringIds));
+    for (const c of componentRows) {
+      componentsByEnrollment.set(c.id, {
+        midtermScore: componentScore(c.midtermScore),
+        finalExamScore: componentScore(c.finalExamScore),
+        homeworkScore: componentScore(c.homeworkScore),
+        participationScore: componentScore(c.participationScore),
+        theoryProfScore: componentScore(c.theoryProfScore),
+        labProfScore: componentScore(c.labProfScore),
+        practicalScore: componentScore(c.practicalScore),
+      });
+    }
+  }
   const appealsByEnrollment = new Map<number, typeof appealRows>();
   for (const a of appealRows) {
     const list = appealsByEnrollment.get(a.enrollmentId) ?? [];
@@ -202,6 +247,8 @@ export default async function ProfessorGradesPage({
         calculatedFinalScore: hasGrade ? raw : undefined,
         status: GRADE_STATUS_MAP[e.gradeStatus] ?? 'DRAFT',
         enrollmentOfferingId: e.offeringId,
+        // هفت جزء نمره — فقط انتقال داده، بدون محاسبه
+        ...(componentsByEnrollment.get(e.enrollmentId) ?? {}),
       };
     });
 

@@ -8,7 +8,7 @@
 //  (پیش از این همه در یک فایل ۱۱۸۰ سطری بود؛ این دور جدا شد — متن بدنه عیناً منتقل شده.)
 // ════════════════════════════════════════════════════════════════════════
 
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { course_rules, courses, curriculum_courses, curriculum_versions, degree_level_configs, majors, staff } from '@/db/schema';
@@ -150,58 +150,106 @@ export async function assertUniqueVersionCode(majorId: number, degreeLevelId: nu
   }
 }
 
-/** بارگیری کامل دادهٔ یک نسخه + دروس + قواعد + بانک کدها — برای اعتبارسنجی */
+/** بارگیری کامل دادهٔ یک نسخه + دروس + قواعد + کدهای بانکِ ارجاع‌شده — برای اعتبارسنجی */
 
 
-/** بارگیری کامل دادهٔ یک نسخه + دروس + قواعد + بانک کدها — برای اعتبارسنجی */
+/** بارگیری کامل دادهٔ یک نسخه + دروس + قواعد + کدهای بانکِ ارجاع‌شده — برای اعتبارسنجی */
 export async function loadVersionData(versionId: number) {
-  const version = await getVersionOrThrow(versionId);
-  const rows = await db
-    .select({
-      courseId: curriculum_courses.courseId,
-      code: courses.code,
-      title: courses.title,
-      clusterId: courses.clusterId,                            // خوشهٔ هم‌ارزی — چک ۱۰
-      units: courses.units,                                    // واحد بانک (numeric → number)
-      versionUnits: curriculum_courses.units,                  // override نسخه
-      roleType: curriculum_courses.roleType,
-      isRequired: curriculum_courses.isRequired,
-      isElective: curriculum_courses.isElective,
-      isGraduationRequired: curriculum_courses.isGraduationRequired,
-      recommendedSemester: curriculum_courses.recommendedSemester,
-      minGrade: curriculum_courses.minGrade,                    // کف قبولی خاص نسخه (numeric → number|null)
-      autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
-      passGradeStatusCode: curriculum_courses.passGradeStatusCode,
-      failGradeStatusCode: curriculum_courses.failGradeStatusCode,
-      // منبعِ سراسری قواعد از «جدول دروس» — برای fallback پایین
-      prereqText: courses.prereqText,
-      coRequisites: courses.coRequisites,
-      courseType: courses.courseType,
-      equivalentCourseCodes: courses.equivalentCourseCodes,
-      prereqMinUnits: courses.prereqMinUnits,
-      prereqMinTerm: courses.prereqMinTerm,
-    })
-    .from(curriculum_courses)
-    .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
-    .where(eq(curriculum_courses.curriculumVersionId, versionId))
-    .orderBy(asc(curriculum_courses.recommendedSemester));
-  const rulesRows = await db
-    .select()
-    .from(course_rules)
-    .where(eq(course_rules.syllabusId, versionId));
-  const bankCodes = await db.select({ code: courses.code, title: courses.title }).from(courses);
+  const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
+  // چهار خواندنِ مستقل با هم (پیش‌تر سریالی بود ⇒ چهار رفت‌وبرگشتِ جدا به DB).
+  // گاردِ چندمؤسسه‌ای همچنان `getVersionOrThrow` است؛ اگر رد کند، نتیجهٔ بقیهٔ
+  // خواندن‌ها هرگز به کلاینت برنمی‌گردد.
+  const [version, rows, rulesRows, uni] = await Promise.all([
+    getVersionOrThrow(versionId),
+    db
+      .select({
+        courseId: curriculum_courses.courseId,
+        code: courses.code,
+        title: courses.title,
+        clusterId: courses.clusterId,                            // خوشهٔ هم‌ارزی — چک ۱۰
+        units: courses.units,                                    // واحد بانک (numeric → number)
+        versionUnits: curriculum_courses.units,                  // override نسخه
+        roleType: curriculum_courses.roleType,
+        isRequired: curriculum_courses.isRequired,
+        isElective: curriculum_courses.isElective,
+        isGraduationRequired: curriculum_courses.isGraduationRequired,
+        recommendedSemester: curriculum_courses.recommendedSemester,
+        minGrade: curriculum_courses.minGrade,                    // کف قبولی خاص نسخه (numeric → number|null)
+        autoCorequisiteAllowed: curriculum_courses.autoCorequisiteAllowed,
+        passGradeStatusCode: curriculum_courses.passGradeStatusCode,
+        failGradeStatusCode: curriculum_courses.failGradeStatusCode,
+        // منبعِ سراسری قواعد از «جدول دروس» — برای fallback پایین
+        prereqText: courses.prereqText,
+        coRequisites: courses.coRequisites,
+        courseType: courses.courseType,
+        equivalentCourseCodes: courses.equivalentCourseCodes,
+        prereqMinUnits: courses.prereqMinUnits,
+        prereqMinTerm: courses.prereqMinTerm,
+      })
+      .from(curriculum_courses)
+      .innerJoin(courses, eq(courses.id, curriculum_courses.courseId))
+      .where(eq(curriculum_courses.curriculumVersionId, versionId))
+      .orderBy(asc(curriculum_courses.recommendedSemester)),
+    db
+      .select()
+      .from(course_rules)
+      .where(eq(course_rules.syllabusId, versionId)),
+    getCurrentUniversity().catch(() => null),
+  ]);
 
   const rules = buildRulesWithCatalogFallback(rows, rulesRows);
 
+  // ── بانک کدها: فقط کدهای ارجاع‌شده، نه اسکنِ کلِ `courses` ────────────────
+  // پیش‌تر `db.select().from(courses)` بدون هیچ فیلتری اجرا می‌شد و در دانشگاه
+  // بزرگ، کلِ بانک دروس (چندهزار ردیف) برای ساختن یک Set خوانده می‌شد؛ در حالی
+  // که فقط دو چیز لازم است:
+  //   ۱) `existingCodes` برای چک «ارجاع نامعتبر» (فقط کدهای داخل درخت قواعد)،
+  //   ۲) `extraTitles` برای کدهای ارجاع‌شده‌ای که در این چارت نیستند.
+  // پس همان مجموعهٔ ارجاع‌شده (کدهای چارت + کدهای درخت قواعد) با inArray
+  // خوانده می‌شود. اعتبارسنجی تضعیف نمی‌شود: کدی که در این مجموعه نباشد،
+  // قبلاً هم فقط «در بانک نیست» شمرده می‌شد و اکنون هم در existingCodes نیست
+  // ⇒ همان خطای PREREQ_REFERENCES_VALID.
+  const inVersion = new Set(rows.map((r) => r.code));
+  const referenced = new Set<string>(inVersion);
+  for (const r of rules) for (const code of collectCourseCodes(r.logicTree)) referenced.add(code);
+  const referencedCodes = [...referenced].filter((c) => c.length > 0);
+  // فیلتر دانشگاهِ فعال؛ دروسِ بدون دانشگاه (رکوردهای مهاجرت قدیم) معتبر می‌مانند
+  // (همان قاعدهٔ admin/codes و api/admin/curriculum/bank). شناسهٔ غیرواقعی (۰) =
+  // بدون فیلتر، تا DENY_UNI باعث خطای کاذب «کد ناموجود» نشود.
+  const uniId = uni?.id ?? null;
+  const actingUniId = isRealUniversityId(uniId) ? uniId : null;
+  const bankQuery = () => db.select({ code: courses.code, title: courses.title }).from(courses);
+  let bankCodes: { code: string; title: string | null }[] = referencedCodes.length === 0
+    ? []
+    : await bankQuery().where(and(
+      inArray(courses.code, referencedCodes),
+      actingUniId != null
+        ? or(eq(courses.universityId, actingUniId), isNull(courses.universityId))
+        : undefined,
+    ));
+  // کدهای ارجاع‌شده‌ای که در دامنهٔ این دانشگاه پیدا نشدند ممکن است در بانک
+  // (دانشگاه دیگر / رکورد بی‌مالکِ مهاجرت) موجود باشند. برای اینکه چک
+  // PREREQ_REFERENCES_VALID هیچ خطای کاذبی ندهد، فقط همان چند کدِ گمشده را
+  // بدون فیلتر می‌پرسیم — مسیر رایج (صفرِ گمشده) کوئری دومی اجرا نمی‌کند.
+  const foundCodes = new Set(bankCodes.map((b) => b.code));
+  const missingCodes = referencedCodes.filter((c) => !foundCodes.has(c));
+  if (missingCodes.length > 0) {
+    const extra = await bankQuery().where(inArray(courses.code, missingCodes));
+    bankCodes = [...bankCodes, ...extra];
+  }
+
   // عنوانِ دروسِ ارجاع‌شده در قواعد که در این چارت نیستند (از بانک) — تا ستون
   // «پیش‌نیاز / هم‌نیاز» به‌جای کدِ خالی، نام درس را نشان دهد.
-  const inVersion = new Set(rows.map((r) => r.code));
-  const referenced = new Set<string>();
-  for (const r of rules) for (const code of collectCourseCodes(r.logicTree)) referenced.add(code);
   const extraTitles: Record<string, string> = {};
   for (const b of bankCodes) {
     if (referenced.has(b.code) && !inVersion.has(b.code) && b.title) extraTitles[b.code] = b.title;
   }
+
+  // کدهای خودِ چارت با innerJoin قطعاً در بانک موجودند؛ افزودنشان به مجموعه
+  // باعث می‌شود فیلتر دانشگاهِ بالا هرگز «کد چارت = ناموجود» نسازد، پس
+  // اعتبارسنجی هیچ‌جا تضعیف نمی‌شود — فقط دامنهٔ اسکن کوچک شده است.
+  const existingCodes = new Set<string>(inVersion);
+  for (const b of bankCodes) existingCodes.add(b.code);
 
   return {
     version,
@@ -227,7 +275,7 @@ export async function loadVersionData(versionId: number) {
     })),
     rules,
     extraTitles,
-    existingCodes: new Set(bankCodes.map((c) => c.code)),
+    existingCodes,
   };
 }
 
@@ -314,8 +362,20 @@ export async function deepCopyCourseData(tx: any, fromVersionId: number, toVersi
 }
 
 
-export function revalidateCurriculumPaths() {
+/**
+ * باطل‌سازی کش مسیرهای وابسته به چارت پس از یک نوشتن.
+ *
+ * `scope`:
+ *  • `'full'` (پیش‌فرض) — تغییر ساختاری/انتشار: چارت، برنامه‌ریزی، انتخاب واحد،
+ *    فارغ‌التحصیلی. رفتار پیش‌فرض عیناً همان ۴ مسیر قبلی است تا هیچ فراخوانیِ
+ *    موجودی تغییر نکند.
+ *  • `'light'` — ویرایش تک‌فیلدیِ یک ردیف (نقش/الزامی/شرط فارغ‌التحصیلی/ترم/کد
+ *    نمره): این‌ها فقط نمای خودِ پنل برنامهٔ درسی را عوض می‌کنند و نباید کش
+ *    برنامه‌ریزی/انتخاب واحد/فارغ‌التحصیلی را بی‌دلیل بشکنند.
+ */
+export function revalidateCurriculumPaths(scope: 'light' | 'full' = 'full') {
   revalidatePath('/admin/curriculum');
+  if (scope === 'light') return;
   revalidatePath('/admin/scheduling');
   revalidatePath('/student/enroll');
   revalidatePath('/admin/graduation');

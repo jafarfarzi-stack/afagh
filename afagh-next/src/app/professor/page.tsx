@@ -229,7 +229,7 @@ export default async function ProfessorHome() {
           و در موبایل معلوم نبود این کاشی‌ها «میان‌بر»اند یا محتوای صفحه. */}
       <div className="print:hidden flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
         <h2 className="text-xs font-extrabold text-slate-900 sm:text-sm">دسترسی سریع</h2>
-        <span className="text-3xs font-bold text-slate-400">۱۱ میان‌بر</span>
+        <span className="text-3xs font-bold text-slate-400">۱۲ میان‌بر</span>
       </div>
 
       <div className="print:hidden grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
@@ -288,6 +288,21 @@ export default async function ProfessorHome() {
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">ثبت نمرات</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
               تعیین سهم میان‌ترم و پایان‌ترم (جمع ۲۰)، نمرات مشترک و رسیدگی به اعتراضات
+            </p>
+          </div>
+        </Link>
+
+        <Link prefetch={false}
+          href="/professor/thesis"
+          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-rose-400 hover:shadow-md transition space-y-2 group"
+        >
+          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
+            🔬
+          </div>
+          <div>
+            <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">پایان‌نامه‌های من</h3>
+            <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
+              تأیید درخواست دفاع، جلسات پیش‌رو، نمرهٔ کیفی در انتظار و بایگانی
             </p>
           </div>
         </Link>

@@ -15,6 +15,7 @@ export default function CoursesTab() {
   const {
     activeTab,
     busy,
+    busyCourses,
     courseCodeOf,
     depWarnings,
     detail,
@@ -42,6 +43,13 @@ export default function CoursesTab() {
   const [semFilter, setSemFilter] = useState(''); // '' همه · 'NONE' نامشخص · کد ترم/تابستان
   const [sortBy, setSortBy] = useState<CourseSortKey>('CODE');
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+
+  /**
+   * آیا همین ردیف در حال ذخیره است؟ (pending تک‌ردیفی)
+   * کست به `| undefined` برای رندرهای تستی که این کلید را در context ندارند.
+   */
+  const isCourseBusy = (courseId: number) =>
+    (busyCourses as Set<number> | undefined)?.has(courseId) === true;
 
   const toggleSort = (k: CourseSortKey) => {
     if (sortBy === k) setSortDir(d => (d === 1 ? -1 : 1));
@@ -252,9 +260,17 @@ export default function CoursesTab() {
                 </tr>
               </thead>
               <tbody>
-                {visibleCourses.map((c, idx) => (
-                  <tr key={c.courseId} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="p-2 border border-slate-200 text-center text-slate-500 font-bold">{faNum(idx + 1)}</td>
+                {visibleCourses.map((c, idx) => {
+                  // pending فقط برای ردیفی که در حال ذخیره است — نه کل جدول
+                  const rowBusy = isCourseBusy(c.courseId);
+                  return (
+                  <tr
+                    key={c.courseId}
+                    aria-busy={rowBusy}
+                    title={rowBusy ? 'در حال ذخیره…' : undefined}
+                    className={`${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}${rowBusy ? ' opacity-60' : ''}`}
+                  >
+                    <td className="p-2 border border-slate-200 text-center text-slate-500 font-bold">{rowBusy ? '⏳' : faNum(idx + 1)}</td>
                     <td className="p-2 border border-slate-200 font-mono text-center font-bold text-indigo-900">{c.code}</td>
                     <td className="p-2 border border-slate-200 font-extrabold text-right">{c.title}</td>
                     <td className="p-2 border border-slate-200 text-center font-black">{faNum(c.units)}</td>
@@ -262,9 +278,10 @@ export default function CoursesTab() {
                       {isDraft ? (
                         <select
                           value={c.roleType}
+                          disabled={rowBusy}
                           onChange={e => handleUpdateRole(c.courseId, e.target.value)}
                           title={c.courseType ? `نوع درس در بانک: ${c.courseType} (نقش پیشنهادی: ${ROLE_LABELS[roleFromBankType(c.courseType)] ?? '—'})` : undefined}
-                          className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white"
+                          className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white disabled:opacity-50"
                         >
                           {Object.entries(ROLE_LABELS).map(([k, v]) => (
                             <option key={k} value={k}>{v}</option>
@@ -287,8 +304,9 @@ export default function CoursesTab() {
                       {isDraft ? (
                         <select
                           value={c.recommendedSemester ?? ''}
+                          disabled={rowBusy}
                           onChange={e => handleAssignSemester(c.courseId, e.target.value ? Number(e.target.value) : null)}
-                          className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white"
+                          className="border border-slate-300 rounded px-1.5 py-1 font-bold bg-white disabled:opacity-50"
                         >
                           <option value="">نامشخص</option>
                           {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}
@@ -303,28 +321,29 @@ export default function CoursesTab() {
                       <input
                         type="checkbox"
                         checked={c.isRequired === 1}
-                        disabled={!isDraft}
+                        disabled={!isDraft || rowBusy}
                         title="الزامی در ترم: این درس برای دانشجوی این ورودی اجباری است و در مجموع واحد الزامی شمرده می‌شود. با تیک‌زدن، «شرط فارغ‌التحصیلی» هم خودکار تیک می‌خورد."
                         onChange={e => handleUpdateRequired(c.courseId, e.target.checked ? 1 : 0)}
-                        className="accent-indigo-700 w-4 h-4"
+                        className="accent-indigo-700 w-4 h-4 disabled:opacity-50"
                       />
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
                       <input
                         type="checkbox"
                         checked={c.isGraduationRequired === 1}
-                        disabled={!isDraft}
+                        disabled={!isDraft || rowBusy}
                         title="شرط فارغ‌التحصیلی: بدون گذراندن این درس، دانشجو فارغ‌التحصیل نمی‌شود (حتی اگر الزامیِ ترم نباشد، مثل پایان‌نامه/کارآموزی)."
                         onChange={e => handleUpdateGradReq(c.courseId, e.target.checked ? 1 : 0)}
-                        className="accent-indigo-700 w-4 h-4"
+                        className="accent-indigo-700 w-4 h-4 disabled:opacity-50"
                       />
                     </td>
                     <td className="p-2 border border-slate-200 text-center">
                       {isDraft ? (
                         <select
                           value={c.passGradeStatusCode ?? ''}
+                          disabled={rowBusy}
                           onChange={e => handleUpdateGradeStatusCodes(c.courseId, e.target.value || null, c.failGradeStatusCode)}
-                          className="border border-slate-300 rounded px-1 py-0.5 text-3xs font-bold bg-white max-w-[140px]"
+                          className="border border-slate-300 rounded px-1 py-0.5 text-3xs font-bold bg-white max-w-[140px] disabled:opacity-50"
                           title={gradeStatusTitleOf(c.passGradeStatusCode) ?? 'پیش‌فرض: 1 (قبول عادی)'}
                         >
                           <option value="">پیش‌فرض (1)</option>
@@ -342,8 +361,9 @@ export default function CoursesTab() {
                       {isDraft ? (
                         <select
                           value={c.failGradeStatusCode ?? ''}
+                          disabled={rowBusy}
                           onChange={e => handleUpdateGradeStatusCodes(c.courseId, c.passGradeStatusCode, e.target.value || null)}
-                          className="border border-slate-300 rounded px-1 py-0.5 text-3xs font-bold bg-white max-w-[140px]"
+                          className="border border-slate-300 rounded px-1 py-0.5 text-3xs font-bold bg-white max-w-[140px] disabled:opacity-50"
                           title={gradeStatusTitleOf(c.failGradeStatusCode) ?? 'پیش‌فرض: 2 (مردود عادی)'}
                         >
                           <option value="">پیش‌فرض (2)</option>
@@ -387,7 +407,7 @@ export default function CoursesTab() {
                       {canRemove ? (
                         <button
                           onClick={() => handleRemoveCourse(c.courseId)}
-                          disabled={busy}
+                          disabled={busy || rowBusy}
                           title="برداشتن کامل این درس از کاتالوگ (تخصیص + قواعد پیش‌نیاز/هم‌نیاز)"
                           className="px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-3xs disabled:opacity-40"
                         >
@@ -403,7 +423,8 @@ export default function CoursesTab() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

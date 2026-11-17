@@ -12,6 +12,7 @@ type SortKey = 'CODE' | 'TITLE' | 'UNITS';
 export default function SemestersTab() {
   const {
     activeTab,
+    busyCourses,
     chartTermCount,
     degreeMajor,
     depWarnings,
@@ -39,6 +40,13 @@ export default function SemestersTab() {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [sortBy, setSortBy] = useState<SortKey>('CODE');
+
+  /**
+   * آیا همین درس در حال ذخیره است؟ (pending تک‌ردیفی)
+   * کست به `| undefined` برای رندرهای تستی که این کلید را در context ندارند.
+   */
+  const isCourseBusy = (courseId: number) =>
+    (busyCourses as Set<number> | undefined)?.has(courseId) === true;
 
   const matches = (c: CourseRow): boolean => {
     if (roleFilter && c.roleType !== roleFilter) return false;
@@ -83,6 +91,28 @@ export default function SemestersTab() {
       </div>
     );
   };
+
+  /**
+   * منوی «→ ترم» هر درس — جایگزینِ صفحه‌کلید/لمسیِ درگ‌اندراپ.
+   * همان هندلر تخصیص ترم را صدا می‌زند؛ درگ فقط میان‌بر (accelerator) می‌ماند.
+   */
+  const termMover = (c: CourseRow, current: number | null) => (
+    <select
+      value={current ?? ''}
+      disabled={isCourseBusy(c.courseId)}
+      onChange={e => handleAssignSemester(c.courseId, e.target.value === '' ? null : Number(e.target.value))}
+      title="انتقال این درس به ترم دیگر — جایگزین کشیدن و رها کردن (مناسب صفحه‌کلید و لمس)"
+      aria-label={`انتقال ${c.code} به ترم`}
+      className="print:hidden border border-slate-300 rounded px-1 py-0.5 font-bold text-3xs bg-white max-w-[92px] disabled:opacity-50"
+    >
+      <option value="">نامشخص</option>
+      {planTerms.map(s => <option key={s} value={s}>→ ترم {faNum(s)}</option>)}
+      <option value={SUMMER_SEMESTER}>→ تابستان</option>
+    </select>
+  );
+
+  /** فهرست فیلترشدهٔ «بدون ترم» — یک‌بار محاسبه (هم برای شمارش «X از Y»، هم برای نمایش) */
+  const unassignedShown = refine(unassignedCourses);
 
   if (!selectedVersion) return null;
 
@@ -170,9 +200,13 @@ export default function SemestersTab() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {gridTerms.map(sem => {
-              const list = refine(semesterCourses.get(sem) ?? []);
-              const units = semesterUnitTotal(list);
+              const all = semesterCourses.get(sem) ?? [];
+              const list = refine(all);
+              // ⚠️ سقف واحد از **همهٔ** دروسِ ترم حساب می‌شود، نه فهرست فیلترشده؛
+              // وگرنه یک فیلتر فعال (کد/نقش) سرریزِ واقعی را پنهان می‌کند.
+              const units = semesterUnitTotal(all);
               const over = detail.version.maxUnitsPerTerm != null && units > (detail.version.maxUnitsPerTerm as number);
+              const filtered = list.length !== all.length;
               const isDropHere = isDraft && dropTarget === sem;
               const summer = isSummerSemester(sem);
               const overflow = isOverflowTerm(sem);
@@ -196,8 +230,13 @@ export default function SemestersTab() {
                       {faNum(units)} واحد
                     </span>
                   </div>
+                  {filtered && (
+                    <div className="print:hidden text-3xs font-bold text-slate-500">
+                      (نمایش {faNum(list.length)} از {faNum(all.length)})
+                    </div>
+                  )}
                   {over && <div className="text-3xs font-bold text-rose-700">⚠️ بیش از سقف ترم!</div>}
-                  {list.length === 0 && <div className="text-3xs text-slate-400 font-bold py-2 text-center">{isDropHere ? '⬇ رها کنید' : '— بدون درس —'}</div>}
+                  {list.length === 0 && <div className="text-3xs text-slate-400 font-bold py-2 text-center">{isDropHere ? '⬇ رها کنید' : all.length > 0 ? 'هیچ درسی با فیلتر فعلی مطابقت ندارد.' : '— بدون درس —'}</div>}
                   <div className="space-y-1.5 min-h-[28px]">
                     {list.map(c => (
                       <div key={c.courseId} className="space-y-1.5">
@@ -206,17 +245,19 @@ export default function SemestersTab() {
                           onDragStart={e => onCourseDragStart(e, c.courseId)}
                           onDragEnd={onCourseDragEnd}
                           title={isDraft ? 'بکشید و در ترم موردنظر رها کنید' : c.title}
-                          className={`flex items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-2xs ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
+                          className={`flex flex-wrap items-center justify-between gap-1 bg-white rounded-lg px-2 py-1 border border-emerald-100 text-2xs ${isDraft ? 'cursor-grab active:cursor-grabbing' : ''} ${dragCourseId === c.courseId ? 'opacity-40' : ''}`}
                         >
                           {isDraft && <span className="text-slate-300 shrink-0 select-none">⠿</span>}
                           <span className="font-mono text-indigo-900 text-3xs">{c.code}</span>
                           <span className="truncate font-bold flex-1">{c.title}</span>
                           <span className="text-slate-400 text-3xs">{faNum(c.units)}</span>
+                          {isDraft && termMover(c, c.recommendedSemester)}
                           {isDraft && (
                             <button
                               onClick={() => handleAssignSemester(c.courseId, null)}
+                              disabled={isCourseBusy(c.courseId)}
                               title="حذف از این ترم (نامشخص)"
-                              className="text-rose-500 hover:text-rose-700 font-black px-1"
+                              className="text-rose-500 hover:text-rose-700 font-black px-1 disabled:opacity-40"
                             >
                               ✕
                             </button>
@@ -242,11 +283,16 @@ export default function SemestersTab() {
               <span className="text-3xs text-slate-400 font-bold">{isDraft ? 'بکشید و روی ترم موردنظر رها کنید — یا از منوی هر درس ترم بدهید' : 'با انتخاب «ترم» از منوی هر درس، به ترمبندی اضافه میشود'}</span>
             </div>
             {unassignedCourses.length === 0 && <div className="text-3xs text-slate-400 font-bold py-2 text-center">{isDraft && dropTarget === 'pool' ? '⬇ اینجا رها کنید تا از ترم خارج شود' : 'همهٔ دروس ترمبندی شدهاند. ✓'}</div>}
-            {unassignedCourses.length > 0 && refine(unassignedCourses).length === 0 && (
+            {unassignedCourses.length > 0 && unassignedShown.length !== unassignedCourses.length && (
+              <div className="print:hidden text-3xs font-bold text-slate-500">
+                (نمایش {faNum(unassignedShown.length)} از {faNum(unassignedCourses.length)})
+              </div>
+            )}
+            {unassignedCourses.length > 0 && unassignedShown.length === 0 && (
               <div className="text-3xs text-slate-400 font-bold py-2 text-center">هیچ درسی با فیلتر فعلی مطابقت ندارد.</div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 min-h-[28px]">
-              {refine(unassignedCourses).map(c => (
+              {unassignedShown.map(c => (
                 <div key={c.courseId} className="space-y-1.5">
                   <div
                     draggable={isDraft}
@@ -262,8 +308,11 @@ export default function SemestersTab() {
                     {isDraft ? (
                       <select
                         value=""
+                        disabled={isCourseBusy(c.courseId)}
                         onChange={e => e.target.value && handleAssignSemester(c.courseId, Number(e.target.value))}
-                        className="border border-slate-300 rounded px-1 py-0.5 font-bold text-3xs bg-white"
+                        title="انتقال این درس به ترم — جایگزین کشیدن و رها کردن (مناسب صفحه‌کلید و لمس)"
+                        aria-label={`انتقال ${c.code} به ترم`}
+                        className="border border-slate-300 rounded px-1 py-0.5 font-bold text-3xs bg-white disabled:opacity-50"
                       >
                         <option value="">ترم…</option>
                         {planTerms.map(s => <option key={s} value={s}>ترم {faNum(s)}</option>)}

@@ -94,8 +94,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
       }
       const fileBuffer = Buffer.concat(chunks);
       return new NextResponse(fileBuffer, { headers: { 'Content-Type': mime, ...safeHeaders } });
-    } catch (_) {
-      // در صورت عدم دسترسی به کانتینر MinIO، تولید پیش‌نمایش گرافیکی زیبا با واترمارک
+    } catch (storageErr) {
+      // ⛔ بازگرداندن یک SVG «سند معتبر» وقتی فایل در دسترس نیست، جعل سند است.
+      //    صادقانه خطا برمی‌گردانیم و جزئیات فنی فقط لاگ می‌شود.
+      console.error('[api] archive/[docId] storage read failed:', (storageErr as Error)?.message ?? storageErr);
+      return NextResponse.json(
+        { error: 'فایل این سند در فضای ذخیره‌سازی در دسترس نیست؛ لطفاً به کارشناس بایگانی اطلاع دهید.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } },
+      );
     }
 
     // ۳. پیش‌نمایش استاندارد سند با واترمارک رسمی دانشگاه

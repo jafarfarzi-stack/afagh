@@ -22,6 +22,7 @@ export const PROFESSOR_NAV = [
   { href: '/professor/availability', label: 'اعلام ساعات حضور ترم', icon: '⏰', exact: false },
   { href: '/professor/performance', label: 'کارنامهٔ عملکرد', icon: '📈', exact: false },
   { href: '/professor/evaluation', label: 'ارزشیابی دانشجویان', icon: '🎯', exact: false },
+  { href: '/professor/thesis', label: 'پایان‌نامه‌های من', icon: '🔬', exact: false },
   { href: '/professor/broadcast', label: 'پیام به کلاس', icon: '📣', exact: false },
   { href: '/professor/virtual-classes', label: 'کلاس آنلاین', icon: '📡', exact: false },
   { href: '/professor/documents', label: 'اسناد و امضا', icon: '📄', exact: false },

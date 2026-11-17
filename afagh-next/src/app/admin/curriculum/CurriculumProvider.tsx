@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CurriculumCtx } from './curriculum-context';
 import { allBankSelected, buildRuleTree, nonCourseConditionsOf, semesterUnitTotal, dependencyWarningsMap, departmentNames, facultyNames, filterBankCourses, filterMajorsByTree, groupBySemester, isOverflowSemester, leafCourseCodesOf, resolveTab, termGrid, typeSummaryRows, unitsByRoleMap, countsByRoleMap, validateMinGrade, visibleBank, overflowSemesters } from './curriculum-core';
-import type { BankCourse, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
+import type { BankCourse, CourseRow, CurriculumTab, CurriculumWorkspace, MajorItem, VersionDetail, VersionRow } from './types';
 import { getCurriculumOverviewAction, getCurriculumVersionDetailAction, listCourseBankAction, listDepartmentsAction } from './actions/read';
 import { createCurriculumRevisionAction, createCurriculumVersionAction, updateCurriculumMetaAction } from './actions/versions';
 import { addCourseToCurriculumAction, assignCourseToSemesterAction, bulkAddCoursesAction, createCourseBankAction, markGraduationRequiredBulkAction, removeCourseFromCurriculumAction, syncRolesFromBankAction, updateCourseInCurriculumAction } from './actions/courses';
@@ -61,6 +61,11 @@ function useCurriculumWorkspace(
 
   const [modal, setModal] = useState<null | 'NEW_VERSION' | 'EDIT_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * ردیف‌های «در حال ذخیره» — ویرایش تک‌فیلدیِ هر درس فقط همان ردیف را pending
+   * می‌کند (نه کل صفحه) تا کار روی بقیهٔ ۱۴۰ درسِ چارت متوقف نشود.
+   */
+  const [busyCourses, setBusyCourses] = useState<Set<number>>(() => new Set());
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // فرم‌ها
@@ -151,9 +156,21 @@ function useCurriculumWorkspace(
     setBankRoles({});
   };
 
-  // بارگذاری جزئیات با تغییر نسخهٔ انتخابی
+  /**
+   * بارگذاری جزئیات با تغییر نسخهٔ انتخابی.
+   * روی mount، اگر `initialDetail` از سرور برای همین نسخه رسیده باشد دوباره
+   * خوانده **نمی‌شود**؛ پیش‌تر SSR داده را می‌داد و این effect بلافاصله کلِ
+   * payload را دوباره می‌گرفت (دو بار بارگذاری در هر ورود به صفحه).
+   */
+  const initialDetailRef = useRef<VersionDetail | null>(initialDetail ?? null);
+  const firstDetailEffectRef = useRef(true);
   useEffect(() => {
     if (selectedVersionId == null) { setDetail(null); return; }
+    if (firstDetailEffectRef.current) {
+      firstDetailEffectRef.current = false;
+      const seeded = initialDetailRef.current;
+      if (seeded != null && seeded.version?.id === selectedVersionId) return;
+    }
     reloadDetail(selectedVersionId);
   }, [selectedVersionId, reloadDetail]);
 
@@ -223,6 +240,65 @@ function useCurriculumWorkspace(
       return true;
     } finally {
       setBusy(false);
+    }
+  };
+
+  // ── پچِ محلی برای ویرایش‌های تک‌فیلدی (بدون reload کاملِ نسخه) ──
+  /**
+   * یک ردیف درس را در `detail` محلی عوض می‌کند. جایگزینِ `reloadDetail` برای
+   * تغییر یک سلول است — reload قبلی کلِ payload (نسخه + دروس + قواعد + اسکن
+   * بانک + تأییدیه‌ها + اعتبارسنجی) را دوباره می‌گرفت و کل صفحه را re-render
+   * می‌کرد. چک‌ها/تاریخچهٔ تأیید دست‌نخورده می‌مانند تا اجرای بعدی «اعتبارسنجی».
+   */
+  const patchCourseRow = useCallback((courseId: number, patch: Partial<CourseRow>, versionId?: number | null) => {
+    setDetail(prev => {
+      if (!prev) return prev;
+      // پاسخِ دیرهنگامِ نسخهٔ قبلی نباید روی نسخهٔ تازه‌انتخاب‌شده اعمال شود
+      if (versionId != null && prev.version.id !== versionId) return prev;
+      let hit = false;
+      const courses = prev.courses.map(c => {
+        if (c.courseId !== courseId) return c;
+        hit = true;
+        return { ...c, ...patch };
+      });
+      return hit ? { ...prev, courses } : prev;
+    });
+  }, []);
+
+  /** pending فقط برای همان ردیف — بقیهٔ ردیف‌ها آزاد می‌مانند */
+  const setCourseBusy = (courseId: number, on: boolean) => {
+    setBusyCourses(prev => {
+      const next = new Set(prev);
+      if (on) next.add(courseId); else next.delete(courseId);
+      return next;
+    });
+  };
+
+  /**
+   * اکشنِ تک‌ردیفی: تا رسیدن پاسخ، فقط همان ردیف pending است (نه کل صفحه).
+   * پس از `ok` مقدارِ ارسالی روی state محلی اعمال می‌شود؛ در `!ok` هیچ پچی
+   * انجام نمی‌شود ⇒ مقدار قبلیِ ردیف دست‌نخورده می‌ماند و خطای فارسی توست
+   * می‌شود. چون optimistic نیستیم، «rollback» لازم هم نیست.
+   */
+  const runRowAction = async (
+    courseId: number,
+    action: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>,
+    apply: () => void,
+  ): Promise<boolean> => {
+    if (busyCourses.has(courseId)) return false;
+    setCourseBusy(courseId, true);
+    try {
+      const r = await action();
+      if (!r.ok) { showToast(r.error, 'error'); return false; }
+      apply();
+      if (r.message) showToast(r.message, 'success');
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(`ذخیرهٔ تغییر ناموفق بود: ${msg}`, 'error');
+      return false;
+    } finally {
+      setCourseBusy(courseId, false);
     }
   };
 
@@ -639,10 +715,18 @@ function useCurriculumWorkspace(
     if (done) reloadDetail(selectedVersionId);
   };
 
+  /**
+   * ترم‌بندی یک درس (درگ‌اندراپ یا منوی «→ ترم»): بعد از `ok` فقط همان ردیف
+   * بین ترم‌ها جابه‌جا می‌شود؛ در شکست، درس سرِ جای قبلی می‌ماند و خطای فارسی
+   * توست می‌شود (پیش‌تر در هر دو حالت reload کامل انجام می‌شد).
+   */
   const handleAssignSemester = async (courseId: number, semesterNo: number | null) => {
     if (selectedVersionId == null) return;
-    await run(() => assignCourseToSemesterAction(selectedVersionId, courseId, semesterNo));
-    reloadDetail(selectedVersionId);
+    await runRowAction(
+      courseId,
+      () => assignCourseToSemesterAction(selectedVersionId, courseId, semesterNo),
+      () => patchCourseRow(courseId, { recommendedSemester: semesterNo }, selectedVersionId),
+    );
   };
 
   // ── درگ‌اندراپ ترم‌بندی (بومی، بدون کتابخانه) ──
@@ -664,34 +748,67 @@ function useCurriculumWorkspace(
     handleAssignSemester(id, sem);
   };
 
+  /** سقف واحد ترمِ نسخه — تک‌مقدار است، پس فقط `detail.version` پچ می‌شود */
   const handleUpdateMaxUnits = async (value: number) => {
     if (selectedVersionId == null) return;
-    await run(() => updateCurriculumMetaAction(selectedVersionId, { maxUnitsPerTerm: value || null }));
-    reloadDetail(selectedVersionId);
+    const next = value || null;
+    try {
+      const r = await updateCurriculumMetaAction(selectedVersionId, { maxUnitsPerTerm: next });
+      if (!r.ok) {
+        showToast('error' in r ? r.error : 'به‌روزرسانی سقف واحد ترم ناموفق بود.', 'error');
+        return;
+      }
+      setDetail(prev => (prev ? { ...prev, version: { ...prev.version, maxUnitsPerTerm: next } } : prev));
+      showToast('سقف واحد ترم به‌روزرسانی شد.', 'success');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(`ذخیرهٔ سقف واحد ناموفق بود: ${msg}`, 'error');
+    }
   };
 
+  /** تیک «الزامی در ترم» — پچ محلی یک ردیف (بدون reload نسخه) */
   const handleUpdateRequired = async (courseId: number, isRequired: number) => {
     if (selectedVersionId == null) return;
-    await run(() => updateCourseInCurriculumAction(selectedVersionId, courseId, { isRequired }));
-    reloadDetail(selectedVersionId);
+    const prev = detail?.courses.find(c => c.courseId === courseId);
+    await runRowAction(
+      courseId,
+      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isRequired }),
+      // سرور هنگام روشن‌شدن «الزامی» شرط فارغ‌التحصیلی را هم تیک می‌زند ⇒ آینهٔ همان قاعده در state محلی
+      () => patchCourseRow(courseId, {
+        isRequired,
+        ...(isRequired === 1 && prev?.isRequired !== 1 ? { isGraduationRequired: 1 } : {}),
+      }, selectedVersionId),
+    );
   };
 
+  /** نقش درس — پچ محلی همان ردیف */
   const handleUpdateRole = async (courseId: number, roleType: string) => {
     if (selectedVersionId == null) return;
-    await run(() => updateCourseInCurriculumAction(selectedVersionId, courseId, { roleType }));
-    reloadDetail(selectedVersionId);
+    await runRowAction(
+      courseId,
+      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { roleType }),
+      () => patchCourseRow(courseId, { roleType }, selectedVersionId),
+    );
   };
 
+  /** «شرط فارغ‌التحصیلی» — پچ محلی همان ردیف */
   const handleUpdateGradReq = async (courseId: number, isGraduationRequired: number) => {
     if (selectedVersionId == null) return;
-    await run(() => updateCourseInCurriculumAction(selectedVersionId, courseId, { isGraduationRequired }));
-    reloadDetail(selectedVersionId);
+    await runRowAction(
+      courseId,
+      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isGraduationRequired }),
+      () => patchCourseRow(courseId, { isGraduationRequired }, selectedVersionId),
+    );
   };
 
+  /** کدهای وضعیت قبولی/مردودی — پچ محلی همان ردیف */
   const handleUpdateGradeStatusCodes = async (courseId: number, passCode: string | null, failCode: string | null) => {
     if (selectedVersionId == null) return;
-    await run(() => setCourseGradeStatusCodesAction(selectedVersionId, courseId, passCode, failCode));
-    reloadDetail(selectedVersionId);
+    await runRowAction(
+      courseId,
+      () => setCourseGradeStatusCodesAction(selectedVersionId, courseId, passCode, failCode),
+      () => patchCourseRow(courseId, { passGradeStatusCode: passCode, failGradeStatusCode: failCode }, selectedVersionId),
+    );
   };
 
   // ── فیلتر درختی رشته: دانشکده → گروه → رشته ──
@@ -787,6 +904,7 @@ function useCurriculumWorkspace(
     showMoreBank: () => setBankShowAll(true),
     bulkRoleType,
     busy,
+    busyCourses,
     chartTermCount,
     closeAddCourse,
     codePrefix,

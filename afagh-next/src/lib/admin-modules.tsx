@@ -266,6 +266,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    href: '/admin/enrollment-integrity',
+    icon: <Icon emoji="🧯" />,
+    title: 'سلامت ثبت‌نام‌ها',
+    desc: 'یکسان‌سازی شمارندهٔ صندلی و پاک‌سازی ردیف‌های تکراری — بدون حذف تاریخچه',
+    group: 'edu',
+    roles: ['ADMIN', 'EDU_EXPERT'],
+    accent: 'from-amber-950 to-orange-950 border-amber-700/50',
+    iconBg: 'bg-amber-700/80 border-amber-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
     href: '/admin/bypass',
     icon: <Icon emoji="🔀" />,
     title: 'درخواست‌های بدون پیش‌نیاز / تداخل امتحانی',

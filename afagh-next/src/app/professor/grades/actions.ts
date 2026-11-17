@@ -35,7 +35,17 @@ import { ensureGradePersistence, resolveStudentRow } from '@/lib/demo-grades-see
 import { logGradeChange, logBulkGradeChange } from '@/lib/grade-change-log';
 import { resolveSamaGradeStatusCode } from '@/lib/resolve-sama-code';
 import type { StudentGradeField } from './types';
-import { DEFAULT_RUBRIC, SCORE_FIELDS, rubricFieldMax } from './grades-core';
+import {
+  COMPONENT_SCORE_COLUMN,
+  DEFAULT_RUBRIC,
+  EXPLICIT_FINAL_SCORE_FIELD,
+  SCORE_FIELDS,
+  calculateFinalFromComponents,
+  isComponentScoreField,
+  isExplicitFinalScoreField,
+  rubricFieldMax,
+  type ComponentScores,
+} from './grades-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // انواع
@@ -59,7 +69,7 @@ export interface SaveGradePayload {
   studentCode: string;
   fullName: string;
   entryYear: number;
-  field: StudentGradeField;
+  field: StudentGradeField | typeof EXPLICIT_FINAL_SCORE_FIELD;
   value: number | null;     // null = پاک کردن
   rubricMax: number;        // سقف بارم همان فیلد (برای اعتبارسنجی سمت سرور)
   coTaughtRole?: 'THEORY' | 'LAB'; // نقش فعلی استاد در درس مشترک
@@ -72,6 +82,55 @@ function fail(err: unknown): SaveGradeState {
 
 function invalid(message: string): SaveGradeState {
   return { ok: false, error: message };
+}
+
+/** ستون‌های جزء نمره در یک ردیف enrollments (همه numeric ⇒ رشته یا NULL) */
+type EnrollmentComponentRow = {
+  midtermScore: string | null;
+  finalExamScore: string | null;
+  homeworkScore: string | null;
+  participationScore: string | null;
+  theoryProfScore: string | null;
+  labProfScore: string | null;
+  practicalScore: string | null;
+};
+
+/**
+ * نگاشت ردیف دیتابیس به هفت جزء نمره (منبع واحد برای هر دو مسیر بازمحاسبه).
+ * NULL/نامعتبر ⇒ undefined؛ همان قراردادی که calculateFinalScore با «صفر»
+ * رفتار می‌کند.
+ */
+function componentsOf(row: EnrollmentComponentRow): ComponentScores {
+  const num = (v: string | null): number | undefined => {
+    if (v === null || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return {
+    midtermScore: num(row.midtermScore),
+    finalExamScore: num(row.finalExamScore),
+    homeworkScore: num(row.homeworkScore),
+    participationScore: num(row.participationScore),
+    theoryProfScore: num(row.theoryProfScore),
+    labProfScore: num(row.labProfScore),
+    practicalScore: num(row.practicalScore),
+  };
+}
+
+/**
+ * نسبت‌های سروریِ درس مشترک (از serverCoTeach) → زمینهٔ محاسبهٔ نمرهٔ نهایی.
+ * برای درس تک‌استادی null برمی‌گردد (جمع بارم).
+ */
+function ratiosOf(co: {
+  isCoTaught: boolean;
+  theoryWeightRatio?: number;
+  labWeightRatio?: number;
+}): { theoryWeightRatio: number; labWeightRatio: number } | null {
+  if (!co.isCoTaught || co.theoryWeightRatio === undefined) return null;
+  return {
+    theoryWeightRatio: co.theoryWeightRatio,
+    labWeightRatio: co.labWeightRatio ?? 1 - co.theoryWeightRatio,
+  };
 }
 
 function mergedTargets(payload: { offeringId: number; memberOfferingIds?: number[] }): number[] {
@@ -97,19 +156,36 @@ async function memberOwnershipOk(staffId: number, targets: number[]): Promise<bo
  * نقش/وضعیت درس مشترک از پایگاه داده (مرجع — نه ادعای کلاینت).
  * نگاشت نقش از professor-data.ts: ‏PRACTICAL/LAB → بخش عملی، بقیه → تئوری.
  * درس مشترک = حداقل دو ردیف در offering_professors (همان قاعدهٔ coTaughtPartners).
+ *
+ * نسبت‌های وزنی هم از همین پرس‌وجو (sharePercentage) ساخته می‌شوند تا هر دو
+ * مسیر بازمحاسبهٔ نمرهٔ نهایی (ثبت جزء و دکمهٔ صریح محاسبه) دقیقاً یک منبع
+ * داشته باشند: سهم استاد با بیشترین درصد = سهم تئوری، باقی = سهم عملی
+ * (همان تعریفِ page.tsx در ساخت coTaughtDetails).
  */
 async function serverCoTeach(
   offeringId: number,
   staffId: number,
-): Promise<{ isCoTaught: boolean; role?: 'THEORY' | 'LAB' }> {
+): Promise<{
+  isCoTaught: boolean;
+  role?: 'THEORY' | 'LAB';
+  theoryWeightRatio?: number;
+  labWeightRatio?: number;
+}> {
   const rows = await db
-    .select({ staffId: offering_professors.staffId, role: offering_professors.role })
+    .select({
+      staffId: offering_professors.staffId,
+      role: offering_professors.role,
+      sharePercentage: offering_professors.sharePercentage,
+    })
     .from(offering_professors)
     .where(eq(offering_professors.offeringId, offeringId));
   if (rows.length < 2) return { isCoTaught: false };
   const mine = rows.find(r => r.staffId === staffId);
   const role = mine && (mine.role === 'PRACTICAL' || mine.role === 'LAB') ? 'LAB' as const : 'THEORY' as const;
-  return { isCoTaught: true, role };
+  const lead = rows.slice().sort((a, b) => Number(b.sharePercentage ?? 0) - Number(a.sharePercentage ?? 0))[0];
+  const theoryWeightRatio = Math.max(0, Math.min(1, Number(lead?.sharePercentage ?? 0) / 100));
+  const labWeightRatio = Math.max(0, Math.min(1, 1 - theoryWeightRatio));
+  return { isCoTaught: true, role, theoryWeightRatio, labWeightRatio };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +221,9 @@ export async function saveGradeAction(
     }
 
     // ۱) اعتبارسنجی فیلد
-    if (!SCORE_FIELDS.includes(payload.field)) {
+    // هفت جزء نمره + فیلد صریح «نمرهٔ نهایی» (calculatedFinalScore).
+    // هر چیز دیگری رد می‌شود؛ پس هیچ رشتهٔ دلخواهی به ستون دیتابیس نمی‌رسد.
+    if (!isComponentScoreField(payload.field) && !isExplicitFinalScoreField(payload.field) && !SCORE_FIELDS.includes(payload.field as StudentGradeField)) {
       return invalid('فیلد نمره نامعتبر است.');
     }
 
@@ -215,21 +293,84 @@ export async function saveGradeAction(
       if (!gate.ok) return invalid(gate.error!);
     }
 
-    const gradeValue = payload.value === null ? null : String(Number(payload.value.toFixed(2)));
+    const storedValue = payload.value === null ? null : String(Number(payload.value.toFixed(2)));
     // ⚠️ هیچ insert/onConflictDoUpdateای این‌جا نیست: insert می‌توانست ردیفِ
     //    حذف‌شده را زنده کند یا (با کد دانشجوی هم‌کد) ردیف دانشجوی دیگری را
     //    بازنویسی کند. فقط به‌روزرسانیِ ردیفِ ثبت‌نامِ همان دانشجو توسط id.
-    await db
-      .update(enrollments)
-      .set({ gradeValue, gradeStatus: 'DRAFT' })
-      .where(eq(enrollments.id, row.enrollment.id));
+    if (isComponentScoreField(payload.field)) {
+      // ── مسیر «جزء نمره» ──
+      // ۱) اجزای فعلی همان ردیف را می‌خوانیم (یک SELECT) تا بتوانیم بدون
+      //    دو رفت‌وبرگشت، نمرهٔ نهایی را از «همهٔ» اجزا بازمحاسبه کنیم.
+      const [existing] = await db
+        .select({
+          gradeValue: enrollments.gradeValue,
+          gradeStatus: enrollments.gradeStatus,
+          midtermScore: enrollments.midtermScore,
+          finalExamScore: enrollments.finalExamScore,
+          homeworkScore: enrollments.homeworkScore,
+          participationScore: enrollments.participationScore,
+          theoryProfScore: enrollments.theoryProfScore,
+          labProfScore: enrollments.labProfScore,
+          practicalScore: enrollments.practicalScore,
+        })
+        .from(enrollments)
+        .where(eq(enrollments.id, row.enrollment.id))
+        .limit(1);
+      if (!existing) return invalid('ردیف ثبت‌نام این دانشجو یافت نشد؛ ثبت نمره ممکن نیست.');
 
-    // ثبت تکی در audit log
-    await logGradeChange({
-      enrollmentId: row.enrollment.id, studentId: row.student.id, offeringId: payload.offeringId,
-      action: 'DRAFT', newGradeValue: gradeValue, newGradeStatus: 'DRAFT',
-      actorUserId: user.id, actorRole: 'PROFESSOR',
-    });
+      // ۲) مقدار ذخیره‌شدهٔ همین فیلد را با اجزای بارگذاری‌شده ادغام می‌کنیم.
+      //    پاک‌سازی (null) یعنی جزء غایب ⇒ مثل calculateFinalScore، صفر.
+      const components = componentsOf(existing);
+      components[payload.field] = storedValue === null ? undefined : Number(storedValue);
+
+      // ۳) بازمحاسبه با همان تابع مشترک و نسبت‌های سروری (serverCo بالاتر
+      //    از خودِ offering_professors خوانده شد؛ هیچ مقداری از کلاینت نیست).
+      const finalValue = calculateFinalFromComponents(components, {
+        rubric: DEFAULT_RUBRIC,
+        coTaughtRatios: ratiosOf(serverCo),
+      });
+      const finalGradeValue = String(Number(finalValue.toFixed(2)));
+
+      // ۴) جزء + نمرهٔ بازمحاسبه‌شده در یک UPDATE اتمی؛ وضعیت همیشه DRAFT.
+      const column = COMPONENT_SCORE_COLUMN[payload.field];
+      // کلید پویا با نگاشت ثابتِ COMPONENT_SCORE_COLUMN ساخته می‌شود؛ cast فقط
+      // برای این است که Drizzle کلید محاسبه‌شده را به ستون همان جدول نسبت دهد.
+      const componentPatch = {
+        [column]: storedValue,
+        gradeValue: finalGradeValue,
+        gradeStatus: 'DRAFT',
+      } as Partial<Record<keyof typeof COMPONENT_SCORE_COLUMN, string | null>> & {
+        gradeValue: string;
+        gradeStatus: string;
+      };
+      await db
+        .update(enrollments)
+        .set(componentPatch)
+        .where(eq(enrollments.id, row.enrollment.id));
+
+      await logGradeChange({
+        enrollmentId: row.enrollment.id, studentId: row.student.id, offeringId: payload.offeringId,
+        action: 'DRAFT',
+        oldGradeValue: existing.gradeValue, newGradeValue: finalGradeValue,
+        oldGradeStatus: existing.gradeStatus, newGradeStatus: 'DRAFT',
+        reason: `ثبت جزء نمره (${payload.field}) و بازمحاسبهٔ نمرهٔ نهایی از اجزا`,
+        actorUserId: user.id, actorRole: 'PROFESSOR',
+      });
+    } else {
+      // ── مسیر «نمرهٔ نهاییِ صریح» ──
+      // رفتار امروز بدون تغییر: gradeValue + DRAFT (هرگز FINALIZED از این مسیر).
+      await db
+        .update(enrollments)
+        .set({ gradeValue: storedValue, gradeStatus: 'DRAFT' })
+        .where(eq(enrollments.id, row.enrollment.id));
+
+      // ثبت تکی در audit log
+      await logGradeChange({
+        enrollmentId: row.enrollment.id, studentId: row.student.id, offeringId: payload.offeringId,
+        action: 'DRAFT', newGradeValue: storedValue, newGradeStatus: 'DRAFT',
+        actorUserId: user.id, actorRole: 'PROFESSOR',
+      });
+    }
 
     // ۵) همگام‌سازی کش
     revalidatePath('/professor/grades');
@@ -317,6 +458,150 @@ export async function submitTemporaryAction(
       ? `؛ ${skipped.toLocaleString('fa-IR')} ردیف قطعی‌شده بدون تغییر ماند`
       : '';
     return { ok: true, persisted: true, message: `ثبت موقت نمرات انجام شد${skippedNote}.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// محاسبهٔ صریح نمرهٔ نهایی از اجزای ذخیره‌شده (بدون بازمحاسبهٔ خودکار)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * بازمحاسبهٔ صریح (دستی) نمرهٔ نهایی از اجزای ذخیره‌شده و نوشتن آن در
+ * `gradeValue` با وضعیت DRAFT.
+ *
+ * این اکشن با کلیک استاد روی «محاسبهٔ نمرهٔ نهایی از اجزا» اجرا می‌شود.
+ * مسیر ثبت هر جزء (saveGradeAction) هم با «همان» تابع خالص
+ * calculateFinalFromComponents بازمحاسبه را انجام می‌دهد؛ این اکشن برای
+ * بازمحاسبهٔ دستی/ترمیمی پس از ویرایش‌های مستقیم داده باقی می‌ماند.
+ * نسبت‌های درس مشترک در هر دو مسیر از پایگاه داده خوانده می‌شوند و هرگز
+ * از کلاینت گرفته نمی‌شوند.
+ */
+export async function computeFinalFromComponentsAction(
+  offeringId: number,
+  studentCode: string,
+): Promise<SaveGradeState> {
+  try {
+    const user = await requireRole(['PROFESSOR']);
+    const me = await getStaffByUser(user.id);
+    if (!me) return invalid('پروندهٔ هیئت علمی یافت نشد.');
+
+    // 🔒 مالکیت (همان قاعدهٔ saveGradeAction)
+    if (!(await memberOwnershipOk(me.id, [offeringId]))) return invalid('شما استاد مسئول این درس نیستید.');
+
+    // 🔒 مهلت ثبت نمره
+    const deadline = await assertGradeDeadline(offeringId);
+    if (!deadline.ok) return invalid(deadline.error!);
+
+    // 🔒 قفل نهایی در سطح ارائه
+    const [offeringLock] = await db
+      .select({ gradesFinalizedAt: course_offerings.gradesFinalizedAt })
+      .from(course_offerings)
+      .where(eq(course_offerings.id, offeringId))
+      .limit(1);
+    if (offeringLock?.gradesFinalizedAt) {
+      return invalid('نمرات این ارائه نهایی شده است؛ تغییر فقط با بازگشایی توسط مدیر.');
+    }
+
+    const row = await resolveStudentRow(offeringId, studentCode);
+    if (!row) {
+      return invalid('دانشجو با این کد دانشجویی در دانشگاه این ارائه یافت نشد؛ محاسبهٔ نمره ممکن نیست.');
+    }
+    if (!row.enrollment) {
+      return invalid('این دانشجو در این ارائه ثبت‌نام نکرده است؛ محاسبهٔ نمره ممکن نیست.');
+    }
+    if (row.enrollment.status === 'DROPPED' || row.enrollment.status === 'REJECTED') {
+      return invalid('ثبت‌نام این دانشجو در این ارائه حذف یا رد شده است؛ محاسبهٔ نمره ممکن نیست.');
+    }
+    // 🔒 قفل ردیف: نمرهٔ قطعی هرگز از این مسیر بازنویسی نمی‌شود.
+    if (row.enrollment.gradeStatus === 'FINALIZED') {
+      return invalid('نمرهٔ این دانشجو قطعی شده است؛ برای تغییر آن درخواست بازگشایی ثبت کنید.');
+    }
+
+    // 🔒 همان گیت مرکزی نوشتنِ نمرهٔ نهایی‌شده
+    {
+      const { assertGradeWriteAllowed } = await import('@/lib/grades/finalize-lock');
+      const gate = await assertGradeWriteAllowed(offeringId);
+      if (!gate.ok) return invalid(gate.error!);
+    }
+
+    const [stored] = await db
+      .select({
+        id: enrollments.id,
+        gradeValue: enrollments.gradeValue,
+        gradeStatus: enrollments.gradeStatus,
+        midtermScore: enrollments.midtermScore,
+        finalExamScore: enrollments.finalExamScore,
+        homeworkScore: enrollments.homeworkScore,
+        participationScore: enrollments.participationScore,
+        theoryProfScore: enrollments.theoryProfScore,
+        labProfScore: enrollments.labProfScore,
+        practicalScore: enrollments.practicalScore,
+      })
+      .from(enrollments)
+      .where(eq(enrollments.id, row.enrollment.id))
+      .limit(1);
+    if (!stored) return invalid('ردیف ثبت‌نام این دانشجو یافت نشد؛ محاسبهٔ نمره ممکن نیست.');
+
+    const components = componentsOf(stored);
+
+    // نسبت‌های درس مشترک و نقش، از همان helper سروریِ saveGradeAction
+    // (offering_professors.sharePercentage — هرگز از کلاینت).
+    const co = await serverCoTeach(offeringId, me.id);
+    const isCoTaught = co.isCoTaught;
+    const role: 'THEORY' | 'LAB' = co.role ?? 'THEORY';
+
+    // الزام حداقل جزء کلیدی: بدون آن، «نمرهٔ صفر» ثبت می‌شد.
+    if (isCoTaught && role === 'THEORY' && components.theoryProfScore === undefined) {
+      return invalid('نمرهٔ بخش تئوری این دانشجو ثبت نشده است؛ ابتدا آن را وارد کنید.');
+    }
+    if (isCoTaught && role === 'LAB' && components.labProfScore === undefined) {
+      return invalid('نمرهٔ بخش عملی این دانشجو ثبت نشده است؛ ابتدا آن را وارد کنید.');
+    }
+    if (!isCoTaught && [
+      components.midtermScore, components.finalExamScore, components.homeworkScore,
+      components.participationScore, components.practicalScore,
+    ].every(v => v === undefined)) {
+      return invalid('هیچ جزئی از نمره برای این دانشجو ثبت نشده است؛ ابتدا اجزا را وارد کنید.');
+    }
+
+    // همان تابع مشترک با saveGradeAction (بدون فرمول موازی)
+    const finalValue = calculateFinalFromComponents(components, {
+      rubric: DEFAULT_RUBRIC,
+      coTaughtRatios: ratiosOf(co),
+    });
+    const gradeValue = String(Number(finalValue.toFixed(2)));
+
+    // ✅ نوشتن صریح نمرهٔ نهایی به‌صورت پیش‌نویس (هرگز FINALIZED از این مسیر)
+    await db
+      .update(enrollments)
+      .set({ gradeValue, gradeStatus: 'DRAFT' })
+      .where(eq(enrollments.id, stored.id));
+
+    await logGradeChange({
+      enrollmentId: stored.id,
+      studentId: row.student.id,
+      offeringId,
+      action: 'DRAFT',
+      oldGradeValue: stored.gradeValue,
+      newGradeValue: gradeValue,
+      oldGradeStatus: stored.gradeStatus,
+      newGradeStatus: 'DRAFT',
+      reason: 'محاسبهٔ نمرهٔ نهایی از اجزا (اقدام صریح استاد)',
+      actorUserId: user.id,
+      actorRole: 'PROFESSOR',
+    });
+
+    revalidatePath('/professor/grades');
+
+    const shown = finalValue.toLocaleString('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return {
+      ok: true,
+      persisted: true,
+      message: `نمرهٔ نهایی از اجزا محاسبه شد: ${shown} از ۲۰ (پیش‌نویس — برای قطعی‌شدن باید با OTP نهایی شود).`,
+      savedAt: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
   } catch (err) {
     return fail(err);
   }

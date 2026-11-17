@@ -22,6 +22,7 @@ import { askConfirm } from '@/lib/ui-feedback';
 import {
   SaveGradePayload,
   SaveGradeState,
+  computeFinalFromComponentsAction,
   finalizeSignedAction,
   getMyUnfinalizeRequests,
   requestUnfinalizeAction,
@@ -57,6 +58,17 @@ type OptimisticUpdate = {
   field: StudentGradeField;
   value: number | undefined;
 };
+
+/** برچسب کوتاه هفت جزء نمره (نمایش فقط‌خواندنی) */
+const COMPONENT_CHIPS: { field: StudentGradeField; label: string }[] = [
+  { field: 'midtermScore', label: 'میان‌ترم' },
+  { field: 'homeworkScore', label: 'تکالیف' },
+  { field: 'participationScore', label: 'حضور' },
+  { field: 'practicalScore', label: 'عملی' },
+  { field: 'finalExamScore', label: 'پایان‌ترم' },
+  { field: 'theoryProfScore', label: 'تئوری' },
+  { field: 'labProfScore', label: 'عملی استاد' },
+];
 
 export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onRequestFinalizeOtp, dispatch }: RosterTabProps) {
   /* پیام‌ها از توستِ سراسری می‌آیند (نه alert بومی): ثبت نمره جریان پیوسته‌ای
@@ -120,6 +132,78 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
 
   const isFinalized = !!offering.isFinalized;
   const isLoading = isSaving;
+
+  // ── محاسبهٔ صریح نمرهٔ نهایی از اجزا (فقط با کلیک استاد — نه خودکار) ──
+  const [computeBusyFor, setComputeBusyFor] = useState<number | null>(null);
+  const [computeResult, setComputeResult] = useState<Record<number, { ok: boolean; text: string }>>({});
+  useEffect(() => { setComputeResult({}); }, [offering.id]);
+
+  const handleComputeFinal = async (st: StudentGradeItem) => {
+    if (isFinalized || st.status === 'FINALIZED' || computeBusyFor !== null) return;
+    setComputeBusyFor(st.studentId);
+    try {
+      const res = await computeFinalFromComponentsAction(
+        st.enrollmentOfferingId ?? offering.id,
+        st.studentCode,
+      );
+      const text = res.ok
+        ? (res.message ?? 'نمرهٔ نهایی از اجزا محاسبه شد.')
+        : (res.error ?? 'محاسبهٔ نمرهٔ نهایی ناموفق بود.');
+      setComputeResult(prev => ({ ...prev, [st.studentId]: { ok: res.ok, text } }));
+      toast(text, res.ok ? 'success' : 'error');
+    } catch {
+      const text = 'محاسبهٔ نمرهٔ نهایی ناموفق بود.';
+      setComputeResult(prev => ({ ...prev, [st.studentId]: { ok: false, text } }));
+      toast(text, 'error');
+    } finally {
+      setComputeBusyFor(null);
+    }
+  };
+
+  /** چیپ‌های فقط‌خواندنی هفت جزء ثبت‌شدهٔ دانشجو */
+  const renderComponentChips = (st: StudentGradeItem) => (
+    <div className="flex flex-wrap items-center justify-center gap-1" dir="rtl">
+      {COMPONENT_CHIPS.map(c => {
+        const v = st[c.field];
+        return (
+          <span
+            key={c.field}
+            title={`${c.label}: ${v === undefined ? 'ثبت نشده' : faNum(v)}`}
+            className={`px-1.5 py-0.5 rounded-md border text-3xs font-bold ${
+              v === undefined
+                ? 'bg-slate-100 text-slate-400 border-slate-200'
+                : 'bg-white text-slate-700 border-slate-300'
+            }`}
+          >
+            {c.label}: {v === undefined ? '—' : faNum(v)}
+          </span>
+        );
+      })}
+    </div>
+  );
+
+  /** دکمهٔ «محاسبهٔ نمرهٔ نهایی از اجزا» + پیام نتیجهٔ همان ردیف */
+  const renderComputeFinal = (st: StudentGradeItem) => {
+    const busy = computeBusyFor === st.studentId;
+    const res = computeResult[st.studentId];
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={() => void handleComputeFinal(st)}
+          disabled={isFinalized || st.status === 'FINALIZED' || computeBusyFor !== null}
+          aria-label={`محاسبهٔ نمرهٔ نهایی از اجزا برای ${st.fullName}`}
+          title="نمرهٔ نهایی فقط از اجزای ثبت‌شده محاسبه و به‌صورت پیش‌نویس ذخیره می‌شود (قطعی نمی‌شود)"
+          className="px-2 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-900 border border-indigo-200 font-bold text-3xs transition whitespace-nowrap"
+        >
+          {busy ? 'در حال محاسبه…' : 'محاسبهٔ نمرهٔ نهایی از اجزا'}
+        </button>
+        {res && (
+          <span className={`text-3xs font-bold ${res.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{res.text}</span>
+        )}
+      </div>
+    );
+  };
 
   const handleScoreChange = (st: StudentGradeItem, field: StudentGradeField, raw: string) => {
     if (isFinalized) return;
@@ -428,9 +512,11 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                   <th scope="col" className="p-2 border border-slate-800 font-bold">پایان‌ترم ({faNum(offering.rubric.finalExam)})</th>
                 </>
               )}
+              <th scope="col" className="p-2 border border-slate-800 font-bold">اجزای ثبت‌شده</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-black bg-slate-950 text-amber-300">نمره کل (از ۲۰)</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-bold">نتیجه</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-bold">وضعیت</th>
+              <th scope="col" className="p-2 border border-slate-800 font-bold">محاسبه از اجزا</th>
             </tr>
           </thead>
           <tbody>
@@ -475,6 +561,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                       <td className="p-1.5 border border-slate-200 text-center">{renderScoreInput(st, 'finalExamScore', offering.rubric.finalExam, 'slate', false)}</td>
                     </>
                   )}
+                  <td className="p-2 border border-slate-200 text-center">{renderComponentChips(st)}</td>
                   <td className="p-2 border border-slate-200 text-center font-black text-sm bg-slate-50">
                     <span className={isPass ? 'text-emerald-700' : isFail ? 'text-rose-700' : 'text-slate-500'}>
                       {finalScore !== undefined ? faNum(finalScore) : '—'}
@@ -498,6 +585,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                       <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold text-3xs">پیش‌نویس</span>
                     )}
                   </td>
+                  <td className="p-2 border border-slate-200 text-center">{renderComputeFinal(st)}</td>
                 </tr>
               );
             })}
@@ -533,6 +621,10 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                     {renderScoreInput(st, 'finalExamScore', offering.rubric.finalExam, 'slate', false)}
                   </>
                 )}
+              </div>
+              <div className="pt-1 border-t border-slate-200 space-y-2">
+                {renderComponentChips(st)}
+                {renderComputeFinal(st)}
               </div>
             </div>
           );

@@ -20,6 +20,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { writeAuditEntry } from '@/lib/audit-writer';
 import { computeGradeStatus } from '@/lib/grade-utils';
+import { recountOfferings } from '@/lib/enrollment-count';
 import type { SyncPlan, SyncRunResult } from './types';
 
 export interface ApplyOptions {
@@ -81,13 +82,10 @@ export async function applyPlan(plan: SyncPlan, opts: ApplyOptions = {}): Promis
         }
       }
 
-      /* ── ۳) هم‌ترازیِ شمارندهٔ ثبت‌نامِ ارائه‌ها ── */
-      for (const offeringId of touchedOfferings) {
-        await tx.execute(sql`
-          UPDATE course_offerings AS o SET "enrolledCount" =
-            (SELECT count(*) FROM enrollments e
-              WHERE e."offeringId" = o.id AND e.status <> 'DROPPED')
-          WHERE o.id = ${offeringId}`);
+      /* ── ۳) هم‌ترازیِ شمارندهٔ ثبت‌نامِ ارائه‌ها ──
+         تعریفِ یکتا (REGISTERED + رزروهای معتبرِ bypass) و در همان تراکنش. */
+      if (touchedOfferings.size > 0) {
+        await recountOfferings([...touchedOfferings], tx);
       }
 
       /* ── ۴) ردِ حسابرسی ── */

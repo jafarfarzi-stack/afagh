@@ -6,7 +6,7 @@ import { audit_logs, student_documents, users } from '@/db/schema';
 import { getSessionUser } from '@/lib/auth';
 import { assertSameOrigin } from '@/lib/security';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { archiveKey, putArchiveObject, sha256 } from '@/lib/objectStore';
+import { archiveKey, putArchiveObject, sha256, ObjectStoreBucketMissingError } from '@/lib/objectStore';
 import { checkUpload, MAX_UPLOAD_BYTES } from '@/lib/safe-input';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,31 @@ export async function POST(req: NextRequest) {
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
   const key = archiveKey(studentUserId, typeId ?? categoryId, check.ext);
-  const { size, etag } = await putArchiveObject(key, buf, check.mime);
+
+  // ── نوشتن واقعی در فضای ذخیره‌سازی ──
+  // باکت اسناد دیگر در هر آپلود ساخته نمی‌شود (یک‌بار در هر پروسه بررسی می‌شود).
+  // اگر نوشتن شکست بخورد، هیچ رکورد/جانشینی در DB ثبت نمی‌شود و پاسخِ صادقانه
+  // ۵۰۳ برمی‌گردد؛ هرگز «سند معتبر» جعلی ساخته نمی‌شود.
+  let stored: { size: number; etag: string };
+  try {
+    stored = await putArchiveObject(key, buf, check.mime);
+  } catch (err) {
+    const missingBucket = err instanceof ObjectStoreBucketMissingError;
+    console.error('[api] archive/upload storage failed:', {
+      key,
+      missingBucket,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      {
+        error: missingBucket
+          ? 'فضای ذخیره‌سازی اسناد آماده نیست؛ با مدیر سامانه تماس بگیرید.'
+          : 'بارگذاری سند در فضای ذخیره‌سازی انجام نشد؛ دوباره تلاش کنید.',
+      },
+      { status: 503 },
+    );
+  }
+  const { size, etag } = stored;
 
   const [row] = await db.insert(student_documents).values({
     universityId: docUniId,

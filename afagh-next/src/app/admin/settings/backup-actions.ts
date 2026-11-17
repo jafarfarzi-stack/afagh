@@ -6,7 +6,10 @@ import { Pool, type PoolClient } from 'pg';
 import { pool, db } from '@/db';
 import { audit_logs } from '@/db/schema';
 import { observePoolErrors } from '@/db/pool-errors';
-import { S3, ARCHIVE_BUCKET, ensureBucket } from '@/lib/objectStore';
+import {
+  S3, ARCHIVE_BUCKET, BACKUP_BUCKET, BACKUP_KEY_PREFIX,
+  ensureBackupBucket, isBucketAvailable, isSseUnsupportedError, putArchiveObject,
+} from '@/lib/objectStore';
 import { getSessionUser } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
 import { assertAdmin, assertPlatformAdmin, isBackupAuthError } from '@/lib/backup-auth';
@@ -273,12 +276,15 @@ export async function backupDatabaseAction(): Promise<{ ok: boolean; sql?: strin
 }
 
 // ═══ بکاپ مستقیم از UI (جریانی، بدون پاسخ RSC حجیم) ═══
-// دامپ/زیپ ابتدا در MinIO (کلید afagh-backup/) ذخیره می‌شود و کلاینت سپس از
-// مسیر /api/admin/backup/download آن را به‌صورت جریانی دریافت می‌کند. این کار
+// دامپ/زیپ ابتدا در باکت اختصاصی پشتیبان (MINIO_BACKUP_BUCKET، پیش‌فرض
+// afagh-backup) با کلید afagh-backup/ ذخیره می‌شود و کلاینت سپس از مسیر
+// /api/admin/backup/download آن را به‌صورت جریانی دریافت می‌کند. این کار
 // پاسخِ حجیمِ سروراکشن (که لبهٔ Arvan قطع می‌کرد) را حذف می‌کند و احراز هویت نیز
 // پیام فارسیِ خوانا می‌دهد (نه دیالوگِ مرموز).
-
-const BACKUP_KEY_PREFIX = 'afagh-backup/';
+//
+// 🔒 پشتیبان‌ها دیگر کنار مدارک دانشجویان نمی‌نشینند: باکت جدا + SSE (AES256).
+// خواندن اشیای قدیمی (که هنوز داخل باکت اسناد هستند) در objectStore.ts به‌صورت
+// شفاف fallback می‌شود ⇒ دانلود/بازیابی بکاپ‌های موجود نمی‌شکند.
 
 function backupKey(kind: 'db' | 'minio'): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -288,17 +294,59 @@ function backupKey(kind: 'db' | 'minio'): string {
 
 /** حذف بکاپ‌های قدیمی (فراتر از keep) تا باکت پر نشود. */
 async function cleanupOldBackups(keep = 10): Promise<void> {
-  try {
-    const keys: string[] = [];
-    for await (const obj of S3.listObjectsV2(ARCHIVE_BUCKET, BACKUP_KEY_PREFIX, true)) {
-      if (obj.name) keys.push(obj.name);
-    }
-    keys.sort();
-    for (const old of keys.slice(0, Math.max(0, keys.length - keep))) {
-      await S3.removeObject(ARCHIVE_BUCKET, old).catch(() => {});
-    }
-  } catch { /* بکاپ‌پاکسازی نباید جلوی بکاپ جدید را بگیرد */ }
+  // هم باکت پشتیبان (مکان تازه) و هم مکان قدیمی (پیشوند afagh-backup/ داخل باکت
+  // اسناد) هرس می‌شوند؛ وگرنه بکاپ‌های تازه باکت اسناد را پر می‌کردند و اشیای
+  // قدیمی هرگز پاک نمی‌شدند. خطای یک باکت مانع پاک‌سازی دیگری نیست.
+  for (const bucket of [BACKUP_BUCKET, ARCHIVE_BUCKET]) {
+    try {
+      const keys: string[] = [];
+      for await (const obj of S3.listObjectsV2(bucket, BACKUP_KEY_PREFIX, true)) {
+        if (obj.name) keys.push(obj.name);
+      }
+      keys.sort();
+      for (const old of keys.slice(0, Math.max(0, keys.length - keep))) {
+        await S3.removeObject(bucket, old).catch(() => {});
+      }
+    } catch { /* بکاپ‌پاکسازی نباید جلوی بکاپ جدید را بگیرد */ }
+  }
 }
+
+/**
+ * آپلود فایل پشتیبان در باکت اختصاصی پشتیبان با رمزنگاری SSE (AES256).
+ *
+ * - باکت پشتیبان یک‌بار در هر پروسه ساخته/بررسی می‌شود (ensureBackupBucket).
+ * - ContentType صریح است تا دانلود، نوع درست ببیند (`application/gzip` برای دامپ).
+ * - اگر نوشتن با SSE شکست بخورد، یک بار بدون رمزنگاری تکرار و هشدار فارسی ثبت
+ *   می‌شود؛ اگر آن هم شکست بخورد خطای واقعی بالا می‌رود (پشتیبانِ ناموفق هرگز
+ *   «موفق» گزارش نمی‌شود).
+ */
+async function putBackupObject(key: string, filePath: string, size: number, contentType: string): Promise<void> {
+  await ensureBackupBucket();
+  const plainMeta = { 'Content-Type': contentType };
+  try {
+    await S3.putObject(BACKUP_BUCKET, key, createReadStream(filePath), size, {
+      ...plainMeta,
+      'x-amz-server-side-encryption': 'AES256',
+    });
+  } catch (err) {
+    // یک بار بدون رمزنگاری تکرار می‌شود (هشدار فارسی ثبت می‌گردد)؛ اگر آن هم
+    // شکست بخورد، خطای واقعی بالا می‌رود تا پشتیبان «موفق» گزارش نشود.
+    if (isSseUnsupportedError(err)) {
+      log.warn('backup_sse_unsupported', {
+        detail: 'سرور Object Storage رمزنگاری SSE (AES256) را نپذیرفت؛ پشتیبان بدون رمزنگاری ذخیره می‌شود.',
+      });
+    } else {
+      log.warn('backup_sse_put_retry', {
+        detail: 'نوشتن پشتیبان با رمزنگاری SSE شکست خورد؛ یک بار بدون رمزنگاری تکرار می‌شود.',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await S3.putObject(BACKUP_BUCKET, key, createReadStream(filePath), size, plainMeta);
+  }
+}
+
+/** پیام فارسیِ یکسان برای «باکت اسناد در دسترس نیست» (۵۰۳ در مسیرهای API). */
+const ARCHIVE_UNAVAILABLE = 'فضای ذخیره‌سازی اسناد در دسترس نیست؛ با مدیر سامانه تماس بگیرید.';
 
 /** اجرای واقعی دامپ → فایل موقت gzip → MinIO (مشترکِ مسیر همزمان و پسزمینه). */
 async function performDatabaseBackup(includeSecrets = false): Promise<{ key: string; size: number; tables: number }> {
@@ -313,7 +361,7 @@ async function performDatabaseBackup(includeSecrets = false): Promise<{ key: str
     await pipeline(stream, createGzip({ level: 1 }), createWriteStream(tmpFile));
     const size = statSync(tmpFile).size;
     // minio-js رشته را محتوای شیء میداند ⇒ استریم فایل + اندازة معلوم (multipart).
-    await S3.putObject(ARCHIVE_BUCKET, key, createReadStream(tmpFile), size, { 'Content-Type': 'application/gzip' });
+    await putBackupObject(key, tmpFile, size, 'application/gzip');
     await cleanupOldBackups();
     return { key, size, tables };
   } finally {
@@ -397,7 +445,10 @@ export async function getDatabaseBackupJobAction(jobId: string): Promise<{ ok: b
 export async function startMinioBackupAction(): Promise<{ ok: boolean; key?: string; size?: number; objects?: number; error?: string }> {
   try {
     await assertPlatformAdmin();
-    await ensureBucket();
+    // باکت اسناد دیگر در هر درخواست ساخته/بررسی نمی‌شود؛ نبودش خطای صریح است.
+    if (!(await isBucketAvailable(ARCHIVE_BUCKET))) {
+      return { ok: false, error: ARCHIVE_UNAVAILABLE };
+    }
     const objects: string[] = [];
     for await (const obj of S3.listObjectsV2(ARCHIVE_BUCKET, '', true)) {
       // خودِ بکاپ‌ها را وارد بکاپ نمی‌کنیم (جلوگیری از بازگشتی).
@@ -412,6 +463,14 @@ export async function startMinioBackupAction(): Promise<{ ok: boolean; key?: str
         if (obj.name && /^afagh-backup\/db-.*\.sql\.gz$/.test(obj.name)) dbKeys.push(obj.name);
       }
     } catch { /* نبود فهرست نباید بستۀ فایلها را خراب کند */ }
+    // بکاپ‌های دیتابیس در باکت تازه هم فهرست می‌شوند (بکاپ‌های قدیمی در باکت اسنادند).
+    try {
+      for await (const obj of S3.listObjectsV2(BACKUP_BUCKET, BACKUP_KEY_PREFIX, true)) {
+        if (obj.name && /^afagh-backup\/db-.*\.sql\.gz$/.test(obj.name) && !dbKeys.includes(obj.name)) {
+          dbKeys.push(obj.name);
+        }
+      }
+    } catch { /* باکت پشتیبان ممکن است هنوز ساخته نشده باشد */ }
     dbKeys.sort();
 
     // بستۀ پیکربندی: فقط «نام» متغیرها و اینکه تنظیم شدهاند یا نه. هیچ مقدار
@@ -448,7 +507,7 @@ export async function startMinioBackupAction(): Promise<{ ok: boolean; key?: str
     await pipeline(createZipStream(entries), writeStream);
     const size = statSync(tmpFile).size;
     // minio-js رشته را محتوای شیء می‌داند (نه مسیر فایل) ⇒ از stream فایل استفاده می‌کنیم.
-    await S3.putObject(ARCHIVE_BUCKET, key, createReadStream(tmpFile), size, { 'Content-Type': 'application/zip' });
+    await putBackupObject(key, tmpFile, size, 'application/zip');
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     await cleanupOldBackups();
     return { ok: true, key, size, objects: objects.length };
@@ -463,8 +522,8 @@ export async function startMinioBackupAction(): Promise<{ ok: boolean; key?: str
 export async function listMinioObjectsAction(): Promise<{ ok: boolean; objects?: { key: string; size: number; lastModified: Date }[]; error?: string }> {
   try {
     await assertAdmin();
-    await ensureBucket();
-    const exists = await S3.bucketExists(ARCHIVE_BUCKET);
+    // وجود باکت اسناد یک‌بار در هر پروسه بررسی می‌شود (memoised) — بدون ساخت.
+    const exists = await isBucketAvailable(ARCHIVE_BUCKET);
     if (!exists) return { ok: true, objects: [] };
 
     const objects: { key: string; size: number; lastModified: Date }[] = [];
@@ -629,7 +688,8 @@ export async function restoreMinioObjectAction(key: string, dataBase64: string):
         !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(dataBase64)) {
       return { ok: false, error: 'محتوای فایل نامعتبر یا بزرگ‌تر از حد مجاز است.' };
     }
-    await ensureBucket();
+    // نوشتن در باکت اسناد: وجود باکت memoised بررسی و SSE درخواست می‌شود
+    // (بدون ساخت باکت در هر درخواست — رفتار پیشین باکتِ گم‌شده را می‌پوشاند).
     const buf = Buffer.from(dataBase64, 'base64');
     if (buf.length > 20 * 1024 * 1024) return { ok: false, error: 'حجم فایل از ۲۰ مگابایت بیشتر است.' };
     const ext = key.split('.').pop()?.toLowerCase() || 'bin';
@@ -637,7 +697,7 @@ export async function restoreMinioObjectAction(key: string, dataBase64: string):
       : ext === 'png' ? 'image/png'
       : ext === 'pdf' ? 'application/pdf'
       : 'application/octet-stream';
-    await S3.putObject(ARCHIVE_BUCKET, key, buf, buf.length, { 'Content-Type': contentType });
+    await putArchiveObject(key, buf, contentType);
     return { ok: true };
   } catch (err: any) {
     log.error('minio_restore_failed', { error: err instanceof Error ? err.message : String(err), auth: !!err?.auth });
@@ -663,9 +723,7 @@ export async function getBackupStatsAction(): Promise<{ ok: boolean; stats?: { t
     let minioObjects = 0;
     let minioSize = 0;
     try {
-      await ensureBucket();
-      const exists = await S3.bucketExists(ARCHIVE_BUCKET);
-      if (exists) {
+      if (await isBucketAvailable(ARCHIVE_BUCKET)) {
         const stream = S3.listObjectsV2(ARCHIVE_BUCKET, '', true);
         for await (const obj of stream) {
           minioObjects++;

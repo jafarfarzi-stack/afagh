@@ -41,7 +41,7 @@ export type PortalTheme = {
   focus: string;
 };
 
-/* ── استاد: ۱۱ مقصد، همان‌های `PROFESSOR_NAV` ───────────────────────────── */
+/* ── استاد: ۱۲ مقصد، همان‌های `PROFESSOR_NAV` ───────────────────────────── */
 export const PROFESSOR_GROUPS: NavGroup[] = [
   {
     key: 'teaching',
@@ -58,6 +58,7 @@ export const PROFESSOR_GROUPS: NavGroup[] = [
     title: 'ارزیابی',
     items: [
       { href: '/professor/grades', label: 'بارم‌بندی و ثبت نمرات', icon: '📝' },
+      { href: '/professor/thesis', label: 'پایان‌نامه‌های من', icon: '🔬' },
       { href: '/professor/evaluation', label: 'ارزشیابی دانشجویان', icon: '🎯' },
       { href: '/professor/performance', label: 'کارنامهٔ عملکرد', icon: '📈' },
     ],
