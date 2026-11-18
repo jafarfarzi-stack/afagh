@@ -626,7 +626,7 @@ export function programSemesterMatrix(
   programs: { id: number; title: string; code?: string }[],
 ): {
   id: number; title: string; code: string;
-  semesters: { semester: number | null; total: number; missingProf: number; unscheduled: number; complete: boolean }[];
+  semesters: { semester: number | null; total: number; courses: number; missingProf: number; unscheduled: number; complete: boolean }[];
 }[] {
   const scheduled = new Set(approved.map(o => o.id));
   return programs.map(p => {
@@ -644,7 +644,10 @@ export function programSemesterMatrix(
         const unscheduled = rows.filter(d => !scheduled.has(d.id)).length;
         return {
           semester,
+          // total = تعداد گروههای ارائه؛ courses = درس متمایز — یک درس با
+          // چند گروه فقط یک بار شمرده میشود (درخواست ۱۴۰۵/۰۸/۲۸).
           total: rows.length,
+          courses: new Set(rows.map(r => r.courseId)).size,
           missingProf,
           unscheduled,
           complete: rows.length > 0 && missingProf === 0 && unscheduled === 0,

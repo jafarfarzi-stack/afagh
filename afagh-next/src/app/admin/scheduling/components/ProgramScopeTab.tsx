@@ -95,7 +95,14 @@ export default function ProgramScopeTab() {
               <div className="min-w-0">
                 <h4 className="font-extrabold text-slate-900 text-sm truncate" title={p.title}>🎓 {p.title}{p.code ? <span className="text-slate-500 font-mono text-xs"> ({p.code})</span> : null}</h4>
                 <p className="text-2xs font-bold text-slate-500 mt-0.5">
-                  {faNum(p.semesters.reduce((n, s) => n + s.total, 0))} درس در این نیمسال
+                  {/* درسِ متمایز مبناست؛ گروهها جداگانه آمده تا چندگروهی گم نشود */}
+                  {(() => {
+                    const groups = p.semesters.reduce((n, s) => n + s.total, 0);
+                    const courses = p.semesters.reduce((n, s) => n + s.courses, 0);
+                    return groups > courses
+                      ? `${faNum(courses)} درس · ${faNum(groups)} گروه در این نیمسال`
+                      : `${faNum(courses)} درس در این نیمسال`;
+                  })()}
                 </p>
               </div>
               {p.semesters.length > 0 && p.semesters.every(s => s.complete) && (
@@ -135,7 +142,7 @@ export default function ProgramScopeTab() {
                     >
                       {s.complete ? '✅' : '⏳'} {label}
                       <span className="block text-[9px] font-bold opacity-80">
-                        {faNum(s.total)} درس
+                        {s.total > s.courses ? `${faNum(s.courses)} درس · ${faNum(s.total)} گروه` : `${faNum(s.courses)} درس`}
                       </span>
                     </button>
                   );

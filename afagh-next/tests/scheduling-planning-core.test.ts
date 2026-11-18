@@ -16,6 +16,7 @@ import {
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
   mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
   slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab, cohortSemesterNo, chartScopeSemester, suggestGroupsCount,
+  programSemesterMatrix,
 } from '../src/app/admin/scheduling/planning-core.ts';
 import type { CourseDemand, DepartmentOffering, SchedulingWorkspace } from '../src/app/admin/scheduling/types.ts';
 
@@ -246,6 +247,30 @@ eq('خالی/نامعتبر → ۱', clampGroupsCount(''), 1);
 eq('undefined → ۱', clampGroupsCount(undefined), 1);
 eq('سقف رعایت می‌شود', clampGroupsCount(999), MAX_GROUPS_PER_COURSE);
 eq('سقف معقول است (۱..۲۰)', MAX_GROUPS_PER_COURSE >= 10 && MAX_GROUPS_PER_COURSE <= 30, true);
+
+
+console.log('\n── ماتریس رشته × ترم: درسِ متمایز در برابر گروه (درخواست ۱۴۰۵/۰۸/۲۸) ──');
+const demandFixture = (id: number, courseId: number, semesterNo: number | null): CourseDemand => ({
+  id, courseId, courseDeptId: null, programId: 1, programTitle: 'رشتهٔ نمونه', programIds: [1],
+  semesterNo, cohortId: '1404-1', cohortTitle: 'ورودی ۱۴۰۴', code: '20063', title: 'سمیار',
+  units: 2, groupNumber: id, courseType: 'تخصصی', preferredProfId: 0,
+  requiredRoomType: 'THEORY', capacity: 40, enrolledCount: 0, groupsCount: 1,
+  weekRecurrence: 'WEEKLY' as CourseDemand['weekRecurrence'], sessionsCountPerWeek: 1, examDate: '',
+} as unknown as CourseDemand);
+const mx = programSemesterMatrix(
+  [demandFixture(1, 20063, 2), demandFixture(2, 20063, 2), demandFixture(3, 20063, 2),
+   demandFixture(4, 20063, 2), demandFixture(5, 20063, 2), demandFixture(6, 20063, 2),
+   demandFixture(7, 30010, 3)],
+  [], [{ id: 1, title: 'مهندسی کامپیوتر', code: '21' }],
+);
+const t2 = mx[0].semesters.find(s => s.semester === 2)!;
+const t3 = mx[0].semesters.find(s => s.semester === 3)!;
+eq('۶ گروهِ یک درس → courses=۱', t2.courses, 1);
+eq('۶ گروهِ یک درس → total=۶', t2.total, 6);
+eq('ترم دیگر جدا شمرده میشود', t3.courses, 1);
+eq('جمع درسِ متمایز کارت = ۲', mx[0].semesters.reduce((n, s) => n + s.courses, 0), 2);
+eq('جمع گروههای کارت = ۷', mx[0].semesters.reduce((n, s) => n + s.total, 0), 7);
+eq('چندگروهی فقط وقتی گروه>درس تفکیک میشود', t2.total > t2.courses, true);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);
