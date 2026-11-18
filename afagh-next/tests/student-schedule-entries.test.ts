@@ -4,7 +4,7 @@ import {
   studentStatusLabel,
   studentWeekLabel,
   type StudentScheduleCourse,
-} from '../src/app/student/schedule/ScheduleClient.tsx';
+} from '../src/app/student/schedule/schedule-entries.ts';
 import { collapseCalendarEntries } from '@/lib/professor-calendar-layout';
 
 const course = (over: Partial<StudentScheduleCourse> = {}): StudentScheduleCourse => ({
