@@ -20,6 +20,7 @@ import {
   degree_level_configs,
   educational_regulations,
   majors,
+  persons,
   roles,
   sanjesh_mappings,
   student_id_formulas,
@@ -750,6 +751,7 @@ export async function assignStudentNumbers(
           .limit(1);
 
         let generatedPassword: string | null = null;
+        let personIdForStudent: number | null = null;
         if (!user) {
           // رمز پیش‌فرض با همان موتور امنیتی سراسری (scrypt + salt تصادفی) —
           // نه sha256 خام؛ و فلگ «تغییر اجباری رمز» برای اولین ورود ست می‌شود.
@@ -789,6 +791,27 @@ export async function assignStudentNumbers(
               .insert(user_roles)
               .values({ userId: user.id, roleId: studentRole.id })
               .onConflictDoNothing();
+          }
+          // پروندهٔ هویت (persons) — مبنای تطبیق فایل‌های بعدی و گزارش‌های هویتی
+          if (nationalCode) {
+            const [person] = await tx
+              .insert(persons)
+              .values({
+                canonicalNationalCode: nationalCode,
+                canonicalFirstName: user.firstName,
+                canonicalLastName: user.lastName,
+                canonicalFatherName: pf.fatherName || null,
+                canonicalBirthDate: jalaliToIso(pf.birthDate) ?? null,
+              })
+              .onConflictDoUpdate({
+                target: persons.canonicalNationalCode,
+                set: { canonicalFirstName: user.firstName, canonicalLastName: user.lastName, updatedAt: new Date() },
+              })
+              .returning({ id: persons.id });
+            if (person) {
+              personIdForStudent = person.id;
+              await tx.update(users).set({ personId: person.id }).where(eq(users.id, user.id));
+            }
           }
         }
 
@@ -936,6 +959,7 @@ export async function assignStudentNumbers(
           .insert(students)
           .values({
             userId: user.id,
+            personId: personIdForStudent ?? user.personId ?? null,
             studentCode,
             universityId: row.universityId ?? null,
             majorId: mappedMajorId,
