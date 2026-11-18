@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { academic_terms, course_offerings, courses, departments, enrollments, tuition_term_tariff } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { getTermScope } from '@/lib/term-scope';
 import { MALI_TYPE_LABELS, MALI_TYPE_NON_CHARGING, maliTypeLabel } from '@/lib/mali-types';
 import MaliTypeSelect from './MaliTypeSelect';
 import { faId } from '@/lib/calendar';
@@ -40,13 +41,31 @@ export default async function CourseFinancePage({
   // پیش‌فرض روی «فقط تعیین‌نشده‌ها» است: این صفحه یک صفِ کار است، نه فهرست کامل.
   const onlyMissing = sp?.only !== 'all';
 
-  // ── ترم جاری (برای سنجش اثر واقعی روی شهریه) ──
-  const [term] = await db
-    .select({ id: academic_terms.id, termCode: academic_terms.termCode, title: academic_terms.title })
-    .from(academic_terms)
-    .where(and(eq(academic_terms.universityId, uni.id), eq(academic_terms.isCurrent, 1)))
-    .orderBy(desc(academic_terms.termCode))
-    .limit(1);
+  // ── ترمِ محدوده از سوییچر سربرگ (کوکی afagh_term) ──
+  const termScope = await getTermScope(uni.id);
+  const scopeTermId = termScope.selectedId;
+
+  const termCols = {
+    id: academic_terms.id,
+    termCode: academic_terms.termCode,
+    title: academic_terms.title,
+  };
+  let [term] = scopeTermId
+    ? await db
+        .select(termCols)
+        .from(academic_terms)
+        .where(and(eq(academic_terms.universityId, uni.id), eq(academic_terms.id, scopeTermId)))
+        .limit(1)
+    : [];
+  if (!term) {
+    // fallback: سوییچ ترم خالی است یا ترمِ انتخابی یافت نشد — مثل قبل ترمِ جاری
+    [term] = await db
+      .select(termCols)
+      .from(academic_terms)
+      .where(and(eq(academic_terms.universityId, uni.id), eq(academic_terms.isCurrent, 1)))
+      .orderBy(desc(academic_terms.termCode))
+      .limit(1);
+  }
 
   // ── سال تعرفهٔ جاری: ۴ رقم اول کد ترم ──
   const termYear = term ? Number(String(term.termCode).slice(0, 4)) : 0;
