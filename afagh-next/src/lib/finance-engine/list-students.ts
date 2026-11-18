@@ -340,10 +340,25 @@ export async function listFinanceStudents(
 }
 
 /** خلاصهٔ اعداد کارتابل روی کل دانشجویانِ فیلتر‌شده (نوار KPI). */
+const SUMMARY_TTL_MS = 60_000;
+const summaryCache = new Map<string, { at: number; value: FinanceSummary }>();
+async function cachedSummary(filters: FinanceListFilters, universityId?: number): Promise<FinanceSummary> {
+  const key = JSON.stringify({ filters, universityId: universityId ?? null });
+  const hit = summaryCache.get(key);
+  if (hit && Date.now() - hit.at < SUMMARY_TTL_MS) return hit.value;
+  const value = (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
+  if (summaryCache.size >= 50) {
+    const oldest = summaryCache.keys().next().value;
+    if (oldest !== undefined) summaryCache.delete(oldest);
+  }
+  summaryCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export async function summarizeFinanceStudents(
   filters: FinanceListFilters = {}, universityId?: number
 ): Promise<FinanceSummary> {
-  return (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
+  return cachedSummary(filters, universityId);
 }
 
 /** تعداد کل دانشجویانِ مطابق فیلتر — برای نوار صفحه‌بندی. */
