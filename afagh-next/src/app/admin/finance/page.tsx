@@ -1,11 +1,9 @@
 import Link from 'next/link';
-import { revalidatePath } from 'next/cache';
 import PrintButton from '@/components/PrintButton';
 import { requireRole } from '@/lib/auth';
 import { listFinanceStudents, listFinanceFilterOptions, summarizeFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getTermScope } from '@/lib/term-scope';
-import { setTermCookie } from '@/lib/term-scope-actions';
 import { faId } from '@/lib/calendar';
 import FinanceTable from './FinanceTable';
 
@@ -101,6 +99,9 @@ export default async function FinanceWorklistPage(props: {
   // دامنهٔ نیمسال از سوییچر سربرگ (کوکی afagh_term) می‌آید؛ null = همهٔ نیمسال‌ها
   const termScope = await getTermScope(currentUniversityId);
   const scopeTermId = termScope.selectedId;
+  const scopeTermTitle = scopeTermId
+    ? (termScope.terms.find((t) => t.id === scopeTermId)?.title ?? `نیمسال ${scopeTermId}`)
+    : null;
 
   const sp = (await props.searchParams) || {};
   const majorId = Number(sp.majorId) || null;
@@ -173,31 +174,9 @@ export default async function FinanceWorklistPage(props: {
               <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
                 🏛️ {currentUniversity ? currentUniversity.title : 'بدون دانشگاه'}
               </span>
-              <form
-                action={async (fd: FormData) => {
-                  'use server';
-                  const raw = String(fd.get('termId') ?? '').trim();
-                  await setTermCookie(raw ? Number(raw) : null, currentUniversityId);
-                  revalidatePath('/admin/finance');
-                }}
-                className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-2xs font-bold"
-                title="دامنهٔ نیمسالِ اعداد این صفحه"
-              >
-                📅
-                <select
-                  name="termId"
-                  defaultValue={scopeTermId ?? ''}
-                  className="max-w-[13rem] truncate rounded-md bg-white/90 px-1 py-0.5 text-2xs font-bold text-slate-900"
-                >
-                  <option value="">همهٔ نیمسال‌ها</option>
-                  {termScope.terms.map((t) => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
-                  ))}
-                </select>
-                <button type="submit" className="rounded-md bg-white/25 px-1.5 py-0.5 font-bold text-white hover:bg-white/35">
-                  اعمال
-                </button>
-              </form>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
+                📅 {scopeTermTitle ?? 'همهٔ نیمسال‌ها'}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
