@@ -174,9 +174,8 @@ export default async function FinanceWorklistPage(props: {
               <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
                 🏛️ {currentUniversity ? currentUniversity.title : 'بدون دانشگاه'}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
-                📅 {scopeTermTitle ?? 'همهٔ نیمسال‌ها'}
-              </span>
+              {/* ??? ???? ?????? ?????? ??? ???? ???? ????? */}
+              <span className="hidden">{scopeTermTitle ?? ''}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
