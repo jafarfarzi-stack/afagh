@@ -148,26 +148,51 @@ async function computeFinance(
     : Math.min(Math.max(filters.limit ?? 5000, 1), 5000);
   const offset = isRows ? Math.max(filters.offset ?? 0, 0) : 0;
 
-  const base = await db.select({
-    studentId: students.id,
-    userId: students.userId,
-    studentCode: students.studentCode,
-    firstName: users.firstName,
-    lastName: users.lastName,
-    nationalCode: users.nationalCode,
-    majorTitle: majors.name,
-    degreeTitle: degree_level_configs.title,
-    entryYear: students.entryYear,
-    status: students.status,
-    totalCount: sql<number>`count(*) over()`,
-  }).from(students)
-    .innerJoin(users, eq(users.id, students.userId))
-    .leftJoin(majors, eq(majors.id, students.majorId))
-    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .where(where.length ? and(...where) : undefined)
-    .orderBy(asc(students.studentCode))
-    .limit(limit)
-    .offset(offset);
+  // مسیر totals (KPI) به نام/رشته/مدرک نیاز ندارد؛ JOIN با users (جدول ۱۹MB)
+  // تنها گلوگاه واقعی بود (Seq Scan ~۳ثانیه). فقط اگر جست‌وجو لازم باشد users
+  // جوین می‌شود. مسیر rows دست‌نخورده می‌ماند چون ۵۰ ردیف نام/رشته می‌خواهد.
+  const base: any[] = isRows
+    ? await db.select({
+      studentId: students.id,
+      userId: students.userId,
+      studentCode: students.studentCode,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      nationalCode: users.nationalCode,
+      majorTitle: majors.name,
+      degreeTitle: degree_level_configs.title,
+      entryYear: students.entryYear,
+      status: students.status,
+      totalCount: sql<number>`count(*) over()`,
+    }).from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .leftJoin(majors, eq(majors.id, students.majorId))
+      .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(asc(students.studentCode))
+      .limit(limit)
+      .offset(offset)
+    : await (() => {
+      const needsUsers = !!(filters.search && filters.search.trim());
+      let q: any = db.select({
+        studentId: students.id,
+        userId: students.userId,
+        studentCode: students.studentCode,
+        firstName: needsUsers ? users.firstName : sql<string>`NULL`,
+        lastName: needsUsers ? users.lastName : sql<string>`NULL`,
+        nationalCode: needsUsers ? users.nationalCode : sql<string>`NULL`,
+        majorTitle: sql<string>`NULL`,
+        degreeTitle: sql<string>`NULL`,
+        entryYear: students.entryYear,
+        status: students.status,
+        totalCount: sql<number>`count(*) over()`,
+      }).from(students);
+      if (needsUsers) q = q.innerJoin(users, eq(users.id, students.userId));
+      return q
+        .where(where.length ? and(...where) : undefined)
+        .orderBy(asc(students.studentCode))
+        .limit(limit);
+    })();
 
   if (base.length === 0) return isRows ? [] : { ...ZERO_SUMMARY };
   const ids = base.map((r) => r.studentId);
