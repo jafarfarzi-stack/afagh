@@ -145,7 +145,7 @@ async function computeFinance(
   const isRows = mode === 'rows';
   const limit = isRows
     ? Math.min(Math.max(filters.limit ?? 100, 1), 2000)
-    : Math.min(Math.max(filters.limit ?? 2000, 1), 2000);
+    : Math.min(Math.max(filters.limit ?? 5000, 1), 5000);
   const offset = isRows ? Math.max(filters.offset ?? 0, 0) : 0;
 
   const base = await db.select({
@@ -159,6 +159,7 @@ async function computeFinance(
     degreeTitle: degree_level_configs.title,
     entryYear: students.entryYear,
     status: students.status,
+    totalCount: sql<number>`count(*) over()`,
   }).from(students)
     .innerJoin(users, eq(users.id, students.userId))
     .leftJoin(majors, eq(majors.id, students.majorId))
@@ -329,7 +330,9 @@ async function computeFinance(
     debtorCount: acc.debtorCount + (s.balance > 0 ? 1 : 0),
     studentCount: acc.studentCount + 1,
   }), { ...ZERO_SUMMARY });
-  return sum as FinanceSummary;
+  // تعداد کل (بدون سقف ۲۰۰۰) از پنجرهٔ COUNT(*) OVER همان اسکن
+  const totalStudents = Number((base[0] as { totalCount?: number } | undefined)?.totalCount ?? sum.studentCount);
+  return { ...sum, studentCount: totalStudents } as FinanceSummary;
 }
 
 /** لیست صفحه‌بندی‌شده برای جدول کارتابل (۱۰۰ ردیف/صفحه). */

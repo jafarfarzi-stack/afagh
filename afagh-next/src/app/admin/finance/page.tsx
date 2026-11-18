@@ -124,7 +124,7 @@ export default async function FinanceWorklistPage(props: {
   //   • students → فقط صفحهٔ جاری (۵۰ ردیف) — بار شبکه/پارس ~۱۰برابر کمتر
   //   • summary  → جمع کل روی همهٔ دانشجویانِ فیلتر‌شده (نوار KPI همچنان درست)
   //   • count    → تعداد کل برای نوار صفحه‌بندی
-  const [options, students, summary, count] = await Promise.all([
+  const [options, students, summary] = await Promise.all([
     listFinanceFilterOptions({ universityId: currentUniversityId }),
     listFinanceStudents({
       majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
@@ -137,11 +137,9 @@ export default async function FinanceWorklistPage(props: {
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
-    countFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
-      universityId: currentUniversityId,
-    }),
   ]);
+  // تعداد کل از همان اسکن خلاصه (COUNT(*) OVER) — کوئری شمارش جدا حذف شد
+  const count = summary.studentCount;
 
   const collected = summary.payments + summary.chequesCleared + summary.loans;
   const netDebtBase = summary.charges - summary.discounts - summary.sponsorships;
