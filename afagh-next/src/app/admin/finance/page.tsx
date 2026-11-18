@@ -190,7 +190,7 @@ export default async function FinanceWorklistPage(props: {
       {/* ── نوار KPI ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
         <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
-        <Kpi icon="💸" label="جمع شهریه (ریال)" value={fa(summary.charges)} tone="rose" />
+        <Kpi icon="💸" label="شهریهٔ ناخالص (ریال)" value={fa(summary.charges)} tone="rose" />
         <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(summary.discounts)} tone="violet" />
         <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(summary.sponsorships)} tone="indigo" />
         <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(summary.payments)} tone="emerald" sub={`وام: ${fa(summary.loans)}`} />
@@ -198,7 +198,7 @@ export default async function FinanceWorklistPage(props: {
         <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(summary.pendingCheques)} tone="amber" />
         <Kpi
           icon={summary.balance > 0 ? '🔴' : '🟢'}
-          label="ماندهٔ خالص (ریال)"
+          label="ماندهٔ بدهی (ریال)"
           value={fa(Math.abs(summary.balance))}
           tone={summary.balance > 0 ? 'rose' : 'emerald'}
           sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
@@ -206,7 +206,7 @@ export default async function FinanceWorklistPage(props: {
         {/* نرخ وصول — کارت تمام‌عرض */}
         <div className="col-span-2 rounded-2xl border border-indigo-200/80 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-e1 md:col-span-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به خالص بدهی)</span>
+            <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به شهریهٔ پس از تخفیف)</span>
             <span className="text-3xl font-black tabular-nums text-indigo-700">{fa(collectionRate)}٪</span>
           </div>
           <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
@@ -217,7 +217,7 @@ export default async function FinanceWorklistPage(props: {
           </div>
           <div className="mt-1.5 flex flex-wrap justify-between gap-2 text-2xs text-slate-500">
             <span>جمع وصولی: <b className="text-emerald-700">{fa(collected)} ریال</b></span>
-            <span>خالص قابل‌وصول: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
+            <span>خالص شهریه پس از تخفیف: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
           </div>
         </div>
       </div>
