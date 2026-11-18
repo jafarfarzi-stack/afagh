@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { currentTerm } from '@/lib/payroll-engine';
 import { getScopedOverview } from '@/lib/payroll-approvals';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { getTermScope } from '@/lib/term-scope';
 import { getSetting } from '@/lib/settings';
 import LivePayrollClient from './LivePayrollClient';
 import PayrollEngineClient from './PayrollEngineClient';
@@ -29,7 +30,12 @@ export default async function PayrollPage(props: { searchParams: Promise<{ tab?:
     const uniTitle = uni?.title && uni.title !== '—'
       ? uni.title
       : (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
-    return <PayrollEngineClient universityTitle={uniTitle} />;
+    // عنوان ترمِ انتخابی از سوییچر سربرگ (کوکی afagh_term) — همان الگوی کارتابل مالی
+    const termScope = await getTermScope(uni?.id ?? null).catch(() => null);
+    const scopeTermTitle = termScope?.selectedId
+      ? (termScope.terms.find((t) => t.id === termScope.selectedId)?.title ?? null)
+      : null;
+    return <PayrollEngineClient universityTitle={uniTitle} termTitle={scopeTermTitle} />;
   }
 
   const term = await currentTerm();

@@ -37,7 +37,7 @@ import BankDisketteTab from './components/BankDisketteTab';
 import CoefficientsRulesTab from './components/CoefficientsRulesTab';
 import { notify } from '@/lib/ui-feedback';
 
-export default function PayrollEngineClient({ universityTitle }: { universityTitle?: string | null } = {}) {
+export default function PayrollEngineClient({ universityTitle, termTitle }: { universityTitle?: string | null; termTitle?: string | null } = {}) {
   const [state, dispatch] = useReducer(
     payrollReducer,
     null,
@@ -162,7 +162,7 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
                   سامانه جامع محاسبه حق‌التدریس، حضور بیومتریک و ابلاغیه‌های اساتید
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/90 text-white shadow-xs">
-                  نیمسال اول ۱۴۰۵-۱۴۰۴
+                  {termTitle || 'نیمسال جاری'}
                 </span>
               </div>
               <p className="text-xs text-indigo-200 mt-1">
@@ -492,7 +492,7 @@ export default function PayrollEngineClient({ universityTitle }: { universityTit
                     فیش رسمی حق‌التدریس و کارکرد آموزشی اساتید — دانشگاه آفاق
                   </h3>
                   <p className="text-2xs text-indigo-300">
-                    نیمسال اول ۱۴۰۵-۱۴۰۴ · شماره سند: AFAGH-PAY-1405-{detailedPayslipRecord.id}
+                    {termTitle || 'نیمسال جاری'} · شماره سند: AFAGH-PAY-1405-{detailedPayslipRecord.id}
                   </p>
                 </div>
               </div>
