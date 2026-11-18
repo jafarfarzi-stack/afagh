@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { getLockState } from '@/lib/finance-time-control';
 import TimeControlClient from './TimeControlClient';
@@ -27,12 +26,6 @@ export default async function FinanceTimeControlPage() {
               ثبت مالی فقط داخل پنجرهٔ دورهٔ مالی باز و بدون قفل مجاز است؛ خارج از آن، همهٔ اکشن‌های مالی با پیام فارسی رد می‌شوند.
             </p>
           </div>
-          <Link prefetch={false}
-            href="/admin/finance"
-            className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
-          >
-            ↩️ بازگشت به کارتابل
-          </Link>
         </div>
       </div>
 

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireRole } from '@/lib/auth';
 import { db } from '@/db';
 import { asc, eq, isNull, or } from 'drizzle-orm';
@@ -73,12 +72,6 @@ export default async function FinanceRulesPage() {
               انواع تخفیف شهریه، بنیادهای حامی، فرمول‌ها، ضریب افزایشی نیمسال و مبالغ موضوعی
             </p>
           </div>
-          <Link prefetch={false}
-            href="/admin/finance"
-            className="rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur transition hover:bg-white/20"
-          >
-            ↩️ بازگشت به کارتابل
-          </Link>
         </div>
       </div>
 
