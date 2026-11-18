@@ -463,7 +463,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
    * جست‌وجو را تنظیم کند. نسخهٔ قبل با `void run(1, k)` بلافاصله شروع به
    * لود می‌کرد (و هنگام ورود با `?kind=...` یک `useEffect` هم اجرای خودکار
    * داشت)، یعنی فیلترها عملاً بعد از اجرا تعریف می‌شدند و نتیجهٔ اول بیهوده
-   * بود. اجرا فقط با دکمهٔ صریح «▶ اجرای گزارش» (یا Enter در جست‌وجو)
+   * بود. اجرا فقط با دکمهٔ صریح «اجرای گزارش ◀» (یا Enter در جست‌وجو)
    * انجام می‌شود.
    */
   const pick = (k: string) => {
@@ -522,7 +522,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     // 🔒 خروجی باید همان چیزی باشد که روی صفحه است؛ با فیلترِ تغییریافته و
     //    بدون اجرا، فایل با جدول ناهمخوان می‌شد.
     if (staleResult) {
-      setErr('نتیجهٔ نمایش‌داده‌شده با فیلترهای فعلی هم‌خوان نیست؛ ابتدا «▶ اجرای گزارش» را بزنید.');
+      setErr('نتیجهٔ نمایش‌داده‌شده با فیلترهای فعلی هم‌خوان نیست؛ ابتدا «اجرای گزارش ◀» را بزنید.');
       return;
     }
     setExporting(true);
@@ -623,13 +623,13 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* نوار عملیات چسبان: اجرا / Excel / چاپ — درست بعد از تبها و جستوجو و قبل از فیلترها */}
-      {!card?.soon && (
+      {singleReport && !card?.soon && (
         <div className="sticky top-[6.5rem] z-20 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-white/95 px-3 py-2 shadow-md backdrop-blur print:hidden">
           <span className="ml-1 hidden max-w-56 truncate text-2xs font-extrabold text-slate-600 sm:inline">
             {card?.title ?? 'گزارش'}
           </span>
           <button onClick={() => run(1)} disabled={loading || !card} title={!card ? 'ابتدا یک گزارش را انتخاب کنید' : undefined} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded disabled:opacity-50">
-            {loading ? '⏳ در حال اجرا...' : '▶ اجرای گزارش'}
+            {loading ? '⏳ در حال اجرا...' : 'اجرای گزارش ◀'}
           </button>
           {res && res.rows.length > 0 && (
             <>
@@ -702,7 +702,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       ))}
 
       {/* نوار فیلتر */}
-      {!card?.soon && (
+      {singleReport && !card?.soon && (
         <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {opts.universities.length > 1 && (
@@ -1114,7 +1114,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       {/* هشدار «نتیجهٔ کهنه»: فیلترها بعد از اجرا عوض شده‌اند */}
       {staleResult && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 print:hidden">
-          نتیجهٔ نمایش‌داده‌شده مربوط به فیلترهای قبلی است. برای اعمال فیلترهای جدید، «▶ اجرای گزارش» را بزنید.
+          نتیجهٔ نمایش‌داده‌شده مربوط به فیلترهای قبلی است. برای اعمال فیلترهای جدید، «اجرای گزارش ◀» را بزنید.
         </p>
       )}
 
@@ -1126,7 +1126,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}
-      {/* نتیجه */}
+      {/* نتیجه — فقط در صفحهٔ اختصاصی هر گزارش (فهرست کارت‌ها نتیجه ندارد) */}
+      {singleReport && (
       <div id="report-result" tabIndex={-1} className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-[10rem] print:hidden focus:outline-none">
         {err ? (
           <p role="alert" className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
@@ -1137,7 +1138,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         ) : !res ? (
           <p className="p-8 text-center text-slate-500 text-sm">
             {card
-              ? `گزارش «${card.title}» انتخاب شد. ابتدا فیلترهای بالا را تنظیم کنید، سپس «▶ اجرای گزارش» را بزنید.`
+              ? `گزارش «${card.title}» انتخاب شد. ابتدا فیلترهای بالا را تنظیم کنید، سپس «اجرای گزارش ◀» را بزنید.`
               : 'یک گزارش را از فهرست بالا انتخاب کنید.'}
           </p>
         ) : res.rows.length === 0 ? (
@@ -1194,6 +1195,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
           </>
         )}
       </div>
+      )}
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتهای صفحه */}
       <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden print:hidden">
         <button
