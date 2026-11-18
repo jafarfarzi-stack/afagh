@@ -200,10 +200,14 @@ try {
   try { await admin.query(`DROP DATABASE IF EXISTS ${scratch}`); }
   catch { console.warn('⚠ دیتابیس موقت پیشین حذف نشد (اتصال باز مانده؟) — همان دوباره پر می‌شود.'); }
   try { await admin.query(`CREATE DATABASE ${scratch}`); } catch {}
-  const target = new pg.Client({ connectionString: restoreUrl.replace(/\/[^/?]+(\?.*)?$/, `/${scratch}$1`) });
+  // ⚠ رشتهٔ اتصال را از client internals نمیخوانیم — در نسخه‌های جدید pg
+  // `connectionParameters.connectionString` undefined است و pg_restore با
+  // `-d` خالی به سوکتِ لوکال میرود (باگِ drill واقعیِ ۱۴۰۵/۰۸/۲۸).
+  const targetUrl = restoreUrl.replace(/\/[^/?]+(\?.*)?$/, `/${scratch}$1`);
+  const target = new pg.Client({ connectionString: targetUrl });
   await target.connect();
   console.log(`… بازگردانی در ${scratch}`);
-  execFileSync('pg_restore', ['--no-owner', '--no-privileges', '-d', target.connectionParameters.connectionString, file],
+  execFileSync('pg_restore', ['--no-owner', '--no-privileges', '-d', targetUrl, file],
     { stdio: 'inherit' });
 
   const src = new pg.Client({ connectionString: SRC_URL });
