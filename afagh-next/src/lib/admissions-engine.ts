@@ -12,6 +12,7 @@ import {
   degreeCodeFor,
 } from '@/lib/student-id-formula';
 import { pickExistingProfile } from '@/lib/admissions-dedupe';
+import { toGregorian } from '@/lib/calendar';
 import { resolveRegulationIdForAdmission } from '@/lib/compliance-policy-server';
 import { globalCompliance } from '@/lib/compliance-integrations';
 import {
@@ -30,6 +31,36 @@ import {
 // خطاهای خام Postgres می‌توانند مقدار نقض‌شده (کد ملی) را در پیام داشته باشند؛
 // پس همهٔ خطاها از لاگر ماسک‌دار عبور می‌کنند.
 const log = createLogger({ mod: 'admissions' });
+
+/** جنسیت سنجش: هم کد (۱=زن، ۲=مرد طبق قالب‌های رسمی) و هم متن. */
+function mapGender(raw?: string | null): string | null {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (!v) return null;
+  if (v === '1' || v === 'female' || v === 'f' || v.includes('زن')) return 'FEMALE';
+  if (v === '2' || v === 'male' || v === 'm' || v.includes('مرد')) return 'MALE';
+  return null;
+}
+
+/** سهمیهٔ سنجش (عنوان یا کد) → کد داخلی students.quotaType. */
+function mapQuota(raw?: string | null): string {
+  const v = String(raw ?? '');
+  if (/شاهد|شهید|ایثار/.test(v)) return 'SHAHED';
+  if (/کارمند|هیئت علمی|هیأت علمی/.test(v)) return 'STAFF';
+  if (/استعداد/.test(v)) return 'TOP_TALENT';
+  return 'NORMAL';
+}
+
+/** تاریخ شمسی `YYYY-MM-DD`/`YYYY/MM/DD` → ISO میلادی برای کاربر. */
+function jalaliToIso(raw?: string | null): string | null {
+  const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/.exec(String(raw ?? '').trim());
+  if (!m) return null;
+  const jy = Number(m[1]);
+  const jm = Number(m[2]);
+  const jd = Number(m[3]);
+  if (jy < 1300 || jy > 1500 || jm < 1 || jm > 12 || jd < 1 || jd > 31) return null;
+  const { gy, gm, gd } = toGregorian(jy, jm, jd);
+  return `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}`;
+}
 
 // ============================================================================
 // نمونه داده‌های نگاشت اولیه سازمان سنجش (Default Sanjesh Mappings)
@@ -730,6 +761,14 @@ export async function assignStudentNumbers(
               firstName: parsed.firstName || row.fullName?.split(' ')[0] || 'دانشجو',
               lastName: parsed.lastName || row.fullName?.split(' ').slice(1).join(' ') || 'پذیرفته‌شده',
               mobile: row.mobile || parsed.mobile || null,
+              fatherName: pf.fatherName || null,
+              birthCertNo: pf.idNumber || null,
+              birthDate: jalaliToIso(pf.birthDate) ? new Date(jalaliToIso(pf.birthDate) as string) : undefined,
+              gender: mapGender(pf.gender) ?? undefined,
+              placeOfBirth: pf.cityBirthTitle || undefined,
+              email: pf.email || null,
+              address: pf.address || null,
+              postalCode: pf.postalCode || null,
               passwordHash,
               isActive: 1,
               mustChangePassword: 1,
@@ -909,7 +948,27 @@ export async function assignStudentNumbers(
             entryYear,
             entryTerm: 1,
             status: 'ACTIVE',
-            quotaType,
+            quotaType: mapQuota(pf.quotaAdmitTitle || pf.quotaFinalTitle || pf.quotaRegTitle || quotaType),
+            // انتقال کامل فیلدهای سنجش به پرونده (هیچ فیلد موجودی دور ریخته نمی‌شود)
+            diplomaType: pf.diplomaTypeCode || null,
+            diplomaPlace: pf.provinceDiplomaTitle || null,
+            diplomaYear: pf.diplomaYear || null,
+            diplomaGrade: pf.diplomaGpa || null,
+            pishdYear: pf.preUniversityYear || null,
+            residenceProvince: pf.provinceResidenceTitle || null,
+            residenceCity: pf.cityResidenceTitle || null,
+            birthProvince: pf.provinceBirthTitle || null,
+            birthCity: pf.cityBirthTitle || null,
+            nativeType: pf.nativeFlag || null,
+            militaryStatus: pf.militaryStatusCode || null,
+            isaarCode: pf.veteranTypeCode || null,
+            admissionMethod: pf.admitStatus || null,
+            entranceExamRank: pf.totalRank ? String(pf.totalRank) : null,
+            foreignStudentId: pf.foreignerCode || null,
+            previousMajorCode: pf.graduatedMajorCode || null,
+            previousMajorTitle: pf.graduatedMajorTitle || null,
+            teachingMode: pf.courseCode || null,
+            studyType: pf.courseTitle || null,
             currentTermNo: 1,
             acceptanceType: opts.entryMethod,
             admissionSource: fromSanjesh ? 'SANJESH' : 'MANUAL',
