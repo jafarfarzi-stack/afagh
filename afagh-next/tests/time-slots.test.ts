@@ -76,5 +76,41 @@ eq('طول زنگ از تنظیمات', cfg.slotMinutes, 90);
 eq('استراحت خالی → null', cfg.breakStart, null);
 eq('کلید غایب → پیش‌فرض', slotConfigFromSettings({}).dayEnd, DEFAULT_SLOT_CONFIG.dayEnd);
 
+
+console.log('\n── استراحت بین دو زنگ (SCHEDULE_GAP_MINUTES — درخواست ۱۴۰۵/۰۸/۲۸) ──');
+{
+  // دو زنگ ۹۰ دقیقه با ۱۵ دقیقه فاصله — زنگ دوم از ۰۹:۴۵ شروع میشود نه ۰۹:۳۰
+  const slots = buildTimeSlots({ dayStart: '08:00', dayEnd: '12:00', slotMinutes: 90, gapMinutes: 15, breakStart: null, breakEnd: null });
+  eq('تعداد زنگها: ۳ (سومی کوتاهِ ۳۰ دقیقهای)', slots.length, 3);
+  eq('زنگ اول از ۰۸:۰۰', slots[0].startTime, '08:00');
+  eq('زنگ اول تا ۰۹:۳۰', slots[0].endTime, '09:30');
+  eq('فاصله رعایت شد: زنگ دوم از ۰۹:۴۵', slots[1].startTime, '09:45');
+  eq('زنگ دوم تا ۱۱:۱۵', slots[1].endTime, '11:15');
+  eq('زنگ سوم از ۱۱:۳۰', slots[2].startTime, '11:30');
+  // با فاصلهٔ صفر رفتار قدیمی: پشت‌سرهم
+  const contiguous = buildTimeSlots({ dayStart: '08:00', dayEnd: '12:00', slotMinutes: 90, gapMinutes: 0, breakStart: null, breakEnd: null });
+  eq('gap=۰ → پشت‌سرهم (رفتار قدیمی)', contiguous[1].startTime, '09:30');
+}
+{
+  // فاصله + استراحت ناهار: بعد از ناهار فاصلهٔ اضافه گذاشته نمیشود
+  const slots = buildTimeSlots({ dayStart: '08:00', dayEnd: '15:00', slotMinutes: 120, gapMinutes: 10, breakStart: '12:00', breakEnd: '12:30', breakLabel: 'نماز و ناهار' });
+  const teach = slots.filter(s => !s.isBreak);
+  eq('سه زنگ آموزشی', teach.length, 3);
+  eq('زنگ دوم (کوتاه‌شده تا شروع ناهار) تا ۱۲:۰۰', teach[1].endTime, '12:00');
+  eq('بعد از ناهار بدون فاصلهٔ اضافه از ۱۲:۳۰', teach[2].startTime, '12:30');
+  eq('یک ردیف استراحت', slots.filter(s => s.isBreak).length, 1);
+}
+{
+  // پیشفرض: بدون کلید هم صفر است — صفحات موجود تغییری نمیکنند
+  const cfg = slotConfigFromSettings({});
+  eq('پیشفرضِ gap صفر', cfg.gapMinutes, 0);
+  const cfg2 = slotConfigFromSettings({ SCHEDULE_GAP_MINUTES: '15' });
+  eq('خواندن از تنظیمات', cfg2.gapMinutes, 15);
+  const cfg3 = slotConfigFromSettings({ SCHEDULE_GAP_MINUTES: '999' });
+  eq('مقدار خارج از بازه → پیشفرض', cfg3.gapMinutes, 0);
+  eq('اعتبارسنجی: ۶۱ دقیقه نامعتبر', validateSlotConfig({ gapMinutes: 61 }).length > 0, true);
+  eq('اعتبارسنجی: ۱۵ دقیقه معتبر', validateSlotConfig({ gapMinutes: 15 }).length, 0);
+}
+
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

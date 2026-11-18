@@ -27,6 +27,8 @@ export interface SlotConfig {
   dayEnd: string;
   /** طول هر زنگ به دقیقه */
   slotMinutes: number;
+  /** استراحت بین دو زنگِ پشت‌سرهم به دقیقه (۰ = بدون فاصله) — درخواست ۱۴۰۵/۰۸/۲۸ */
+  gapMinutes: number;
   /** شروع بازهٔ ناهار/نماز — null یا خالی یعنی بدون استراحت */
   breakStart: string | null;
   /** پایان بازهٔ ناهار/نماز */
@@ -40,6 +42,7 @@ export const DEFAULT_SLOT_CONFIG: SlotConfig = {
   dayStart: '08:00',
   dayEnd: '19:30',
   slotMinutes: 120,
+  gapMinutes: 0,
   breakStart: '12:00',
   breakEnd: '13:30',
   breakLabel: 'نماز و ناهار',
@@ -75,6 +78,10 @@ export function slotLabel(startTime: string, endTime: string): string {
  * ساخت زنگ‌ها از پیکربندی.
  * قواعد:
  *  • زنگ‌ها از dayStart پشت‌سرهم تا dayEnd ساخته می‌شوند.
+ *  • اگر gapMinutes > 0 باشد، بین دو زنگِ پشت‌سرهم همان‌قدر استراحت گذاشته
+ *    می‌شود (مثل ۱۰–۱۵ دقیقه بین دو کلاس) — یعنی زنگِ بعدی از «پایانِ قبلی +
+ *    فاصله» شروع میشود، نه از همان لحظهٔ پایان. بعد از استراحتِ ناهار فاصلهٔ
+ *    اضافه گذاشته نمیشود (خودِ ناهار استراحت است).
  *  • اگر بازهٔ استراحت داخل روز بیفتد، یک ردیف isBreak هم اضافه می‌شود و
  *    ساعت‌ها بعد از استراحت ادامه پیدا می‌کنند (نه اینکه روی آن بیفتند).
  *  • زنگی که به استراحت می‌خورد، کوتاه می‌شود تا دقیقاً به شروع استراحت برسد.
@@ -87,6 +94,7 @@ export function buildTimeSlots(cfg: Partial<SlotConfig> | null | undefined): Tim
   const end = parseTimeToMinutes(c.dayEnd);
   let dur = Math.round(Number(c.slotMinutes));
   if (!Number.isFinite(dur) || dur < 30 || dur > 300) dur = DEFAULT_SLOT_CONFIG.slotMinutes;
+  const gap = Number.isFinite(Number(c.gapMinutes)) ? Math.max(0, Math.round(Number(c.gapMinutes))) : 0;
   if (start == null || end == null || end - start < 30) return buildTimeSlots(DEFAULT_SLOT_CONFIG);
 
   let bStart = parseTimeToMinutes(c.breakStart);
@@ -129,7 +137,8 @@ export function buildTimeSlots(cfg: Partial<SlotConfig> | null | undefined): Tim
       endTime: minutesToTime(slotEnd),
       isBreak: false,
     });
-    cursor = slotEnd;
+    // فاصلهٔ استراحت بین دو زنگ — فقط تا وقتی زنگِ بعدی داخل روز جا میشود
+    cursor = slotEnd + (slotEnd + gap < end ? gap : 0);
 
     if (bStart != null && bEnd != null && !breakEmitted && cursor >= bStart) {
       slots.push({
@@ -163,6 +172,8 @@ export function validateSlotConfig(cfg: Partial<SlotConfig> | null | undefined):
   if (start != null && end != null && end - start < 30) errors.push('پایان روز آموزشی باید دست‌کم ۳۰ دقیقه بعد از شروع آن باشد.');
   const dur = Math.round(Number(c.slotMinutes));
   if (!Number.isFinite(dur) || dur < 30 || dur > 300) errors.push('طول هر زنگ باید بین ۳۰ تا ۳۰۰ دقیقه باشد.');
+  const gap = Math.round(Number(c.gapMinutes));
+  if (!Number.isFinite(gap) || gap < 0 || gap > 60) errors.push('استراحت بین دو زنگ باید بین ۰ تا ۶۰ دقیقه باشد.');
 
   const hasAnyBreak = Boolean((c.breakStart ?? '').trim() || (c.breakEnd ?? '').trim());
   if (hasAnyBreak) {
@@ -182,10 +193,12 @@ export function validateSlotConfig(cfg: Partial<SlotConfig> | null | undefined):
 export function slotConfigFromSettings(s: Record<string, string | undefined> | null | undefined): SlotConfig {
   const pick = (k: string, fallback: string) => (s?.[k] ?? '').trim() || fallback;
   const n = Number((s?.SCHEDULE_SLOT_MINUTES ?? '').trim());
+  const g = Number((s?.SCHEDULE_GAP_MINUTES ?? '').trim());
   return {
     dayStart: pick('SCHEDULE_DAY_START', DEFAULT_SLOT_CONFIG.dayStart),
     dayEnd: pick('SCHEDULE_DAY_END', DEFAULT_SLOT_CONFIG.dayEnd),
     slotMinutes: Number.isFinite(n) && n >= 30 && n <= 300 ? n : DEFAULT_SLOT_CONFIG.slotMinutes,
+    gapMinutes: Number.isFinite(g) && g >= 0 && g <= 60 ? g : DEFAULT_SLOT_CONFIG.gapMinutes,
     breakStart: (s?.SCHEDULE_BREAK_START ?? '').trim() || null,
     breakEnd: (s?.SCHEDULE_BREAK_END ?? '').trim() || null,
     breakLabel: (s?.SCHEDULE_BREAK_LABEL ?? '').trim() || DEFAULT_SLOT_CONFIG.breakLabel,
