@@ -749,11 +749,13 @@ export async function assignStudentNumbers(
           .where(and(eq(users.nationalCode, nationalCode), eq(users.universityId, universityId)))
           .limit(1);
 
+        let generatedPassword: string | null = null;
         if (!user) {
           // رمز پیش‌فرض با همان موتور امنیتی سراسری (scrypt + salt تصادفی) —
           // نه sha256 خام؛ و فلگ «تغییر اجباری رمز» برای اولین ورود ست می‌شود.
           const tempPassword = crypto.randomBytes(9).toString('base64url').slice(0, 12);
             const passwordHash = await hashPassword(tempPassword);
+          generatedPassword = tempPassword;
           [user] = await tx
             .insert(users)
             .values({
@@ -991,7 +993,7 @@ export async function assignStudentNumbers(
           })
           .where(eq(admissions_staging.id, row.id));
 
-        return { studentCode, userId: user.id, firstName: user.firstName, lastName: user.lastName, linked: false, linkReason: null };
+        return { studentCode, userId: user.id, firstName: user.firstName, lastName: user.lastName, linked: false, linkReason: null, tempPassword: generatedPassword };
       });
 
       importedResults.push({
@@ -1001,6 +1003,7 @@ export async function assignStudentNumbers(
         nationalCode: row.nationalCode,
         linked: result.linked === true,
         linkReason: result.linkReason ?? null,
+        tempPassword: result.tempPassword ?? null,
       });
     } catch (err: any) {
       // رکورد ناموفق به‌طور کامل rollback شد — بقیهٔ دسته ادامه می‌یابد.

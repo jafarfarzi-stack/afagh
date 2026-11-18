@@ -11,7 +11,7 @@
  * از همان ستون‌های ذخیره‌شده بازسازی می‌شوند.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -132,6 +132,19 @@ export async function ingestSanjeshFile(input: IngestInput): Promise<IngestResul
   const rows = input.limit && input.limit > 0 ? parsed.rows.slice(0, input.limit) : parsed.rows;
   const fileHash = await sha256Hex(input.buffer);
   const templateId = template ? await templateIdOf(template.key) : null;
+
+  // تشخیص بارگذاری تکراری همان فایل (قبل از هر نوشتن)
+  const uniCond = input.universityId == null
+    ? isNull(sanjesh_files.universityId)
+    : eq(sanjesh_files.universityId, input.universityId);
+  const [dup] = await db
+    .select({ id: sanjesh_files.id })
+    .from(sanjesh_files)
+    .where(and(eq(sanjesh_files.fileHash, fileHash), uniCond))
+    .limit(1);
+  if (dup) {
+    throw new Error(`این فایل قبلاً بارگذاری شده است (شناسهٔ ${dup.id}). برای بارگذاری مجدد، ابتدا همان فایل را حذف یا فایل جدید بسازید.`);
+  }
 
   // ── ۳. ثبت در دیتابیس ──
   return db.transaction(async (tx) => {
@@ -429,7 +442,7 @@ export async function stageMatchedRows(fileId: number): Promise<{ staged: number
   // قاعدهٔ نگاشت اصلاح شود، یک بار دیگر زدن دکمه همان ردیف‌ها را تازه می‌کند
   // و ردیف تکراری نمی‌سازد. ردیف‌های «ثبت قطعی شده» دست نمی‌خورند.
   const existing = await db
-    .select({ id: admissions_staging.id, rowNo: admissions_staging.rowNo, status: admissions_staging.status })
+    .select({ id: admissions_staging.id, rowNo: admissions_staging.rowNo, status: admissions_staging.status, studentId: admissions_staging.studentId })
     .from(admissions_staging)
     .where(eq(admissions_staging.fileId, fileId));
   const stagedByRowNo = new Map(existing.map((e) => [e.rowNo ?? -1, e]));
@@ -438,7 +451,7 @@ export async function stageMatchedRows(fileId: number): Promise<{ staged: number
   let updated = 0;
   for (const r of rows) {
     const prev = stagedByRowNo.get(r.rowNo);
-    if (prev?.status === 'IMPORTED') continue;
+    if (prev && ['IMPORTED', 'NUMBER_ASSIGNED', 'REJECTED'].includes(String(prev.status ?? ''))) continue;
     const data = r.dataJson as { fields?: Record<string, string> } | null;
     const f = data?.fields ?? {};
     // کد «رشته محل قبولی» معتبرترین کلید است؛ در کاردانی ستون «کد رشتهٔ
@@ -470,7 +483,7 @@ export async function stageMatchedRows(fileId: number): Promise<{ staged: number
       profileJson: JSON.stringify({ fields: f, columns: (r.dataJson as { columns?: unknown })?.columns ?? {} }),
       fullName: r.fullName,
       mobile: f.mobile ?? null,
-      studentId: r.studentId,
+      studentId: prev?.studentId ?? r.studentId,
       mappedMajorId,
       // سال ورود/مقطع از خود فایل می‌آید، نه پیش‌فرض ۱۴۰۵ در موتور پذیرش
       entryYear: file.examYear ?? null,

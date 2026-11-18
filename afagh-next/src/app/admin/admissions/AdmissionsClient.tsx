@@ -182,7 +182,7 @@ export default function AdmissionsClient({
     {
       key: 'gender',
       label: 'جنسیت',
-      get: s => (s.profile?.gender === '1' ? 'مرد' : s.profile?.gender === '2' ? 'زن' : '—'),
+      get: s => (s.profile?.gender === '1' ? 'زن' : s.profile?.gender === '2' ? 'مرد' : '—'),
     },
     { key: 'degree', label: 'مقطع', get: s => degreeTitleOf(s) || s.profile?.degreeLevelTitle || '' },
     {
@@ -521,10 +521,16 @@ export default function AdmissionsClient({
       const parts: string[] = [];
       if (created > 0) parts.push(`${created} شمارهٔ دانشجویی جدید صادر شد`);
       if (linked > 0) parts.push(`${linked} ردیف به پروندهٔ از قبل موجود وصل شد`);
+      const pwItems = (res.items ?? []).filter((i: any) => i.tempPassword);
+      if (pwItems.length) {
+        const list = pwItems.slice(0, 8).map((i: any) => `${i.studentCode}/${i.tempPassword}`).join('، ');
+        parts.push(`رمزهای موقت (فقط یک‌بار نمایش): ${list}${pwItems.length > 8 ? ' …' : ''}`);
+      }
       const head = parts.length > 0 ? parts.join(' و ') : 'موردی برای پردازش نبود';
       const failNote = res.failures?.length ? ` — ${res.failures.length} رکورد ناموفق بود.` : '';
       setFeedback({ text: `${head}.${failNote}`, type: res.failures?.length ? 'warning' : 'success' });
-      setTimeout(() => setFeedback(null), 5000);
+      // اگر رمز موقت صادر شده، پیام باید بماند تا کارشناس آن را ثبت کند.
+      setTimeout(() => setFeedback(null), pwItems.length ? 60000 : 5000);
       // ردیف‌ها از «آماده» خارج شدند؛ شناسه‌های تأییدشده هم پاک شوند تا
       // شمارندهٔ «تأیید شده» برای دستهٔ بعدی گمراه‌کننده نباشد.
       setReviewed(new Set());
@@ -1385,7 +1391,7 @@ export default function AdmissionsClient({
             const issuedCount = stagingList.filter(
               s => s.status === 'NUMBER_ASSIGNED' || s.status === 'IMPORTED',
             ).length;
-            const genderFa = (g?: string) => (g === '1' ? 'مرد' : g === '2' ? 'زن' : '—');
+            const genderFa = (g?: string) => (g === '1' ? 'زن' : g === '2' ? 'مرد' : '—');
             return (
               <div className="card p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">

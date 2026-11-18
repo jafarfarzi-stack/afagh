@@ -37,7 +37,7 @@ export const FORMULA_TOKENS: FormulaTokenDef[] = [
   { key: 'Seq', label: 'شماره سریال', desc: 'شمارندهٔ اتمیک پذیرش (از چپ با صفر پر می‌شود)', sample: (w) => String(15).padStart(w || 3, '0') },
   { key: 'QuotaCode', label: 'کد سهمیه', desc: 'کد سهمیه/منطقه (۱=عادی، ۲=منطقه۲، …)', sample: (w) => String(1).padStart(w || 1, '0') },
   { key: 'UniversityCode', label: 'کد دانشگاه', desc: 'کد شعبه/دانشگاه (در صورت چند واحدی بودن)', sample: (w) => String(1).padStart(w || 2, '0') },
-  { key: 'Gender', label: 'جنسیت', desc: '۱=مرد، ۲=زن (از فایل سنجش)', sample: () => '1' },
+  { key: 'Gender', label: 'جنسیت', desc: '۱=زن، ۲=مرد (از فایل سنجش)', sample: () => '2' },
   { key: 'Province', label: 'کد استان', desc: 'کد استان محل سکونت (۲ رقم)', sample: (w) => String(11).padStart(w || 2, '0') },
   { key: 'Settlement', label: 'بومی/غیربومی', desc: '۱=بومی، ۲=غیربومی', sample: () => '1' },
   { key: 'DiplomaCode', label: 'کد دیپلم', desc: 'کد رشتهٔ دیپلم داوطلب', sample: () => '41110' },
