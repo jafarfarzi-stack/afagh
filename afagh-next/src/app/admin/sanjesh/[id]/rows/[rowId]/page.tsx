@@ -66,7 +66,10 @@ export default async function SanjeshRowDetailPage({
       </header>
 
       <div className="mb-3 flex flex-wrap gap-1.5 text-2xs">
-        <span className="badge bg-slate-100 text-slate-600">وضعیت: {row.matchStatus}</span>
+        <span className="badge bg-slate-100 text-slate-600">
+          وضعیت: {({ PENDING: 'در انتظار تطبیق', MATCHED: 'تطبیق‌شده', INVALID: 'نامعتبر', DUPLICATE: 'تکراری/مبهم', IGNORED: 'نادیده', IMPORTED: 'منتقل‌شده' } as Record<string, string>)[String(row.matchStatus)] ?? row.matchStatus}
+        </span>
+        {row.matchNote && <span className="badge bg-amber-100 text-amber-900">دلیل: {row.matchNote}</span>}
         {row.studentId && <span className="badge bg-emerald-100 text-emerald-800">شناسهٔ دانشجو: {row.studentId}</span>}
         <span className="badge bg-sky-100 text-sky-800">{totalCols} ستون ذخیره‌شده</span>
         <Link prefetch={false} href={`/admin/sanjesh/${fileId}/rows`} className="badge bg-white text-teal-700 hover:underline">

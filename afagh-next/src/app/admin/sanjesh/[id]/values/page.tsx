@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
@@ -45,6 +46,12 @@ export default async function SanjeshValuesPage({
   return (
     <div className="mx-auto max-w-5xl p-4">
       <SanjeshSteps fileId={fileId} active="values" />
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-2xs">
+          <span>این مرحله اختیاری است (کد→عنوان). اگر برای فایل شما لازم نیست، مستقیم به لیست سنجش بروید.</span>
+          <Link prefetch={false} href={`/admin/sanjesh/${fileId}/rows`} className="font-bold text-indigo-700 underline">
+            بعدی: لیست سنجش ←
+          </Link>
+        </div>
       <header className="mb-3">
         <h1 className="text-base font-bold text-slate-800">جدول براورد — {file.title}</h1>
         <p className="text-2xs text-slate-500">
