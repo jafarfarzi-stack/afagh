@@ -23,14 +23,16 @@ import {
 import { requireRole, getStaffByUser } from '@/lib/auth';
 import { headedDepartments } from '@/lib/group-manager';
 import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
-import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, releaseRoomShift, borrowReleasedShift, getSmartSuggestions } from '@/lib/scheduling-engine';
+import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, releaseRoomShift, borrowReleasedShift, getSmartSuggestions, previewScheduleModels, computeScheduleModelAssignments } from '@/lib/scheduling-engine';
+import type { ScheduleModelDemand, ScheduleModelPreview } from '@/lib/scheduling-engine';
+export type { ScheduleModelPreview } from '@/lib/scheduling-engine';
 import { runSchedulingHealthCheck, type HealthReport } from '@/lib/scheduling-health';
 import { generateClassSessionsForTerm, getTermSessionsSummary, inspectSchedulingHardConflicts } from '@/lib/class-session-generator';
 import { detectScheduleConflicts, jalaliDateOf, type RoomCapacityInfo, type ScheduleConflictInput } from '@/lib/scheduling-core';
 // ستون‌های تاریخِ جلالی هرگز نباید با `new Date` پارس شوند — از این helper بخوانید.
 import { normalizeExamDate } from '@/lib/shamsi';
 // دامنهٔ مدیرگروه — توابعِ خالص و Unit-Test‌شده (tests/scheduling-dept-scope.test.ts)
-import { scopeDemandsToDepts, scopeClassroomsToDepts } from './planning-core';
+import { scopeDemandsToDepts, scopeClassroomsToDepts, AUTO_SCHEDULE_MODELS, canUseCompactModel, type AutoModelId } from './planning-core';
 
 const EDITORS = ['ADMIN', 'EDU_EXPERT'];
 const MANAGERS = EDITORS;
@@ -748,6 +750,8 @@ export type SchedulingWorkspaceResult =
       ok: true;
       /** true = نسخهٔ سبکِ اسکلتی؛ لیستهای سنگین را کلاینت پس از paint واکشی میکند */
       partial?: boolean;
+      /** نقش‌های نشستِ فعلی — گیتِ مدل «فشرده» در کلاینت */
+      roles?: string[];
       terms: { id: number; code: string; title: string; isCurrent: boolean }[];
       selectedTermId: number | null;
       programs: { id: number; code: string; title: string; facultyName: string; degreeLevel: string; facultyId: number | null }[];
@@ -796,7 +800,7 @@ export type SchedulingWorkspaceResult =
  */
 export async function getSchedulingWorkspaceLightAction(): Promise<SchedulingWorkspaceResult> {
   try {
-    await requireRole([...EDITORS, 'DEP_HEAD']);
+    const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
     const uid = await serverUniId();
     const [terms, programs, deptRows, phases] = await Promise.all([
       listRealTerms(uid),
@@ -825,6 +829,7 @@ export async function getSchedulingWorkspaceLightAction(): Promise<SchedulingWor
     return {
       ok: true,
       partial: true,
+      roles: actor.roles,
       terms: terms.map(t => ({ id: t.id, code: t.code, title: t.title, isCurrent: t.isCurrent === 1 })),
       selectedTermId: resolvedTermId,
       programs: programs.map(p => ({
@@ -995,6 +1000,7 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
 
     return {
       ok: true,
+      roles: actor.roles,
       terms: terms.map(t => ({ id: t.id, code: t.code, title: t.title, isCurrent: t.isCurrent === 1 })),
       selectedTermId: resolvedTermId,
       programs: programs.map(p => ({
@@ -1570,6 +1576,195 @@ export async function getSmartSuggestionsAction(px: {
     return { ok: true, suggestions: rows };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'خطا در محاسبهٔ پیشنهادها.' };
+  }
+}
+
+// ─────────────────────────── گام ۴: ۴ مدل چیدمان ───────────────────────────
+
+/**
+ * ساخت فهرست تقاضاهای واقعی برای پیش‌نمایش/اعمال مدل‌های چیدمان.
+ * همان منبعِ گام ۱ (`listRealDemands`) + همان دامنهٔ مدیرگروه. هیچ داده‌ای
+ * ساخته یا تخمین زده نمی‌شود.
+ */
+async function loadScheduleModelDemands(opts: {
+  termId: number;
+  programId?: number | null;
+  actor: { id: number; roles: string[] };
+  uid?: number;
+}): Promise<ScheduleModelDemand[]> {
+  const uid = opts.uid ?? await serverUniId();
+  const { isDeptHead, deptIds } = await deptHeadScope(opts.actor);
+  const [demandRows, profRows, programRows] = await Promise.all([
+    listRealDemands(opts.termId, uid),
+    listRealProfessors(uid),
+    db.select({ id: majors.id, facultyId: majors.facultyId }).from(majors)
+      .where(universityEq(majors.universityId, uid)),
+  ]);
+  let list = demandRows;
+  if (isDeptHead) list = scopeDemandsToDepts(list, deptIds);
+  if (opts.programId && opts.programId > 0) {
+    list = list.filter(d => {
+      const ids = d.programIds ?? [];
+      return ids.length === 0 || ids.includes(opts.programId as number);
+    });
+  }
+  const profName = new Map(profRows.map(p => [p.id, `${p.name} ${p.lastName ?? ''}`.trim()]));
+  const facultyOfProgram = new Map(programRows.map(p => [p.id, p.facultyId != null ? Number(p.facultyId) : null]));
+  return list
+    .filter(d => d.professorId != null && Number(d.professorId) > 0 && Number(d.capacity) > 0)
+    .map(d => ({
+      offeringId: Number(d.offeringId),
+      courseId: Number(d.courseId),
+      groupNumber: Number(d.groupNumber),
+      title: d.title,
+      capacity: Number(d.capacity),
+      enrolledCount: Number(d.enrolledCount ?? 0),
+      professorId: Number(d.professorId),
+      professorName: profName.get(Number(d.professorId)) ?? null,
+      ownerDepartmentId: d.courseDeptId ?? null,
+      programId: Number(d.programId ?? 0),
+      targetFacultyId: facultyOfProgram.get(Number(d.programId ?? 0)) ?? null,
+    }));
+}
+
+export type ScheduleModelPreviewActionResult =
+  | { ok: true; models: ScheduleModelPreview[] }
+  | { ok: false; error: string };
+
+/**
+ * پیش‌نمایش «۴ مدل چیدمان» گام ۴ — فقط‌خواندنی.
+ * موتور برای هر مدل یک‌بار روی ارائه‌های واقعیِ ترم اجرا می‌شود؛ اعداد
+ * (روزهای هفته، جلسات، تداخل سخت، تناسب استاد/سالن) از همان اجرا می‌آیند و
+ * هیچ چیدمانی در مرورگر یا خارج از موتور ساخته نمی‌شود.
+ */
+export async function previewScheduleModelsAction(input: {
+  termId: number;
+  programId?: number | null;
+}): Promise<ScheduleModelPreviewActionResult> {
+  try {
+    const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
+    if (!input || !Number(input.termId)) return { ok: false, error: 'ترم انتخاب نشده است.' };
+    const uid = await serverUniId();
+    const demands = await loadScheduleModelDemands({
+      termId: Number(input.termId), programId: input.programId ?? null, actor, uid,
+    });
+    if (!demands.length) {
+      return {
+        ok: false,
+        error: 'برای این رشته/ترم هیچ ارائهٔ دارای استاد و ظرفیت پیدا نشد؛ پیش‌نمایش مدل‌ها معنایی ندارد.',
+      };
+    }
+    const models = await previewScheduleModels({ termId: Number(input.termId), demands });
+    return { ok: true, models };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'خطا در پیش‌نمایش مدل‌های چیدمان.' };
+  }
+}
+
+export type ApplyScheduleModelResult =
+  | { ok: true; applied: number; skipped: number; errors: string[] }
+  | { ok: false; error: string };
+
+/**
+ * اعمال یک مدل چیدمان — از همان مسیر موجودِ `supplyGroupDrafts` عبور می‌کند
+ * تا گاردهای فاز، قفل توافقی، ظرفیت فیزیکی و گروه تکراری دست‌نخورده بمانند.
+ * هیچ جدول یا ستون جدیدی نوشته نمی‌شود.
+ */
+export async function applyScheduleModelAction(input: {
+  termId: number;
+  programId?: number | null;
+  model: AutoModelId;
+}): Promise<ApplyScheduleModelResult> {
+  try {
+    const actor = await requireRole([...EDITORS, 'DEP_HEAD']);
+    if (!input || !Number(input.termId)) return { ok: false, error: 'ترم انتخاب نشده است.' };
+    if (!AUTO_SCHEDULE_MODELS.some(m => m.id === input.model)) {
+      return { ok: false, error: 'مدل چیدمان انتخاب‌شده معتبر نیست.' };
+    }
+    // مدل «فشرده» ویژهٔ مدیرگروه/مدیر آموزش است (همان گیتِ UI در سرور هم اعمال می‌شود)
+    if (input.model === 'COMPACT' && !canUseCompactModel(actor.roles)) {
+      return { ok: false, error: 'مدل «فشرده ۲–۳ روز» ویژهٔ مدیرگروه یا مدیر آموزش است.' };
+    }
+    const uid = await serverUniId();
+    const demands = await loadScheduleModelDemands({
+      termId: Number(input.termId), programId: input.programId ?? null, actor, uid,
+    });
+    if (!demands.length) return { ok: false, error: 'هیچ ارائهٔ دارای استاد و ظرفیت برای اعمال این مدل پیدا نشد.' };
+
+    const assignments = await computeScheduleModelAssignments({
+      termId: Number(input.termId), model: input.model, demands,
+    });
+    if (!assignments.length) {
+      return {
+        ok: false,
+        error: 'موتور برای این مدل هیچ اسلات معتبری پیدا نکرد (درٔ دسترس بودن استاد یا سالن آزاد کافی نیست).',
+      };
+    }
+
+    const courseIds = Array.from(new Set(assignments.map(a => a.courseId)));
+    const existingGroups = await db
+      .select({ courseId: course_offerings.courseId, groupNumber: course_offerings.groupNumber })
+      .from(course_offerings)
+      .where(and(eq(course_offerings.termId, Number(input.termId)), inArray(course_offerings.courseId, courseIds)));
+    const nextGroupNo = new Map<number, number>();
+    for (const g of existingGroups) {
+      nextGroupNo.set(Number(g.courseId), Math.max(nextGroupNo.get(Number(g.courseId)) ?? 0, Number(g.groupNumber)));
+    }
+
+    const byCourse = new Map<number, typeof assignments>();
+    for (const a of assignments) {
+      const list = byCourse.get(a.courseId) ?? [];
+      list.push(a);
+      byCourse.set(a.courseId, list);
+    }
+
+    let applied = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+    for (const [courseId, list] of byCourse) {
+      const ownerDepartmentId = list[0].ownerDepartmentId;
+      if (!ownerDepartmentId) {
+        skipped += list.length;
+        if (errors.length < 8) errors.push(`درس «${list[0].courseTitle}»: گروه آموزشیِ سازنده مشخص نیست.`);
+        continue;
+      }
+      const drafts = list.map(a => {
+        const groupNumber = (nextGroupNo.get(courseId) ?? 0) + 1;
+        nextGroupNo.set(courseId, groupNumber);
+        return {
+          groupNumber,
+          capacity: a.capacity,
+          gender: 'MIXED' as const,
+          professorId: a.professorId,
+          classroomId: a.classroomId,
+          dayOfWeek: a.dayOfWeek,
+          startTime: a.startTime,
+          endTime: a.endTime,
+        };
+      });
+      try {
+        const res = await supplyGroupDrafts(actor.id, {
+          termId: Number(input.termId),
+          courseId,
+          ownerDepartmentId,
+          isSharedService: false,
+          drafts,
+        });
+        applied += res.created;
+      } catch (e: any) {
+        skipped += drafts.length;
+        if (errors.length < 8) errors.push(`«${list[0].courseTitle}»: ${e?.message ?? 'خطا در تأمین گروه.'}`);
+      }
+    }
+
+    if (applied > 0) {
+      revalidatePath('/admin/scheduling');
+      revalidatePath('/group-manager/offerings');
+      revalidatePath('/student/enroll');
+    }
+    return { ok: true, applied, skipped, errors };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'اعمال مدل چیدمان ناموفق بود.' };
   }
 }
 

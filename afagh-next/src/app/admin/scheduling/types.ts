@@ -200,6 +200,8 @@ export interface SchedulingWorkspace {
   /** true = فقط اسکلتِ سبک (ترم/رشته/فاز/تقویم)؛ لیستهای سنگین را کلاینت
    *  بعد از اولین paint با getSchedulingWorkspaceAction واکشی میکند */
   partial?: boolean;
+  /** نقش‌های نشستِ فعلی — گیتِ مدل «فشرده» (DEP_HEAD/ADMIN) در کلاینت */
+  roles?: string[];
   terms: { id: number; code: string; title: string; isCurrent: boolean }[];
   selectedTermId: number | null;
   programs: { id: number; code: string; title: string; facultyName: string; degreeLevel: string; facultyId: number | null }[];

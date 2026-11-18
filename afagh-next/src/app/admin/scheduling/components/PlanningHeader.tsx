@@ -4,7 +4,7 @@
 import { useMemo } from 'react';
 import { usePlanning } from '../PlanningProvider';
 import Link from 'next/link';
-import { faNum, PHASE_LABELS, SHIFT_MODELS } from '../planning-core';
+import { faNum, PHASE_LABELS, AUTO_SCHEDULE_MODELS } from '../planning-core';
 import type { ProgramShiftType } from '../types';
 
 export default function PlanningHeader() {
@@ -174,9 +174,12 @@ export default function PlanningHeader() {
                 <option value="AFTERNOON_WORKING" className="bg-slate-900 text-white">🌆 شیفت عصر/شب (دانشجویان شاغل)</option>
                 <option value="MORNING" className="bg-slate-900 text-white">☀️ شیفت صبح (دانشجویان تمام‌وقت)</option>
                 <option value="FLEXIBLE" className="bg-slate-900 text-white">⚡ شناور و متوازن</option>
+                <option value="COMPACT" disabled className="bg-slate-900 text-white">
+                  🗜️ فشرده ۲–۳ روز (ویژهٔ مدیرگروه) — از گام ۴
+                </option>
               </select>
               <p className="mt-1 text-3xs font-bold text-amber-200/80">
-                {faNum(SHIFT_MODELS.length)} مدل چیدمان — همین تعداد در گام ۴
+                {faNum(AUTO_SCHEDULE_MODELS.length)} مدل چیدمان — همه در گام ۴
               </p>
             </div>
 

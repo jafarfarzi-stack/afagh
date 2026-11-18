@@ -27,8 +27,14 @@ import {
   allocateQuotaShifts, canAllocateInPhase, canEditInPhase, canTransition,
   calculateSlotScore, countInternalGaps, distributeGroupsByFaculty, overlaps, suggestedGroupCount,
   toMinutes, validateGroupDrafts,
+  assignScheduleModelSlots, calculateModelDayScore,
+  detectScheduleConflicts,
   type GroupDraftInput, type Shift, type RoomGrantInput,
+  type ModelSlotAssignment, type ModelDemandInput, type ModelAvailabilityWindow,
+  type ModelBusyBlock, type ModelOccupiedBlock, type ModelRoomOption,
+  type ScheduleConflictInput, type RoomCapacityInfo,
 } from '@/lib/scheduling-core';
+import { AUTO_SCHEDULE_MODELS, type AutoModelId } from '@/app/admin/scheduling/planning-core';
 
 const hm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '');
 const hhmmss = (t: string) => (t.length === 5 ? `${t}:00` : t);
@@ -532,6 +538,15 @@ export async function forecastCourseDemand(courseId: number, standardCapacity = 
 export async function getSmartSuggestions(px: {
   termId: number; professorId: number; capacity: number;
   targetFacultyId: number | null; durationMinutes?: number;
+  /**
+   * مدل چیدمان گام ۴. اگر داده نشود، رفتار قبلی دقیقاً حفظ می‌شود
+   * (همهٔ فراخوانی‌های موجود بدون تغییر می‌مانند).
+   */
+  model?: AutoModelId;
+  /** روزهای استفاده‌شدهٔ رشته/کوهورت — فقط برای مدل COMPACT */
+  usedDays?: number[];
+  /** سقف روزهای فشرده — پیش‌فرض ۳ */
+  dayCeiling?: number;
 }) {
   const duration = px.durationMinutes ?? WEEKLY_DURATION_MIN;
   const [prof] = await db.select({ id: staff.id }).from(staff).where(eq(staff.id, px.professorId)).limit(1);
@@ -602,6 +617,18 @@ export async function getSmartSuggestions(px: {
           dayAlreadyUsed,
           gapsCreated,
         });
+        const modelScore = px.model
+          ? calculateModelDayScore({
+              model: px.model,
+              dayOfWeek: day,
+              startMinutes: start,
+              endMinutes: end,
+              usedDays: px.usedDays,
+              dayCeiling: px.dayCeiling,
+              adjacentToExisting,
+              gapsCreated,
+            })
+          : null;
         // امتیاز فقط «ترتیب» می‌سازد، نه فیلتر: یک اسلاتِ معتبر نباید فقط
         // به‌خاطر جریمهٔ ساعت خالی از فهرست حذف شود.
         if (Number(room.capacity) < px.capacity) continue;
@@ -609,7 +636,8 @@ export async function getSmartSuggestions(px: {
           dayOfWeek: day,
           startTime: toHHMM(start), endTime: toHHMM(end),
           classroomId: Number(room.id), classroomName: room.name, classroomCapacity: Number(room.capacity),
-          score, reasons,
+          score: score + (modelScore?.score ?? 0),
+          reasons: modelScore ? [...reasons, ...modelScore.reasons] : reasons,
         });
       }
     }
@@ -626,6 +654,238 @@ export async function getDepartmentProfessors(departmentId: number) {
     .from(staff)
     .where(and(eq(staff.departmentId, departmentId), eq(staff.isActive, 1)))
     .orderBy(staff.staffCode);
+}
+
+// ─────────────────────────── پیش‌نمایش ۴ مدل چیدمان (گام ۴) ───────────────────────────
+
+/** تقاضای ورودی پیش‌نمایش — از ارائه‌های واقعیِ ترم ساخته می‌شود (نه Mock) */
+export interface ScheduleModelDemand extends ModelDemandInput {
+  enrolledCount: number;
+  programId: number;
+}
+
+export interface ScheduleModelPreview {
+  id: AutoModelId;
+  title: string;
+  /** تعداد روزهای هفتهٔ متمایز در چیدمان این مدل */
+  days: number;
+  /** تعداد جلسه‌هایی که موتور توانست واقعاً جای دهد */
+  sessions: number;
+  /** تداخل سختِ واقعیِ ایجادشده توسط این مدل (بازرس تداخل موجود) */
+  conflicts: number;
+  /** درصد جلساتِ داخل پنجرهٔ ترجیحی استاد (۰..۱۰۰) */
+  profFit: number;
+  /** درصد جلسات با تناسب ظرفیت سالن (مازاد ۰..۴۰ نفر) (۰..۱۰۰) */
+  roomFit: number;
+  sample: {
+    courseTitle: string;
+    groupNumber: number;
+    dayOfWeek: number | null;
+    startTime: string;
+    endTime: string;
+    professorName: string | null;
+  }[];
+}
+
+interface ModelPreviewContext {
+  availabilities: ModelAvailabilityWindow[];
+  busy: ModelBusyBlock[];
+  occupied: ModelOccupiedBlock[];
+  rooms: ModelRoomOption[];
+  roomsInfo: RoomCapacityInfo[];
+  baselineEntries: ScheduleConflictInput[];
+  seedDays: number[];
+}
+
+const PREVIEW_WEEKLY_DURATION_MIN = 90;
+
+/** بارگذاری یک‌بارهٔ دادهٔ لازم برای هر چهار مدل (بدون N+1) */
+async function loadModelPreviewContext(termId: number, demands: ScheduleModelDemand[]): Promise<ModelPreviewContext> {
+  const profIds = Array.from(new Set(demands.map(d => Number(d.professorId)).filter(id => id > 0)));
+
+  const classRows = (await db.execute(sql`
+    select s."offeringId", s."dayOfWeek", s."startTime", s."endTime", s."roomId",
+           o."professorId", o."capacity", o."groupNumber", c."title" as "courseTitle"
+    from schedules s
+    join course_offerings o on o.id = s."offeringId"
+    join courses c on c.id = o."courseId"
+    where o."termId" = ${termId}
+      and s."scheduleType" = 'CLASS'
+      and s."dayOfWeek" is not null
+  `)).rows as {
+    offeringId: number; dayOfWeek: number; startTime: string; endTime: string;
+    roomId: number | null; professorId: number | null; capacity: number;
+    groupNumber: number; courseTitle: string;
+  }[];
+
+  const availRows = profIds.length
+    ? (await db.execute(sql`
+        select "staffId", "dayOfWeek", "startTime", "endTime", "termId" from professor_availabilities
+        where "staffId" in (${sql.join(profIds.map(id => sql`${id}`), sql`, `)})
+          and ("termId" is null or "termId" = ${termId})
+          and "startTime" is not null and "endTime" is not null
+      `)).rows as { staffId: number; dayOfWeek: number; startTime: string; endTime: string; termId: number | null }[]
+    : [];
+
+  const roomRows = (await db.execute(sql`
+    select id, name, capacity, "facultyId" from classrooms where capacity > 0
+  `)).rows as { id: number; name: string; capacity: number; facultyId: number | null }[];
+
+  const profSet = new Set(profIds);
+  const demandOfferingIds = new Set(demands.map(d => Number(d.offeringId)));
+  const seedDaysSet = new Set<number>();
+  const busy: ModelBusyBlock[] = [];
+  const occupied: ModelOccupiedBlock[] = [];
+  const baselineEntries: ScheduleConflictInput[] = [];
+
+  for (const r of classRows) {
+    const day = Number(r.dayOfWeek);
+    const start = toMinutes(hm(r.startTime));
+    const end = toMinutes(hm(r.endTime));
+    if (r.professorId != null && profSet.has(Number(r.professorId))) {
+      busy.push({ professorId: Number(r.professorId), dayOfWeek: day, startMinutes: start, endMinutes: end });
+    }
+    if (r.roomId != null) {
+      occupied.push({ roomId: Number(r.roomId), dayOfWeek: day, startMinutes: start, endMinutes: end });
+    }
+    if (demandOfferingIds.has(Number(r.offeringId))) seedDaysSet.add(day);
+    baselineEntries.push({
+      offeringId: Number(r.offeringId),
+      groupNumber: Number(r.groupNumber),
+      dayOfWeek: day,
+      startTime: hm(r.startTime),
+      endTime: hm(r.endTime),
+      roomId: r.roomId != null ? Number(r.roomId) : null,
+      requiredCapacity: Number(r.capacity),
+      professorIds: r.professorId != null ? [Number(r.professorId)] : [],
+      offeringTitle: r.courseTitle,
+    });
+  }
+
+  const rooms: ModelRoomOption[] = roomRows.map(r => ({
+    id: Number(r.id), name: r.name, capacity: Number(r.capacity),
+    facultyId: r.facultyId != null ? Number(r.facultyId) : null,
+  }));
+  const roomsInfo: RoomCapacityInfo[] = roomRows.map(r => ({
+    id: Number(r.id), capacity: Number(r.capacity), title: r.name,
+  }));
+
+  return {
+    availabilities: availRows.map(a => ({
+      professorId: Number(a.staffId),
+      dayOfWeek: Number(a.dayOfWeek),
+      startMinutes: toMinutes(hm(a.startTime)),
+      endMinutes: toMinutes(hm(a.endTime)),
+      preferred: a.termId !== null,
+    })),
+    busy,
+    occupied,
+    rooms,
+    roomsInfo,
+    baselineEntries,
+    seedDays: [...seedDaysSet],
+  };
+}
+
+/** اجرای موتور (توابع خالص هسته) برای یک مدل روی دادهٔ واقعیِ ترم */
+function runModelAssignment(
+  ctx: ModelPreviewContext,
+  model: AutoModelId,
+  demands: ScheduleModelDemand[],
+): ModelSlotAssignment[] {
+  return assignScheduleModelSlots({
+    model,
+    demands,
+    availabilities: ctx.availabilities,
+    busy: ctx.busy,
+    occupied: ctx.occupied,
+    rooms: ctx.rooms,
+    initialUsedDays: ctx.seedDays,
+    dayCeiling: 3,
+    durationMinutes: PREVIEW_WEEKLY_DURATION_MIN,
+  });
+}
+
+/**
+ * پیش‌نمایش چهار مدل چیدمان — هر مدل یک‌بار روی دادهٔ واقعی اجرا می‌شود.
+ * هیچ چیزی ذخیره نمی‌شود؛ خروجی فقط اعداد واقعیِ همان اجراست.
+ * تداخل‌ها با بازرسِ موجود (`detectScheduleConflicts`) روی «برنامهٔ فعلی +
+ * اسلات‌های پیشنهادی همین مدل» سنجیده و فقط تداخل‌های مربوط به خود مدل شمرده
+ * می‌شوند (تداخل‌های قبلیِ برنامه به پای مدل نوشته نمی‌شود).
+ */
+export async function previewScheduleModels(px: {
+  termId: number;
+  demands: ScheduleModelDemand[];
+  models?: AutoModelId[];
+}): Promise<ScheduleModelPreview[]> {
+  const models = px.models ?? (['MORNING', 'AFTERNOON_WORKING', 'FLEXIBLE', 'COMPACT'] as AutoModelId[]);
+  const ctx = await loadModelPreviewContext(px.termId, px.demands);
+  const out: ScheduleModelPreview[] = [];
+
+  for (const model of models) {
+    const assignments = runModelAssignment(ctx, model, px.demands);
+    const previewEntries: ScheduleConflictInput[] = assignments.map((a, i) => ({
+      offeringId: -(100_000 + i),
+      groupNumber: a.groupNumber,
+      dayOfWeek: a.dayOfWeek,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      roomId: a.classroomId,
+      requiredCapacity: a.capacity,
+      professorIds: [a.professorId],
+      offeringTitle: a.courseTitle,
+    }));
+    const previewDays = new Set(previewEntries.map(p => p.dayOfWeek));
+    const conflicts = detectScheduleConflicts(
+      [
+        ...ctx.baselineEntries.filter(e => e.dayOfWeek != null && previewDays.has(e.dayOfWeek)),
+        ...previewEntries,
+      ],
+      ctx.roomsInfo,
+    ).filter(c => c.offeringIds.some(id => id < 0)).length;
+
+    const sessions = assignments.length;
+    const days = new Set(assignments.map(a => a.dayOfWeek)).size;
+    const pref = assignments.filter(a => a.inPreferredWindow).length;
+    const fitRooms = assignments.filter(a => {
+      const spare = a.classroomCapacity - a.capacity;
+      return spare >= 0 && spare <= 40;
+    }).length;
+
+    out.push({
+      id: model,
+      title: AUTO_SCHEDULE_MODELS.find(m => m.id === model)?.label ?? model,
+      days,
+      sessions,
+      conflicts,
+      profFit: sessions ? Math.round((pref / sessions) * 100) : 0,
+      roomFit: sessions ? Math.round((fitRooms / sessions) * 100) : 0,
+      sample: assignments.slice(0, 5).map(a => ({
+        courseTitle: a.courseTitle,
+        groupNumber: a.groupNumber,
+        dayOfWeek: a.dayOfWeek,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        professorName: a.professorName,
+      })),
+    });
+  }
+
+  return out;
+}
+
+/**
+ * چیدمان یک مدل برای «اعمال» — همان موتورِ پیش‌نمایش، بدون ذخیره‌سازی.
+ * نتیجهٔ خروجی به مسیر موجودِ `supplyGroupDrafts` داده می‌شود تا همهٔ گاردهای
+ * فاز/قفل/ظرفیت/تکرار حفظ شوند.
+ */
+export async function computeScheduleModelAssignments(px: {
+  termId: number;
+  model: AutoModelId;
+  demands: ScheduleModelDemand[];
+}): Promise<ModelSlotAssignment[]> {
+  const ctx = await loadModelPreviewContext(px.termId, px.demands);
+  return runModelAssignment(ctx, px.model, px.demands);
 }
 
 // ─────────────────────────── کارتابل کارشناس کل (Override) ───────────────────────────

@@ -3,12 +3,14 @@
 // گام ۴: گذار فاز، تأمین گروه و پیشنهاد هوشمند موتور
 import { useState } from 'react';
 import { usePlanning } from '../PlanningProvider';
-import { faNum, DAY_NAMES, PHASE_LABELS } from '../planning-core';
+import { faNum, DAY_NAMES, PHASE_LABELS, AUTO_SCHEDULE_MODELS } from '../planning-core';
 import { allocateRoomQuotasAction } from '../actions';
 
 export default function SmartAssignTab() {
   const [allocatingRooms, setAllocatingRooms] = useState(false);
   const [roomMsg, setRoomMsg] = useState<string | null>(null);
+  // پیش‌نمایش بازشدهٔ کدام مدل (ردیف‌های نمونه)
+  const [expandedModelId, setExpandedModelId] = useState<string | null>(null);
   const {
     initial,
     courseDemands,
@@ -37,6 +39,13 @@ export default function SmartAssignTab() {
     suggestions,
     supplying,
     teachingSlots,
+    // گام ۴ — ۴ مدل چیدمان
+    applyingModelId,
+    compactModelAllowed,
+    handleApplyModel,
+    loadingPreviews,
+    loadModelPreviews,
+    modelPreviews,
   } = usePlanning();
 
   return (
@@ -223,6 +232,124 @@ export default function SmartAssignTab() {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* ═══ گام ۴: ۴ مدل چیدمان — پیش‌نمایش واقعی + اعمال از مسیر موجود ═══ */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 space-y-3">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">
+                    🧩 مدل‌های چیدمان هوشمند ({faNum(AUTO_SCHEDULE_MODELS.length)} مدل)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    هر مدل یک‌بار روی <b>ارائه‌های واقعیِ همین ترم</b> در سرور اجرا می‌شود؛ اعداد کارت‌ها از همان اجرا
+                    می‌آیند (نه تخمین). «اعمال» از همان مسیر تأمین گروه عبور می‌کند و گاردهای فاز، قفل، ظرفیت و تکرار سر جای‌شان‌اند.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadModelPreviews()}
+                  disabled={loadingPreviews || !selectedTermId}
+                  className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white text-xs font-extrabold shadow disabled:opacity-50 shrink-0"
+                >
+                  {loadingPreviews ? '⏳ در حال محاسبهٔ ۴ مدل…' : '🔄 پیش‌نمایش هر ۴ مدل'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {AUTO_SCHEDULE_MODELS.map(model => {
+                  const preview = modelPreviews.find(p => p.id === model.id);
+                  const locked = model.id === 'COMPACT' && !compactModelAllowed;
+                  const isExpanded = expandedModelId === model.id;
+                  const isCompact = model.id === 'COMPACT';
+                  return (
+                    <div
+                      key={model.id}
+                      className={`rounded-2xl border-2 p-3.5 space-y-2.5 ${
+                        isCompact ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/40'
+                      } ${locked ? 'opacity-80' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-xs font-extrabold text-slate-900 leading-relaxed">{model.label}</div>
+                        {locked && <span className="text-sm" title="فقط مدیرگروه / مدیر آموزش">🔒</span>}
+                      </div>
+                      <p className="text-3xs text-slate-500 font-bold leading-relaxed">{model.hint}</p>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { k: 'روزهای هفته', v: preview ? faNum(preview.days) : '—', danger: false },
+                          { k: 'جلسات', v: preview ? faNum(preview.sessions) : '—', danger: false },
+                          { k: 'تداخل سخت', v: preview ? faNum(preview.conflicts) : '—', danger: (preview?.conflicts ?? 0) > 0 },
+                          { k: 'تناسب استاد', v: preview ? `${faNum(preview.profFit)}٪` : '—', danger: false },
+                          { k: 'تناسب سالن', v: preview ? `${faNum(preview.roomFit)}٪` : '—', danger: false },
+                        ].map(chip => (
+                          <span
+                            key={chip.k}
+                            className={`px-1.5 py-1 rounded-lg text-3xs font-extrabold text-center border ${
+                              chip.danger ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-white text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {chip.k}: {chip.v}
+                          </span>
+                        ))}
+                      </div>
+
+                      {locked ? (
+                        <div className="rounded-lg bg-amber-100/70 border border-amber-200 p-2 text-3xs font-bold text-amber-900 leading-relaxed">
+                          این مدل ویژهٔ <b>مدیرگروه / مدیر آموزش</b> است؛ برای شما فقط قابل مشاهده است. چیدمان فشرده
+                          ۲–۳ روزه با همین حساب شما قابل اعمال نیست.
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedModelId(isExpanded ? null : model.id);
+                              if (!preview) loadModelPreviews();
+                            }}
+                            disabled={loadingPreviews && !preview}
+                            className="flex-1 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-extrabold text-3xs disabled:opacity-50"
+                          >
+                            {isExpanded ? 'بستن پیش‌نمایش' : 'پیش‌نمایش'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyModel(model.id)}
+                            disabled={!!applyingModelId || !preview || preview.sessions === 0}
+                            className="flex-1 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-3xs disabled:opacity-40"
+                            title={!preview ? 'ابتدا پیش‌نمایش بگیرید' : preview.sessions === 0 ? 'موتور برای این مدل جلسه‌ای نیافت' : ''}
+                          >
+                            {applyingModelId === model.id ? '⏳ در حال ثبت…' : 'اعمال'}
+                          </button>
+                        </div>
+                      )}
+
+                      {isExpanded && !locked && (
+                        <div className="rounded-lg border border-slate-200 bg-white p-2 space-y-1">
+                          {!preview ? (
+                            <div className="text-3xs text-slate-400 font-bold text-center py-1">در حال محاسبه…</div>
+                          ) : preview.sample.length === 0 ? (
+                            <div className="text-3xs text-slate-400 font-bold text-center py-1">جلسه‌ای جای نگرفت.</div>
+                          ) : (
+                            preview.sample.map((s, i) => (
+                              <div key={i} className="text-3xs text-slate-600 font-bold flex items-center justify-between gap-1">
+                                <span className="truncate">
+                                  {s.dayOfWeek != null ? (DAY_NAMES[s.dayOfWeek] ?? '—') : '—'} · {s.startTime}–{s.endTime}
+                                </span>
+                                <span className="text-slate-400 truncate">{s.courseTitle} (گروه {faNum(s.groupNumber)})</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-3xs text-slate-400 font-bold">
+                «تناسب استاد» = درصد جلساتِ داخل پنجرهٔ ترجیحی استاد · «تناسب سالن» = درصد جلسات با مازاد ظرفیت ۰ تا ۴۰ نفر ·
+                تعداد روزها/جلسات/تداخل‌ها شمارشِ واقعیِ همان اجراست.
+              </p>
             </div>
 
             {/* وضعیت واقعی برنامه — KPI محاسبه‌شده از DB */}

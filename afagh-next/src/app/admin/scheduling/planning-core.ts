@@ -9,15 +9,62 @@ import type {
 } from './types';
 
 /**
- * مدل‌های چیدمان هوشمند (ترجیح شیفت). تنها منبع حقیقت برای هر دو جای UI:
- * نوار تب‌ها («… مدل») و کشویی هدر. پیش‌تر نوار تب‌ها «۴ مدل» می‌نوشت در حالی
- * که فقط ۳ گزینه وجود داشت.
+ * ═══════════════════════════════════════════════════════════════════════
+ *  مدل‌های چیدمان هوشمند — تنها منبع حقیقتِ «۴ مدل» برای کل کارتابل.
+ * ───────────────────────────────────────────────────────────────────────
+ *  ۳ مدلِ شیفت‌محورِ قبلی + مدلِ چهارم «فشرده ۲–۳ روز» که مخصوص مدیرگروه
+ *  است. پیش‌تر نوار تب‌ها «۴ مدل» می‌نوشت ولی فقط ۳ گزینه وجود داشت و گام ۴
+ *  هیچ کارتی برای مدل چهارم نداشت. حالا هر دو جای UI از همین آرایه می‌خوانند
+ *  تا عدد و گزینه‌ها هرگز ناهماهنگ نشوند.
+ * ═══════════════════════════════════════════════════════════════════════
  */
-export const SHIFT_MODELS: { value: ProgramShiftType; label: string }[] = [
-  { value: 'AFTERNOON_WORKING', label: '🌆 شیفت عصر/شب (دانشجویان شاغل)' },
-  { value: 'MORNING', label: '☀️ شیفت صبح (دانشجویان تمام‌وقت)' },
-  { value: 'FLEXIBLE', label: '⚡ شناور و متوازن' },
-];
+export type AutoModelId = 'MORNING' | 'AFTERNOON_WORKING' | 'FLEXIBLE' | 'COMPACT';
+
+export const AUTO_SCHEDULE_MODELS = [
+  {
+    id: 'MORNING',
+    label: '☀️ شیفت صبح',
+    hint: 'جلسات را داخل بازهٔ ۰۶:۰۰–۱۳:۰۰ می‌چیند؛ مناسب دانشجویان تمام‌وقت.',
+  },
+  {
+    id: 'AFTERNOON_WORKING',
+    label: '🌆 شیفت عصر/شب',
+    hint: 'جلسات را داخل بازهٔ ۱۳:۰۰–۲۰:۰۰ می‌چیند؛ مناسب دانشجویان شاغل.',
+  },
+  {
+    id: 'FLEXIBLE',
+    label: '⚡ شناور و متوازن',
+    hint: 'بدون اجبار شیفت؛ فقط درٔ دسترس بودن استاد، ظرفیت و اشغال سالن.',
+  },
+  {
+    id: 'COMPACT',
+    label: '🗜️ فشرده ۲–۳ روز (ویژهٔ مدیرگروه)',
+    hint: 'حداکثر ۳ روز هفته، بلوک‌های پشت‌سرهم و بدون ساعت خالی برای همان رشته.',
+  },
+] as const satisfies readonly { id: AutoModelId; label: string; hint: string }[];
+
+/** مدل‌های شیفت‌محور — برای سازگاری با کدهای قبلی (کشویی هدر) */
+export const SHIFT_MODELS: { value: ProgramShiftType; label: string }[] = AUTO_SCHEDULE_MODELS
+  .filter(m => m.id !== 'COMPACT')
+  .map(m => ({ value: m.id as ProgramShiftType, label: m.label }));
+
+/** نقش‌هایی که اجازهٔ اعمال مدل «فشرده» را دارند (ویژهٔ مدیرگروه / مدیر آموزش) */
+export const COMPACT_MODEL_ROLES = ['DEP_HEAD', 'ADMIN'] as const;
+
+/**
+ * گیت مدل فشرده — خالص و قابل تست.
+ * اگر نقش‌ها از سرور برسد، فقط DEP_HEAD/ADMIN مجازند. اگر نرسد (نسخهٔ قدیمی
+ * payload) به دامنه برمی‌گردیم: کارتابل دپارتمان فقط با DEP_HEAD باز می‌شود.
+ */
+export function canUseCompactModel(
+  roles: readonly string[] | null | undefined,
+  scope?: 'admin' | 'dept',
+): boolean {
+  if (roles && roles.length > 0) {
+    return roles.some(r => (COMPACT_MODEL_ROLES as readonly string[]).includes(r));
+  }
+  return scope === 'dept';
+}
 
 /**
  * استادِ «تهی» برای وقتی هنوز هیچ استادی در سامانه ثبت نشده (دانشگاهِ تازه‌راه‌افتاده).

@@ -423,6 +423,292 @@ export function countInternalGaps(
   return gaps;
 }
 
+// ─────────────────────────── مدل‌های چیدمان (گام ۴) ───────────────────────────
+
+export const SCHEDULING_MODEL_IDS = ['MORNING', 'AFTERNOON_WORKING', 'FLEXIBLE', 'COMPACT'] as const;
+export type SchedulingModelId = (typeof SCHEDULING_MODEL_IDS)[number];
+
+/** سقف روزهای هفته در مدل فشرده — «۲–۳ روز» */
+export const COMPACT_DAY_CEILING = 3;
+
+/** پنجرهٔ شیفت‌ها (دقیقه از نیمه‌شب) — صبح ۰۶:۰۰–۱۳:۰۰، عصر ۱۳:۰۰–۲۰:۰۰ */
+export const MODEL_SHIFT_WINDOWS = {
+  MORNING: { start: 6 * 60, end: 13 * 60 },
+  AFTERNOON_WORKING: { start: 13 * 60, end: 20 * 60 },
+} as const;
+
+/**
+ * امتیازهای مدل‌محور — مستقل از `SCORE` نگه داشته می‌شوند تا تست‌های موجودِ
+ * `calculateSlotScore` دست‌نخورده بمانند. اعداد فقط «ترتیب» می‌سازند، نه
+ * فیلتر: هیچ اسلات معتبری حذف نمی‌شود.
+ */
+export const MODEL_SCORE = {
+  shiftWindowMatch: 45,      // داخل پنجرهٔ شیفت همان مدل
+  shiftWindowMiss: -35,      // بیرون از پنجرهٔ شیفت (هنوز مجاز، فقط کم‌امتیاز)
+  compactSameDay: 60,        // روزی که برنامهٔ همین رشته/کوهورت از قبل استفاده می‌کند
+  compactNewDay: -45,        // باز کردن یک روز جدید تا سقف ۳ روز
+  compactBeyondCeiling: -400,// روز چهارم و بیشتر (فقط وقتی چاره نیست)
+  compactAdjacent: 25,       // چسبیدن به بلوک همان روز (فشرده‌سازی)
+  compactGap: -40,           // جریمهٔ هر ساعت خالیِ داخل روز فشرده
+} as const;
+
+export interface ModelDayScoreInput {
+  model: SchedulingModelId;
+  dayOfWeek: number;
+  startMinutes: number;
+  endMinutes: number;
+  /** روزهایی که برنامه/کوهورت همین حالا در پیش‌نمایش استفاده می‌کند */
+  usedDays?: readonly number[];
+  /** سقف روزهای فشرده — پیش‌فرض ۳ */
+  dayCeiling?: number;
+  adjacentToExisting?: boolean;
+  gapsCreated?: number;
+}
+
+/**
+ * امتیازِ افزودنیِ مدل روی امتیاز پایهٔ `calculateSlotScore`.
+ *  • MORNING / AFTERNOON_WORKING: اسلاتِ داخل پنجرهٔ شیفت را ترجیح می‌دهد.
+ *  • FLEXIBLE: هیچ امتیاز اضافه‌ای نمی‌دهد (رفتار امروز).
+ *  • COMPACT: روزهای استفاده‌شده را تشویق، روز جدید را جریمه، روز چهارم را
+ *    به‌شدت جریمه و بلوکِ چسبیده را پاداش می‌دهد؛ ساعت خالیِ داخلی جریمه دارد.
+ * این تابع خالص است و هیچ‌چیز را فیلتر نمی‌کند.
+ */
+export function calculateModelDayScore(p: ModelDayScoreInput): { score: number; reasons: string[] } {
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (p.model === 'MORNING' || p.model === 'AFTERNOON_WORKING') {
+    const w = MODEL_SHIFT_WINDOWS[p.model];
+    const inside = p.startMinutes >= w.start && p.endMinutes <= w.end;
+    if (inside) {
+      score += MODEL_SCORE.shiftWindowMatch;
+      reasons.push(p.model === 'MORNING' ? 'داخل شیفت صبح (۰۶:۰۰–۱۳:۰۰)' : 'داخل شیفت عصر/شب (۱۳:۰۰–۲۰:۰۰)');
+    } else {
+      score += MODEL_SCORE.shiftWindowMiss;
+      reasons.push('خارج از پنجرهٔ شیفت این مدل');
+    }
+    return { score, reasons };
+  }
+
+  if (p.model !== 'COMPACT') return { score, reasons };
+
+  const used = p.usedDays ?? [];
+  const ceiling = Math.max(1, Math.floor(Number(p.dayCeiling ?? COMPACT_DAY_CEILING)));
+  if (used.includes(p.dayOfWeek)) {
+    score += MODEL_SCORE.compactSameDay;
+    reasons.push('همان روزی که این رشته از قبل جلسه دارد');
+  } else if (used.length < ceiling) {
+    score += MODEL_SCORE.compactNewDay;
+    reasons.push('باز کردن یک روز جدید (تا سقف ۳ روز)');
+  } else {
+    score += MODEL_SCORE.compactBeyondCeiling;
+    reasons.push('روز چهارم — سقف ۳ روز فشرده فقط به‌خاطر قید سخت نقض می‌شود');
+  }
+  if (p.adjacentToExisting) {
+    score += MODEL_SCORE.compactAdjacent;
+    reasons.push('چسبیده به بلوک همان روز (فشرده‌سازی)');
+  }
+  const gaps = Math.max(0, Number(p.gapsCreated ?? 0));
+  if (gaps > 0) {
+    score += MODEL_SCORE.compactGap * gaps;
+    reasons.push(`${gaps} ساعت خالی در روز فشرده`);
+  }
+  return { score, reasons };
+}
+
+// ── ورودی/خروجی خالصِ چیدمان یک مدل (قابل تست بدون DB) ──
+
+export interface ModelDemandInput {
+  offeringId: number;
+  courseId: number;
+  groupNumber: number;
+  title: string;
+  capacity: number;
+  professorId: number;
+  professorName: string | null;
+  ownerDepartmentId: number | null;
+  targetFacultyId: number | null;
+}
+
+export interface ModelAvailabilityWindow {
+  professorId: number;
+  dayOfWeek: number;
+  startMinutes: number;
+  endMinutes: number;
+  /** پنجره از سطر اختصاصیِ همین ترم است (ترجیح استاد) */
+  preferred: boolean;
+}
+
+export interface ModelBusyBlock {
+  professorId: number;
+  dayOfWeek: number;
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export interface ModelOccupiedBlock {
+  roomId: number;
+  dayOfWeek: number;
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export interface ModelRoomOption {
+  id: number;
+  name: string;
+  capacity: number;
+  facultyId: number | null;
+}
+
+export interface ModelSlotAssignment {
+  offeringId: number;
+  courseId: number;
+  groupNumber: number;
+  courseTitle: string;
+  professorId: number;
+  professorName: string | null;
+  capacity: number;
+  ownerDepartmentId: number | null;
+  classroomId: number;
+  classroomName: string;
+  classroomCapacity: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  score: number;
+  reasons: string[];
+  inPreferredWindow: boolean;
+}
+
+const minutesToLabel = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/**
+ * چیدمان حریصانهٔ یک مدل روی فهرست تقاضاها — خالص و قطعی.
+ *
+ * قواعد سخت هیچ‌جا شل نمی‌شوند: اسلاتی که با درٔ دسترس بودن استاد، اشغال سالن
+ * یا ظرفیت فیزیکی ناسازگار باشد حتی ساخته نمی‌شود. مدل فقط بین اسلات‌های
+ * معتبر «ترتیب» می‌دهد. اگر سقف ۳ روزِ COMPACT با قید سخت بشکند، اسلاتِ روز
+ * چهارم با جریمهٔ سنگین ولی **مجاز** انتخاب می‌شود تا برنامه معتبر بماند و
+ * `days` بزرگ‌تر از ۳ صادقانه گزارش شود.
+ */
+export function assignScheduleModelSlots(px: {
+  model: SchedulingModelId;
+  demands: ModelDemandInput[];
+  availabilities: ModelAvailabilityWindow[];
+  busy: ModelBusyBlock[];
+  occupied: ModelOccupiedBlock[];
+  rooms: ModelRoomOption[];
+  /** روزهایی که برنامهٔ فعلیِ همین رشته از قبل استفاده می‌کند */
+  initialUsedDays?: number[];
+  dayCeiling?: number;
+  durationMinutes?: number;
+  /** حداکثر سالن‌های بررسی‌شده برای هر اسلات (نزدیک‌ترین ظرفیت‌ها) */
+  maxRoomsPerSlot?: number;
+}): ModelSlotAssignment[] {
+  const duration = Math.max(30, Math.floor(Number(px.durationMinutes ?? 90)));
+  const ceiling = Math.max(1, Math.floor(Number(px.dayCeiling ?? COMPACT_DAY_CEILING)));
+  const maxRooms = Math.max(1, Math.floor(Number(px.maxRoomsPerSlot ?? 30)));
+  const busy: ModelBusyBlock[] = [...px.busy];
+  const occupied: ModelOccupiedBlock[] = [...px.occupied];
+  const usedDays = new Set<number>(px.initialUsedDays ?? []);
+  const out: ModelSlotAssignment[] = [];
+
+  for (const demand of px.demands) {
+    if (!demand.professorId || !(demand.capacity > 0)) continue;
+    const windows = px.availabilities.filter(a => a.professorId === demand.professorId);
+    if (!windows.length) continue;
+
+    const dayBlocks = new Map<number, { start: number; end: number }[]>();
+    for (const b of busy) {
+      if (b.professorId !== demand.professorId) continue;
+      const list = dayBlocks.get(b.dayOfWeek) ?? [];
+      list.push({ start: b.startMinutes, end: b.endMinutes });
+      dayBlocks.set(b.dayOfWeek, list);
+    }
+
+    const rooms = px.rooms
+      .filter(r => r.capacity >= demand.capacity)
+      .sort((a, b) => a.capacity - b.capacity || a.id - b.id)
+      .slice(0, maxRooms);
+    if (!rooms.length) continue;
+
+    type Candidate = ModelSlotAssignment;
+    const candidates: Candidate[] = [];
+
+    for (const w of windows) {
+      const day = Number(w.dayOfWeek);
+      const blocks = dayBlocks.get(day) ?? [];
+      const gapsBefore = countInternalGaps(blocks);
+      for (let start = w.startMinutes; start + duration <= w.endMinutes; start += 30) {
+        const end = start + duration;
+        if (busy.some(b => b.professorId === demand.professorId && b.dayOfWeek === day && overlaps(start, end, b.startMinutes, b.endMinutes))) continue;
+        const adjacent = blocks.some(b => b.end === start || b.start === end);
+        const gapsCreated = Math.max(0, countInternalGaps([...blocks, { start, end }]) - gapsBefore);
+        for (const room of rooms) {
+          if (occupied.some(o => o.roomId === room.id && o.dayOfWeek === day && overlaps(start, end, o.startMinutes, o.endMinutes))) continue;
+          const base = calculateSlotScore({
+            roomFacultyId: room.facultyId,
+            targetFacultyId: demand.targetFacultyId,
+            inPreferredWindow: w.preferred,
+            inAvailableWindow: true,
+            roomCapacity: room.capacity,
+            requiredCapacity: demand.capacity,
+            adjacentToExisting: adjacent,
+            dayAlreadyUsed: blocks.length > 0,
+            gapsCreated,
+          });
+          const extra = calculateModelDayScore({
+            model: px.model,
+            dayOfWeek: day,
+            startMinutes: start,
+            endMinutes: end,
+            usedDays: [...usedDays],
+            dayCeiling: ceiling,
+            adjacentToExisting: adjacent,
+            gapsCreated,
+          });
+          candidates.push({
+            offeringId: demand.offeringId,
+            courseId: demand.courseId,
+            groupNumber: demand.groupNumber,
+            courseTitle: demand.title,
+            professorId: demand.professorId,
+            professorName: demand.professorName,
+            capacity: demand.capacity,
+            ownerDepartmentId: demand.ownerDepartmentId,
+            classroomId: room.id,
+            classroomName: room.name,
+            classroomCapacity: room.capacity,
+            dayOfWeek: day,
+            startTime: minutesToLabel(start),
+            endTime: minutesToLabel(end),
+            score: base.score + extra.score,
+            reasons: [...base.reasons, ...extra.reasons],
+            inPreferredWindow: w.preferred,
+          });
+        }
+      }
+    }
+
+    if (!candidates.length) continue;
+    candidates.sort((a, b) =>
+      b.score - a.score ||
+      a.dayOfWeek - b.dayOfWeek ||
+      a.startTime.localeCompare(b.startTime) ||
+      a.classroomId - b.classroomId,
+    );
+    const best = candidates[0];
+    out.push(best);
+    busy.push({ professorId: demand.professorId, dayOfWeek: best.dayOfWeek, startMinutes: toMinutes(best.startTime), endMinutes: toMinutes(best.endTime) });
+    occupied.push({ roomId: best.classroomId, dayOfWeek: best.dayOfWeek, startMinutes: toMinutes(best.startTime), endMinutes: toMinutes(best.endTime) });
+    usedDays.add(best.dayOfWeek);
+  }
+
+  return out;
+}
+
+
 // ─────────────────────────── پیش‌بینی تقاضا ───────────────────────────
 
 /** تعداد گروه پیشنهادی از روی متقاضیان واقعی (سقف ۲۰ گروه) */

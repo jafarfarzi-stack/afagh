@@ -32,10 +32,19 @@ export default async function EnrollmentIntegrityPage() {
     );
   }
 
+  // پیشفرض: «ترم جاری» — اسکنِ ۶۷ هزار ارائهٔ کل دانشگاه ۳ ثانیه طول میکشید.
+  const cur = await db.execute<{ id: number; termCode: string | null }>(sql`
+    SELECT id, "termCode" FROM academic_terms
+     WHERE "universityId" = ${uni.id} AND "isCurrent" = 1
+     ORDER BY id DESC LIMIT 1
+  `).catch(() => ({ rows: [] as Array<{ id: number; termCode: string | null }> }));
+  const currentTermRow = (cur?.rows ?? [])[0];
+  const currentTermId = currentTermRow ? Number(currentTermRow.id) : null;
+
   const [drift, dup, driftRows, dupGroups] = await Promise.all([
-    countDrift(uni.id).catch(() => ({ offerings: 0, totalDrift: 0, samples: [] })),
+    countDrift(uni.id, currentTermId).catch(() => ({ offerings: 0, totalDrift: 0, samples: [] })),
     duplicateSummary(uni.id).catch(() => ({ groups: 0, extraRows: 0 })),
-    loadOfferingDrift(uni.id, 100).catch(() => []),
+    loadOfferingDrift(uni.id, 100, currentTermId).catch(() => []),
     loadDuplicateGroups(uni.id, 100).catch(() => []),
   ]);
 
@@ -60,6 +69,7 @@ export default async function EnrollmentIntegrityPage() {
     <div className="max-w-7xl mx-auto space-y-4 p-4 md:p-6">
       <IntegrityClient
         universityName={uni.title || '—'}
+        scopeTermCode={currentTermRow?.termCode ? String(currentTermRow.termCode) : null}
         kpi={{
           driftOfferings: drift.offerings,
           totalDrift: drift.totalDrift,

@@ -140,13 +140,18 @@ export type OfferingDriftRow = OfferingDrift & {
   capacity: number | null;
 };
 
-/** خلاصهٔ ناهمگامیِ شمارنده در سطح دانشگاه (همهٔ ارائه‌ها، نه فقط نمونه‌ها) */
-export async function countDrift(universityId: number): Promise<{
+/**
+ * خلاصهٔ ناهمگامیِ شمارنده (همهٔ ارائه‌ها، نه فقط نمونه‌ها).
+ * `termId` اختیاری است: صفحه به‌صورت پیش‌فرض «ترم جاری» را می‌دهد تا اسکنِ
+ * ۶۷ هزار ارائه انجام نشود (۳ ثانیه → چند صد میلی‌ثانیه). null = کل دانشگاه.
+ */
+export async function countDrift(universityId: number, termId?: number | null): Promise<{
   offerings: number;
   totalDrift: number;
   samples: OfferingDrift[];
 }> {
   const u = Number(universityId);
+  const term = Number.isInteger(Number(termId)) && Number(termId) > 0 ? Number(termId) : null;
   if (!Number.isInteger(u) || u <= 0) return { offerings: 0, totalDrift: 0, samples: [] };
 
   const agg = await db.execute(sql`
@@ -154,6 +159,7 @@ export async function countDrift(universityId: number): Promise<{
            COALESCE(sum(abs(o."enrolledCount" - ${seatCountSql})), 0)::int AS "drift"
       FROM "course_offerings" AS o
      WHERE o."universityId" = ${u}
+       AND (${term}::int IS NULL OR o."termId" = ${term}::int)
        AND o."enrolledCount" IS DISTINCT FROM ${seatCountSql}
   `);
   const a = ((agg?.rows ?? [])[0] ?? {}) as { offerings?: number | string; drift?: number | string };
@@ -164,6 +170,7 @@ export async function countDrift(universityId: number): Promise<{
            ${seatCountSql} AS "computed"
       FROM "course_offerings" AS o
      WHERE o."universityId" = ${u}
+       AND (${term}::int IS NULL OR o."termId" = ${term}::int)
        AND o."enrolledCount" IS DISTINCT FROM ${seatCountSql}
      ORDER BY abs(o."enrolledCount" - ${seatCountSql}) DESC, o.id
      LIMIT 100
@@ -181,9 +188,10 @@ export async function countDrift(universityId: number): Promise<{
 }
 
 /** فهرستِ بدترین ناهمگامی‌ها برای جدولِ صفحه (نام درس/ترم هم می‌آید) */
-export async function loadOfferingDrift(universityId: number, limit = 100): Promise<OfferingDriftRow[]> {
+export async function loadOfferingDrift(universityId: number, limit = 100, termId?: number | null): Promise<OfferingDriftRow[]> {
   const u = Number(universityId);
   if (!Number.isInteger(u) || u <= 0) return [];
+  const term = Number.isInteger(Number(termId)) && Number(termId) > 0 ? Number(termId) : null;
   const res = await db.execute(sql`
     SELECT o.id AS "offeringId",
            o."enrolledCount"::int AS "stored",
@@ -198,6 +206,7 @@ export async function loadOfferingDrift(universityId: number, limit = 100): Prom
       JOIN courses c ON c.id = o."courseId"
       JOIN academic_terms t ON t.id = o."termId"
      WHERE o."universityId" = ${u}
+       AND (${term}::int IS NULL OR o."termId" = ${term}::int)
        AND o."enrolledCount" IS DISTINCT FROM ${seatCountSql}
      ORDER BY abs(o."enrolledCount" - ${seatCountSql}) DESC, o.id
      LIMIT ${Math.max(1, Math.min(500, Math.floor(limit)))}

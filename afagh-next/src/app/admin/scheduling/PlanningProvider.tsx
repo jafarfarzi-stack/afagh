@@ -7,10 +7,10 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab, programSemesterMatrix, cohortSemesterNo, chartScopeSemester } from './planning-core';
+import { faNum, parseJalaliDates, PHASE_LABELS, TIME_SLOT_PRESETS, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, clampGroupsCount, mapDemands, mapClassrooms, mapProfessors, mapCohorts, mapOfferings, buildRealScenario, computeProfUnits, slotAvailStatus, filterScenarioOfferings, filterContextDemands, inspectorSummary, nextGroupNumber, coTeachingWeights, resolveTab, programSemesterMatrix, cohortSemesterNo, chartScopeSemester, canUseCompactModel, type AutoModelId } from './planning-core';
 import type { PlanningTab, WeekRecurrence, ProgramShiftType, TimeSlot, CohortOption, ClassroomOption, ProfessorOption, CourseDemand, DepartmentOffering, AutoScheduleScenario, SchedulingWorkspace } from './types';
-import { getSchedulingWorkspaceAction, getRoomGrantsAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction, setOfferingCohortMergeAction } from './actions';
-import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult } from './actions';
+import { getSchedulingWorkspaceAction, getRoomGrantsAction, generateClassSessionsAction, supplyGroupDraftsAction, getSmartSuggestionsAction, getSchedulingHealthAction, transitionSchedulingPhaseAction, getCurriculumDemandsAction, setOfferingCohortMergeAction, previewScheduleModelsAction, applyScheduleModelAction } from './actions';
+import type { SmartSlot, SchedulingHealthReport, SchedulingWorkspaceResult, CurriculumDemandsResult, ScheduleModelPreview } from './actions';
 
 /**
  * scope = 'admin'  → کارتابل دانشگاهی (مدیر آموزش / کارشناس): گذار فاز، تولید جلسات ترم،
@@ -139,6 +139,17 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   const [health, setHealth] = useState<SchedulingHealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [ownedDeptId, setOwnedDeptId] = useState<number>(initial.departments[0]?.id ?? 0);
+
+  // گام ۴ — پیش‌نمایش «۴ مدل چیدمان» (اعداد واقعی از سرور) + اعمال مدل
+  const [modelPreviews, setModelPreviews] = useState<ScheduleModelPreview[]>([]);
+  const [loadingPreviews, setLoadingPreviews] = useState(false);
+  const [applyingModelId, setApplyingModelId] = useState<AutoModelId | null>(null);
+  /** نقش‌های نشست — از payload سرور می‌آید (گیت مدل فشرده) */
+  const sessionRoles = useMemo<string[]>(() => initial.roles ?? [], [initial.roles]);
+  const compactModelAllowed = useMemo(
+    () => canUseCompactModel(sessionRoles, scope),
+    [sessionRoles, scope],
+  );
 
   // Curriculum-based demands (filtered by selected program)
   const [curriculumDemands, setCurriculumDemands] = useState<CourseDemand[]>([]);
@@ -356,6 +367,65 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
       showToast('خطا در ارتباط با سرور.', 'warning');
     } finally {
       setSupplying(false);
+    }
+  };
+
+  // ── گام ۴: بارگذاری پیش‌نمایش ۴ مدل و اعمال مدل انتخاب‌شده ──
+
+  /** پیش‌نمایش هر چهار مدل چیدمان روی ارائه‌های واقعیِ ترم/رشته (سرور) */
+  const loadModelPreviews = async (programId?: number | null) => {
+    if (!selectedTermId || loadingPreviews) return;
+    const pid = programId ?? (selectedProgramId > 0 ? selectedProgramId : null);
+    setLoadingPreviews(true);
+    try {
+      const res = await previewScheduleModelsAction({ termId: selectedTermId, programId: pid });
+      if (!res.ok) {
+        setModelPreviews([]);
+        showToast(res.error, 'warning');
+        return;
+      }
+      setModelPreviews(res.models);
+      if (!res.models.length) showToast('پیش‌نمایش مدلی برنگشت؛ ارائهٔ دارای استاد پیدا نشد.', 'info');
+    } catch {
+      showToast('خطا در پیش‌نمایش مدل‌های چیدمان.', 'warning');
+    } finally {
+      setLoadingPreviews(false);
+    }
+  };
+
+  /** اعمال مدل — از مسیر موجودِ supplyGroupDrafts (همان گاردهای فاز/قفل/ظرفیت) */
+  const handleApplyModel = async (model: AutoModelId) => {
+    if (!selectedTermId) return;
+    if (model === 'COMPACT' && !compactModelAllowed) {
+      showToast('مدل «فشرده ۲–۳ روز» ویژهٔ مدیرگروه یا مدیر آموزش است.', 'warning');
+      return;
+    }
+    setApplyingModelId(model);
+    try {
+      const res = await applyScheduleModelAction({
+        termId: selectedTermId,
+        programId: selectedProgramId > 0 ? selectedProgramId : null,
+        model,
+      });
+      if (!res.ok) { showToast(res.error, 'warning'); return; }
+      if (res.applied > 0) {
+        showToast(
+          `✅ ${faNum(res.applied)} گروه از مدل انتخاب‌شده در پایگاه داده ثبت شد` +
+          (res.skipped > 0 ? ` — ${faNum(res.skipped)} مورد رد شد.` : '.'),
+          res.skipped > 0 ? 'warning' : 'success',
+        );
+      } else {
+        showToast(
+          `هیچ گروهی ثبت نشد${res.errors[0] ? ` — ${res.errors[0]}` : '؛ قیدهای فاز/ظرفیت/تکرار اجازه ندادند.'}`,
+          'warning',
+        );
+      }
+      reloadWorkspace();
+      await loadModelPreviews();
+    } catch {
+      showToast('خطا در اعمال مدل چیدمان.', 'warning');
+    } finally {
+      setApplyingModelId(null);
     }
   };
 
@@ -612,6 +682,8 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   // همه را یک‌جا رندر نمی‌کنیم تا مرورگر (و رندر سمت سرور) از پا نیفتد.
   const [demandLimit, setDemandLimit] = useState(DEMAND_PAGE);
   useEffect(() => { setDemandLimit(DEMAND_PAGE); }, [selectedProgramId, selectedCohortId, selectedTermId]);
+  // پیش‌نمایش مدل‌ها به ترم گره خورده است — با تغییر ترم پاک می‌شود تا عدد کهنه نمایش داده نشود.
+  useEffect(() => { setModelPreviews([]); }, [selectedTermId]);
   const displayedDemands = useMemo(() => filteredDemands.slice(0, demandLimit), [filteredDemands, demandLimit]);
 
   const inspectorProf = useMemo(() => {
@@ -645,10 +717,12 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     activeMainTab,
     activeSlotPresetKey,
     applyWorkspace,
+    applyingModelId,
     approvedOfferings,
     calendarConfig,
     classrooms,
     cohorts,
+    compactModelAllowed,
     courseDemands,
     currentPhase,
     currentProgram,
@@ -662,6 +736,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     editingProfId,
     filteredDemands,
     generatedTermSessionsCount,
+    handleApplyModel,
     handleAssignCoProfessor,
     handleAssignProfessorToCourse,
     handleAssignProfessorToGroup,
@@ -690,7 +765,10 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     isLoadingWorkspace,
     isProfAvailabilityModalOpen,
     loadCurriculumDemands,
+    loadModelPreviews,
+    loadingPreviews,
     makeupSessions,
+    modelPreviews,
     ownedDeptId,
     phaseBusy,
     profAssignedUnitsMap,
@@ -712,6 +790,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     selectedTermId,
     selectedWeekFilter,
     sessionsByOffering,
+    sessionRoles,
     setActiveMainTab,
     setActiveSlotPresetKey,
     setApprovedOfferings,

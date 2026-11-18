@@ -50,6 +50,7 @@ export interface DupGroup {
 
 interface Props {
   universityName: string;
+  scopeTermCode: string | null;
   kpi: { driftOfferings: number; totalDrift: number; duplicateGroups: number; extraRows: number };
   drift: DriftRow[];
   duplicates: DupGroup[];
@@ -96,7 +97,7 @@ function KpiCard({ title, value, hint, tone }: { title: string; value: string; h
   );
 }
 
-export default function IntegrityClient({ universityName, kpi, drift, duplicates, terms }: Props) {
+export default function IntegrityClient({ universityName, scopeTermCode, kpi, drift, duplicates, terms }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<Msg>(null);
@@ -230,13 +231,13 @@ export default function IntegrityClient({ universityName, kpi, drift, duplicates
         <KpiCard
           title="تعداد ارائه‌های ناهمگام"
           value={fa(kpi.driftOfferings)}
-          hint="ارائه‌هایی که عددِ ذخیره‌شده با شمارشِ واقعی یکی نیست"
+          hint={`ارائه‌هایی که عددِ ذخیره‌شده با شمارشِ واقعی یکی نیست${scopeTermCode ? ` — نیمسال ${scopeTermCode}` : ''}`}
           tone="border-amber-200 bg-amber-50"
         />
         <KpiCard
           title="مجموع اختلاف صندلی"
           value={fa(kpi.totalDrift)}
-          hint="جمع قدرمطلقِ اختلافِ شمارنده با شمارشِ واقعی"
+          hint={`جمع قدرمطلقِ اختلافِ شمارنده با شمارشِ واقعی${scopeTermCode ? ` — نیمسال ${scopeTermCode}` : ''}`}
           tone="border-rose-200 bg-rose-50"
         />
         <KpiCard
