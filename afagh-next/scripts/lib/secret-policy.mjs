@@ -91,7 +91,9 @@ export function checkProdEnv(env, { allowWeak = false } = {}) {
 
 /** رمز تصادفی خوانا برای .env (بدون کاراکترهای مشکل‌ساز در shell/compose) */
 export function generateSecret(len = POLICY.generatedLen) {
-  const alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  // ⚠️ بدون x/X/y/Y: پیش‌شونده‌های جای‌نگهدارِ سیاست (xxx+/yyy+) نباید هرگز
+  // در رمزِ تصادفیِ تولیدی اتفاق بیفتند (flake واقعی تست hardening).
+  const alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'.replace(/[xyXY]/g, '');
   const bytes = randomBytes(len);
   let out = '';
   for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];

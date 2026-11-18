@@ -21,7 +21,6 @@ export default function CurriculumAssignTab() {
     handleUpdateCoWeights,
     handleUpdateCourseGroupsCount,
     handleUpdateDemandExamDate,
-    isDeptScope,
     profAssignedUnitsMap,
     profSuggestionData,
     professors,
@@ -87,24 +86,38 @@ export default function CurriculumAssignTab() {
                     // کشویی استاد فقط استادانِ «گروه صاحب درس» را نشان می‌دهد.
                     // اگر آن گروه هنوز استادی ندارد، به فهرست کامل برمی‌گردیم تا
                     // کشویی خالی و بی‌استفاده نشود.
+                    // اساتید گروه صاحبِ درس و اساتید سایر گروه‌ها (مشترک) — هر دو در
+                    // کشویی دیده میشوند؛ اختصاصی‌ها در رتبه‌بندی +۴ بونوس میگیرند.
                     const deptProfs = professors.filter(p => p.departmentId != null && p.departmentId === demand.courseDeptId);
-                    // مدیرگروه فقط استادان گروه خودش را ببیند؛ fallback فقط برای ادمین.
-                    const pool = isDeptScope ? deptProfs : (deptProfs.length ? deptProfs : professors);
+                    const otherProfs = professors.filter(p => p.departmentId == null || p.departmentId !== demand.courseDeptId);
+                    // اگر گروه صاحبِ درس استادی ندارد، فهرست کامل بدون تفکیک —
+                    // تا کشویی خالی و بی‌استفاده نشود (رفتار قبلی).
+                    const pool = deptProfs.length ? [...deptProfs, ...otherProfs] : professors;
                     // ⭐ پیشنهاد استاد: سابقهٔ تدریسِ همین درس × ۲ + آخرین نمرهٔ ارزشیابی،
                     //    با احترام به سقف بار استاد. فقط پیشنهاد است — انتخاب خودکار نمی‌شود.
                     const ranking = suggestProfessorRanking({
-                      pool: pool.map(p => ({ id: p.id, maxWeeklyUnits: p.maxWeeklyUnits, academicRank: p.academicRank, employmentType: p.employmentType })),
-                      demand: { courseId: demand.courseId, units: demand.units, groupCount: demand.groupsCount },
+                      pool: pool.map(p => ({ id: p.id, maxWeeklyUnits: p.maxWeeklyUnits, academicRank: p.academicRank, employmentType: p.employmentType, departmentId: p.departmentId })),
+                      demand: { courseId: demand.courseId, units: demand.units, groupCount: demand.groupsCount, courseDeptId: demand.courseDeptId },
                       history: profSuggestionData.history,
                       evalScores: profSuggestionData.evalScores,
                       currentLoads,
                     });
                     // پیشنهاد نمایشی: نخستین گزینهٔ در-سقف با سابقه یا ارزشیابی ناصفر
                     const topSuggestion = ranking.find(r => r.fitsCap && (r.times > 0 || r.evalScore > 0)) ?? null;
-                    // ترتیب کشویی: پیشنهاد اول، بعد بقیه (همان pool، فقط مرتب‌شده)
+                    // ترتیب کشویی: بر اساس رتبه‌بندی (پیشنهاد اول، بعد بقیه)
+                    const rankIndex = new Map(ranking.map((r, i) => [r.profId, i] as const));
+                    const byRank = (a: (typeof pool)[number], b: (typeof pool)[number]) =>
+                      (rankIndex.get(a.id) ?? 0) - (rankIndex.get(b.id) ?? 0);
                     const orderedPool = ranking.length
                       ? ranking.map(r => pool.find(p => p.id === r.profId)).filter((p): p is (typeof pool)[number] => !!p)
                       : pool;
+                    // تفکیک optgroup فقط وقتی گروه صاحبِ درس استاد دارد؛ وگرنه فهرست سادهٔ قبلی
+                    const selectGroups = deptProfs.length
+                      ? [
+                          { label: 'اساتید گروه', professors: [...deptProfs].sort(byRank) },
+                          { label: 'اساتید سایر گروه‌ها (مشترک)', professors: [...otherProfs].sort(byRank) },
+                        ].filter(g => g.professors.length > 0)
+                      : undefined;
                     const assignedProf = pool.find(p => p.id === demand.preferredProfId)
                       || professors.find(p => p.id === demand.preferredProfId)
                       || pool[0] || NO_PROFESSOR;
@@ -212,6 +225,7 @@ export default function CurriculumAssignTab() {
                                 <div className="flex items-center gap-1.5">
                                   <ProfessorSelect
                                     professors={orderedPool}
+                                    groups={selectGroups}
                                     value={demand.preferredProfId}
                                     onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                     label={p => `${p.name} (${p.academicRank} — ${p.contractType})`}
@@ -264,6 +278,7 @@ export default function CurriculumAssignTab() {
                                       </span>
                                       <ProfessorSelect
                                         professors={orderedPool}
+                                        groups={selectGroups}
                                         value={curProfId}
                                         onChange={id => handleAssignProfessorToGroup(demand.id, gNo, id)}
                                         className="w-full border border-indigo-300 rounded px-1.5 py-0.5 font-bold bg-white text-indigo-950 text-xs"
@@ -294,6 +309,7 @@ export default function CurriculumAssignTab() {
                                 </div>
                                 <ProfessorSelect
                                   professors={orderedPool}
+                                  groups={selectGroups}
                                   value={demand.preferredProfId}
                                   onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                   className="w-full border border-indigo-300 rounded px-2 py-1 font-extrabold bg-white text-indigo-950 text-xs"
@@ -308,6 +324,7 @@ export default function CurriculumAssignTab() {
                                 </div>
                                 <ProfessorSelect
                                   professors={orderedPool}
+                                  groups={selectGroups}
                                   value={demand.coProfId ?? pool[0]?.id ?? 0}
                                   onChange={id => handleAssignCoProfessor(demand.id, id)}
                                   className="w-full border border-purple-300 rounded px-2 py-1 font-extrabold bg-white text-purple-950 text-xs"

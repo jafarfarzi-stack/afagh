@@ -15,22 +15,31 @@ import type { ProfessorOption } from '../types';
  * راه‌حل: تا وقتی کاربر کشویی را باز نکرده، فقط گزینهٔ *انتخاب‌شده* رندر
  * می‌شود. با اولین mousedown/focus (که پیش از باز شدن لیست رخ می‌دهد)
  * فهرست کامل جای آن را می‌گیرد. رفتار برای کاربر عیناً همان است.
+ *
+ * `groups` (اختیاری): تقسیم گزینه‌ها به <optgroup> هنگام باز شدن کشویی —
+ * مثلاً «اساتید گروه» و «اساتید سایر گروه‌ها (مشترک)». مجموع professors همهٔ
+ * گروه‌ها باید همان professors ورودی باشد (پارتیشن) تا مقدار انتخاب‌شده
+ * همیشه در لیستِ بازشده پیدا شود.
  */
 
+export type ProfessorSelectGroup = { label: string; professors: ProfessorOption[] };
+
 export function ProfessorSelect({
-  professors, value, onChange, className, label,
+  professors, value, onChange, className, label, groups,
 }: {
   professors: ProfessorOption[];
   value: number;
   onChange: (id: number) => void;
   className?: string;
   label?: (p: ProfessorOption) => string;
+  groups?: ProfessorSelectGroup[];
 }) {
   const [expanded, setExpanded] = useState(false);
   const text = label ?? ((p: ProfessorOption) => `${p.name} (${p.academicRank})`);
   const selected = professors.find(p => p.id === value);
   const list = expanded ? professors : (selected ? [selected] : professors.slice(0, 1));
   const open = () => { if (!expanded) setExpanded(true); };
+  const hasGroups = expanded && groups && groups.some(g => g.professors.length > 0);
   return (
     <select
       value={value}
@@ -41,9 +50,17 @@ export function ProfessorSelect({
       onKeyDown={open}
       className={className}
     >
-      {list.map(p => (
-        <option key={p.id} value={p.id}>{text(p)}</option>
-      ))}
+      {hasGroups
+        ? groups!.map(g => (
+            <optgroup key={g.label} label={g.label}>
+              {g.professors.map(p => (
+                <option key={p.id} value={p.id}>{text(p)}</option>
+              ))}
+            </optgroup>
+          ))
+        : list.map(p => (
+            <option key={p.id} value={p.id}>{text(p)}</option>
+          ))}
     </select>
   );
 }

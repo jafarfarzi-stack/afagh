@@ -329,9 +329,22 @@ eq('score = مرتبه + نوع همکاری + سابقه × ۲ + ارزشیاب
   evalScores: { 2: 1, 3: 2 },
   currentLoads: {},
 })[0], { profId: 1, times: 3, evalScore: 0, fitsCap: true, score: 10 });
-// استادیارِ تماموقت (۸+۶=۱۴) و دانشیارِ حق‌التدریسی (۱۲+۲=۱۴) با سابقهٔ برابر مساوی می‌شوند؛
-// تساوی امتیاز با وزن نوع همکاری شکسته می‌شود (تعهد تماموقت مقدم) — نه حذف گزینه.
-eq('استادیار تماموقت با سابقهٔ برابر از دانشیار حق‌التدریسی جلو میزند (شکست تساوی با نوع همکاری)', suggestProfessorRanking({
+// استادِ تماموقت (۱۶+۶=۲۲) با سابقهٔ برابر از دانشیارِ حق‌التدریسی (۱۲+۲=۱۴) جلو میزند —
+// (استادیار تماموقت ۸+۶ و دانشیار حق‌التدریسی ۱۲+۲ هر دو ۱۴ می‌شوند؛ تساویِ آن حالت
+// در سنجهٔ جداگانهٔ پایین با tie-break نوع همکاری پوشش داده شده است.)
+eq('تماموقتِ استاد با سابقهٔ برابر، حق‌التدریسیِ دانشیار را میبرد', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'استاد', employmentType: 'تمام‌وقت' },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'دانشیار', employmentType: 'حق‌التدریس' },
+  ],
+  demand: { courseId: 4, units: 2 },
+  history: { '4:1': 2, '4:2': 2 },
+  evalScores: {},
+  currentLoads: {},
+}).map(r => r.profId), [1, 2]);
+// حالتِ مرزی ۱۴:۱۴ (استادیار تماموقت در برابر دانشیار حق‌التدریسی): تساوی امتیاز
+// با وزن نوع همکاری شکسته میشود (تعهد تماموقت مقدم) — نه حذف گزینه.
+eq('استادیار تماموقت در برابر دانشیار حق‌التدریسی (تساوی ۱۴:۱۴) → شکست تساوی با نوع همکاری', suggestProfessorRanking({
   pool: [
     { id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار', employmentType: 'تمام‌وقت' },
     { id: 2, maxWeeklyUnits: 16, academicRank: 'دانشیار', employmentType: 'حق‌التدریس' },
@@ -364,6 +377,26 @@ eq('دانشگاه بدون هیچ ارزشیابی → امتیاز صفر نم
   { profId: 1, times: 3, evalScore: 0, fitsCap: true, score: 24 },
   { profId: 2, times: 1, evalScore: 0, fitsCap: true, score: 12 },
 ]);
+eq('استاد اختصاصی گروه با سابقه/ارزشیابی برابر، استادِ غیراختصاصی را میبرد (+۴)', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار', employmentType: 'تمام‌وقت', departmentId: 7 },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'استادیار', employmentType: 'تمام‌وقت', departmentId: 9 },
+  ],
+  demand: { courseId: 4, units: 2, courseDeptId: 7 },
+  history: { '4:1': 2, '4:2': 2 },
+  evalScores: { 1: 15, 2: 15 },
+  currentLoads: {},
+}).map(r => r.profId), [1, 2]);
+eq('اختصاصی فقط +۴ جمعی است: مربیِ اختصاصی (۴+۴) از دانشیارِ غیراختصاصی (۱۲) جلو نمیزند', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'مربی', employmentType: 'تمام‌وقت', departmentId: 7 },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'دانشیار', employmentType: 'تمام‌وقت', departmentId: 9 },
+  ],
+  demand: { courseId: 4, units: 2, courseDeptId: 7 },
+  history: {},
+  evalScores: {},
+  currentLoads: {},
+})[0].profId, 2);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

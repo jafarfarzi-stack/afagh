@@ -111,10 +111,16 @@ export function profEmploymentWeight(employmentType: string | null | undefined):
  * رتبه‌بندی «پیشنهاد استاد» برای یک ارائهٔ گام ۱ — خالص و Unit-Test‌شده.
  *
  * امتیاز ADDITIVE است (هرگز ضربی) تا در دانشگاه‌های بدونِ ارزشیابی صفر نشود:
- *   score = rankWeight + employmentWeight + times*2 + evalScore
- * مبنای سابقه: تعداد ارائه‌های «ترم‌های دیگر» همان درس. اساتیدی که با این
- * ارائه از سقف بارشان (`maxWeeklyUnits`) رد می‌شوند، بعد از گزینه‌های
- * جای‌جای‌شده می‌آیند. فقط «پیشنهاد» است — انتخاب خودکار انجام نمی‌شود.
+ *   score = rankWeight + employmentWeight + dedicatedGroupWeight + times*2 + evalScore
+ *   - rankWeight: وزن مرتبهٔ علمی (profRankWeight).
+ *   - employmentWeight: وزن نوع همکاری (profEmploymentWeight).
+ *   - dedicatedGroupWeight: استادِ «اختصاصی گروه» (departmentId او دقیقاً برابر
+ *     courseDeptId درس) → ۴؛ مشترک/غیراختصاصی → ۰.
+ * مبنای سابقه: تعداد ارائه‌های «ترم‌های دیگر» همان درس. نمرهٔ ارزشیابی عددِ
+ * واقعیِ ثبت‌شدهٔ دیتابیس است (evaluation_responses)؛ نبودِ رکورد فقط یعنی
+ * ۰ امتیاز از آن جمله — هرگز کل score صفر نمیشود. اساتیدی که با این ارائه
+ * از سقف بارشان (`maxWeeklyUnits`) رد می‌شوند، بعد از گزینه‌های جای‌جای‌شده
+ * می‌آیند. فقط «پیشنهاد» است — انتخاب خودکار انجام نمی‌شود.
  */
 export type ProfSuggestionEntry = {
   profId: number;
@@ -125,8 +131,8 @@ export type ProfSuggestionEntry = {
 };
 
 export function suggestProfessorRanking(opts: {
-  pool: { id: number; maxWeeklyUnits: number; academicRank?: string | null; employmentType?: string | null }[];
-  demand: { courseId: number; units: number; groupCount?: number };
+  pool: { id: number; maxWeeklyUnits: number; academicRank?: string | null; employmentType?: string | null; departmentId?: number | null }[];
+  demand: { courseId: number; units: number; groupCount?: number; courseDeptId?: number | null };
   history: Record<string, number>;
   evalScores: Record<number, number>;
   currentLoads: Record<number, number>;
@@ -139,12 +145,13 @@ export function suggestProfessorRanking(opts: {
       const evalScore = opts.evalScores[p.id] ?? 0;
       const fitsCap = (opts.currentLoads[p.id] ?? 0) + load <= p.maxWeeklyUnits;
       const empW = profEmploymentWeight(p.employmentType);
+      const dedicated = p.departmentId != null && p.departmentId === opts.demand.courseDeptId ? 4 : 0;
       return {
         profId: p.id,
         times,
         evalScore,
         fitsCap,
-        score: profRankWeight(p.academicRank) + empW + times * 2 + evalScore,
+        score: profRankWeight(p.academicRank) + empW + dedicated + times * 2 + evalScore,
         empW,
       };
     })
