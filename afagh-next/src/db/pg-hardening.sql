@@ -1069,3 +1069,62 @@ CREATE POLICY fin_base_legal_read ON "legal_cases" FOR SELECT TO afagh_app
   USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
     WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
       AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
+
+-- ── حسابداری دوطرفهٔ GL (مهاجرت 0142) ─────────────────────────────────────
+-- دادهٔ مالیِ محض (اسناد حسابداری، سطرهای بدهکار/بستانکار با studentId).
+-- الگو: نقش‌محور مثل fin_base_* ولی «خواندن + نوشتن» — چون موتورِ صدور سند
+-- (src/lib/accounting/posting.ts) با همان اتصال afagh_app در تراکنش INSERT
+-- میزند و app.user_id ست میشود (src/db/index.ts:107). جدول‌های مرجع
+-- (accounts/periods/posting_rules) هم FULL هستند: پنل ادمین قواعد ارسال را
+-- ویرایش میکند و مالکِ جدول (BYPASSRLS نشده، ولی مالک = دور از RLS) سیدِ
+-- اولیهٔ کد حسابها را میگذارد.
+ALTER TABLE "gl_accounts" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "gl_periods" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "gl_vouchers" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "gl_voucher_lines" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "gl_posting_rules" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS gl_accounts_rw ON "gl_accounts";
+CREATE POLICY gl_accounts_rw ON "gl_accounts" FOR ALL TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')))
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
+
+DROP POLICY IF EXISTS gl_periods_rw ON "gl_periods";
+CREATE POLICY gl_periods_rw ON "gl_periods" FOR ALL TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')))
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
+
+DROP POLICY IF EXISTS gl_vouchers_rw ON "gl_vouchers";
+CREATE POLICY gl_vouchers_rw ON "gl_vouchers" FOR ALL TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')))
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
+
+DROP POLICY IF EXISTS gl_voucher_lines_rw ON "gl_voucher_lines";
+CREATE POLICY gl_voucher_lines_rw ON "gl_voucher_lines" FOR ALL TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')))
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));
+
+DROP POLICY IF EXISTS gl_posting_rules_rw ON "gl_posting_rules";
+CREATE POLICY gl_posting_rules_rw ON "gl_posting_rules" FOR ALL TO afagh_app
+  USING (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')))
+  WITH CHECK (EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+    WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+      AND r."code" IN ('ADMIN','FINANCE_EXPERT','FINANCE')));

@@ -254,6 +254,9 @@ try {
     'saved_reports',
     // ارزیابی جامع دکتری (مهاجرت 0135) — studentId دارد ⇒ RLS اجباری.
     'comprehensive_exams',
+    // حسابداری دوطرفهٔ GL (مهاجرت 0142) — voucher_lines دارای studentId؛
+    // بقیه هم دادهٔ مالی محضاند. سیاستها در pg-hardening.sql (gl_*_rw).
+    'gl_accounts','gl_periods','gl_vouchers','gl_voucher_lines','gl_posting_rules',
   ];
   const checks = await client.query(
     `SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
