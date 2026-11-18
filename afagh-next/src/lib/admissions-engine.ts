@@ -19,9 +19,11 @@ import {
   degree_level_configs,
   educational_regulations,
   majors,
+  roles,
   sanjesh_mappings,
   student_id_formulas,
   students,
+  user_roles,
   users,
 } from '@/db/schema';
 
@@ -734,6 +736,19 @@ export async function assignStudentNumbers(
               universityId,
             })
             .returning();
+          // نقشِ STUDENT — بدون آن، دانشجو پس از پذیرش نمی‌تواند وارد شود
+          // (`homeFor` کاربر بدون نقش را به `/login?e=norole` می‌فرستد).
+          const [studentRole] = await tx
+            .select({ id: roles.id })
+            .from(roles)
+            .where(eq(roles.code, 'STUDENT'))
+            .limit(1);
+          if (studentRole) {
+            await tx
+              .insert(user_roles)
+              .values({ userId: user.id, roleId: studentRole.id })
+              .onConflictDoNothing();
+          }
         }
 
         // ۲. هر پذیرش یک پروندهٔ تازه با شماره دانشجویی جدید می‌گیرد؛ پرونده‌های قبلی دست‌نخورده می‌مانند.

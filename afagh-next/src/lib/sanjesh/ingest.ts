@@ -289,6 +289,25 @@ export async function remapFileRows(fileId: number): Promise<{ updatedRows: numb
      WHERE r."fileId" = ${fileId}
   `);
   const updatedRows = Number((result as unknown as { rowCount?: number }).rowCount ?? 0);
+  // ستون‌های هویتیِ ردیف از نگاشت تازه بازسازی می‌شوند؛ وگرنه اصلاح «تطبیق فیلدها»
+  // هیچ اثری روی کد ملی/نام و وضعیت تطبیق ندارد و ردیف‌ها برای همیشه INVALID می‌مانند.
+  await db.execute(sql`
+    UPDATE "sanjesh_file_rows" r
+       SET "nationalCode" = CASE WHEN m."targetField" = 'nationalCode'
+             THEN NULLIF(btrim(r."dataJson"->'columns'->>(m."colIndex"::text)), '') ELSE r."nationalCode" END,
+           "fullName" = CASE WHEN m."targetField" = 'fullName'
+             THEN NULLIF(btrim(r."dataJson"->'columns'->>(m."colIndex"::text)), '') ELSE r."fullName" END
+      FROM "sanjesh_file_fields" m
+     WHERE r."fileId" = ${fileId} AND m."fileId" = ${fileId}
+       AND m."targetField" IN ('nationalCode','fullName')
+  `);
+  await db.execute(sql`
+    UPDATE "sanjesh_file_rows"
+       SET "nationalCodeValid" = ("nationalCode" ~ '^[0-9]{10}$'),
+           "matchStatus" = CASE WHEN "matchStatus" = 'INVALID' THEN 'PENDING' ELSE "matchStatus" END,
+           "studentId" = CASE WHEN "matchStatus" = 'INVALID' THEN NULL ELSE "studentId" END
+     WHERE "fileId" = ${fileId}
+  `);
   return { updatedRows };
 }
 
@@ -317,14 +336,15 @@ export async function matchFileRows(fileId: number): Promise<{
   // دامنهٔ دانشگاه الزامی است: بدون آن، دانشجوی همان کد ملی در دانشگاه دیگر
   // به این ردیف وصل می‌شد.
   const uniFilter = file.universityId
-    ? sql` AND s."universityId" = ${file.universityId}`
+    ? sql` AND (s."universityId" = ${file.universityId} OR s."universityId" IS NULL)`
     : sql``;
 
+  // تطبیق روی users.nationalCode است، نه persons (که در runtime ساخته نمی‌شود).
   const found = await db.execute(sql`
-    SELECT p."canonicalNationalCode" AS nc, s."id" AS sid
-      FROM "persons" p
-      JOIN "students" s ON s."personId" = p."id"
-     WHERE p."canonicalNationalCode" IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})
+    SELECT u."nationalCode" AS nc, s."id" AS sid
+      FROM "users" u
+      JOIN "students" s ON s."userId" = u."id"
+     WHERE u."nationalCode" IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})
        ${uniFilter}
   `);
 
@@ -375,7 +395,7 @@ export async function matchFileRows(fileId: number): Promise<{
  */
 export async function stageMatchedRows(fileId: number): Promise<{ staged: number; skipped: number }> {
   const [file] = await db
-    .select({ universityId: sanjesh_files.universityId, examKind: sanjesh_files.examKind })
+    .select({ universityId: sanjesh_files.universityId, examKind: sanjesh_files.examKind, examYear: sanjesh_files.examYear, degreeLevelId: sanjesh_files.degreeLevelId })
     .from(sanjesh_files)
     .where(eq(sanjesh_files.id, fileId))
     .limit(1);
@@ -452,6 +472,9 @@ export async function stageMatchedRows(fileId: number): Promise<{ staged: number
       mobile: f.mobile ?? null,
       studentId: r.studentId,
       mappedMajorId,
+      // سال ورود/مقطع از خود فایل می‌آید، نه پیش‌فرض ۱۴۰۵ در موتور پذیرش
+      entryYear: file.examYear ?? null,
+      degreeLevelId: file.degreeLevelId ?? null,
       status: mappedMajorId ? 'RESOLVED' : 'PENDING_MAPPING',
       fileId,
       rowNo: r.rowNo,
