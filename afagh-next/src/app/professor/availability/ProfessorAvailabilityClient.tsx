@@ -285,31 +285,30 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
 
       {/* Interactive Availability Matrix */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
-          <div>
-            <h3 className="font-extrabold text-slate-900 text-base">
-              ماتریس اعلام ساعات حضور هفتگی برای {currentTerm?.title}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              روی هر خانه کلیک کنید تا وضعیت آن بین <b>🟩 اولویت اصلی (سبز)</b>، <b>🟨 در صورت نیاز (زرد)</b> و <b>🟥 عدم امکان حضور (قرمز)</b> تغییر کند.
-            </p>
-          </div>
+        {/* اطلاعیهها بالای دکمهها — دکمههای preset همه در یک ردیف (درخواست ۱۴۰۵/۰۸/۲۸) */}
+        {openTermNote && (
+          <div className="rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 text-2xs font-bold text-sky-900 print:hidden">{openTermNote}</div>
+        )}
+        {prefillNote && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-2xs font-bold text-emerald-900 print:hidden">{prefillNote}</div>
+        )}
+        <div className="pb-3 border-b border-slate-200">
+          <h3 className="font-extrabold text-slate-900 text-base">
+            ماتریس اعلام ساعات حضور هفتگی برای {currentTerm?.title}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            روی هر خانه کلیک کنید تا وضعیت آن بین <b>🟩 اولویت اصلی (سبز)</b>، <b>🟨 در صورت نیاز (زرد)</b> و <b>🟥 عدم امکان حضور (قرمز)</b> تغییر کند.
+          </p>
+        </div>
 
-          {/* Presets */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {openTermNote && (
-              <div className="rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 text-2xs font-bold text-sky-900 print:hidden">{openTermNote}</div>
-            )}
-            {prefillNote && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-2xs font-bold text-emerald-900 print:hidden">{prefillNote}</div>
-            )}
-            <button onClick={() => applyPreset('ALL_PREF')} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-bold text-2xs hover:bg-emerald-200 transition">🟢 حضور کامل</button>
-            <button onClick={() => applyPreset('MORNING_ONLY')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200 transition">☀️ فقط صبح‌ها</button>
-            <button onClick={() => applyPreset('AFTERNOON_ONLY')} className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 font-bold text-2xs hover:bg-blue-200 transition">🌆 فقط بعدازظهرها</button>
-            <button onClick={() => applyPreset('EVEN_DAYS')} className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-bold text-2xs hover:bg-purple-200 transition">📅 روزهای زوج</button>
-            <button onClick={() => applyPreset('ODD_DAYS')} className="px-2.5 py-1 rounded-lg bg-violet-100 text-violet-900 font-bold text-2xs hover:bg-violet-200 transition">🗓️ روزهای فرد</button>
-            <button onClick={() => applyPreset('CLEAR')} className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 font-bold text-2xs hover:bg-rose-200 transition">🔴 مسدودسازی</button>
-          </div>
+        {/* Presets — یک ردیفِ ثابت؛ در نمایشگرِ باریک اسکرول افقی */}
+        <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+            <button onClick={() => applyPreset('ALL_PREF')} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-bold text-2xs hover:bg-emerald-200 transition whitespace-nowrap">🟢 حضور کامل</button>
+            <button onClick={() => applyPreset('MORNING_ONLY')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200 transition whitespace-nowrap">☀️ فقط صبح‌ها</button>
+            <button onClick={() => applyPreset('AFTERNOON_ONLY')} className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 font-bold text-2xs hover:bg-blue-200 transition whitespace-nowrap">🌆 فقط بعدازظهرها</button>
+            <button onClick={() => applyPreset('EVEN_DAYS')} className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-bold text-2xs hover:bg-purple-200 transition whitespace-nowrap">📅 روزهای زوج</button>
+            <button onClick={() => applyPreset('ODD_DAYS')} className="px-2.5 py-1 rounded-lg bg-violet-100 text-violet-900 font-bold text-2xs hover:bg-violet-200 transition whitespace-nowrap">🗓️ روزهای فرد</button>
+            <button onClick={() => applyPreset('CLEAR')} className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 font-bold text-2xs hover:bg-rose-200 transition whitespace-nowrap">🔴 مسدودسازی</button>
         </div>
 
         {/* Matrix Grid */}

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requirePlatformAdmin } from '@/lib/platform-admin';
-import { resetSettings, saveSettings, SETTING_BY_KEY } from '@/lib/settings';
+import { resetSettings, saveSettings, SETTING_BY_KEY, getSetting } from '@/lib/settings';
 import { SECRET_MASK } from '@/lib/settings-shared';
 import { magicMatches } from '@/lib/safe-input';
 
@@ -47,9 +47,23 @@ export async function saveSettingsAction(values: Record<string, string>): Promis
     clean[key] = v;
   }
 
+  // حالتِ قبلیِ باز بودن اعلام حضور — برای تشخیصِ گذارِ به NEXT (ارسال اطلاعیه)
+  const oldAvMode = (await getSetting('AVAILABILITY_TERM_MODE'))?.trim() || 'ACTIVE';
+
   const n = await saveSettings(clean);
   revalidatePath('/admin/settings');
-  return { ok: true, message: `${n} تنظیم ذخیره شد.` };
+
+  let message = `${n} تنظیم ذخیره شد.`;
+  if (clean.AVAILABILITY_TERM_MODE === 'NEXT' && oldAvMode !== 'NEXT') {
+    // گذار به «ترم فعال + ترم بعدی» → اطلاعیهٔ خودکارِ درخواستِ اعلام حضور
+    // به همهٔ اساتید (درخواست ۱۴۰۵/۰۸/۲۸) — شکستش ذخیرهٔ تنظیمات را نبندد.
+    try {
+      const { notifyAvailabilityNextTerm } = await import('@/lib/availability-notify');
+      const sent = await notifyAvailabilityNextTerm();
+      if (sent > 0) message = `${message} اطلاعیهٔ «درخواست اعلام حضور ترم آینده» برای ${sent} استاد ارسال شد.`;
+    } catch { /* اطلاعیه جانبی است */ }
+  }
+  return { ok: true, message };
 }
 
 /**
