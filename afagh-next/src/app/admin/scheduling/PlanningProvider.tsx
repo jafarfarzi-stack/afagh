@@ -108,6 +108,11 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
   const [realAvailRows, setRealAvailRows] = useState<SchedulingWorkspace['availabilities']>(initial.availabilities);
   const [courseDemands, setCourseDemands] = useState<CourseDemand[]>(() => mapDemands((initial as any).demands));
 
+  // دادهٔ «پیشنهاد استاد» (گام ۱) — سابقهٔ تدریس + آخرین نمرهٔ ارزشیابی؛ از سرور می‌آید
+  const [profSuggestionData, setProfSuggestionData] = useState<{ history: Record<string, number>; evalScores: Record<number, number> }>(() =>
+    (initial as any).suggestions ?? { history: {}, evalScores: {} },
+  );
+
   // Inspector — استادِ پیش‌فرضِ «گام ۵» باید کسی باشد که واقعاً درس دارد؛ وگرنه
   // جدولِ پیش‌فرض تقریباً خالی دیده می‌شود و کاربر فکر می‌کند برنامه ثبت نشده است.
   const [inspectorProfId, setInspectorProfId] = useState<number>(() => {
@@ -182,6 +187,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     setProfessors(mapProfessors(ww.professors as any, ww.availabilities));
     setRealAvailRows(ww.availabilities);
     setCourseDemands(mapDemands(ww.demands as any));
+    setProfSuggestionData(ww.suggestions ?? { history: {}, evalScores: {} });
     setApprovedOfferings(mapOfferings(ww.approvedOfferings as any));
     setCurrentRealScenario(buildRealScenario(mapOfferings(ww.approvedOfferings as any), ww.hardConflictCount, ww.sessionsTotal, ww.allocatedRoomIds.length));
     setGeneratedTermSessionsCount(ww.sessionsTotal);
@@ -772,6 +778,7 @@ function useDepartmentPlanning(initial: SchedulingWorkspace, initialTab?: string
     ownedDeptId,
     phaseBusy,
     profAssignedUnitsMap,
+    profSuggestionData,
     programMatrix,
     applyScope,
     chartRange,

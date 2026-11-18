@@ -61,6 +61,8 @@ export interface ProfessorOption {
   staffCode: string;
   academicRank: string;
   contractType: 'تمام‌وقت' | 'نیمه‌وقت' | 'مدعو';
+  /** طريقهٔ همکاری واقعی استاد (cooperationType/employmentType دیتابیس) — وزن «پیشنهاد استاد» */
+  employmentType: string | null;
   /** گروه آموزشی استاد — کشویی هر درس فقط استادان همین گروه را نشان می‌دهد */
   departmentId: number | null;
   departmentName: string;
@@ -209,7 +211,10 @@ export interface SchedulingWorkspace {
   classrooms: { id: number; name: string; buildingName: string; capacity: number; roomType: string; isActive: number | null; facultyId: number | null; facultyName: string | null; facultyStudents: number }[];
   allocatedRoomIds: number[];
   roomGrants: { id: number; classroomId: number; shift: string; ownerDepartmentId: number; status: string }[];
-  professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null }[];
+  professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null; employmentType: string | null }[];
+  /** دادهٔ «پیشنهاد استاد» (گام ۱) — history: کلید `${courseId}:${profId}` = تعداد ارائه‌های ترم‌های دیگر؛
+   *  evalScores: staffId = آخرین نمرهٔ ارزشیابی. نسخهٔ سبک (partial) خالی می‌آید. */
+  suggestions: { history: Record<string, number>; evalScores: Record<number, number> };
   demands: {
     offeringId: number; courseId: number; courseDeptId: number | null;
     code: string; title: string; units: string; courseType: string;

@@ -1,9 +1,10 @@
 'use client';
 
 // گام ۱: چارت دروس و انتساب اساتید
+import { useMemo } from 'react';
 import { usePlanning } from '../PlanningProvider';
 import { ProfessorSelect } from './ProfessorSelect';
-import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, suggestGroupsCount } from '../planning-core';
+import { faNum, DEMAND_PAGE, NO_PROFESSOR, MAX_GROUPS_PER_COURSE, suggestGroupsCount, suggestProfessorRanking } from '../planning-core';
 
 export default function CurriculumAssignTab() {
   const {
@@ -22,10 +23,18 @@ export default function CurriculumAssignTab() {
     handleUpdateDemandExamDate,
     isDeptScope,
     profAssignedUnitsMap,
+    profSuggestionData,
     professors,
     setActiveMainTab,
     setDemandLimit,
   } = usePlanning();
+
+  // بار فعلی هر استاد (کلید عددی) — مبنای کنترل سقف در پیشنهاد استاد
+  const currentLoads = useMemo<Record<number, number>>(() => {
+    const m: Record<number, number> = {};
+    for (const [pid, v] of Object.entries(profAssignedUnitsMap)) m[Number(pid)] = v.units;
+    return m;
+  }, [profAssignedUnitsMap]);
 
   return (
           <div className="space-y-4">
@@ -81,6 +90,21 @@ export default function CurriculumAssignTab() {
                     const deptProfs = professors.filter(p => p.departmentId != null && p.departmentId === demand.courseDeptId);
                     // مدیرگروه فقط استادان گروه خودش را ببیند؛ fallback فقط برای ادمین.
                     const pool = isDeptScope ? deptProfs : (deptProfs.length ? deptProfs : professors);
+                    // ⭐ پیشنهاد استاد: سابقهٔ تدریسِ همین درس × ۲ + آخرین نمرهٔ ارزشیابی،
+                    //    با احترام به سقف بار استاد. فقط پیشنهاد است — انتخاب خودکار نمی‌شود.
+                    const ranking = suggestProfessorRanking({
+                      pool: pool.map(p => ({ id: p.id, maxWeeklyUnits: p.maxWeeklyUnits, academicRank: p.academicRank, employmentType: p.employmentType })),
+                      demand: { courseId: demand.courseId, units: demand.units, groupCount: demand.groupsCount },
+                      history: profSuggestionData.history,
+                      evalScores: profSuggestionData.evalScores,
+                      currentLoads,
+                    });
+                    // پیشنهاد نمایشی: نخستین گزینهٔ در-سقف با سابقه یا ارزشیابی ناصفر
+                    const topSuggestion = ranking.find(r => r.fitsCap && (r.times > 0 || r.evalScore > 0)) ?? null;
+                    // ترتیب کشویی: پیشنهاد اول، بعد بقیه (همان pool، فقط مرتب‌شده)
+                    const orderedPool = ranking.length
+                      ? ranking.map(r => pool.find(p => p.id === r.profId)).filter((p): p is (typeof pool)[number] => !!p)
+                      : pool;
                     const assignedProf = pool.find(p => p.id === demand.preferredProfId)
                       || professors.find(p => p.id === demand.preferredProfId)
                       || pool[0] || NO_PROFESSOR;
@@ -187,7 +211,7 @@ export default function CurriculumAssignTab() {
                               <div className="space-y-1.5">
                                 <div className="flex items-center gap-1.5">
                                   <ProfessorSelect
-                                    professors={pool}
+                                    professors={orderedPool}
                                     value={demand.preferredProfId}
                                     onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                     label={p => `${p.name} (${p.academicRank} — ${p.contractType})`}
@@ -202,6 +226,21 @@ export default function CurriculumAssignTab() {
                                     👥 مشترک
                                   </button>
                                 </div>
+                                {/* ⭐ پیشنهاد استاد — فقط نمایش؛ انتخاب خودکار انجام نمیشود */}
+                                {topSuggestion && (
+                                  demand.preferredProfId === topSuggestion.profId ? (
+                                    <span className="inline-block px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[9px] font-black whitespace-nowrap">
+                                      ✅ همان پیشنهاد
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black whitespace-nowrap"
+                                      title="بر اساس سابقهٔ تدریس همین درس + آخرین نمرهٔ ارزشیابی، بدون احتساب استادی که از سقف بارش رد میشود"
+                                    >
+                                      ⭐ پیشنهاد: {pool.find(p => p.id === topSuggestion.profId)?.name ?? '—'} — {pool.find(p => p.id === topSuggestion.profId)?.academicRank ?? '—'} · سابقهٔ {faNum(topSuggestion.times)} بار{topSuggestion.evalScore > 0 ? ` · ارزشیابی ${faNum(Math.round(topSuggestion.evalScore * 100) / 100)}` : ''}
+                                    </span>
+                                  )
+                                )}
                               </div>
                             ) : (
                               <div className="space-y-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
@@ -224,7 +263,7 @@ export default function CurriculumAssignTab() {
                                         گروه {faNum(gNo)}:
                                       </span>
                                       <ProfessorSelect
-                                        professors={pool}
+                                        professors={orderedPool}
                                         value={curProfId}
                                         onChange={id => handleAssignProfessorToGroup(demand.id, gNo, id)}
                                         className="w-full border border-indigo-300 rounded px-1.5 py-0.5 font-bold bg-white text-indigo-950 text-xs"
@@ -254,7 +293,7 @@ export default function CurriculumAssignTab() {
                                   <span className="text-indigo-900">سهم: {faNum((demand.theoryWeightRatio || 0.7) * 100)}٪ ({faNum((demand.theoryWeightRatio || 0.7) * 20)} نمره)</span>
                                 </div>
                                 <ProfessorSelect
-                                  professors={pool}
+                                  professors={orderedPool}
                                   value={demand.preferredProfId}
                                   onChange={id => handleAssignProfessorToCourse(demand.id, id)}
                                   className="w-full border border-indigo-300 rounded px-2 py-1 font-extrabold bg-white text-indigo-950 text-xs"
@@ -268,7 +307,7 @@ export default function CurriculumAssignTab() {
                                   <span className="text-purple-900">سهم: {faNum((demand.labWeightRatio || 0.3) * 100)}٪ ({faNum((demand.labWeightRatio || 0.3) * 20)} نمره)</span>
                                 </div>
                                 <ProfessorSelect
-                                  professors={pool}
+                                  professors={orderedPool}
                                   value={demand.coProfId ?? pool[0]?.id ?? 0}
                                   onChange={id => handleAssignCoProfessor(demand.id, id)}
                                   className="w-full border border-purple-300 rounded px-2 py-1 font-extrabold bg-white text-purple-950 text-xs"

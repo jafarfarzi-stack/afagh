@@ -188,7 +188,7 @@ type StaffPeriodScore = { staffId: number; periodId: number; periodTitle: string
  * نمرهٔ وزنی ارزشیابی همهٔ اساتید در همهٔ دوره‌ها — یک کوئری.
  * این همان چیزی است که جای حلقهٔ «به ازای هر استاد → به ازای هر دوره» نشسته.
  */
-async function allStaffPeriodScores(): Promise<StaffPeriodScore[]> {
+export async function allStaffPeriodScores(): Promise<StaffPeriodScore[]> {
   const res = await db.execute(sql`
     with ${OWNERSHIP_CTE},
     resp as (

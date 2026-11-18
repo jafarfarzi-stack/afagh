@@ -16,7 +16,7 @@ import {
   filterContextDemands, filterScenarioOfferings, inspectorSummary, mapCohorts, mapDemands,
   mapOfferings, MAX_GROUPS_PER_COURSE, nextGroupNumber, NO_PROFESSOR, parseJalaliDates, PHASE_LABELS,
   slotAvailStatus, TIME_SLOT_PRESETS, PLANNING_TABS, resolveTab, cohortSemesterNo, chartScopeSemester, suggestGroupsCount,
-  programSemesterMatrix,
+  programSemesterMatrix, suggestProfessorRanking, profRankWeight, profEmploymentWeight,
 } from '../src/app/admin/scheduling/planning-core.ts';
 import type { CourseDemand, DepartmentOffering, SchedulingWorkspace } from '../src/app/admin/scheduling/types.ts';
 
@@ -271,6 +271,99 @@ eq('ترم دیگر جدا شمرده میشود', t3.courses, 1);
 eq('جمع درسِ متمایز کارت = ۲', mx[0].semesters.reduce((n, s) => n + s.courses, 0), 2);
 eq('جمع گروههای کارت = ۷', mx[0].semesters.reduce((n, s) => n + s.total, 0), 7);
 eq('چندگروهی فقط وقتی گروه>درس تفکیک میشود', t2.total > t2.courses, true);
+
+console.log('\n۱۰) رتبه‌بندی پیشنهاد استاد (suggestProfessorRanking) — امتیاز ADDITIVE: مرتبه + نوع همکاری + سابقه×۲ + ارزشیابی');
+eq('استاد تمام → ۱۶، دانشیار → ۱۲، استادیار → ۸، مربی → ۴', [profRankWeight('استاد'), profRankWeight('دانشیار'), profRankWeight('استادیار'), profRankWeight('مربی')], [16, 12, 8, 4]);
+eq('شروعِ رشته هم تطبیق می‌کند (مربی‌ارشد → ۴) و دانشیار قبل از استاد چک می‌شود', [profRankWeight('مربی‌ارشد'), profRankWeight('دانشیار ماده'), profRankWeight('استادیار هیات علمی')], [4, 12, 8]);
+eq('کارشناس/خالی/نامشخص → ۲ (خنثی نه صفر)', [profRankWeight('کارشناس آموزش'), profRankWeight(''), profRankWeight(null)], [2, 2, 2]);
+eq('نوع همکاری: تمام → ۶، حق‌التدریس/نیمه → ۲، نامشخص → ۰', [profEmploymentWeight('تمام‌وقت'), profEmploymentWeight('حق التدريس'), profEmploymentWeight('نیمه‌وقت'), profEmploymentWeight('قراردادی'), profEmploymentWeight(null)], [6, 2, 2, 0, 0]);
+eq('سابقهٔ تدریس بیشتر برنده است', suggestProfessorRanking({
+  pool: [{ id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار' }, { id: 2, maxWeeklyUnits: 16, academicRank: 'استادیار' }],
+  demand: { courseId: 10, units: 3 },
+  history: { '10:2': 4 },
+  evalScores: {},
+  currentLoads: {},
+})[0].profId, 2);
+eq('سابقهٔ برابر → ارزشیابی بالاتر برنده است', suggestProfessorRanking({
+  pool: [{ id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار' }, { id: 2, maxWeeklyUnits: 16, academicRank: 'استادیار' }],
+  demand: { courseId: 10, units: 3 },
+  history: { '10:1': 2, '10:2': 2 },
+  evalScores: { 1: 16, 2: 18.5 },
+  currentLoads: {},
+}).map(r => r.profId), [2, 1]);
+eq('سقف بار، استادِ پرمشغله را به ته فهرست می‌فرستد', suggestProfessorRanking({
+  pool: [{ id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار' }, { id: 2, maxWeeklyUnits: 6, academicRank: 'استادیار' }],
+  demand: { courseId: 10, units: 3, groupCount: 2 },
+  history: { '10:1': 5 },
+  evalScores: {},
+  currentLoads: { 1: 11, 2: 0 },
+}), [
+  { profId: 2, times: 0, evalScore: 0, fitsCap: true, score: 8 },
+  { profId: 1, times: 5, evalScore: 0, fitsCap: false, score: 18 },
+]);
+eq('همهٔ سابقه/ارزشیابی صفر → ترتیب pool حفظ میشود (مرتبهٔ نامشخص = وزن خنثی ۲)', suggestProfessorRanking({
+  pool: [{ id: 7, maxWeeklyUnits: 16 }, { id: 3, maxWeeklyUnits: 16 }],
+  demand: { courseId: 1, units: 2 },
+  history: {},
+  evalScores: {},
+  currentLoads: {},
+}), [
+  { profId: 7, times: 0, evalScore: 0, fitsCap: true, score: 2 },
+  { profId: 3, times: 0, evalScore: 0, fitsCap: true, score: 2 },
+]);
+eq('groupCount در کنترل سقف لحاظ میشود (۲ گروه × ۳ واحد = ۶)', suggestProfessorRanking({
+  pool: [{ id: 1, maxWeeklyUnits: 6, academicRank: 'استادیار' }, { id: 2, maxWeeklyUnits: 7, academicRank: 'استادیار' }],
+  demand: { courseId: 5, units: 3, groupCount: 2 },
+  history: {},
+  evalScores: {},
+  currentLoads: { 1: 1, 2: 1 },
+}).map(r => r.profId), [2, 1]);
+eq('score = مرتبه + نوع همکاری + سابقه × ۲ + ارزشیابی', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'مربی' },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'مربی' },
+    { id: 3, maxWeeklyUnits: 16, academicRank: 'مربی' },
+  ],
+  demand: { courseId: 8, units: 2 },
+  history: { '8:1': 3, '8:2': 1 },
+  evalScores: { 2: 1, 3: 2 },
+  currentLoads: {},
+})[0], { profId: 1, times: 3, evalScore: 0, fitsCap: true, score: 10 });
+// استادیارِ تماموقت (۸+۶=۱۴) و دانشیارِ حق‌التدریسی (۱۲+۲=۱۴) با سابقهٔ برابر مساوی می‌شوند؛
+// تساوی امتیاز با وزن نوع همکاری شکسته می‌شود (تعهد تماموقت مقدم) — نه حذف گزینه.
+eq('استادیار تماموقت با سابقهٔ برابر از دانشیار حق‌التدریسی جلو میزند (شکست تساوی با نوع همکاری)', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار', employmentType: 'تمام‌وقت' },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'دانشیار', employmentType: 'حق‌التدریس' },
+  ],
+  demand: { courseId: 4, units: 2 },
+  history: { '4:1': 2, '4:2': 2 },
+  evalScores: {},
+  currentLoads: {},
+}).map(r => r.profId), [1, 2]);
+eq('دانشیار با سابقهٔ برابر بالاتر از استادیار است', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'استادیار' },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'دانشیار' },
+  ],
+  demand: { courseId: 4, units: 2 },
+  history: { '4:1': 2, '4:2': 2 },
+  evalScores: {},
+  currentLoads: {},
+})[0].profId, 2);
+eq('دانشگاه بدون هیچ ارزشیابی → امتیاز صفر نمیشود و ترتیب درست است', suggestProfessorRanking({
+  pool: [
+    { id: 1, maxWeeklyUnits: 16, academicRank: 'دانشیار', employmentType: 'تمام‌وقت' },
+    { id: 2, maxWeeklyUnits: 16, academicRank: 'استادیار', employmentType: 'حق‌التدریس' },
+  ],
+  demand: { courseId: 6, units: 3 },
+  history: { '6:1': 3, '6:2': 1 },
+  evalScores: {},
+  currentLoads: {},
+}), [
+  { profId: 1, times: 3, evalScore: 0, fitsCap: true, score: 24 },
+  { profId: 2, times: 1, evalScore: 0, fitsCap: true, score: 12 },
+]);
 
 console.log(`\nنتیجه: ${pass} موفق، ${fail} ناموفق`);
 process.exit(fail === 0 ? 0 : 1);

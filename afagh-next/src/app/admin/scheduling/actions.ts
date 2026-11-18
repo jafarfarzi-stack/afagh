@@ -21,6 +21,7 @@ import {
   professor_availabilities, scheduling_room_grants, staff, students, term_scheduling_states, users,
 } from '@/db/schema';
 import { requireRole, getStaffByUser } from '@/lib/auth';
+import { allStaffPeriodScores } from '@/lib/bi-engine';
 import { headedDepartments } from '@/lib/group-manager';
 import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { getSchedulingState, transitionSchedulingPhase, supplyGroupDrafts, allocateSections, allocateRoomQuotas, releaseRoomShift, borrowReleasedShift, getSmartSuggestions, previewScheduleModels, computeScheduleModelAssignments } from '@/lib/scheduling-engine';
@@ -197,6 +198,9 @@ async function listRealProfessors(universityId?: number) {
       academicRank: staff.academicRank,
       departmentId: staff.departmentId,
       departmentName: departments.name,
+      // طريقهٔ همکاری — وزن «پیشنهاد استاد» (تمام‌وقت/حق‌التدریس/نیمه‌وقت)
+      cooperationType: staff.cooperationType,
+      employmentType: staff.employmentType,
     })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
@@ -761,7 +765,9 @@ export type SchedulingWorkspaceResult =
       roomGrants: { id: number; classroomId: number; shift: string; ownerDepartmentId: number; status: string }[];
       departments: { id: number; name: string; departmentCode: string | null }[];
       availabilities: { staffId: number; dayOfWeek: number | null; startTime: string | null; endTime: string | null; status: string | null }[];
-      professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null }[];
+      professors: { id: number; name: string; staffCode: string | null; academicRank: string | null; departmentId: number | null; departmentName: string | null; employmentType: string | null }[];
+      /** دادهٔ «پیشنهاد استاد» (گام ۱) — در نسخهٔ سبک خالی است */
+      suggestions: { history: Record<string, number>; evalScores: Record<number, number> };
       demands: {
         offeringId: number; courseId: number; courseDeptId: number | null;
         code: string; title: string; units: string; courseType: string;
@@ -844,6 +850,7 @@ export async function getSchedulingWorkspaceLightAction(): Promise<SchedulingWor
       departments: deptRows,
       availabilities: [],
       professors: [],
+      suggestions: { history: {}, evalScores: {} },
       demands: [],
       phases: Object.fromEntries(phases.map(p => [p.termId, p.phase])),
       termCalendar,
@@ -998,6 +1005,39 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
       if (ownPrograms.length) programs = ownPrograms;
     }
 
+    // ── دادهٔ «پیشنهاد استاد» (گام ۱): سابقهٔ تدریس + آخرین نمرهٔ ارزشیابی ──
+    // ① سابقهٔ تدریسِ همان درس: تعداد ارائه‌های «ترم‌های دیگر» به ازای (courseId، professorId).
+    // ② آخرین نمرهٔ ارزشیابی هر استاد (آخرِ آرایهٔ دوره‌ها برای همان staffId — کوئری
+    //    با startDate صعودی مرتب می‌کند). دامنه: استادانِ همین دانشگاه (professors همین کارتابل).
+    const profIdSet = new Set(professors.map(p => p.id));
+    const [historyRows, periodScores] = await Promise.all([
+      resolvedTermId != null
+        ? db.select({
+            courseId: course_offerings.courseId,
+            professorId: course_offerings.professorId,
+            times: sql<number>`count(*)::int`,
+          }).from(course_offerings).where(and(
+            uniOrGlobal(course_offerings.universityId, uid),
+            sql`${course_offerings.termId} <> ${resolvedTermId}`,
+            sql`${course_offerings.professorId} is not null`,
+          )).groupBy(course_offerings.courseId, course_offerings.professorId)
+        : Promise.resolve([] as { courseId: number; professorId: number | null; times: number }[]),
+      // کوئری BI دامنهٔ دانشگاهی صریح ندارد؛ با فیلتر profIdSetِ همین کارتابل محدود می‌شود.
+      allStaffPeriodScores().catch(() => []),
+    ]);
+    const suggestionHistory: Record<string, number> = {};
+    for (const r of historyRows) {
+      if (r.professorId == null) continue;
+      suggestionHistory[`${r.courseId}:${r.professorId}`] = Number(r.times) || 0;
+    }
+    const suggestionEvalScores: Record<number, number> = {};
+    for (const s of periodScores) {
+      const staffId = Number(s.staffId);
+      if (!profIdSet.has(staffId)) continue;
+      const v = Number(s.score);
+      if (Number.isFinite(v)) suggestionEvalScores[staffId] = v;
+    }
+
     return {
       ok: true,
       roles: actor.roles,
@@ -1017,7 +1057,9 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
       professors: professors.map(p => ({
         id: p.id, name: `${p.name} ${p.lastName}`.trim(), staffCode: p.staffCode,
         academicRank: p.academicRank ?? '—', departmentId: p.departmentId ?? null, departmentName: p.departmentName ?? '—',
+        employmentType: (p.cooperationType ?? p.employmentType) ?? null,
       })),
+      suggestions: { history: suggestionHistory, evalScores: suggestionEvalScores },
       departments: deptRows,
       availabilities: availRows.map(a => ({
         staffId: a.staffId, dayOfWeek: a.dayOfWeek,

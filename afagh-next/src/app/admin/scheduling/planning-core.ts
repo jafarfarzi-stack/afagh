@@ -74,10 +74,85 @@ export function canUseCompactModel(
 export const NO_PROFESSOR: ProfessorOption = {
   id: 0, name: '— استادی ثبت نشده —', staffCode: '', academicRank: '—',
   contractType: 'تمام‌وقت', departmentId: null, departmentName: '—', maxWeeklyUnits: 1,
-  maxDailyHours: 0, hasSubmittedAvailability: false,
+  maxDailyHours: 0, hasSubmittedAvailability: false, employmentType: null,
 };
 
 export const faNum = (n: number | string | null | undefined) => (n === null || n === undefined ? '—' : String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]));
+
+/**
+ * وزن مرتبهٔ علمی استاد — از متن فارسی `academicRank`.
+ * ترتیب بررسی مهم است: اول «دانشیار»/«استادیار» (چون هر دو شامل «استاد»اند)،
+ * بعد «استاد» خالص (استاد تمام). تطابق شامل شروعِ رشته هم هست (مثل «مربی‌ارشد»).
+ * نامشخص/خالی/«کارشناس» → ۲ (خنثی، نه صفر مطلق).
+ */
+export function profRankWeight(academicRank: string | null | undefined): number {
+  const r = normalizeFa(String(academicRank ?? ''));
+  if (!r || /کارشناس/.test(r)) return 2;
+  if (r.includes('دانشیار')) return 12;
+  if (r.includes('استادیار')) return 8;
+  if (r.includes('استاد')) return 16;
+  if (r.includes('مربی')) return 4;
+  return 2;
+}
+
+/**
+ * وزن نوع همکاری استاد — از `cooperationType`/`employmentType`.
+ * تمام‌وقت → ۶، حق‌التدریس یا نیمه‌وقت → ۲، نامشخص → ۰ (خنثی).
+ */
+export function profEmploymentWeight(employmentType: string | null | undefined): number {
+  const t = normalizeFa(String(employmentType ?? ''));
+  if (!t) return 0;
+  if (t.includes('تمام')) return 6;
+  if (t.includes('حق') || t.includes('نیمه')) return 2;
+  return 0;
+}
+
+/**
+ * رتبه‌بندی «پیشنهاد استاد» برای یک ارائهٔ گام ۱ — خالص و Unit-Test‌شده.
+ *
+ * امتیاز ADDITIVE است (هرگز ضربی) تا در دانشگاه‌های بدونِ ارزشیابی صفر نشود:
+ *   score = rankWeight + employmentWeight + times*2 + evalScore
+ * مبنای سابقه: تعداد ارائه‌های «ترم‌های دیگر» همان درس. اساتیدی که با این
+ * ارائه از سقف بارشان (`maxWeeklyUnits`) رد می‌شوند، بعد از گزینه‌های
+ * جای‌جای‌شده می‌آیند. فقط «پیشنهاد» است — انتخاب خودکار انجام نمی‌شود.
+ */
+export type ProfSuggestionEntry = {
+  profId: number;
+  times: number;
+  evalScore: number;
+  fitsCap: boolean;
+  score: number;
+};
+
+export function suggestProfessorRanking(opts: {
+  pool: { id: number; maxWeeklyUnits: number; academicRank?: string | null; employmentType?: string | null }[];
+  demand: { courseId: number; units: number; groupCount?: number };
+  history: Record<string, number>;
+  evalScores: Record<number, number>;
+  currentLoads: Record<number, number>;
+}): ProfSuggestionEntry[] {
+  const groupCount = opts.demand.groupCount ?? 1;
+  const load = (Number(opts.demand.units) || 0) * groupCount;
+  return opts.pool
+    .map(p => {
+      const times = opts.history[`${opts.demand.courseId}:${p.id}`] ?? 0;
+      const evalScore = opts.evalScores[p.id] ?? 0;
+      const fitsCap = (opts.currentLoads[p.id] ?? 0) + load <= p.maxWeeklyUnits;
+      const empW = profEmploymentWeight(p.employmentType);
+      return {
+        profId: p.id,
+        times,
+        evalScore,
+        fitsCap,
+        score: profRankWeight(p.academicRank) + empW + times * 2 + evalScore,
+        empW,
+      };
+    })
+    // گزینه‌های در-سقف اول؛ امتیاز نزولی؛ تساویِ امتیاز با وزن نوع همکاری شکسته
+    // می‌شود (تعهد تماموقت مقدم) و در نهایت ترتیب pool حفظ می‌شود.
+    .sort((a, b) => Number(b.fitsCap) - Number(a.fitsCap) || b.score - a.score || b.empW - a.empW)
+    .map(({ empW: _empW, ...entry }) => entry);
+}
 
 /**
  * سقف تعداد گروه‌های موازی یک درس در یک ترم.
@@ -230,6 +305,7 @@ export function mapProfessors(profs: SchedulingWorkspace['professors'], avail: S
     staffCode: p.staffCode ?? '—',
     academicRank: p.academicRank ?? '—',
     contractType: 'تمام‌وقت',
+    employmentType: (p as any).employmentType ?? null,
     departmentId: p.departmentId ?? null,
     departmentName: p.departmentName ?? '—',
     maxWeeklyUnits: PROF_DEFAULT_MAX_UNITS,
