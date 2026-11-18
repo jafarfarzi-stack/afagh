@@ -38,7 +38,7 @@ const DAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه'
 /** فقط برای زمانی که تنظیمات دانشگاه در دسترس نیست — همان الگوی پیش‌فرض سامانه */
 const FALLBACK_SLOTS: TimeSlot[] = buildTimeSlots(DEFAULT_SLOT_CONFIG);
 
-export default function ProfessorAvailabilityClient({ demo = false, professor, terms, initialTermId, timeSlots }: Props) {
+export default function ProfessorAvailabilityClient({ demo = false, professor, terms, initialTermId, timeSlots, openTermNote }: Props & { openTermNote?: string | null }) {
   /* پیام‌ها از توستِ سراسری (نه alert بومی) تا صفحهٔ ماتریس قفل نشود. */
   const toast = useToast();
   // زنگ‌ها از تنظیمات دانشگاه می‌آیند (۲ ساعته/۱٫۵ ساعته، ۰۷:۰۰ تا ۲۰:۰۰ و …)
@@ -53,6 +53,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
   const [notes, setNotes] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [prefillNote, setPrefillNote] = useState<string | null>(null);
   const [loadingAvail, setLoadingAvail] = useState<boolean>(true);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -85,6 +86,9 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
         setAvailability(grid);
         setNotes(res.notes ?? '');
         setIsSubmitted(true);
+        setPrefillNote(res.prefilled
+          ? `✅ ماتریس بر اساس برنامهٔ مصوب شما پیش‌پُر شد (${res.scheduledBlocks ?? 0} بازهٔ کلاس) — میتوانید تغییر دهید و ذخیره کنید.`
+          : null);
       }
     }).finally(() => { if (!cancelled) setLoadingAvail(false); });
     return () => { cancelled = true; };
@@ -293,6 +297,12 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
 
           {/* Presets */}
           <div className="flex flex-wrap items-center gap-1.5">
+            {openTermNote && (
+              <div className="rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 text-2xs font-bold text-sky-900 print:hidden">{openTermNote}</div>
+            )}
+            {prefillNote && (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-2xs font-bold text-emerald-900 print:hidden">{prefillNote}</div>
+            )}
             <button onClick={() => applyPreset('ALL_PREF')} className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-bold text-2xs hover:bg-emerald-200 transition">🟢 حضور کامل</button>
             <button onClick={() => applyPreset('MORNING_ONLY')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200 transition">☀️ فقط صبح‌ها</button>
             <button onClick={() => applyPreset('AFTERNOON_ONLY')} className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 font-bold text-2xs hover:bg-blue-200 transition">🌆 فقط بعدازظهرها</button>

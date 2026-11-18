@@ -8,6 +8,7 @@ import { termsFor } from '@/lib/terms';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import { isDemoProfessorUser } from '@/lib/demo-accounts';
 import { getTimeSlots } from '@/lib/schedule-config';
+import { getSettings } from '@/lib/settings';
 import {
   DEMO_ACADEMIC_RANK,
   DEMO_AVAILABILITY_TERM,
@@ -65,6 +66,21 @@ export default async function ProfessorAvailabilityPage() {
     );
   }
 
+  // کنترلِ ادمین: کدام ترمها برای اعلام حضور بازند؟ (پیشفرض فقط ترم فعال)
+  const avMode = (await getSettings(['AVAILABILITY_TERM_MODE'] as const)).AVAILABILITY_TERM_MODE?.trim() || 'ACTIVE';
+  const curTerm = terms.find(t => t.isCurrent === 1) ?? null;
+  let openTerms = terms;
+  if (avMode === 'ACTIVE') {
+    openTerms = curTerm ? terms.filter(t => t.id === curTerm.id) : terms;
+  } else if (avMode === 'NEXT') {
+    // ترم بعدی = اولین ترم بعد از ترمِ فعال بر اساس sortOrder (مثلاً ۱۴۰۲۱ بعد از ۱۴۰۱۵)
+    const sorted = [...terms].sort((a, b) => (a.sortOrder ?? a.id) - (b.sortOrder ?? b.id));
+    const idx = curTerm ? sorted.findIndex(t => t.id === curTerm.id) : -1;
+    const next = idx >= 0 ? sorted[idx + 1] : undefined;
+    openTerms = curTerm ? [curTerm, ...(next ? [next] : [])] : terms;
+  }
+  const avTerm = selectedTerm && openTerms.some(t => t.id === selectedTerm.id) ? selectedTerm : openTerms[0] ?? null;
+
   const [dep] = me.departmentId
     ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, me.departmentId)).limit(1)
     : [];
@@ -89,13 +105,14 @@ export default async function ProfessorAvailabilityPage() {
           departmentName: dep?.name ?? '',
           maxWeeklyUnits,
         }}
-        terms={terms.map(t => ({
+        terms={openTerms.map(t => ({
           id: t.id,
           code: t.termCode,
           title: t.title,
           isCurrent: Boolean(t.isCurrent),
         }))}
-        initialTermId={selectedTerm?.id ?? null}
+        initialTermId={avTerm?.id ?? null}
+        openTermNote={avMode === 'NEXT' ? '📢 مدیریت اعلام حضور برای ترم آینده را باز کرده است — لطفاً ماتریس ترم بعد را هم پر کنید.' : avMode === 'ALL' ? '📢 همهٔ ترم‌ها برای اعلام حضور باز هستند.' : null}
         timeSlots={timeSlots}
       />
     </div>

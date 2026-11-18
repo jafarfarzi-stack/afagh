@@ -1,11 +1,12 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { professor_availabilities, professor_availability_notes } from '@/db/schema';
+import { course_offerings, professor_availabilities, professor_availability_notes, schedules } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import { getTimeSlots } from '@/lib/schedule-config';
+import { parseTimeToMinutes } from '@/lib/time-slots';
 
 export interface AvailabilityCell {
   dayIndex: number; // 0..6 (شنبه..جمعه)
@@ -19,7 +20,7 @@ export interface AvailabilityCell {
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** بارگذاری ماتریس از professor_availabilities (جدولی که موتور زمان‌بندی می‌خواند) */
-export async function loadAvailabilityAction(termId: number): Promise<{ ok: boolean; cells?: AvailabilityCell[]; notes?: string; error?: string }> {
+export async function loadAvailabilityAction(termId: number): Promise<{ ok: boolean; cells?: AvailabilityCell[]; notes?: string; error?: string; prefilled?: boolean; scheduledBlocks?: number }> {
   try {
     const user = await requireRole(['PROFESSOR']);
     const me = await getStaffByUser(user.id);
@@ -33,6 +34,44 @@ export async function loadAvailabilityAction(termId: number): Promise<{ ok: bool
     const teaching = (await getTimeSlots()).filter(s => !s.isBreak);
 
     const cells: AvailabilityCell[] = [];
+    let prefilled = false;
+    let scheduledBlocks = 0;
+    if (rows.length === 0) {
+      // پیش‌پُر از برنامهٔ مصوب: در ترمی که چارت تصویب شده، زنگهایی که استاد
+      // کلاس دارد باید از اول «ترجیحی» باشند — نه عدمِ حضور (درخواست ۱۴۰۵/۰۸/۲۸).
+      const blocks = await db
+        .select({ dayOfWeek: schedules.dayOfWeek, startTime: schedules.startTime, endTime: schedules.endTime })
+        .from(schedules)
+        .innerJoin(course_offerings, eq(course_offerings.id, schedules.offeringId))
+        .where(and(
+          eq(schedules.scheduleType, 'CLASS'),
+          eq(course_offerings.termId, Number(termId)),
+          eq(course_offerings.professorId, me.id),
+          sql`${schedules.dayOfWeek} is not null`,
+        ));
+      scheduledBlocks = blocks.length;
+      const seen = new Set<string>();
+      for (const b of blocks) {
+        const dayIndex = b.dayOfWeek ?? -1;
+        if (dayIndex < 0 || dayIndex > 6) continue;
+        const bS = parseTimeToMinutes(String(b.startTime).slice(0, 5));
+        const bE = parseTimeToMinutes(String(b.endTime).slice(0, 5));
+        if (bS == null || bE == null) continue;
+        for (const t of teaching) {
+          const sS = parseTimeToMinutes(t.startTime);
+          const sE = parseTimeToMinutes(t.endTime);
+          if (sS == null || sE == null) continue;
+          // هر زنگی که با بازهٔ کلاس همپوشانی دارد → ترجیحی
+          if (sS < bE && bS < sE) {
+            const k = dayIndex + ':' + t.id;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            cells.push({ dayIndex, slotIndex: t.id, status: 'PREF', startTime: t.startTime, endTime: t.endTime });
+          }
+        }
+      }
+      prefilled = cells.length > 0;
+    }
     for (const r of rows) {
       const dayIndex = r.dayOfWeek ?? -1;
       if (dayIndex < 0 || dayIndex > 6) continue;
@@ -52,7 +91,7 @@ export async function loadAvailabilityAction(termId: number): Promise<{ ok: bool
         }
       }
     }
-    return { ok: true, cells, notes: noteRow?.note ?? '' };
+    return { ok: true, cells, notes: noteRow?.note ?? '', prefilled, scheduledBlocks };
   } catch (err) {
     return { ok: false, error: (err as Error)?.message || 'خطا در بارگذاری.' };
   }
