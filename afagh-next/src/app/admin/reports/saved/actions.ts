@@ -27,6 +27,13 @@ async function currentUniversityId(): Promise<number> {
   return uni.id;
 }
 
+/** خطاهای kontrol جریان Next (redirect/notFound) نباید به پیام {ok:false} تبدیل شوند. */
+function failResult(e: unknown): { ok: false; error: string } {
+  const msg = String((e as Error)?.message ?? e ?? '');
+  if (/^NEXT_(REDIRECT|NOT_FOUND)/.test(msg)) throw e;
+  return { ok: false, error: (e as Error)?.message ?? String(e) };
+}
+
 type Row = typeof saved_reports.$inferSelect;
 
 /** آیا این کاربر اجازهٔ دیدنِ گزارش را دارد؟ */
@@ -245,7 +252,7 @@ export async function deleteSavedReport(id: number): Promise<{ ok: true } | { ok
     await db.delete(saved_reports).where(eq(saved_reports.id, id));
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return failResult(e);
   }
 }
 
@@ -275,7 +282,7 @@ export async function runSavedReportAction(
     );
     return { ok: true, result };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return failResult(e);
   }
 }
 
@@ -294,7 +301,9 @@ export async function exportSavedReportAction(
       .limit(1);
     const r = rows[0];
     if (!r) return { ok: false, error: 'گزارش یافت نشد.' };
-    if (!canSee(r, me.id, me.roles)) return { ok: false, error: 'به این گزارش دسترسی ندارید.' };
+    if (!canSee(r, me.id, me.roles)) return { ok: false, error: 'به اینReports دسترسی ندارید.' };
+    // همان گ	foreach منبع که در اجرا هست، اینجا هم اعمال میشود (جلوگیری از دور زدن مجوز).
+    if (!canUseSource(r.sourceKey, me.roles)) return { ok: false, error: 'دسترسی به منبع این REPORT وجود ندارد.' };
 
     const out = await exportCatalogReport(
       r.sourceKey,
@@ -303,7 +312,7 @@ export async function exportSavedReportAction(
     );
     return { ok: true, ...out };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return failResult(e);
   }
 }
 
@@ -332,7 +341,7 @@ export async function previewReportAction(
     });
     return { ok: true, result };
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return failResult(e);
   }
 }
 

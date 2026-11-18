@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import PrintButton from '@/components/PrintButton';
 import { requireRole } from '@/lib/auth';
-import { listFinanceStudents, listFinanceFilterOptions, summarizeFinanceStudents, countFinanceStudents } from '@/lib/finance-engine';
+import { listFinanceStudents, listFinanceFilterOptions, summarizeFinanceStudents } from '@/lib/finance-engine';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { getTermScope } from '@/lib/term-scope';
 import { faId } from '@/lib/calendar';
@@ -87,6 +87,7 @@ export default async function FinanceWorklistPage(props: {
     entryYear?: string;
     q?: string;
     debtors?: string;
+    all?: string;
     page?: string;
   }>;
 }) {
@@ -108,6 +109,8 @@ export default async function FinanceWorklistPage(props: {
   const entryYear = Number(sp.entryYear) || null;
   const search = (sp.q || '').trim();
   const onlyDebtors = sp.debtors === '1';
+  // پیش‌فرض فقط دانشجویان فعال؛ با ?all=1 همهٔ وضعیت‌ها (فارغ‌التحصیل/انصرافی…)
+  const statusScope = sp.all === '1' ? 'ALL' : 'ACTIVE';
   const page = Math.max(1, Number(sp.page) || 1);
   // ⚡ ۵۰ ردیف در هر صفحه (پیشتر ۱۰۰): `FinanceTable` یک کامپوننت کلاینت است،
   //    پس ردیفها هم بهعنوان props در payloadـ RSC سریال میشوند و هم **دوبار** در
@@ -121,24 +124,22 @@ export default async function FinanceWorklistPage(props: {
   //   • students → فقط صفحهٔ جاری (۵۰ ردیف) — بار شبکه/پارس ~۱۰برابر کمتر
   //   • summary  → جمع کل روی همهٔ دانشجویانِ فیلتر‌شده (نوار KPI همچنان درست)
   //   • count    → تعداد کل برای نوار صفحه‌بندی
-  const [options, students, summary, count] = await Promise.all([
+  const [options, students, summary] = await Promise.all([
     listFinanceFilterOptions({ universityId: currentUniversityId }),
     listFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
       limit: pageSize, offset: (page - 1) * pageSize,
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
     summarizeFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
-    countFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
-      universityId: currentUniversityId,
-    }),
   ]);
+  // تعداد کل از همان اسکن خلاصه (COUNT(*) OVER) — کوئری شمارش جدا حذف شد
+  const count = summary.studentCount;
 
   const collected = summary.payments + summary.chequesCleared + summary.loans;
   const netDebtBase = summary.charges - summary.discounts - summary.sponsorships;
@@ -173,9 +174,8 @@ export default async function FinanceWorklistPage(props: {
               <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
                 🏛️ {currentUniversity ? currentUniversity.title : 'بدون دانشگاه'}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-bold">
-                📅 {scopeTermTitle ?? 'همهٔ نیمسال‌ها'}
-              </span>
+              {/* ??? ???? ?????? ?????? ??? ???? ???? ????? */}
+              <span className="hidden">{scopeTermTitle ?? ''}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -189,7 +189,7 @@ export default async function FinanceWorklistPage(props: {
       {/* ── نوار KPI ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
         <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
-        <Kpi icon="💸" label="جمع شهریه (ریال)" value={fa(summary.charges)} tone="rose" />
+        <Kpi icon="💸" label="شهریهٔ ناخالص (ریال)" value={fa(summary.charges)} tone="rose" />
         <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(summary.discounts)} tone="violet" />
         <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(summary.sponsorships)} tone="indigo" />
         <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(summary.payments)} tone="emerald" sub={`وام: ${fa(summary.loans)}`} />
@@ -197,7 +197,7 @@ export default async function FinanceWorklistPage(props: {
         <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(summary.pendingCheques)} tone="amber" />
         <Kpi
           icon={summary.balance > 0 ? '🔴' : '🟢'}
-          label="ماندهٔ خالص (ریال)"
+          label="ماندهٔ بدهی (ریال)"
           value={fa(Math.abs(summary.balance))}
           tone={summary.balance > 0 ? 'rose' : 'emerald'}
           sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
@@ -205,7 +205,7 @@ export default async function FinanceWorklistPage(props: {
         {/* نرخ وصول — کارت تمام‌عرض */}
         <div className="col-span-2 rounded-2xl border border-indigo-200/80 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-e1 md:col-span-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به خالص بدهی)</span>
+            <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به شهریهٔ پس از تخفیف)</span>
             <span className="text-3xl font-black tabular-nums text-indigo-700">{fa(collectionRate)}٪</span>
           </div>
           <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
@@ -216,7 +216,7 @@ export default async function FinanceWorklistPage(props: {
           </div>
           <div className="mt-1.5 flex flex-wrap justify-between gap-2 text-2xs text-slate-500">
             <span>جمع وصولی: <b className="text-emerald-700">{fa(collected)} ریال</b></span>
-            <span>خالص قابل‌وصول: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
+            <span>خالص شهریه پس از تخفیف: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
           </div>
         </div>
       </div>
@@ -225,10 +225,16 @@ export default async function FinanceWorklistPage(props: {
       <form method="get" className="card print:hidden">
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
           <h2 className="text-xs font-black text-slate-700">🔍 فیلترها</h2>
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-            <input type="checkbox" name="debtors" value="1" defaultChecked={onlyDebtors} className="accent-emerald-700" />
-            فقط دانشجویان بدهکار
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <input type="checkbox" name="debtors" value="1" defaultChecked={onlyDebtors} className="accent-emerald-700" />
+              فقط دانشجویان بدهکار
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700" title="پیش‌فرض فقط دانشجویان در حال تحصیل نمایش داده می‌شوند">
+              <input type="checkbox" name="all" value="1" defaultChecked={statusScope === 'ALL'} className="accent-emerald-700" />
+              همهٔ وضعیت‌ها
+            </label>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <label className="flex flex-col gap-1">

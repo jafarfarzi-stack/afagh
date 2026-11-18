@@ -34,6 +34,8 @@ export interface FinanceStudentRow {
 }
 
 export interface FinanceListFilters {
+  /** وضعیت تحصیلی؛ پیش‌فرض ACTIVE و 'ALL' برای همهٔ وضعیت‌ها */
+  status?: string | null;
   majorId?: number | null;
   degreeLevelId?: number | null;
   entryYear?: number | null;
@@ -79,6 +81,10 @@ const ZERO_SUMMARY: FinanceSummary = {
  */
 function buildWhere(filters: FinanceListFilters, universityId?: number): SQL[] {
   const where: SQL[] = [];
+  // پیش‌فرض: فقط دانشجویان با وضعیت ACTIVE — فهرست ۴۰هزارنفری همهٔ وضعیت‌ها
+  // هم کند بود و هم بدهی/پرداختی دانش‌آموختگانِ قدیمی را با ترم جاری قاطی می‌کرد.
+  const scopeStatus = filters.status ?? 'ACTIVE';
+  if (scopeStatus !== 'ALL') where.push(eq(students.status, scopeStatus));
   if (filters.majorId) where.push(eq(students.majorId, filters.majorId));
   if (filters.degreeLevelId) where.push(eq(students.degreeLevelId, filters.degreeLevelId));
   if (filters.entryYear) where.push(eq(students.entryYear, filters.entryYear));
@@ -139,28 +145,54 @@ async function computeFinance(
   const isRows = mode === 'rows';
   const limit = isRows
     ? Math.min(Math.max(filters.limit ?? 100, 1), 2000)
-    : Math.min(Math.max(filters.limit ?? 2000, 1), 2000);
+    : Math.min(Math.max(filters.limit ?? 5000, 1), 5000);
   const offset = isRows ? Math.max(filters.offset ?? 0, 0) : 0;
 
-  const base = await db.select({
-    studentId: students.id,
-    userId: students.userId,
-    studentCode: students.studentCode,
-    firstName: users.firstName,
-    lastName: users.lastName,
-    nationalCode: users.nationalCode,
-    majorTitle: majors.name,
-    degreeTitle: degree_level_configs.title,
-    entryYear: students.entryYear,
-    status: students.status,
-  }).from(students)
-    .innerJoin(users, eq(users.id, students.userId))
-    .leftJoin(majors, eq(majors.id, students.majorId))
-    .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
-    .where(where.length ? and(...where) : undefined)
-    .orderBy(asc(students.studentCode))
-    .limit(limit)
-    .offset(offset);
+  // مسیر totals (KPI) به نام/رشته/مدرک نیاز ندارد؛ JOIN با users (جدول ۱۹MB)
+  // تنها گلوگاه واقعی بود (Seq Scan ~۳ثانیه). فقط اگر جست‌وجو لازم باشد users
+  // جوین می‌شود. مسیر rows دست‌نخورده می‌ماند چون ۵۰ ردیف نام/رشته می‌خواهد.
+  const base: any[] = isRows
+    ? await db.select({
+      studentId: students.id,
+      userId: students.userId,
+      studentCode: students.studentCode,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      nationalCode: users.nationalCode,
+      majorTitle: majors.name,
+      degreeTitle: degree_level_configs.title,
+      entryYear: students.entryYear,
+      status: students.status,
+      totalCount: sql<number>`count(*) over()`,
+    }).from(students)
+      .innerJoin(users, eq(users.id, students.userId))
+      .leftJoin(majors, eq(majors.id, students.majorId))
+      .leftJoin(degree_level_configs, eq(degree_level_configs.id, students.degreeLevelId))
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(asc(students.studentCode))
+      .limit(limit)
+      .offset(offset)
+    : await (() => {
+      const needsUsers = !!(filters.search && filters.search.trim());
+      let q: any = db.select({
+        studentId: students.id,
+        userId: students.userId,
+        studentCode: students.studentCode,
+        firstName: needsUsers ? users.firstName : sql<string>`NULL`,
+        lastName: needsUsers ? users.lastName : sql<string>`NULL`,
+        nationalCode: needsUsers ? users.nationalCode : sql<string>`NULL`,
+        majorTitle: sql<string>`NULL`,
+        degreeTitle: sql<string>`NULL`,
+        entryYear: students.entryYear,
+        status: students.status,
+        totalCount: sql<number>`count(*) over()`,
+      }).from(students);
+      if (needsUsers) q = q.innerJoin(users, eq(users.id, students.userId));
+      return q
+        .where(where.length ? and(...where) : undefined)
+        .orderBy(asc(students.studentCode))
+        .limit(limit);
+    })();
 
   if (base.length === 0) return isRows ? [] : { ...ZERO_SUMMARY };
   const ids = base.map((r) => r.studentId);
@@ -323,7 +355,9 @@ async function computeFinance(
     debtorCount: acc.debtorCount + (s.balance > 0 ? 1 : 0),
     studentCount: acc.studentCount + 1,
   }), { ...ZERO_SUMMARY });
-  return sum as FinanceSummary;
+  // تعداد کل (بدون سقف ۲۰۰۰) از پنجرهٔ COUNT(*) OVER همان اسکن
+  const totalStudents = Number((base[0] as { totalCount?: number } | undefined)?.totalCount ?? sum.studentCount);
+  return { ...sum, studentCount: totalStudents } as FinanceSummary;
 }
 
 /** لیست صفحه‌بندی‌شده برای جدول کارتابل (۱۰۰ ردیف/صفحه). */
@@ -334,10 +368,25 @@ export async function listFinanceStudents(
 }
 
 /** خلاصهٔ اعداد کارتابل روی کل دانشجویانِ فیلتر‌شده (نوار KPI). */
+const SUMMARY_TTL_MS = 60_000;
+const summaryCache = new Map<string, { at: number; value: FinanceSummary }>();
+async function cachedSummary(filters: FinanceListFilters, universityId?: number): Promise<FinanceSummary> {
+  const key = JSON.stringify({ filters, universityId: universityId ?? null });
+  const hit = summaryCache.get(key);
+  if (hit && Date.now() - hit.at < SUMMARY_TTL_MS) return hit.value;
+  const value = (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
+  if (summaryCache.size >= 50) {
+    const oldest = summaryCache.keys().next().value;
+    if (oldest !== undefined) summaryCache.delete(oldest);
+  }
+  summaryCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 export async function summarizeFinanceStudents(
   filters: FinanceListFilters = {}, universityId?: number
 ): Promise<FinanceSummary> {
-  return (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
+  return cachedSummary(filters, universityId);
 }
 
 /** تعداد کل دانشجویانِ مطابق فیلتر — برای نوار صفحه‌بندی. */

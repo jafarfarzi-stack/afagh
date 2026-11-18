@@ -6,7 +6,8 @@ import { getSessionUser } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { TERM_COOKIE } from '@/lib/term-scope';
 import { assertCsrf } from '@/lib/security';
-import { safeBackPath } from '@/lib/scope-switch';
+import { isDetailPath, safeBackPath } from '@/lib/scope-switch';
+import { invalidateTermCache } from '@/lib/term-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,12 @@ export async function POST(req: NextRequest) {
   const csrf = assertCsrf(req);
   if (csrf) return csrf;
 
-  const back = safeBackPath(req.headers.get('referer'));
+  // همانند سوییچ دانشگاه: جزئیات/صفحهبندی/پارامترهای موقتی را حذف میکنیم تا
+  // بعد از عوضکردن ترم، دوباره همان صفحهٔ جزئیات و نوار بازگشتش ظاهر نشود.
+  const rawBack = safeBackPath(req.headers.get('referer'));
+  const back = isDetailPath(rawBack)
+    ? '/admin'
+    : rawBack.replace(/([?&])(page|university|tour)=[^&]*/g, '').replace(/[?&]+$/, '');
 
   const me = await getSessionUser().catch(() => null);
   if (!me) return redirect('/login');
@@ -50,6 +56,7 @@ export async function POST(req: NextRequest) {
   if (!raw) {
     const res = redirect(back);
     res.cookies.set(TERM_COOKIE, '', { path: '/', maxAge: 0, httpOnly: true, secure: secureCookie(), sameSite: 'lax' });
+    invalidateTermCache();
     return res;
   }
 
@@ -79,5 +86,6 @@ export async function POST(req: NextRequest) {
     secure: secureCookie(),
     sameSite: 'lax',
   });
+  invalidateTermCache();
   return res;
 }

@@ -104,7 +104,7 @@ export default async function SanjeshEnrolledPage({
                   <td className="p-2 tabular-nums text-slate-600" dir="ltr">
                     {s.studentCode ?? s.assignedStudentCode ?? <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="p-2 text-slate-600">{s.status ?? '—'}</td>
+                  <td className="p-2 text-slate-600">{({ PENDING_MAPPING: 'در انتظار نگاشت رشته', RESOLVED: 'آمادهٔ صدور شماره', NUMBER_ASSIGNED: 'شماره صادر شده', IMPORTED: 'ثبت قطعی', REJECTED: 'ردشده' } as Record<string, string>)[String(s.status)] ?? s.status ?? '—'}</td>
                   <td className="p-2">
                     <span className="badge bg-slate-100 text-slate-600">{s.onboardingStatus ?? '—'}</span>
                   </td>

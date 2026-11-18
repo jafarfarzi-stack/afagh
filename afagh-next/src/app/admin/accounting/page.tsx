@@ -49,6 +49,7 @@ export default async function AdminAccountingPage() {
           </p>
           <Link
             href="/admin"
+            prefetch={false}
             className="mt-4 inline-block rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-800"
           >
             بازگشت به داشبورد

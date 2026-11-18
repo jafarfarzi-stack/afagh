@@ -7,6 +7,31 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 
+/** 🔒 فایل باید متعلق به دانشگاه فعال باشد (یا سراسریِ بدون دانشگاه). */
+async function assertFileScope(fileId: number): Promise<{ ok: true; uniId: number } | { ok: false; error: string }> {
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uniId) || uniId <= 0) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
+  const [f] = await db
+    .select({ universityId: sanjesh_files.universityId })
+    .from(sanjesh_files)
+    .where(eq(sanjesh_files.id, fileId))
+    .limit(1);
+  if (!f) return { ok: false, error: 'فایل یافت نشد.' };
+  if (f.universityId !== null && f.universityId !== uniId) return { ok: false, error: 'فایل متعلق به دانشگاه دیگری است.' };
+  return { ok: true, uniId };
+}
+
+/** 🔒 وجود ردیف شماره‌دار/ثبت‌شده مانع حذف/برگشت کامل فایل است. */
+async function hasProtectedStaging(fileId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: admissions_staging.id })
+    .from(admissions_staging)
+    .where(and(eq(admissions_staging.fileId, fileId), inArray(admissions_staging.status, ['IMPORTED', 'NUMBER_ASSIGNED'])))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * مرحلهٔ ۴ → ۳: برگشت ردیف‌های IMPORTED به RESOLVED.
  * پروندهٔ دانشجویی و ثبت‌نام‌ها دست‌نخورده می‌مانند؛ فقط پیوند staging و تصمیم پاک می‌شود.
@@ -89,8 +114,11 @@ export async function revertResolvedToPendingAction(stagingIds: number[]) {
 export async function revertStagedToFieldsReadyAction(fileId: number) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   try {
-    const uni = await getCurrentUniversity().catch(() => null);
-    const uniScope = (c: any) => uni ? (c === uni.id ? true : false) : true;
+    const scope = await assertFileScope(fileId);
+    if (!scope.ok) return { ok: false, error: scope.error };
+    if (await hasProtectedStaging(fileId)) {
+      return { ok: false, error: 'این فایل ردیف شماره‌دار یا ثبت‌شده دارد؛ ابتدا پذیرش را کنسل کنید.' };
+    }
     await db.transaction(async tx => {
       await tx.delete(admissions_staging).where(eq(admissions_staging.fileId, fileId));
       await tx.update(sanjesh_files).set({ status: 'FIELDS_READY', updatedAt: new Date() }).where(eq(sanjesh_files.id, fileId));
@@ -110,6 +138,11 @@ export async function revertStagedToFieldsReadyAction(fileId: number) {
 export async function deleteSanjeshFileAction(fileId: number) {
   await requireRole(['ADMIN']);
   try {
+    const scope = await assertFileScope(fileId);
+    if (!scope.ok) return { ok: false, error: scope.error };
+    if (await hasProtectedStaging(fileId)) {
+      return { ok: false, error: 'این فایل ردیف شماره‌دار یا ثبت‌شده دارد؛ ابتدا پذیرش را کنسل کنید.' };
+    }
     await db.transaction(async tx => {
       await tx.delete(admissions_staging).where(eq(admissions_staging.fileId, fileId));
       await tx.delete(sanjesh_file_rows).where(eq(sanjesh_file_rows.fileId, fileId));

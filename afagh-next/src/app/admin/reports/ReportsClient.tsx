@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { exportReport, fetchReportForPrint, runReport, type FilterOptions, type ReportResult } from './actions';
 import { LINK_CARDS } from './report-links';
 import { faIncludes } from '@/lib/persian-search';
@@ -17,6 +19,15 @@ type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTe
 
 /** تمام دستههای مالی — هم در فیلتر Scope و هم در فیلتر تبها استفاده میشود */
 const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-academic', 'finance-ops']);
+
+/** خطای حملونقل اکشن سرور (پروکسی/OOM/پاسخ HTML) را به پیام قابل فهم تبدیل میکند. */
+function reportError(e: unknown, fallback: string): string {
+  const raw = e instanceof Error ? e.message : fallback;
+  if (/unexpected response|failed to fetch|networkerror|\b50[0234]\b|\b413\b/i.test(raw)) {
+    return 'پاسخ سرور نامعتبر بود — احتمالاً گزارش سنگین یا اتصال قطع شد. فیلترها/ترمها را محدود کنید و دوباره اجرا کنید.';
+  }
+  return raw;
+}
 
 const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'students', label: '🧑‍🎓 دانشجویی و فهرست' },
@@ -265,7 +276,8 @@ const CARDS: Card[] = [
 
 const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities', 'graduation-dossiers', 'grade-audit-log', 'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses', 'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status', 'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info', 'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview', 'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule', 'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts', 'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable', 'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses', 'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card', 'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer']);
 
-export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string> }) {
+export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra, singleReport = false }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string>; singleReport?: boolean }) {
+  const router = useRouter();
   const [kind, setKind] = useState<string>(initialKind ?? 'active-term');
   const [cat, setCat] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
@@ -438,7 +450,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         (el as HTMLElement | null)?.focus?.({ preventScroll: true });
       }, 50);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'خطای نامشخص در اجرای گزارش');
+      setErr(reportError(e, 'خطای نامشخص در اجرای گزارش'));
     } finally {
       setLoading(false);
     }
@@ -451,7 +463,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
    * جست‌وجو را تنظیم کند. نسخهٔ قبل با `void run(1, k)` بلافاصله شروع به
    * لود می‌کرد (و هنگام ورود با `?kind=...` یک `useEffect` هم اجرای خودکار
    * داشت)، یعنی فیلترها عملاً بعد از اجرا تعریف می‌شدند و نتیجهٔ اول بیهوده
-   * بود. اجرا فقط با دکمهٔ صریح «▶ اجرای گزارش» (یا Enter در جست‌وجو)
+   * بود. اجرا فقط با دکمهٔ صریح «اجرای گزارش ◀» (یا Enter در جست‌وجو)
    * انجام می‌شود.
    */
   const pick = (k: string) => {
@@ -510,7 +522,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
     // 🔒 خروجی باید همان چیزی باشد که روی صفحه است؛ با فیلترِ تغییریافته و
     //    بدون اجرا، فایل با جدول ناهمخوان می‌شد.
     if (staleResult) {
-      setErr('نتیجهٔ نمایش‌داده‌شده با فیلترهای فعلی هم‌خوان نیست؛ ابتدا «▶ اجرای گزارش» را بزنید.');
+      setErr('نتیجهٔ نمایش‌داده‌شده با فیلترهای فعلی هم‌خوان نیست؛ ابتدا «اجرای گزارش ◀» را بزنید.');
       return;
     }
     setExporting(true);
@@ -537,7 +549,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       );
       setTimeout(() => setInfoMsg(''), 9000);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'خطای نامشخص در خروجی');
+      setErr(reportError(e, 'خطای نامشخص در خروجی'));
     } finally {
       setExporting(false);
     }
@@ -551,7 +563,17 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* نوار دسته‌بندی (تب‌ها) — با شمارنده و تب «همه» */}
-      {tabKeys.length > 0 && (
+      {singleReport && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-indigo-200 bg-white px-3 py-2.5 shadow-sm print:hidden">
+          <Link prefetch={false} href={scope === 'finance' ? '/admin/finance/reports' : '/admin/reports'} className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-300">
+            ← بازگشت به فهرست گزارشها
+          </Link>
+          <span className="text-sm font-extrabold text-slate-800">{card?.icon} {card?.title ?? kind}</span>
+          {card?.desc && <span className="hidden text-2xs text-slate-500 sm:inline">{card.desc}</span>}
+        </div>
+      )}
+
+      {!singleReport && tabKeys.length > 0 && (
         <div role="tablist" aria-label="دسته‌بندی گزارش‌ها" className="flex flex-wrap items-center gap-2">
           {[{ key: ALL_TAB, label: '📚 همه' }, ...CATEGORIES]
             .filter(c => c.key === ALL_TAB || ((scope === 'finance' ? FINANCE_CATS.has(c.key as ReportCat) : scope === 'edu' ? !FINANCE_CATS.has(c.key as ReportCat) : true) && catKeys.includes(c.key as ReportCat)))
@@ -590,6 +612,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* جست‌وجوی گزارش‌ها — در همهٔ دسته‌ها */}
+      {!singleReport && (
       <input
         value={search}
         aria-label="جست‌وجو در گزارش‌ها"
@@ -597,15 +620,16 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         placeholder={`🔍 جست‌وجو در همهٔ گزارش‌ها (نام گزارش)… (${faNum(visibleCards.length)} گزارش)`}
         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
       />
+      )}
 
       {/* نوار عملیات چسبان: اجرا / Excel / چاپ — درست بعد از تبها و جستوجو و قبل از فیلترها */}
-      {!card?.soon && (
+      {singleReport && !card?.soon && (
         <div className="sticky top-[6.5rem] z-20 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-white/95 px-3 py-2 shadow-md backdrop-blur print:hidden">
           <span className="ml-1 hidden max-w-56 truncate text-2xs font-extrabold text-slate-600 sm:inline">
             {card?.title ?? 'گزارش'}
           </span>
           <button onClick={() => run(1)} disabled={loading || !card} title={!card ? 'ابتدا یک گزارش را انتخاب کنید' : undefined} className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold rounded disabled:opacity-50">
-            {loading ? '⏳ در حال اجرا...' : '▶ اجرای گزارش'}
+            {loading ? '⏳ در حال اجرا...' : 'اجرای گزارش ◀'}
           </button>
           {res && res.rows.length > 0 && (
             <>
@@ -642,19 +666,18 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* کارت‌های گزارش — گروه‌بندی‌شده تا هر تب قابل اسکن باشد */}
-      {gridCards.length === 0 ? (
+      {!singleReport && (gridCards.length === 0 ? (
         <p className="p-6 text-center text-slate-500 text-sm bg-white border border-slate-300 rounded-xl shadow-sm">گزارشی با این عبارت یافت نشد.</p>
       ) : (
-        <div className="space-y-4">
+        <div className="grid auto-rows-fr grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {cardGroups.map(g => (
-            <section key={g.label}>
-              <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold text-slate-500">
+            <Fragment key={g.label}>
+              <div className="col-span-full mb-1 mt-1 flex items-center gap-1.5 text-xs font-extrabold text-slate-500">
                 <span className="h-1 w-1 rounded-full bg-indigo-400" />
                 {g.label}
                 <span className="text-2xs font-normal text-slate-400">({faNum(g.cards.length)})</span>
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {g.cards.map(c => (
+              </div>
+              {g.cards.map(c => (
                   <CardTile
                     key={c.kind}
                     tone={c.cat}
@@ -665,17 +688,21 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                     badge={c.soon ? 'به‌زودی' : c.needsTerm ? 'نیازمند ترم' : FEATURED.has(c.kind) ? 'پیشنهاد' : undefined}
                     selected={kind === c.kind}
                     soon={c.soon}
-                    onClick={() => pick(c.kind)}
+                    onClick={() => {
+                      pick(c.kind);
+                      // کارتهای «بهزودی» پیادهای ندارند؛ همانجا پیام بدهیم تا ۴۰۴ نگیرند.
+                      if (c.soon) { setInfoMsg(`گزارش «${c.title}» هنوز پیاده نشده است.`); return; }
+                      router.push(`/admin/reports/${c.kind}${scope === 'finance' ? '?scope=finance' : ''}`);
+                    }}
                   />
-                ))}
-              </div>
-            </section>
+              ))}
+            </Fragment>
           ))}
         </div>
-      )}
+      ))}
 
       {/* نوار فیلتر */}
-      {!card?.soon && (
+      {singleReport && !card?.soon && (
         <div className="bg-white border border-slate-300 rounded-xl p-3 shadow-sm">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {opts.universities.length > 1 && (
@@ -720,7 +747,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         dir="ltr"
                       />
                       <button type="button" onClick={applyTermInput} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-2xs">افزودن</button>
-                      <button type="button" onClick={() => setManyTerms(opts.terms.map(t => t.code))} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">انتخاب همه</button>
+                      <button type="button" onClick={() => { setManyTerms(opts.terms.slice(0, MAX_TERM_CODES).map(t => t.code)); setTermMsg(`حداکثر ${MAX_TERM_CODES} ترم قابل انتخاب است.`); }} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">انتخاب همه</button>
                       <button type="button" onClick={() => { setManyTerms([]); setTermMsg(''); }} className="px-2 py-1 bg-white border border-slate-300 rounded font-bold text-2xs">پاک کردن</button>
                     </div>
                     {termMsg && <p className="text-2xs font-bold text-indigo-700">{termMsg}</p>}
@@ -1087,7 +1114,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       {/* هشدار «نتیجهٔ کهنه»: فیلترها بعد از اجرا عوض شده‌اند */}
       {staleResult && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 print:hidden">
-          نتیجهٔ نمایش‌داده‌شده مربوط به فیلترهای قبلی است. برای اعمال فیلترهای جدید، «▶ اجرای گزارش» را بزنید.
+          نتیجهٔ نمایش‌داده‌شده مربوط به فیلترهای قبلی است. برای اعمال فیلترهای جدید، «اجرای گزارش ◀» را بزنید.
         </p>
       )}
 
@@ -1099,7 +1126,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
       )}
 
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتها تا مسیر اجرا→نتیجه تمیز بماند */}
-      {/* نتیجه */}
+      {/* نتیجه — فقط در صفحهٔ اختصاصی هر گزارش (فهرست کارت‌ها نتیجه ندارد) */}
+      {singleReport && (
       <div id="report-result" tabIndex={-1} className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden scroll-mt-[10rem] print:hidden focus:outline-none">
         {err ? (
           <p role="alert" className="p-8 text-center text-rose-700 bg-rose-50 text-sm font-bold">خطا: {err}</p>
@@ -1110,7 +1138,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
         ) : !res ? (
           <p className="p-8 text-center text-slate-500 text-sm">
             {card
-              ? `گزارش «${card.title}» انتخاب شد. ابتدا فیلترهای بالا را تنظیم کنید، سپس «▶ اجرای گزارش» را بزنید.`
+              ? `گزارش «${card.title}» انتخاب شد. ابتدا فیلترهای بالا را تنظیم کنید، سپس «اجرای گزارش ◀» را بزنید.`
               : 'یک گزارش را از فهرست بالا انتخاب کنید.'}
           </p>
         ) : res.rows.length === 0 ? (
@@ -1159,14 +1187,15 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
             </div>
             {res.totalPages > 1 && (
               <div className="flex items-center justify-center gap-2 p-3 text-xs border-t border-slate-200">
-                <button disabled={res.page <= 1} onClick={() => runReport(kind, { ...filters, page: res.page - 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">قبلی ▶</button>
+                <button disabled={loading || res.page <= 1} onClick={() => void run(res.page - 1)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">قبلی ▶</button>
                 <span className="font-bold">صفحه {res.page.toLocaleString('fa-IR')} از {res.totalPages.toLocaleString('fa-IR')} ({res.total.toLocaleString('fa-IR')} رکورد)</span>
-                <button disabled={res.page >= res.totalPages} onClick={() => runReport(kind, { ...filters, page: res.page + 1 }).then(setRes)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">◀ بعدی</button>
+                <button disabled={loading || res.page >= res.totalPages} onClick={() => void run(res.page + 1)} className="px-3 py-1.5 bg-white border border-slate-300 rounded font-bold disabled:opacity-40">◀ بعدی</button>
               </div>
             )}
           </>
         )}
       </div>
+      )}
       {/* پیوند به صفحات تخصصی — جمع‌شونده در انتهای صفحه */}
       <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden print:hidden">
         <button

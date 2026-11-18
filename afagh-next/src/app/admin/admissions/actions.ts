@@ -16,9 +16,31 @@ import { executeIrandocCheck } from '@/lib/api-integrations';
 import { isEntryMethod } from '@/lib/entry-methods';
 import { db } from '@/db';
 import { admissions_staging, majors, sanjesh_mappings, student_id_formula_models, student_id_formulas } from '@/db/schema';
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { validateFormula } from '@/lib/student-id-formula';
+
+/**
+ * 🔒 گاردِ مالکیتِ ردیف‌های صف پذیرش — پیش از هر تصمیم/صدور شماره/ثبت قطعی.
+ * بدون این، هر کارشناس با دستکاری `stagingIds` می‌توانست ردیف دانشگاه دیگر را
+ * شماره‌دهی یا کنسل کند (IDOR چنددانشگاهی).
+ */
+async function assertStagingScope(ids: number[]): Promise<string | null> {
+  const cleanIds = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!cleanIds.length) return 'ردیفی برای پردازش انتخاب نشده است.';
+  const uni = await getCurrentUniversity().catch(() => null);
+  const uniId = Number(uni?.id ?? 0);
+  if (!Number.isFinite(uniId) || uniId <= 0) return 'دانشگاه فعال نامشخص است.';
+  const rows = await db
+    .select({ id: admissions_staging.id, universityId: admissions_staging.universityId })
+    .from(admissions_staging)
+    .where(inArray(admissions_staging.id, cleanIds));
+  if (rows.length !== cleanIds.length) return 'برخی ردیف‌ها یافت نشدند.';
+  if (rows.some((r) => r.universityId !== null && r.universityId !== uniId)) {
+    return 'ردیفی متعلق به دانشگاه دیگری است.';
+  }
+  return null;
+}
 
 export async function stageSanjeshDataAction(rawText: string, entryYear = 1405) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
@@ -57,6 +79,8 @@ export async function setStagingDecisionAction(
 ) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   try {
+    const scopeErr = await assertStagingScope([stagingId]);
+    if (scopeErr) return { ok: false, error: scopeErr };
     if (decision === 'REJECT') {
       await db.update(admissions_staging)
         .set({ status: 'REJECTED', decisionNote: 'REJECTED_BY_ADMIN' })
@@ -90,6 +114,8 @@ export async function assignStudentNumbersAction(
 
   try {
     if (!isEntryMethod(entryMethod)) return { ok: false, error: 'روش ورود را انتخاب کنید.' };
+    const scopeErr = await assertStagingScope(stagingIds);
+    if (scopeErr) return { ok: false, error: scopeErr };
     const result = await assignStudentNumbers(stagingIds, { entryMethod, starts });
     revalidatePath('/admin/admissions');
     revalidatePath('/admin/students');
@@ -108,6 +134,8 @@ export async function finalRegisterStudentsAction(stagingIds: number[]) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
 
   try {
+    const scopeErr = await assertStagingScope(stagingIds);
+    if (scopeErr) return { ok: false, error: scopeErr };
     const result = await finalRegisterStudents(stagingIds);
     revalidatePath('/admin/admissions');
     revalidatePath('/admin/students');
