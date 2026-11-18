@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { loadAvailabilityAction, saveAvailabilityAction, type AvailabilityCell } from './actions';
 import { DEMO_AVAILABILITY_SUMMARY } from '@/lib/demo-professor-data';
-import { buildTimeSlots, DEFAULT_SLOT_CONFIG, type TimeSlot } from '@/lib/time-slots';
+import { buildTimeSlots, DEFAULT_SLOT_CONFIG, parseTimeToMinutes, type TimeSlot } from '@/lib/time-slots';
 import { useToast } from '@/components/ui/Toast';
 
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
@@ -45,7 +45,6 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
   const slots: TimeSlot[] = timeSlots && timeSlots.length > 0 ? timeSlots : FALLBACK_SLOTS;
   const teachingSlots = slots.filter(s => !s.isBreak);
   const slotIds = teachingSlots.map(s => s.id);
-  const morningCut = Math.ceil(teachingSlots.length / 2);
   const slotById = new Map(slots.map(s => [s.id, s]));
 
   const [selectedTermId, setSelectedTermId] = useState<number>(
@@ -109,13 +108,20 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
     const updated: { [d: number]: { [s: number]: SlotStatus } } = {};
     for (let d = 0; d < 7; d++) {
       updated[d] = {};
-      teachingSlots.forEach((slot, idx) => {
+      teachingSlots.forEach((slot) => {
         const s = slot.id;
         if (preset === 'ALL_PREF') updated[d][s] = 'PREF';
         else if (preset === 'CLEAR') updated[d][s] = 'UNAVAIL';
-        // «صبح» = نیمهٔ اول زنگ‌های روز، «بعدازظهر» = نیمهٔ دوم (مستقل از تعداد زنگ‌ها)
-        else if (preset === 'MORNING_ONLY') updated[d][s] = idx < morningCut ? 'PREF' : 'UNAVAIL';
-        else if (preset === 'AFTERNOON_ONLY') updated[d][s] = idx >= morningCut ? 'PREF' : 'UNAVAIL';
+        /* «صبح/بعدازظهر» از روی ساعتِ شروعِ زنگ تشخیص داده میشود (درخواست ۱۴۰۵/۰۸/۲۸):
+           شروعِ پیشازظهر = صبح؛ شروع از ۱۲:۰۰ و بعد = بعدازظهر. تقسیمِ ایندکسیِ
+           قبلی («نیمهٔ اول زنگها») غلط بود — زنگِ ۱۳:۰۰ در ماتریسِ زنگِ کم،
+           «صبح» حساب میشد. */
+        else if (preset === 'MORNING_ONLY' || preset === 'AFTERNOON_ONLY') {
+          const startMin = parseTimeToMinutes(slot.startTime) ?? 0;
+          const isMorning = startMin < 12 * 60; // ۱۲:۰۰ خودش بعدازظهر حساب میشود
+          const want = preset === 'MORNING_ONLY' ? isMorning : !isMorning;
+          updated[d][s] = want ? 'PREF' : 'UNAVAIL';
+        }
         else if (preset === 'EVEN_DAYS') updated[d][s] = (d % 2 === 0) ? 'PREF' : 'UNAVAIL';
         else if (preset === 'ODD_DAYS') updated[d][s] = (d % 2 === 1) ? 'PREF' : 'UNAVAIL';
       });
@@ -291,6 +297,7 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
             <button onClick={() => applyPreset('MORNING_ONLY')} className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-2xs hover:bg-amber-200 transition">☀️ فقط صبح‌ها</button>
             <button onClick={() => applyPreset('AFTERNOON_ONLY')} className="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 font-bold text-2xs hover:bg-blue-200 transition">🌆 فقط بعدازظهرها</button>
             <button onClick={() => applyPreset('EVEN_DAYS')} className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 font-bold text-2xs hover:bg-purple-200 transition">📅 روزهای زوج</button>
+            <button onClick={() => applyPreset('ODD_DAYS')} className="px-2.5 py-1 rounded-lg bg-violet-100 text-violet-900 font-bold text-2xs hover:bg-violet-200 transition">🗓️ روزهای فرد</button>
             <button onClick={() => applyPreset('CLEAR')} className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-900 font-bold text-2xs hover:bg-rose-200 transition">🔴 مسدودسازی</button>
           </div>
         </div>
