@@ -86,6 +86,7 @@ export default async function AdminCurriculumPage({
       <div dir="rtl" className="flex items-center justify-end px-3 pt-3 sm:px-6 sm:pt-5 print:hidden">
         <Link
           href="/admin/curriculum/coverage"
+          prefetch={false}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-2xs font-extrabold text-indigo-900 shadow-sm hover:bg-indigo-50 transition"
         >
           🧭 پوشش چارت رشته‌ها

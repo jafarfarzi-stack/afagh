@@ -85,7 +85,7 @@ export default async function CurriculumCoveragePage() {
             برای دیدن پوشش چارت رشته‌ها باید یک دانشگاه فعالِ مجاز انتخاب شود.
             اگر چند دانشگاه دارید، از سوییچرِ سربرگ دانشگاه را انتخاب کنید.
           </p>
-          <Link href="/admin/curriculum" className="inline-block mt-1 text-2xs font-extrabold text-indigo-800 hover:underline">
+          <Link prefetch={false} href="/admin/curriculum" className="inline-block mt-1 text-2xs font-extrabold text-indigo-800 hover:underline">
             بازگشت به برنامهٔ درسی
           </Link>
         </div>
@@ -293,6 +293,7 @@ export default async function CurriculumCoveragePage() {
           </div>
           <Link
             href="/admin/curriculum"
+            prefetch={false}
             className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-extrabold text-xs shadow-md transition"
           >
             ← بازگشت به برنامهٔ درسی
@@ -447,6 +448,7 @@ export default async function CurriculumCoveragePage() {
                         {r.newestDraftId != null ? (
                           <Link
                             href={`/admin/curriculum?version=${r.newestDraftId}`}
+                            prefetch={false}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 text-2xs font-extrabold transition"
                           >
                             باز کردن پیش‌نویس
