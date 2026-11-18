@@ -373,13 +373,19 @@ const summaryCache = new Map<string, { at: number; value: FinanceSummary }>();
 async function cachedSummary(filters: FinanceListFilters, universityId?: number): Promise<FinanceSummary> {
   const key = JSON.stringify({ filters, universityId: universityId ?? null });
   const hit = summaryCache.get(key);
-  if (hit && Date.now() - hit.at < SUMMARY_TTL_MS) return hit.value;
+  if (hit && Date.now() - hit.at < SUMMARY_TTL_MS) {
+    // eslint-disable-next-line no-console
+    console.log('[fin-sum-hit]', key, hit.value.charges, hit.value.payments, hit.value.studentCount);
+    return hit.value;
+  }
   const value = (await computeFinance(filters, universityId, 'totals')) as FinanceSummary;
   if (summaryCache.size >= 50) {
     const oldest = summaryCache.keys().next().value;
     if (oldest !== undefined) summaryCache.delete(oldest);
   }
   summaryCache.set(key, { at: Date.now(), value });
+  // eslint-disable-next-line no-console
+  console.log('[fin-sum-miss]', key, value.charges, value.payments, value.studentCount);
   return value;
 }
 
