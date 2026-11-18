@@ -34,6 +34,8 @@ export interface FinanceStudentRow {
 }
 
 export interface FinanceListFilters {
+  /** وضعیت تحصیلی؛ پیش‌فرض ACTIVE و 'ALL' برای همهٔ وضعیت‌ها */
+  status?: string | null;
   majorId?: number | null;
   degreeLevelId?: number | null;
   entryYear?: number | null;
@@ -79,6 +81,10 @@ const ZERO_SUMMARY: FinanceSummary = {
  */
 function buildWhere(filters: FinanceListFilters, universityId?: number): SQL[] {
   const where: SQL[] = [];
+  // پیش‌فرض: فقط دانشجویان با وضعیت ACTIVE — فهرست ۴۰هزارنفری همهٔ وضعیت‌ها
+  // هم کند بود و هم بدهی/پرداختی دانش‌آموختگانِ قدیمی را با ترم جاری قاطی می‌کرد.
+  const scopeStatus = filters.status ?? 'ACTIVE';
+  if (scopeStatus !== 'ALL') where.push(eq(students.status, scopeStatus));
   if (filters.majorId) where.push(eq(students.majorId, filters.majorId));
   if (filters.degreeLevelId) where.push(eq(students.degreeLevelId, filters.degreeLevelId));
   if (filters.entryYear) where.push(eq(students.entryYear, filters.entryYear));

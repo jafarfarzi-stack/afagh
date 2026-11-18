@@ -87,6 +87,7 @@ export default async function FinanceWorklistPage(props: {
     entryYear?: string;
     q?: string;
     debtors?: string;
+    all?: string;
     page?: string;
   }>;
 }) {
@@ -108,6 +109,8 @@ export default async function FinanceWorklistPage(props: {
   const entryYear = Number(sp.entryYear) || null;
   const search = (sp.q || '').trim();
   const onlyDebtors = sp.debtors === '1';
+  // پیش‌فرض فقط دانشجویان فعال؛ با ?all=1 همهٔ وضعیت‌ها (فارغ‌التحصیل/انصرافی…)
+  const statusScope = sp.all === '1' ? 'ALL' : 'ACTIVE';
   const page = Math.max(1, Number(sp.page) || 1);
   // ⚡ ۵۰ ردیف در هر صفحه (پیشتر ۱۰۰): `FinanceTable` یک کامپوننت کلاینت است،
   //    پس ردیفها هم بهعنوان props در payloadـ RSC سریال میشوند و هم **دوبار** در
@@ -124,18 +127,18 @@ export default async function FinanceWorklistPage(props: {
   const [options, students, summary, count] = await Promise.all([
     listFinanceFilterOptions({ universityId: currentUniversityId }),
     listFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
       limit: pageSize, offset: (page - 1) * pageSize,
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
     summarizeFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
       universityId: currentUniversityId,
       termId: scopeTermId,
     }),
     countFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors,
+      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
       universityId: currentUniversityId,
     }),
   ]);
@@ -225,10 +228,16 @@ export default async function FinanceWorklistPage(props: {
       <form method="get" className="card print:hidden">
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
           <h2 className="text-xs font-black text-slate-700">🔍 فیلترها</h2>
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-            <input type="checkbox" name="debtors" value="1" defaultChecked={onlyDebtors} className="accent-emerald-700" />
-            فقط دانشجویان بدهکار
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <input type="checkbox" name="debtors" value="1" defaultChecked={onlyDebtors} className="accent-emerald-700" />
+              فقط دانشجویان بدهکار
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700" title="پیش‌فرض فقط دانشجویان در حال تحصیل نمایش داده می‌شوند">
+              <input type="checkbox" name="all" value="1" defaultChecked={statusScope === 'ALL'} className="accent-emerald-700" />
+              همهٔ وضعیت‌ها
+            </label>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <label className="flex flex-col gap-1">
