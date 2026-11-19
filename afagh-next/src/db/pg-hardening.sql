@@ -381,9 +381,44 @@ CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
 -- RLS برای درخواست‌های بدون رعایت پیش‌نیاز/تداخل امتحانی (پوشش کامل migrator)
 ALTER TABLE "enroll_bypass_requests" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS bypass_app_access ON "enroll_bypass_requests";
+-- ⚠ سیاست قبلی «app.user_id IS NOT NULL» بود ⇒ هر کاربر واردشده می‌توانست
+-- درخواست bypass دانشجویان دیگر را بخواند یا وضعیتش را APPROVED کند (IDOR سطری).
+-- اکنون: فقط ردیف‌های خودِ دانشجو، یا کارمند مجاز همان دانشگاه.
 CREATE POLICY bypass_app_access ON "enroll_bypass_requests" FOR ALL TO afagh_app
-  USING (nullif(current_setting('app.user_id', true), '') IS NOT NULL)
-  WITH CHECK (nullif(current_setting('app.user_id', true), '') IS NOT NULL);
+  USING (
+    "studentId" IN (SELECT "id" FROM "students"
+                    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
+  )
+  WITH CHECK (
+    "studentId" IN (SELECT "id" FROM "students"
+                    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
+  );
 GRANT SELECT, INSERT, UPDATE, DELETE ON "enroll_bypass_requests" TO afagh_app;
 
 DROP POLICY IF EXISTS cart_self_read ON "cart_items";

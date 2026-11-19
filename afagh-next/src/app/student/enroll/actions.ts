@@ -795,6 +795,12 @@ export async function requestBypassAction(
   if (!term) return { ok: false, error: 'ترم جاری یافت نشد.' };
   if (kind !== 'PREREQ' && kind !== 'EXAM_CONFLICT') return { ok: false, error: 'نوع درخواست نامعتبر است.' };
 
+  // ⏳ گیت پنجرهٔ انتخاب واحد — این مسیر پیش‌تر assertEnrollmentWrite را صدا
+  // نمی‌زد؛ با پنجرهٔ بسته هم درخواست می‌ساخت و یک صندلی رزرو می‌کرد
+  // (bypass پنجرهٔ زمانی + مصرف ظرفیت). اکنون همان گیت مسیر ثبت نهایی اعمال می‌شود.
+  const bypassWinGate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!bypassWinGate.ok) return { ok: false, error: bypassWinGate.error };
+
   const target = await offeringInMyScope(myUni, term.id, offeringId);
   if (!target) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
 

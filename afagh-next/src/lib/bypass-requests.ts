@@ -9,6 +9,7 @@ import {
 } from '@/db/schema';
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
+import { assertEnrollmentWrite } from '@/lib/enrollment-window';
 import { recountOffering } from '@/lib/enrollment-count';
 import {
   BYPASS_KIND_LABEL,
@@ -183,6 +184,11 @@ export async function createBypassRequest(input: {
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, off.termId)).limit(1);
   if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+
+  // ⏳ گیت پنجرهٔ انتخاب واحد (دفاع در عمق) — درخواست هم صندلی رزرو می‌کند،
+  // پس باید همان قید زمانی مسیر ثبت نهایی را داشته باشد.
+  const winGate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!winGate.ok) return { ok: false, error: winGate.error };
 
   const [dup] = await db.select({ id: enroll_bypass_requests.id })
     .from(enroll_bypass_requests)
