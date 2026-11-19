@@ -102,13 +102,14 @@ export default function OfficialTranscriptView({
       'ملیت',
       student.nationality === '120001' ? 'ایرانی' : (!student.nationality || /^\s*unknown\s*$/i.test(student.nationality) ? '—' : student.nationality),
     ] as [string, string]] : []),
-    ['استاد راهنما', '—'],
+    ['استاد راهنما', student.supervisorName?.trim() || '—'],
   ];
   // خانه‌های خالی ردیف آخر جدول مشخصات (تا نوار طوسیِ gap دیده نشود)
   const infoFillers = (3 - (info.length % 3)) % 3;
   // گروه‌بندی ۳تایی نیمسال‌ها (مثل سما)
   const chunks: TermGroup[][] = [];
-  for (let i = 0; i < summary.terms.length; i += 3) chunks.push(summary.terms.slice(i, i + 3));
+  const perRow = printOptions.layout === '2col' ? 2 : 3;
+  for (let i = 0; i < summary.terms.length; i += perRow) chunks.push(summary.terms.slice(i, i + perRow));
   const breakdown = breakdownByType(summary.terms.flatMap(t => t.rows));
   // راهنمای کد وضع نمره (فقط ردیف‌هایی که کد خام سما دارند؛ متن کامل در پایین کارنامه یک‌بار می‌آید)
   const statusLegend = new Map<string, string>();
@@ -170,7 +171,7 @@ export default function OfficialTranscriptView({
               title={canEditGrades && onEditGrade ? 'برای ویرایش یا ثبت نمره کلیک کنید' : undefined}
             >
               <td className="p-1 font-mono text-center" dir="ltr">{faDigits(r.courseCode)}</td>
-              <td className="tr-course-title p-1 leading-tight">
+              <td className={`tr-course-title p-1 leading-tight ${(r.courseTitle || '').length > 18 ? 'text-[8px] break-words' : ''}`}>
                 {r.courseTitle}
                 {r._excludedByRegulation && (
                   <span className="block text-[7px] text-amber-600 font-bold">({r._excludedByRegulation} اعمال شد)</span>
@@ -232,21 +233,11 @@ export default function OfficialTranscriptView({
       </div>
           </td></tr>
         </thead>
-        {/* امضاها در tfoot است تا زیر همهٔ صفحات چاپ تکرار شود (از جمله صفحهٔ آخر) */}
-        <tfoot>
-          <tr><td className="tr-doc-cell">
-            <div className="tr-signatures flex justify-between px-3 py-2 text-3xs">
-              <span>امضاء رئیس خدمات آموزش</span>
-              <span>امضاء و مهر اداره کل آموزش</span>
-              <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
-            </div>
-          </td></tr>
-        </tfoot>
         <tbody>
       {/* نیمسال‌ها ۳تایی — گرید هم‌ارتفاع تا پانوشت نیمسال‌های یک ردیف هم‌تراز شود */}
       {chunks.map((ch, i) => (
         <tr key={i} className="tr-doc-row"><td className="tr-doc-cell">
-          <div className="tr-term-row">{ch.map(termCell)}</div>
+          <div className="tr-term-row" style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}>{ch.map(termCell)}</div>
         </td></tr>
       ))}
       {/* راهنمای کد وضع نمره — فقط اگر تیک سما روشن و کدی در کارنامه استفاده شده باشد */}
@@ -345,6 +336,14 @@ export default function OfficialTranscriptView({
             </div>
           </td></tr>
         )}
+        {/* امضاها — فقط یکبار در پایان سند (نه تکرار در هر صفحه) */}
+        <tr><td className="tr-doc-cell">
+          <div className="tr-signatures flex justify-between px-3 py-2 text-3xs">
+            <span>امضاء رئیس خدمات آموزش</span>
+            <span>امضاء و مهر اداره کل آموزش</span>
+            <span>امضاء و مهر امور آموزشی دانشگاه منتخب</span>
+          </div>
+        </td></tr>
         </tbody>
       </table>
     </div>

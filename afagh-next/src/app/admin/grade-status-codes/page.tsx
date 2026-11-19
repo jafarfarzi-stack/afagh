@@ -4,8 +4,8 @@ import {
   courses, departments, degree_level_configs, equivalence_clusters,
   curriculum_courses, curriculum_versions, majors,
 } from '@/db/schema';
-import { eq, asc, count, isNull, or } from 'drizzle-orm';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { eq, asc, count, isNull, or, sql } from 'drizzle-orm';
+import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import GradeCodesClient from './GradeCodesClient';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +17,8 @@ export default async function GradeStatusCodesPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  const whereCond = currentUniversityId ? eq(courses.universityId, currentUniversityId) : undefined;
-  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
+  const whereCond = universityEq(courses.universityId, currentUniversityId);
+  const scopeOf = (c: any) => (isRealUniversityId(currentUniversityId) ? or(eq(c, currentUniversityId), isNull(c)) : sql`1 = 0`);
 
   const [{ total }] = await db.select({ total: count() }).from(courses).where(whereCond);
 

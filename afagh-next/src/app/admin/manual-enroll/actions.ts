@@ -3,12 +3,13 @@
 import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db, withUserRls } from '@/db';
 import {
-  academic_terms, course_offerings, courses, curriculum_courses, departments, enrollments, financial_clearances, majors,
+  academic_terms, course_offerings, course_rules, courses, curriculum_courses, departments, enrollments, financial_clearances, majors,
   offering_professors, schedules, staff, student_term_states, students, users,
 } from '@/db/schema';
 import { getSessionUser, requireRole } from '@/lib/auth';
 import { getBool } from '@/lib/settings';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { authorizedUniversityIds, getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
+import { DEFAULT_MAX_STUDENTS_PER_GROUP } from '@/app/admin/scheduling/planning-core';
 import { buildPrereqContext, formatPrereq } from '@/lib/enroll-engine/prereqs';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
@@ -23,6 +24,21 @@ async function uniId(): Promise<number | null> {
   try { return (await getCurrentUniversity())?.id ?? null; } catch { return null; }
 }
 
+// ── F-21: مرز امنیتی دانشگاه — fail-closed ──
+// `uniId()` ممکن است 0 (DENY_UNI) یا null (خطا) برگرداند؛ الگوی `if (u && …)`
+// در این حالت‌ها فیلتر دانشگاه را حذف می‌کرد (fail-open). اکنون هر اکشنِ
+// جهش‌دهنده وقتی `u` دانشگاه واقعی نیست رد می‌شود، مگر کاربر مدیرِ پلتفرمی
+// بدون دانشگاه خانگی باشد (authorizedUniversityIds === null — تنها حالت
+// نامحدودِ مشروع). شرط‌های SQL با universityEq ساخته می‌شوند که برای
+// شناسهٔ نامعتبر `1 = 0` می‌دهد؛ یعنی هیچ کوئری‌ای فیلتر دانشگاهش را از دست نمی‌دهد.
+const UNI_DENIED_MSG = 'دانشگاه فعال شما نامشخص است — عملیات رد شد.';
+async function uniBoundary(): Promise<{ u: number | null; ok: boolean }> {
+  const u = await uniId();
+  if (isRealUniversityId(u)) return { u, ok: true };
+  const allowed = await authorizedUniversityIds().catch((): number[] | null => []);
+  return { u, ok: allowed === null };
+}
+
 // ─────────────── جست‌وجوی دانشجو (تک‌ثبت‌نام) ───────────────
 export async function searchStudentsForManualEnroll(q: string): Promise<{
   ok: boolean; items?: { userId: number; studentId: number; studentCode: string; name: string; entryYear: number | null; status: string }[]; error?: string;
@@ -32,7 +48,7 @@ export async function searchStudentsForManualEnroll(q: string): Promise<{
   const needle = String(q || '').trim();
   if (!needle) return { ok: true, items: [] };
   const conds = [eq(students.status, 'ACTIVE')];
-  if (u) conds.push(eq(students.universityId, u));
+  conds.push(universityEq(students.universityId, u));
   // دامنهٔ کارشناس: رشته‌های مجازش را اعمال کن
   const eff = await currentExpertFilters();
   const majScope = await scopedMajorIds(eff, u);
@@ -110,7 +126,8 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   if (override && !overrideAllowed) return { ok: false, error: 'نادیده‌گرفتن آیین‌نامه در حال حاضر غیرمجاز است (تنظیم سازمان).' };
   if (override && reason.length < 5) return { ok: false, error: 'وقتی آیین‌نامه را نادیده می‌گیری، دلیل (حداقل ۵ نویسه) الزامی است.' };
 
-  const u = await uniId();
+  const { u, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   const [stu] = await db.select().from(students).where(and(eq(students.id, sid), eq(students.status, 'ACTIVE'))).limit(1);
   if (!stu) return { ok: false, error: 'دانشجوی فعال یافت نشد.' };
   if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
@@ -203,7 +220,7 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
     councilRuling: conflicts?.length ? 1 : 0, overriddenRules: overriddenCodes,
   }).returning({ id: enrollments.id }));
   await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + 1` })
-    .where(and(eq(course_offerings.id, oid), u ? eq(course_offerings.universityId, u) : sql`1 = 1`));
+    .where(and(eq(course_offerings.id, oid), universityEq(course_offerings.universityId, u)));
   return { ok: true, enrollmentId: ins[0]?.id };
 }
 
@@ -220,7 +237,8 @@ export async function dropEnrollAction(enrollmentId: number, reason: string): Pr
     .from(enrollments).innerJoin(students, eq(students.id, enrollments.studentId))
     .where(eq(enrollments.id, eid)).limit(1);
   if (!row) return { ok: false, error: 'ثبت‌نام یافت نشد.' };
-  const u = await uniId();
+  const { u, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   if (u && row.studentUni && row.studentUni !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
   // دامنهٔ کارشناس
   const eff = await currentExpertFilters();
@@ -256,7 +274,7 @@ async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
   if (Array.isArray(f.studentIds) && f.studentIds.length) {
     const u = await uniId();
     const conds: any[] = [inArray(students.id, f.studentIds.map(Number).filter(Number.isInteger))];
-    if (u) conds.push(eq(students.universityId, u));
+    conds.push(universityEq(students.universityId, u));
     const eff = await currentExpertFilters();
     const majScope = await scopedMajorIds(eff, u);
     if (majScope) conds.push(inArray(students.majorId, majScope));
@@ -264,7 +282,7 @@ async function bulkStudentIds(f: BulkFilter): Promise<number[]> {
     return rows.map(r => r.id);
   }
   const u = await uniId();
-  const conds = [eq(students.status, 'ACTIVE'), u ? eq(students.universityId, u) : sql`1 = 0`];
+  const conds = [eq(students.status, 'ACTIVE'), universityEq(students.universityId, u)];
   // دامنهٔ کارشناس
   const eff = await currentExpertFilters();
   const majScope = await scopedMajorIds(eff, u);
@@ -293,16 +311,25 @@ export async function countBulkStudents(f: BulkFilter): Promise<{ ok: boolean; c
 /** انتخاب واحد دسته‌جمعی: همهٔ دانشجویان فیلتر → در یک یا چند کلاس ثبت می‌شوند */
 export async function bulkEnrollAction(
   f: BulkFilter, offeringIds: number[], override: boolean, reason: string,
-): Promise<{ ok: boolean; error?: string; inserted?: number; skipped?: number; total?: number }> {
+  confirmedCount?: number,
+): Promise<{ ok: boolean; error?: string; inserted?: number; skipped?: number; total?: number; uncheckedPrereq?: boolean; uncheckedMaxUnits?: boolean; unitCapSkipped?: number }> {
   const me = await requireRole(EDU);
   const overrideAllowed = await getBool('ENROLL_EXPERT_OVERRIDE').catch(() => true);
   if (override && !overrideAllowed) return { ok: false, error: 'نادیده‌گرفتن آیین‌نامه غیرمجاز است (تنظیم سازمان).' };
   if (override && String(reason || '').trim().length < 5) return { ok: false, error: 'دلیل نادیده‌گرفتن (≥۵ نویسه) الزامی است.' };
   const ids = offeringIds.map(Number).filter(Number.isInteger);
   if (!ids.length) return { ok: false, error: 'حداقل یک کلاس انتخاب کنید.' };
+  const { u: ub, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   const sids = await bulkStudentIds(f);
   if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
-  const ub = await uniId();
+  // ── F-22-۲: اتصال به پیش‌نمایش ──
+  // منبع حقیقت، bulkStudentIds(f) همین فراخوان است. اگر confirmedCount نیامده یا
+  // با شمارشِ الان ناهمخوان است، دستهٔ بزرگ (>۵۰) رد می‌شود؛ دستهٔ کوچک ادامه
+  // می‌یابد تا فراخوانِ فعلیِ کلاینت نشکند (سازگاری). تعدادِ محاسبه‌شده در `total` برمی‌گردد.
+  if ((confirmedCount == null || confirmedCount !== sids.length) && sids.length > 50) {
+    return { ok: false, error: `تعداد مخاطبان (${sids.length}) با پیش‌نمایش شما هم‌خوان نیست — لطفاً دوباره «شمارش» را اجرا و نتیجه را تأیید کنید.` };
+  }
 
   // ── آماده‌سازی دسته‌ای ──────────────────────────────────────────────────
   // پیش‌تر برای هر جفت (کلاس × دانشجو) سه کوئری جدا می‌رفت: چک تکراری، درج،
@@ -310,8 +337,37 @@ export async function bulkEnrollAction(
   // حالا: ارائه‌ها یک‌بار، جفت‌های موجود یک‌بار، درج دسته‌ای، و یک آپدیت
   // ظرفیت به‌ازای هر کلاس. **قواعد و شمارش‌ها عیناً حفظ شده‌اند.**
   const CAP = 3000;
-  const offRows = await db.select().from(course_offerings).where(inArray(course_offerings.id, ids));
+  const offRows = await db.select().from(course_offerings)
+    .where(and(inArray(course_offerings.id, ids), universityEq(course_offerings.universityId, ub)));
   const offMap = new Map(offRows.map(o => [o.id, o]));
+
+  // ── F-22-۴ (مجموعه‌ای): واحدهای دروسِ ارائه‌شده + واحدهای ثبت‌شدهٔ فعلی هر
+  // دانشجو در هر ترم — با یک کوئری گروهی، نه کوئری به‌ازای هر دانشجو. ──
+  const unitMap = new Map<number, number>();
+  const courseIds = [...new Set(offRows.map(o => o.courseId).filter((n): n is number => typeof n === 'number'))];
+  if (courseIds.length) {
+    const crows = await db.select({ id: courses.id, units: courses.units }).from(courses).where(inArray(courses.id, courseIds));
+    for (const c of crows) unitMap.set(c.id, Number(c.units || 0));
+  }
+  const curUnits = new Map<string, number>();
+  {
+    const urows = await db
+      .select({ sid: enrollments.studentId, tid: course_offerings.termId, sumUnits: sql<number>`coalesce(sum(${courses.units}), 0)` })
+      .from(enrollments)
+      .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+      .innerJoin(courses, eq(courses.id, course_offerings.courseId))
+      .where(and(inArray(enrollments.studentId, sids), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])))
+      .groupBy(enrollments.studentId, course_offerings.termId);
+    for (const r of urows) curUnits.set(`${r.sid}:${r.tid}`, Number(r.sumUnits || 0));
+  }
+  // تشخیص مجموعه‌ایِ «نیاز به بررسی پیش‌نیاز/تداخل»: وجود قاعدهٔ PREREQ برای
+  // دروسِ ارائه‌شده / وجود برنامهٔ کلاس یا امتحان برای کلاس‌های هدف.
+  const needPrereq = courseIds.length
+    ? (await db.select({ id: course_rules.id }).from(course_rules)
+        .where(and(inArray(course_rules.courseId, courseIds), eq(course_rules.ruleType, 'PREREQ'))).limit(1)).length > 0
+    : false;
+  const needConflict = (await db.select({ id: schedules.id }).from(schedules)
+    .where(and(inArray(schedules.offeringId, ids), inArray(schedules.scheduleType, ['CLASS', 'EXAM']))).limit(1)).length > 0;
 
   // ── گیت تسویهٔ مالی (دسته‌ای) ──
   // پیش‌تر ثبت دسته‌جمعی هیچ بررسی مالی نداشت ⇒ یک فراخوان می‌توانست صدها
@@ -340,7 +396,8 @@ export async function bulkEnrollAction(
 
   let skipped = 0;
   let planned = 0;
-  const toInsert: { studentId: number; offeringId: number; universityId: number | null }[] = [];
+  let ceilingBlocked = 0;
+  let toInsert: { studentId: number; offeringId: number; universityId: number | null }[] = [];
 
   for (const oid of ids) {
     if (planned + skipped >= CAP) break;
@@ -354,42 +411,107 @@ export async function bulkEnrollAction(
       skipped += sids.length;
       continue;
     }
-    // گیت ظرفیت مگر با override — همان snapshot قبلی، ثابت برای همهٔ دانشجویان این کلاس
-    const full = !override && off.enrolledCount != null && off.capacity > 0 && off.enrolledCount >= off.capacity;
+    // گیت ظرفیت — همان snapshot، ثابت برای همهٔ دانشجویان این کلاس
+    // F-22-۳: سقف سخت — با override هم enrolledCount هرگز از capacity+40
+    // نمی‌گذرد (DEFAULT_MAX_STUDENTS_PER_GROUP)؛ بدون override عبور از خودِ
+    // ظرفیت در همین فراخوان متوقف می‌شود (نه فقط در snapshot). ظرفیت 0 مثل
+    // قبل «بدون گیت ظرفیت» است.
+    const seats = off.capacity > 0
+      ? Math.max(0, (override ? off.capacity + DEFAULT_MAX_STUDENTS_PER_GROUP : off.capacity) - (off.enrolledCount ?? 0))
+      : Number.POSITIVE_INFINITY;
+    let taken = 0;
     const clearedForTerm = override ? null : clearedByTerm.get(off.termId!);
     for (const sid of sids) {
       if (planned + skipped >= CAP) break;
       if (!override && clearedForTerm && !clearedForTerm.has(sid)) { financiallyExcluded++; skipped++; continue; }
       if (existingPairs.has(`${oid}:${sid}`)) { skipped++; continue; }
-      if (full) { skipped++; continue; }
+      if (taken >= seats) { if (override) ceilingBlocked++; skipped++; continue; }
       existingPairs.add(`${oid}:${sid}`); // جلوگیری از تکرار داخل همین دسته
       toInsert.push({ studentId: sid, offeringId: oid, universityId: off.universityId ?? null });
-      planned++;
+      planned++; taken++;
+    }
+  }
+
+  // ── F-22-۳: سقف سخت شکسته می‌شود؟ پیش از هر درج، کل فراخوان رد می‌شود. ──
+  if (ceilingBlocked > 0) {
+    return { ok: false, error: `سقف سخت ظرفیت: افزودن ${ceilingBlocked} نفر کلاس را بیش از «ظرفیت + ${DEFAULT_MAX_STUDENTS_PER_GROUP}» می‌برد — ثبت انجام نشد؛ کلاس یا فیلتر را محدودتر انتخاب کنید.`, skipped, total: sids.length };
+  }
+
+  // ── F-22-۴: پیش‌نیاز/تداخل در مسیر گروهی بررسی فردی نمی‌شود — پس هیچ دور
+  // زدنِ بی‌صدا نیست: اگر کلاسِ هدف قاعدهٔ پیش‌نیاز یا برنامهٔ کلاس/امتحان
+  // دارد، ادامه فقط با override+دلیل مجاز است و در نتیجه هم صادقانه علامت
+  // می‌خورد (uncheckedPrereq). ──
+  if (planned > 0 && (needPrereq || needConflict) && !override) {
+    return { ok: false, error: 'بررسی پیش‌نیاز/تداخل در ثبت‌نام گروهی انجام نمی‌شود — برای ادامه، «نادیده‌گرفتن» با دلیل را فعال کنید یا از ثبت تکی استفاده کنید.', skipped, total: sids.length };
+  }
+
+  // ── F-22-۴: سقف واحد گروهی ──
+  // ارزیابی سقف، مجموعه‌ای: واحدهای فعلی (کوئری گروهی) + واحدهای درس + سقف
+  // مؤثر از موتور آیین‌نامه. فراخوانِ موتور به‌ازای هر دانشجو گران است؛ فقط
+  // برای دستهٔ کوچک (≤۵۰ دانشجوی متمایز) انجام می‌شود و برای دستهٔ بزرگ
+  // صادقانه با uncheckedMaxUnits علامت می‌خورد — نه دور زدنِ بی‌صدا.
+  let unitCapSkipped = 0;
+  let uncheckedMaxUnits = false;
+  if (!override && toInsert.length) {
+    const evalSids = [...new Set(toInsert.map(v => v.studentId))];
+    if (evalSids.length <= 50) {
+      const regMax = new Map<string, number | null>();
+      const kept: typeof toInsert = [];
+      for (const v of toInsert) {
+        const off = offMap.get(v.offeringId)!;
+        const key = `${v.studentId}:${off.termId}`;
+        if (!regMax.has(key)) {
+          try { regMax.set(key, (await evaluateStudentRegulationStatus(v.studentId, off.termId)).effectiveMaxUnits ?? null); }
+          catch { regMax.set(key, null); }
+        }
+        const max = regMax.get(key)!;
+        const cur = curUnits.get(key) ?? 0;
+        const addUnits = unitMap.get(off.courseId) ?? 0;
+        if (max != null && cur + addUnits > max) { unitCapSkipped++; skipped++; continue; }
+        kept.push(v);
+      }
+      toInsert = kept;
+    } else {
+      uncheckedMaxUnits = true;
     }
   }
 
   let inserted = 0;
   if (toInsert.length) {
-    const perOffering = new Map<number, number>();
+    // ── F-22-۱: درج و افزایش شمارندهٔ ظرفیت در «همان تراکنش» هر تکه ──
+    // پیش‌تر شمارنده بعد از همهٔ تکه‌ها جداگانه اضافه می‌شد: شکست در میانهٔ
+    // دسته یعنی ثبتِ نیمه‌کاره + رانش شمارنده. حالا هر تکه اتمی است؛ شکستِ
+    // تکه کل فراخوان را خطا می‌دهد و فراخوانِ بعدی می‌تواند retry کند —
+    // درج با onConflictDoNothing روی uq_enrollments(studentId, offeringId)
+    // همان‌اَنگ idempotent است (فقط ردیف‌های واقعاً درج‌شده برمی‌گردند و
+    // شمارنده فقط به‌ازای همان‌ها +می‌شود).
     for (let i = 0; i < toInsert.length; i += 500) {
       const chunk = toInsert.slice(i, i + 500);
-      const done = await withUserRls(me.id, tx => tx.insert(enrollments).values(chunk.map(v => ({
-        ...v, status: 'REGISTERED',
-        enrolledByUserId: me.id,
-        enrollOverride: override ? 1 : 0,
-        enrollOverrideReason: override ? String(reason || '').trim() : null,
-        councilRuling: override ? 1 : 0,
-      }))).onConflictDoNothing().returning({ id: enrollments.id, offeringId: enrollments.offeringId }));
+      const done = await withUserRls(me.id, async tx => {
+        const res = await tx.insert(enrollments).values(chunk.map(v => ({
+          ...v, status: 'REGISTERED',
+          enrolledByUserId: me.id,
+          enrollOverride: override ? 1 : 0,
+          enrollOverrideReason: override ? String(reason || '').trim() : null,
+          councilRuling: override ? 1 : 0,
+        }))).onConflictDoNothing().returning({ id: enrollments.id, offeringId: enrollments.offeringId });
+        const counts = new Map<number, number>();
+        for (const r of res) counts.set(r.offeringId, (counts.get(r.offeringId) ?? 0) + 1);
+        for (const [oid, n] of counts) {
+          await tx.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + ${n}` })
+            .where(eq(course_offerings.id, oid));
+        }
+        return res;
+      });
       inserted += done.length;
-      for (const r of done) perOffering.set(r.offeringId, (perOffering.get(r.offeringId) ?? 0) + 1);
-    }
-    // یک آپدیت ظرفیت به‌ازای هر کلاس (به‌جای یکی به‌ازای هر دانشجو)
-    for (const [oid, n] of perOffering) {
-      await db.update(course_offerings).set({ enrolledCount: sql`${course_offerings.enrolledCount} + ${n}` })
-        .where(and(eq(course_offerings.id, oid), ub ? eq(course_offerings.universityId, ub) : sql`1 = 1`));
     }
   }
-  return { ok: true, inserted, skipped, total: sids.length };
+  return {
+    ok: true, inserted, skipped, total: sids.length,
+    ...(needPrereq || needConflict ? { uncheckedPrereq: true } : {}),
+    ...(uncheckedMaxUnits ? { uncheckedMaxUnits: true } : {}),
+    ...(unitCapSkipped > 0 ? { unitCapSkipped } : {}),
+  };
 }
 
 /** حذف دسته‌جمعی: ثبت‌نام دانشجویان فیلتر در کلاس‌های انتخابی → DROPPED */
@@ -401,21 +523,29 @@ export async function bulkDropAction(
   if (!ids.length) return { ok: false, error: 'حداقل یک کلاس انتخاب کنید.' };
   const sids = await bulkStudentIds(f);
   if (!sids.length) return { ok: false, error: 'هیچ دانشجویی با این فیلتر پیدا نشد.' };
-  const ud = await uniId();
+  const { u: ud, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   let dropped = 0, skipped = 0;
   for (const oid of ids) {
-    if (ud) {
-      const [offChk] = await db.select({ universityId: course_offerings.universityId }).from(course_offerings).where(eq(course_offerings.id, oid)).limit(1);
-      if (!offChk || (offChk.universityId && offChk.universityId !== ud)) { skipped += 0; continue; }
-    }
-    const res = await withUserRls(me.id, tx => tx.update(enrollments)
-      .set({ status: 'DROPPED', enrolledByUserId: me.id, enrollOverrideReason: String(reason || '').trim() || null })
-      .where(and(inArray(enrollments.studentId, sids), eq(enrollments.offeringId, oid), eq(enrollments.status, 'REGISTERED'),
-        ud ? eq(enrollments.universityId, ud) : sql`1 = 1`))
-      .returning({ id: enrollments.id }));
+    // F-21: شرط دانشگاه fail-closed — کلاسِ ناموجود/غیرهم‌دانشگاهی رد می‌شود
+    const [offChk] = await db.select({ id: course_offerings.id }).from(course_offerings)
+      .where(and(eq(course_offerings.id, oid), universityEq(course_offerings.universityId, ud))).limit(1);
+    if (!offChk) { skipped++; continue; }
+    // F-22-۵: تغییر وضعیت ثبت‌نام و کاهش شمارندهٔ ظرفیت در «همان تراکنش» —
+    // پیش‌تر کاهش شمارنده بعد از تراکنش جداگانه انجام می‌شد (رانش در شکست).
+    const res = await withUserRls(me.id, async tx => {
+      const upd = await tx.update(enrollments)
+        .set({ status: 'DROPPED', enrolledByUserId: me.id, enrollOverrideReason: String(reason || '').trim() || null })
+        .where(and(inArray(enrollments.studentId, sids), eq(enrollments.offeringId, oid), eq(enrollments.status, 'REGISTERED'),
+          universityEq(enrollments.universityId, ud)))
+        .returning({ id: enrollments.id });
+      if (upd.length) {
+        await tx.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - ${upd.length}, 0)` })
+          .where(eq(course_offerings.id, oid));
+      }
+      return upd;
+    });
     dropped += res.length;
-    await db.update(course_offerings).set({ enrolledCount: sql`GREATEST(${course_offerings.enrolledCount} - ${res.length}, 0)` })
-      .where(and(eq(course_offerings.id, oid), ud ? eq(course_offerings.universityId, ud) : sql`1 = 1`));
   }
   return { ok: true, dropped, skipped };
 }
@@ -474,7 +604,8 @@ export async function activateTermForFilter(
   const [term] = await db.select({ id: academic_terms.id, termCode: academic_terms.termCode, universityId: academic_terms.universityId })
     .from(academic_terms).where(eq(academic_terms.id, tid)).limit(1);
   if (!term) return { ok: false, error: 'ترم یافت نشد.' };
-  const u0 = await uniId();
+  const { u: u0, ok: uniOk0 } = await uniBoundary();
+  if (!uniOk0) return { ok: false, error: UNI_DENIED_MSG };
   if (u0 && term.universityId && term.universityId !== u0) return { ok: false, error: 'این ترم متعلق به دانشگاه دیگری است.' };
   if (u0 && term.universityId == null) return { ok: false, error: 'دانشگاه ترم نامشخص است.' };
   const sids = await bulkStudentIds(f);
@@ -586,7 +717,8 @@ export async function getStudentWarnings(studentId: number, termId: number): Pro
   const items: StudentWarning[] = [];
   const [stu] = await db.select().from(students).where(eq(students.id, sid)).limit(1);
   if (!stu) return { ok: false, error: 'دانشجو یافت نشد.' };
-  const u = await uniId();
+  const { u, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
   if (u && stu.universityId == null) return { ok: false, error: 'دانشگاه دانشجو نامشخص است.' };
   const _eff0 = await currentExpertFilters().catch(() => null);
@@ -710,7 +842,8 @@ export async function getStudentCatalog(
   if (!Number.isInteger(sid) || !Number.isInteger(tid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
   const [stu] = await db.select().from(students).where(eq(students.id, sid)).limit(1);
   if (!stu) return { ok: false, error: 'دانشجو یافت نشد.' };
-  const u = await uniId();
+  const { u, ok: uniOk } = await uniBoundary();
+  if (!uniOk) return { ok: false, error: UNI_DENIED_MSG };
   if (u && stu.universityId && stu.universityId !== u) return { ok: false, error: 'این دانشجو از دانشگاه دیگری است.' };
   if (u && stu.universityId == null) return { ok: false, error: 'دانشگاه دانشجو نامشخص است.' };
   const _effC = await currentExpertFilters().catch(() => null);

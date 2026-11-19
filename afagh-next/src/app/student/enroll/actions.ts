@@ -35,6 +35,8 @@ import { resolveApplicableCurriculum, type ResolvableVersion } from '@/lib/curri
 import { listTermsForUniversity, termOrdinalForEntry } from '@/lib/term-scope';
 import { createBypassRequest, cancelBypassRequest } from '@/lib/bypass-requests';
 import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { assertFinancialClearance } from '@/lib/enrollment-financial-gate';
+import { appendAudit } from '@/lib/audit';
 import { toShamsi } from '@/lib/shamsi';
 
 /**
@@ -731,19 +733,41 @@ export async function referCouncilAction(offeringId: number, reason?: string): P
   const target = await offeringInMyScope(myUni, term.id, offeringId);
   if (!target) return { ok: false, error: 'این ارائه برای دانشگاه/نیمسال شما در دسترس نیست' };
   const [o] = await db
-    .select({ title: courses.title })
+    .select({ title: courses.title, capacity: course_offerings.capacity, enrolledCount: course_offerings.enrolledCount })
     .from(course_offerings)
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(eq(course_offerings.id, target.id));
 
-  // ثبت PENDING_COUNCIL + پروندهٔ گردش کار
-  const [ins] = await db.transaction(tx =>
-    tx
+  // 🚫 گیت مالی — ارجاع به شورا مسیرِ استثنای آموزشی است؛ بدهی با شورا بخشیده نمی‌شود
+  const fin = await assertFinancialClearance(me.id, term.id, myUni);
+  if (!fin.ok) return { ok: false, error: fin.error };
+
+  // 🚫 فقط دانشجوی ACTIVE
+  if (me.status !== 'ACTIVE') {
+    return { ok: false, error: 'وضعیت پروندهٔ دانشجویی شما فعال نیست؛ معرفی به شورا امکان‌پذیر نیست.' };
+  }
+
+  // 🚫 ظرفیت — تأییدِ شورا ثبت را قطعی می‌کند، پس همین حالا باید صندلیِ خالی باشد
+  if (o?.capacity != null && o.capacity > 0 && o.enrolledCount != null && o.enrolledCount >= o.capacity) {
+    return { ok: false, error: 'ظرفیت این کلاس تکمیل است؛ معرفی به شورا امکان‌پذیر نیست.' };
+  }
+
+  // ثبت PENDING_COUNCIL + پروندهٔ گردش کار + audit (در یک تراکنش READ COMMITTED)
+  const [ins] = await db.transaction(async tx => {
+    const [row] = await tx
       .insert(enrollments)
       .values({ studentId: me.id, offeringId, status: 'PENDING_COUNCIL' })
       .onConflictDoUpdate({ target: [enrollments.studentId, enrollments.offeringId], set: { status: 'PENDING_COUNCIL' } })
-      .returning({ id: enrollments.id })
-  );
+      .returning({ id: enrollments.id });
+    await appendAudit(tx, {
+      actorUserId: user.id,
+      action: 'council_referral',
+      entityType: 'enrollments',
+      entityId: row?.id ?? null,
+      details: JSON.stringify({ offeringId, kind: 'ADD', termId: term.id }),
+    });
+    return [row];
+  });
 
   const [proc] = await db.select().from(process_definitions).where(eq(process_definitions.code, 'PREREQ_WAIVER')).limit(1);
   if (proc) {

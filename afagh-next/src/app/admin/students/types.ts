@@ -28,6 +28,8 @@ export type StudentItem = {
   entryTerm: number;
   /** تاریخ ورود — ارقام همین ستون در DB «شمسی» است (YYYY-MM-DD) */
   entryDate?: string | null;
+  /** نام استاد راهنمای پایاننامه (از thesis_progress، یک کوئری مجموعهای در page.tsx) */
+  supervisorName?: string | null;
   /** شماره‌های دانشجویی قبلی همین شخص (رکوردهای دیگر با همان userId) */
   previousCodes?: PreviousStudentCode[];
   status: string;
@@ -219,9 +221,11 @@ export type TranscriptPrintOptions = {
   showAcceptance: boolean;    // نحوه ورود
   showStudyMode: boolean;     // شیوه آموزشی
   thesisQualitative: boolean; // نمرهٔ پایان‌نامه/رساله به‌صورت کیفی
+  layout?: '3col' | '2col'; // تعداد ستون نیمسالها (پیشفرض ۳)
 };
 
 export const DEFAULT_PRINT_OPTIONS: TranscriptPrintOptions = {
+  layout: '3col',
   showLegend: true,
   showBreakdown: true,
   showRank: false,

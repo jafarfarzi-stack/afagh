@@ -1021,7 +1021,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       ['showAcceptance', 'نحوه ورود'],
                       ['showStudyMode', 'شیوه آموزشی'],
                       ['thesisQualitative', 'پایان‌نامه کیفی'],
-                    ] as [keyof TranscriptPrintOptions, string][]).map(([k, label]) => (
+                    ] as [keyof Omit<TranscriptPrintOptions, 'layout'>, string][]).map(([k, label]) => (
                       <label
                         key={k}
                         className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-2xs font-bold border cursor-pointer ${printOptions[k] ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-slate-50 border-slate-300 text-slate-500'}`}
@@ -1035,6 +1035,21 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                         {label}
                       </label>
                     ))}
+                    {/* تعداد ستونهای نیمسالها — کنترل دوگزینهای (نه چکباکس) */}
+                    <div className="flex items-center gap-1 border-r border-slate-200 pr-2 mr-1">
+                      <span className="text-2xs font-bold text-slate-500">چیدمان:</span>
+                      {([['3col', 'سه\u200cستونه'], ['2col', 'دوستونه']] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setPrintOptions(o => ({ ...o, layout: value }))}
+                          className={`px-2 py-0.5 rounded-lg text-2xs font-bold border ${(printOptions.layout ?? '3col') === value ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}
+                          aria-pressed={(printOptions.layout ?? '3col') === value}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     {printOptions.showRank && (
                       <select
                         value={rankScope}

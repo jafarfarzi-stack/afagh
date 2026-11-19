@@ -6,7 +6,8 @@ import { db } from '@/db';
 import { academic_terms, courses, degree_level_configs, departments, exam_calendar_configs, faculties, majors, universities } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { normJalali } from '@/lib/exam-scheduler';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
+import { appendAudit } from '@/lib/audit';
 import { faIncludes, normalizeFa } from '@/lib/persian-search';
 import { CODE_TABLES, type CodeRow, type CodeStat, type CodeTable, type FormOptions } from './tables';
 
@@ -796,13 +797,33 @@ const dtWrite = (v: string | null): SQL | null =>
   v == null ? null : sql`${v}::timestamp`;
 
 export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const actor = await requireRole(['ADMIN', 'VICE_EDU', 'EDU_EXPERT']);
+  // F-05: ویرایش ترم فقط برای ADMIN/VICE_EDU — کارشناس آموزشی حق تغییر
+  // پنجرهٔ انتخاب واحد (دستگاهی سراسری و اثرگذار بر همهٔ مستأجرها) را ندارد.
+  const actor = await requireRole(['ADMIN', 'VICE_EDU']);
   const id = Number(fd.get('id') || 0);
   if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, error: 'رکورد نامعتبر است.' };
   const [term] = await db.select({
     id: academic_terms.id, universityId: academic_terms.universityId,
+    isCurrent: academic_terms.isCurrent,
+    isEnrollmentOpen: academic_terms.isEnrollmentOpen,
+    enrollmentStartDate: academic_terms.enrollmentStartDate,
+    enrollmentEndDate: academic_terms.enrollmentEndDate,
+    addDropStartDate: academic_terms.addDropStartDate,
+    addDropEndDate: academic_terms.addDropEndDate,
   }).from(academic_terms).where(eq(academic_terms.id, id)).limit(1);
   if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+
+  // F-05: اتصال به دانشگاه — ترم فقط در محدودهٔ دانشگاهِ فعال ویرایش می‌شود.
+  // شناسهٔ ۰ (deny) یا نامشخص فقط برای ADMIN پلتفرمی راه دارد؛ بقیه fail-closed.
+  const activeUni = await getCurrentUniversity();
+  const activeUniId = activeUni?.id;
+  if (isRealUniversityId(activeUniId)) {
+    if (term.universityId !== null && term.universityId !== activeUniId) {
+      return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
+    }
+  } else if (!actor.roles.includes('ADMIN')) {
+    return { ok: false, error: 'ترم متعلق به دانشگاه دیگری است.' };
+  }
 
   const title = str(fd, 'title');
   if (!title) return { ok: false, error: 'عنوان ترم را وارد کنید.' };
@@ -865,64 +886,97 @@ export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; 
     zoning = { a, b };
   }
 
-  await db.update(academic_terms).set({
-    title, termType,
-    standardCode: optCode(fd, 'standardCode'),
-    ministryCode: optCode(fd, 'ministryCode'),
-    academicYear: year ?? null,
-    startDate: dtWrite(vals.startDate),
-    endDate: dtWrite(vals.endDate),
-    enrollmentStartDate: dtWrite(vals.enrollmentStartDate),
-    enrollmentEndDate: dtWrite(vals.enrollmentEndDate),
-    addDropStartDate: dtWrite(vals.addDropStartDate),
-    addDropEndDate: dtWrite(vals.addDropEndDate),
-    gradeEntryDeadline: dtWrite(vals.gradeEntryDeadline),
-    appealWindowDays: appeal,
-    professorAppealSlaDays: sla,
-    isCurrent: isCur,
+  // F-05: پیش/پسِ فیلدهای گیت‌کنندهٔ پنجره — برای ردیف ممیز
+  const iso = (v: unknown): string | null =>
+    v instanceof Date ? v.toISOString() : ((v as string | null) ?? null);
+  const before = {
+    isEnrollmentOpen: term.isEnrollmentOpen,
+    isCurrent: term.isCurrent,
+    enrollmentStartDate: iso(term.enrollmentStartDate),
+    enrollmentEndDate: iso(term.enrollmentEndDate),
+    addDropStartDate: iso(term.addDropStartDate),
+    addDropEndDate: iso(term.addDropEndDate),
+  };
+  const after = {
     isEnrollmentOpen: isEnr,
-  }).where(eq(academic_terms.id, id));
+    isCurrent: isCur,
+    enrollmentStartDate: vals.enrollmentStartDate,
+    enrollmentEndDate: vals.enrollmentEndDate,
+    addDropStartDate: vals.addDropStartDate,
+    addDropEndDate: vals.addDropEndDate,
+  };
 
-  // «ترم جاری» و «باز بودن انتخاب واحد» در هر دانشگاه فقط یکی است — بقیه خاموش می‌شوند
-  const uniScope = term.universityId != null
-    ? eq(academic_terms.universityId, term.universityId)
-    : isNull(academic_terms.universityId);
-  if (isCur) {
-    await db.update(academic_terms).set({ isCurrent: 0 })
-      .where(and(eq(academic_terms.isCurrent, 1), uniScope, ne(academic_terms.id, id)));
-  }
-  if (isEnr) {
-    await db.update(academic_terms).set({ isEnrollmentOpen: 0 })
-      .where(and(eq(academic_terms.isEnrollmentOpen, 1), uniScope, ne(academic_terms.id, id)));
-  }
+  // F-05: همهٔ نوشتن‌های ترم در یک تراکنش — ردیف ممیز همان‌جا نوشته می‌شود
+  // تا خرابیِ ممیز، خود تغییر را هم برگرداند (READ COMMITTED).
+  await db.transaction(async (tx) => {
+    await tx.update(academic_terms).set({
+      title, termType,
+      standardCode: optCode(fd, 'standardCode'),
+      ministryCode: optCode(fd, 'ministryCode'),
+      academicYear: year ?? null,
+      startDate: dtWrite(vals.startDate),
+      endDate: dtWrite(vals.endDate),
+      enrollmentStartDate: dtWrite(vals.enrollmentStartDate),
+      enrollmentEndDate: dtWrite(vals.enrollmentEndDate),
+      addDropStartDate: dtWrite(vals.addDropStartDate),
+      addDropEndDate: dtWrite(vals.addDropEndDate),
+      gradeEntryDeadline: dtWrite(vals.gradeEntryDeadline),
+      appealWindowDays: appeal,
+      professorAppealSlaDays: sla,
+      isCurrent: isCur,
+      isEnrollmentOpen: isEnr,
+    }).where(eq(academic_terms.id, id));
 
-  // پنجرهٔ امتحانات: upsert در exam_calendar_configs — بازه‌های عمومی/تخصصی
-  // قبلی داخل بازهٔ جدید clamp می‌شوند (تغییر جزئیات در ماژول امتحانات).
-  if (zoning) {
-    const [z] = await db.select().from(exam_calendar_configs)
-      .where(eq(exam_calendar_configs.termId, id)).limit(1);
-    const clamp = (v: string | null | undefined): string => {
-      if (!v) return zoning!.a;
-      return v < zoning!.a ? zoning!.a : v > zoning!.b ? zoning!.b : v;
-    };
-    if (z) {
-      await db.update(exam_calendar_configs).set({
-        globalStart: zoning.a, globalEnd: zoning.b,
-        generalStart: clamp(z.generalStart), generalEnd: clamp(z.generalEnd),
-        specializedStart: clamp(z.specializedStart), specializedEnd: clamp(z.specializedEnd),
-        updatedByUserId: actor.id, updatedAt: new Date(),
-      }).where(eq(exam_calendar_configs.id, z.id));
-    } else {
-      await db.insert(exam_calendar_configs).values({
-        termId: id,
-        globalStart: zoning.a, globalEnd: zoning.b,
-        generalStart: zoning.a, generalEnd: zoning.b,
-        specializedStart: zoning.a, specializedEnd: zoning.b,
-        universityId: term.universityId,
-        updatedByUserId: actor.id,
-      });
+    // «ترم جاری» و «باز بودن انتخاب واحد» در هر دانشگاه فقط یکی است — بقیه خاموش می‌شوند
+    const uniScope = term.universityId != null
+      ? eq(academic_terms.universityId, term.universityId)
+      : isNull(academic_terms.universityId);
+    if (isCur) {
+      await tx.update(academic_terms).set({ isCurrent: 0 })
+        .where(and(eq(academic_terms.isCurrent, 1), uniScope, ne(academic_terms.id, id)));
     }
-  }
+    if (isEnr) {
+      await tx.update(academic_terms).set({ isEnrollmentOpen: 0 })
+        .where(and(eq(academic_terms.isEnrollmentOpen, 1), uniScope, ne(academic_terms.id, id)));
+    }
+
+    // پنجرهٔ امتحانات: upsert در exam_calendar_configs — بازه‌های عمومی/تخصصی
+    // قبلی داخل بازهٔ جدید clamp می‌شوند (تغییر جزئیات در ماژول امتحانات).
+    if (zoning) {
+      const [z] = await tx.select().from(exam_calendar_configs)
+        .where(eq(exam_calendar_configs.termId, id)).limit(1);
+      const clamp = (v: string | null | undefined): string => {
+        if (!v) return zoning!.a;
+        return v < zoning!.a ? zoning!.a : v > zoning!.b ? zoning!.b : v;
+      };
+      if (z) {
+        await tx.update(exam_calendar_configs).set({
+          globalStart: zoning.a, globalEnd: zoning.b,
+          generalStart: clamp(z.generalStart), generalEnd: clamp(z.generalEnd),
+          specializedStart: clamp(z.specializedStart), specializedEnd: clamp(z.specializedEnd),
+          updatedByUserId: actor.id, updatedAt: new Date(),
+        }).where(eq(exam_calendar_configs.id, z.id));
+      } else {
+        await tx.insert(exam_calendar_configs).values({
+          termId: id,
+          globalStart: zoning.a, globalEnd: zoning.b,
+          generalStart: zoning.a, generalEnd: zoning.b,
+          specializedStart: zoning.a, specializedEnd: zoning.b,
+          universityId: term.universityId,
+          updatedByUserId: actor.id,
+        });
+      }
+    }
+
+    // F-05: ممیزِ هر تغییر پنجرهٔ ترم — هر فراخوانی یک ردیف
+    await appendAudit(tx, {
+      actorUserId: actor.id,
+      action: 'term_window_update',
+      entityType: 'academic_terms',
+      entityId: id,
+      details: JSON.stringify({ before, after }),
+    });
+  });
 
   revalidatePath('/admin/codes');
   revalidatePath('/admin/exams');

@@ -32,18 +32,18 @@ export default async function StudentFinancePage({
   // دفتر مالی دانشگاه فعال: ردیف‌های همین دانشگاه + سراسری (universityId=null)
   const ledgerScope = currentUniversityId
     ? sql`where ("universityId" = ${currentUniversityId} or "universityId" is null)`
-    : sql``;
+    : sql`where 1 = 0`;
   const studentScope = currentUniversityId
     ? sql`and (st."universityId" = ${currentUniversityId} or st."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
   const requestScope = currentUniversityId
     ? sql`and (r."universityId" = ${currentUniversityId} or r."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
 
   // ── تفکیک وصولی بر اساس «نوع واریز» ──
   const payScope = currentUniversityId
     ? sql`and (l."universityId" = ${currentUniversityId} or l."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
 
   // ── فیلتر نوع واریز (از ستون ساختاریافتهٔ جدید — مهاجرت ۰۱۱۹) ──
   const depositTypeFilter =

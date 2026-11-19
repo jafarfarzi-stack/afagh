@@ -9,8 +9,9 @@ import { ledgerBalance } from '../ledger-balance';
 import { offeringVisible } from '../offering-targeting';
 import { atomicSeat, nextWaitlistPosition, releaseSeat, warmupCapacities } from '../waitingRoom';
 import { evaluateStudentRegulationStatus, parseUnits } from '../regulations-engine';
-import { buildPrereqContext, evaluateLogicTree, type PrereqContext } from './prereqs';
+import { buildPrereqContext, evaluateCoreqTree, evaluateLogicTree, type PrereqContext } from './prereqs';
 import { assertEnrollmentWrite } from '../enrollment-window';
+import { assertAddDropBudget } from '../add-drop-limit';
 import { recountOfferings } from '../enrollment-count';
 
 // ═══ خط لولهٔ اعتبارسنجی — سند §۱۰۰۸ ═══
@@ -31,6 +32,8 @@ export type SubmitResult = {
   softErrors: { offeringId: number; msg: string }[];
   /** ردیف‌های سبد که در این ثبت حذف/نادیده شدند (H2 — اطلاعاتی، غیرمسدودکننده) */
   droppedCart?: { offeringId: number; title: string; reason: string }[];
+  /** پذیرش‌های ناشی از سیاست PREREQ_FAIL_POLICY — اطلاعاتی، برای ردگیری */
+  policyAdmissions?: { offeringId: number; title: string; code: string; policy: string }[];
 };
 
 export type SubmitDeps = {
@@ -116,7 +119,7 @@ function examOverlaps(a: { examDate: string | null; startTime: string; endTime: 
  * طبق §۶۹۰۶ فقط نتیجهٔ نهایی در PostgreSQL ثبت می‌شود؛ ظرفیت زنده در Redis می‌ماند.
  */
 export async function processQueuedSubmit(userId: number, studentId: number, acceptSameDayRisk = false, deps: SubmitDeps = {}): Promise<SubmitResult> {
-  const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [], droppedCart: [] };
+  const out: SubmitResult = { ok: true, registered: [], waitlisted: [], hardErrors: [], softErrors: [], droppedCart: [], policyAdmissions: [] };
   const D: typeof db = deps.db ?? db;
   const doRls = deps.withUserRls ?? withUserRls;
 
@@ -136,12 +139,20 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   // ⏳ گیت سروری پنجرهٔ انتخاب واحد — کارگر صف نباید به UI اعتماد کند.
   //    همین تابع، همان قواعد action‌ها را اعمال می‌کند (پرچم + کلید سراسری + بازهٔ زمانی).
+  //    استثنا: اگر پنجرهٔ اصلی انتخاب واحد بسته ولی بازهٔ حذف و اضافه باز باشد،
+  //    ثبتِ «اضافه» ادامه می‌یابد اما مشمول سقف ADD_DROP_MAX_CHANGES می‌شود (فیلتر ۴).
+  let inAddDrop = false;
   {
     const gate = await assertEnrollmentWrite(term.id, 'ADD', D as any);
     if (!gate.ok) {
-      out.ok = false;
-      out.hardErrors.push(gate.error);
-      return out;
+      const dropGate = await assertEnrollmentWrite(term.id, 'DROP', D as any);
+      if (dropGate.ok) {
+        inAddDrop = true;
+      } else {
+        out.ok = false;
+        out.hardErrors.push(gate.error);
+        return out;
+      }
     }
   }
 
@@ -279,7 +290,7 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
 
   // دروس همین ترم که قبلاً ثبت شده‌اند (تکراری نگیریم)
   const current = await D
-    .select({ offeringId: enrollments.offeringId, courseId: course_offerings.courseId, units: courses.units })
+    .select({ offeringId: enrollments.offeringId, courseId: course_offerings.courseId, code: courses.code, units: courses.units })
     .from(enrollments).innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
     .where(and(eq(enrollments.studentId, studentId), eq(course_offerings.termId, term.id), inArray(enrollments.status, ['REGISTERED', 'PENDING_COUNCIL'])));
@@ -385,18 +396,84 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
     }
   }
 
-  // ── فیلتر ۴: پیش‌نیاز — درخت منطقی (§۱۰۱۲، خطای نرم) ──
+  // ── فیلتر ۴: پیش‌نیاز/هم‌نیاز — درخت منطقی (§۱۰۱۲) ──
+  //    پیش‌نیاز: خطای نرمِ قابل گذر با درخواست مدیر. سیاست PREREQ_FAIL_POLICY
+  //    (STRICT | COREQ_REQUIRED | WAIVED — مقدارِ ناشناخته = STRICT، شکستِ امن):
+  //      WAIVED         → پیش‌نیازِ تلاش‌شدهٔ ناموفق (مردودی/حذف) پاس‌انگاشته می‌شود
+  //      COREQ_REQUIRED → پیش‌نیازِ تلاش‌شدهٔ ناموفق فقط به‌صورت هم‌نیاز در همین ترم مجاز است
+  //    هم‌نیاز (COREQ): خطای سخت — درخواستِ گذرِ پیش‌نیاز آن را پوشش نمی‌دهد.
   const buildCtx = deps.buildPrereq ?? buildPrereqContext;
   const prereq = await buildCtx(studentId);
+  const policyRaw = await import('../settings').then(m => m.getSetting('PREREQ_FAIL_POLICY')).catch(() => 'STRICT');
+  const policy = ['STRICT', 'COREQ_REQUIRED', 'WAIVED'].includes(String(policyRaw)) ? String(policyRaw) : 'STRICT';
+
+  // ── سقف حذف و اضافه: فقط وقتی پنجرهٔ اصلی بسته و بازهٔ حذف و اضافه باز است
+  //    (inAddDrop از گیتِ پنجره بالا می‌آید) — خطای سخت، غیرقابل گذر.
+  if (inAddDrop) {
+    const budget = await assertAddDropBudget(studentId, term.id);
+    if (!budget.ok) {
+      out.ok = false;
+      out.hardErrors.push(budget.error);
+    }
+  }
+
+  // کدهای «همین ترم» برای بررسی هم‌نیاز: ثبت‌شدهٔ فعلی (REGISTERED/PENDING_COUNCIL)
+  // + همهٔ درس‌های سبدِ همین ارسال (دستهٔ یکجا).
+  const codesThisTerm = new Set<string>([
+    ...current.map(c => c.code),
+    ...activeOffs.map(o => o.code),
+  ]);
+
   for (const o of activeOffs) {
     if (already.has(o.id)) continue;
+
+    // هم‌نیاز (COREQ): ارزیابیِ درخت با ثبتِ «همین ترم» — AND/OR تودرتو رعایت
+    // می‌شود (برگِ درسی = کدش در codesThisTerm؛ برگ غیردرسی = برآورده).
+    const coreqRule = prereq.coreqRuleByCourse?.get(o.courseId);
+    if (coreqRule) {
+      const coreqEv = evaluateCoreqTree(coreqRule, codesThisTerm);
+      if (!coreqEv.ok) {
+        const nameOf = (c: string) => '«' + (prereq.titles.get(c) ?? c) + '»';
+        const groupNames = coreqEv.missingGroups.map(g => [...new Set(g.map(nameOf))].join(' یا '));
+        out.ok = false;
+        if (groupNames.length === 1) {
+          out.hardErrors.push(
+            groupNames[0].includes(' یا ')
+              ? `برای اخذ «${o.title}» یکی از درس‌های هم‌نیاز ${groupNames[0]} باید در همین ترم اخذ شود.`
+              : `برای اخذ «${o.title}» باید درس هم‌نیاز ${groupNames[0]} را نیز در همین ترم بگیرید.`
+          );
+        } else {
+          out.hardErrors.push(`برای اخذ «${o.title}» باید درس‌های هم‌نیاز ${groupNames.join('، ')} را نیز در همین ترم بگیرید.`);
+        }
+      }
+    }
+
     const rule = prereq.ruleByCourse.get(o.courseId);
     if (!rule) continue;
     const ev = evaluateLogicTree(rule, prereq.passed, prereq);
-    if (!ev.ok) {
-      const missing = ev.missing.map(c => prereq.titles.get(c) ?? c).join('، ');
-      out.softErrors.push({ offeringId: o.id, msg: 'عدم پیش‌نیاز: «' + o.title + '» نیازمند گذرانده‌شدن «' + missing + '» است.' });
+    if (ev.ok) continue;
+    const missingCodes = ev.missing;
+    const missing = missingCodes.map(c => prereq.titles.get(c) ?? c).join('، ');
+
+    const allAttempted = missingCodes.length > 0 && missingCodes.every(c => prereq.attempted?.has(c) ?? false);
+    if (policy === 'WAIVED' && allAttempted) {
+      // پیش‌نیازهای ناقص سابقهٔ تلاش دارند → بدون درخواستِ گذر پذیرفته می‌شود (قابل ردگیری)
+      out.policyAdmissions!.push({ offeringId: o.id, title: o.title, code: o.code, policy: 'WAIVED' });
+      continue;
     }
+    if (policy === 'COREQ_REQUIRED' && allAttempted) {
+      const notThisTerm = missingCodes.filter(c => !codesThisTerm.has(c));
+      if (notThisTerm.length === 0) {
+        // پیش‌نیازِ مردوده در همین ترم هم‌نیاز اخذ می‌شود → پذیرشِ ناشی از سیاست (قابل ردگیری)
+        out.policyAdmissions!.push({ offeringId: o.id, title: o.title, code: o.code, policy: 'COREQ_REQUIRED' });
+        continue;
+      }
+      const names = notThisTerm.map(c => '«' + (prereq.titles.get(c) ?? c) + '»').join('، ');
+      out.ok = false;
+      out.hardErrors.push(`پیش‌نیاز ${names} پاس نشده است؛ با توجه به سیاست سازمان، اخذ «${o.title}» فقط به‌صورت هم‌نیاز (همراه همان درس در همین ترم) مجاز است.`);
+      continue;
+    }
+    out.softErrors.push({ offeringId: o.id, msg: 'عدم پیش‌نیاز: «' + o.title + '» نیازمند گذرانده‌شدن «' + missing + '» است.' });
   }
 
   if (out.hardErrors.length) { out.ok = false; return out; }

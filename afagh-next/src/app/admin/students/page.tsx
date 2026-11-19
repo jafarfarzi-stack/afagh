@@ -1,11 +1,11 @@
-import { and, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
-import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, term_status_types, universities, user_roles, users } from '@/db/schema';
+import { degree_level_configs, departments, educational_regulations, faculties, legacy_code_maps, majors, roles, staff, students, term_status_types, thesis_progress, universities, user_roles, users } from '@/db/schema';
 import type { RegulationPick } from './types';
 import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { escapeLikeChars, normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getSetting } from '@/lib/settings';
 import StudentsManagerClient from './StudentsManagerClient';
@@ -81,7 +81,7 @@ export default async function AdminStudentsPage({
 
   // ── فیلترهای مشترک ──
   const conds = [];
-  if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
+  conds.push(universityEq(students.universityId, currentUniversityId));
   // دامنهٔ کارشناس آموزش: فقط دانشجویانِ رشته‌های مجازش
   if (user.roles.includes('EDU_EXPERT')) {
     const _eff = await currentExpertFilters().catch(() => null);
@@ -243,6 +243,33 @@ export default async function AdminStudentsPage({
     ? await baseQuery.where(where as never).orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE)
     : await baseQuery.orderBy(...(orderBy as never[])).limit(PER_PAGE).offset((safePage - 1) * PER_PAGE);
 
+  // ── استاد راهنما: یک کوئری مجموعهای برای تمام دانشجویان همین صفحه ──
+  // نام استاد در users است (staff.userId → users.id)، نه در staff — الگوی همان
+  // nameOf() در defense-scheduling/actions.ts:188. جدول thesis_progress ستون
+  // supervisorConfirmed ندارد؛ newest ردیف مبنا است.
+  const supervisorByStudent = new Map<number, string>();
+  try {
+    const pageIds = studentRows.map(s => s.id);
+    if (pageIds.length) {
+      const supRows = await db
+        .select({
+          studentId: thesis_progress.studentId,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(thesis_progress)
+        .innerJoin(staff, eq(staff.id, thesis_progress.supervisorId))
+        .innerJoin(users, eq(users.id, staff.userId))
+        .where(and(inArray(thesis_progress.studentId, pageIds), isNotNull(thesis_progress.supervisorId)))
+        .orderBy(desc(thesis_progress.updatedAt), desc(thesis_progress.id));
+      for (const r of supRows) {
+        if (supervisorByStudent.has(r.studentId)) continue;
+        const name = `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim();
+        if (name) supervisorByStudent.set(r.studentId, name);
+      }
+    }
+  } catch { /* نبود جدول/دسترسی نباید لیست دانشجویان را بشکند */ }
+
   // ── شماره‌های دانشجویی قبلیِ همین اشخاص (بدون مایگریشن) ──
   // هر شخص ممکن است چند رکورد در جدول students داشته باشد (انتقالی، تغییر
   // رشته، ورود مجدد). رکوردهای دیگرِ همان userId — با رشته/سال/وضعیت —
@@ -302,17 +329,17 @@ export default async function AdminStudentsPage({
       degreeLevelId: majors.degreeLevelId,
     })
     .from(majors)
-    .where(currentUniversityId ? or(eq(majors.universityId, currentUniversityId), isNull(majors.universityId)) : undefined)
+    .where(isRealUniversityId(currentUniversityId) ? or(eq(majors.universityId, currentUniversityId), isNull(majors.universityId)) : sql`1 = 0`)
     .orderBy(majors.name);
   const facultyOptions = await db
     .select({ id: faculties.id, name: faculties.name })
     .from(faculties)
-    .where(currentUniversityId ? or(eq(faculties.universityId, currentUniversityId), isNull(faculties.universityId)) : undefined)
+    .where(isRealUniversityId(currentUniversityId) ? or(eq(faculties.universityId, currentUniversityId), isNull(faculties.universityId)) : sql`1 = 0`)
     .orderBy(faculties.name);
   const deptOptions = await db
     .select({ id: departments.id, name: departments.name, facultyId: departments.facultyId })
     .from(departments)
-    .where(currentUniversityId ? or(eq(departments.universityId, currentUniversityId), isNull(departments.universityId)) : undefined)
+    .where(isRealUniversityId(currentUniversityId) ? or(eq(departments.universityId, currentUniversityId), isNull(departments.universityId)) : sql`1 = 0`)
     .orderBy(departments.name);
   // کدینگ وضعیت تحصیلی/ترم — منبع همان عنوانی که کنار شمارهٔ دانشجویی می‌آید
   const termStatusOptions = await db
@@ -393,6 +420,7 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
           entryYear: s.entryYear,
           entryTerm: s.entryTerm || 1,
           entryDate: s.entryDate ? String(s.entryDate).slice(0, 10) : null,
+          supervisorName: supervisorByStudent.get(s.id) ?? null,
           previousCodes: (previousByUser.get(s.userId) ?? []).filter(p => p.code !== s.studentCode),
           status: s.status,
           samaStatusCode: s.samaStatusCode,

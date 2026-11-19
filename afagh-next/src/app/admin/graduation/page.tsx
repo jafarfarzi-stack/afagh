@@ -1,10 +1,10 @@
 import { db } from '@/db';
 import { clearance_departments } from '@/db/schema';
-import { eq, isNull, or } from 'drizzle-orm';
+import { eq, isNull, or, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth';
 import { listDossiers, pipelineStats, ensureClearanceDepartments, WORKFLOW_STEPS } from '@/lib/graduation-engine';
 import { allRequests, serviceCatalog } from '@/lib/alumni';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import GraduationClient from './GraduationClient';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export default async function AdminGraduationPage() {
     listDossiers({ universityId: currentUniversityId }),
     pipelineStats({ universityId: currentUniversityId }),
     db.select().from(clearance_departments)
-      .where(currentUniversityId ? or(eq(clearance_departments.universityId, currentUniversityId), isNull(clearance_departments.universityId)) : undefined),
+      .where(isRealUniversityId(currentUniversityId) ? or(eq(clearance_departments.universityId, currentUniversityId), isNull(clearance_departments.universityId)) : sql`1 = 0`),
     allRequests(),
     serviceCatalog(),
   ]);

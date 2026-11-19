@@ -9,7 +9,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { writeAuditEntry } from '@/lib/audit-writer';
 import { getBool } from '@/lib/settings';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId, universityEq } from '@/lib/university-scope';
 import { currentExpertFilters, type ExpertScopeFilters } from '@/lib/expert-scope';
 import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
 
@@ -108,6 +108,7 @@ export async function getTransferTargetsAction(termId: number): Promise<{
   if (!Number.isInteger(tid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
 
   const u = await uniId();
+  if (!isRealUniversityId(u)) return { ok: false, error: 'دانشگاه شما شناسایی نشد.' };
   const eff = await currentExpertFilters();
   const deptScope = await scopedDepartmentIds(eff, u);
 
@@ -125,7 +126,7 @@ export async function getTransferTargetsAction(termId: number): Promise<{
     .where(and(
       eq(course_offerings.termId, tid),
       eq(course_offerings.isActive, 1),
-      u ? eq(course_offerings.universityId, u) : undefined,
+      universityEq(course_offerings.universityId, u),
       deptScope ? inArray(courses.departmentId, deptScope) : undefined,
     ))
     .orderBy(asc(courses.title), asc(course_offerings.groupNumber))
@@ -166,6 +167,7 @@ export async function getGroupRosterAction(termId: number, offeringId: number): 
   if (!Number.isInteger(tid) || !Number.isInteger(oid)) return { ok: false, error: 'اطلاعات نامعتبر.' };
 
   const u = await uniId();
+  if (!isRealUniversityId(u)) return { ok: false, error: 'دانشگاه شما شناسایی نشد.' };
   const [off] = await db
     .select({
       offeringId: course_offerings.id, groupNumber: course_offerings.groupNumber,
@@ -231,6 +233,7 @@ export async function getTransferTargetGroupsAction(termId: number, offeringId: 
     .where(eq(course_offerings.id, oid)).limit(1);
   if (!src) return { ok: false, error: 'گروه مبدأ یافت نشد.' };
   const u = await uniId();
+  if (!isRealUniversityId(u)) return { ok: false, error: 'دانشگاه شما شناسایی نشد.' };
   if (u && src.universityId && src.universityId !== u) return { ok: false, error: 'این گروه متعلق به دانشگاه دیگری است.' };
   if (u && src.universityId == null) return { ok: false, error: 'دانشگاه گروه نامشخص است.' };
   const eff = await currentExpertFilters();
@@ -462,6 +465,7 @@ export async function transferStudentAction(input: TransferInput): Promise<Trans
 
   // دامنهٔ کارشناس: درس هر دو گروه باید در محدودهٔ مجاز باشد
   const u = await uniId();
+  if (!isRealUniversityId(u)) return { ok: false, error: 'دانشگاه شما شناسایی نشد.' };
   if (u) {
     if (fromOff[0].universityId && fromOff[0].universityId !== u) return { ok: false, error: 'گروه مبدأ متعلق به دانشگاه دیگری است.' };
     if (toOff[0].universityId && toOff[0].universityId !== u) return { ok: false, error: 'گروه مقصد متعلق به دانشگاه دیگری است.' };

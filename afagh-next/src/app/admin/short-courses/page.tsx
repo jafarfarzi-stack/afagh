@@ -1,8 +1,8 @@
-import { desc, eq, isNull, or } from 'drizzle-orm';
+import { desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { short_term_certificates, short_term_courses, short_term_discounts, short_term_learners, short_term_registrations } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import AdminShortCoursesClient, { AdminCourseItem } from './AdminShortCoursesClient';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export default async function AdminShortCoursesPage() {
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
   const uniScope = (col: any) =>
-    currentUniversityId ? or(eq(col, currentUniversityId), isNull(col)) : undefined;
+    isRealUniversityId(currentUniversityId) ? or(eq(col, currentUniversityId), isNull(col)) : sql`1 = 0`;
 
   const courses = await db.select().from(short_term_courses)
     .where(uniScope(short_term_courses.universityId)).orderBy(desc(short_term_courses.id));

@@ -1,8 +1,8 @@
-import { desc, eq, isNull, or } from 'drizzle-orm';
+import { desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { document_categories, document_types, student_documents, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import ArchiveClient from './ArchiveClient';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export default async function ArchivePage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
+  const scopeOf = (c: any) => (isRealUniversityId(currentUniversityId) ? or(eq(c, currentUniversityId), isNull(c)) : sql`1 = 0`);
 
   const rows = await db
     .select({

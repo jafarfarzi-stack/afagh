@@ -22,7 +22,7 @@ import {
   recordDefenseResult,
   supervisorApproveDefense,
 } from '@/lib/graduation-engine';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 
 // ═══ میز کار «برنامه‌ریزی و ثبت نتیجهٔ دفاع پایان‌نامه» ═══
 // کارشناسی (تأیید پروپوزال، تعیین وقت، ثبت نتیجه، استخر داوران):
@@ -140,7 +140,7 @@ async function loadBoard(): Promise<Board> {
   const user = await requireRole(BOARD_ROLES);
   const uni = await getCurrentUniversity().catch(() => null);
   const uid = uni?.id;
-  const scopeOf = (c: any) => (uid ? or(eq(c, uid), isNull(c)) : undefined);
+  const scopeOf = (c: any) => (isRealUniversityId(uid) ? or(eq(c, uid), isNull(c)) : sql`1 = 0`);
 
   const tpRows = await db
     .select({
