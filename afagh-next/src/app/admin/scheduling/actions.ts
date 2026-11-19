@@ -892,6 +892,34 @@ export async function getSchedulingWorkspaceAction(termId?: number, _universityI
     if (isDeptHead && deptIds.length) {
       professors = professors.filter(p => p.departmentId != null && deptIds.includes(p.departmentId));
     }
+
+    // ── اساتید مشترک (یافتهٔ تست زندهٔ ۵ ایجنتی) ─────────────────────────────
+    // فیلتر بالا فقط استادانِ دپارتمانِ خودِ مدیرگروه را نگه می‌داشت. نتیجه: دروس
+    // عمومی/مشترک (فیزیک بدن انسان، آمار، زبان…) هیچ‌گاه استادِ گروهِ صاحبِ درس را
+    // در کشویی نداشتند و گروهِ «اساتید سایر گروه‌ها (مشترک)» در UI هرگز ساخته
+    // نمی‌شد — یعنی قابلیتِ تفکیکِ اختصاصی/مشترک عملاً مرده بود.
+    // این‌جا استادانِ سایر گروه‌ها که *سابقهٔ تدریسِ دروسِ چارتِ همین رشته‌ها* را
+    // دارند اضافه می‌شوند: مجموعهٔ محدود و معنادار، نه کل استادان دانشگاه
+    // (که قبلاً باعث OOM می‌شد).
+    if (isDeptHead && deptIds.length && deptMajorIds?.length) {
+      const ownIds = new Set(professors.map(p => p.id));
+      const sharedRows = await db
+        .selectDistinct({ professorId: course_offerings.professorId })
+        .from(course_offerings)
+        .innerJoin(curriculum_courses, eq(curriculum_courses.courseId, course_offerings.courseId))
+        .innerJoin(curriculum_versions, eq(curriculum_versions.id, curriculum_courses.curriculumVersionId))
+        .where(and(
+          uniOrGlobal(course_offerings.universityId, uid),
+          inArray(curriculum_versions.majorId, deptMajorIds),
+          sql`${course_offerings.professorId} is not null`,
+        ));
+      const sharedIds = new Set(
+        sharedRows.map(r => Number(r.professorId)).filter(id => Number.isFinite(id) && !ownIds.has(id)),
+      );
+      if (sharedIds.size) {
+        professors = [...professors, ...professorsRaw.filter(p => sharedIds.has(p.id))];
+      }
+    }
     let programs = programRows;
     const resolvedTermId = termId ?? terms.find(t => t.isCurrent === 1)?.id ?? terms[0]?.id ?? null;
 

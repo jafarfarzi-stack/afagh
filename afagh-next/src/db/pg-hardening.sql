@@ -291,7 +291,7 @@ CREATE POLICY checkpoint_self_read ON "request_parallel_checkpoints" FOR SELECT 
 -- دانشجو فقط این ستون‌ها را می‌تواند عوض کند؛ gradeValue/approvedBy/financial…
 -- از نقش اپ غیرقابل نوشتن‌اند (گرنت ستونی + سیاست ردیف).
 GRANT INSERT ON "enrollments" TO afagh_app;
-GRANT UPDATE ("status", "waitlistPosition") ON "enrollments" TO afagh_app;
+GRANT UPDATE ("status", "waitlistPosition", "hasAcceptedSameDayExam") ON "enrollments" TO afagh_app;
 GRANT INSERT, DELETE ON "cart_items" TO afagh_app;
 GRANT INSERT ON "notifications" TO afagh_app;
 -- student_requests: هیچ مسیری از نقش اپ نمی‌نویسد (همه از نقش مالک) → revoke

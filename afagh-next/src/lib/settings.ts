@@ -162,6 +162,10 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'PAY_WAGE_PERCENT', env: 'PAYMENT_WAGE_PERCENT', group: 'درگاه پرداخت', label: 'درصد کارمزد', type: 'number', default: '0' },
 
   // ── شهریه و امور مالی ──
+  // آستانهٔ بدهی مجاز هنگام ثبت‌نامی نهایی — توسط موتور صف خوانده می‌شود
+  // (src/lib/enroll-engine/submit.ts). پیش‌تر فقط خوانده می‌شد ولی تعریف نشده
+  // بود → خطای «تنظیم ناشناخته» و شکست ثبت‌نامی دانشجویان تسویه‌شده.
+  { key: 'ENROLLMENT_DEBT_THRESHOLD', env: 'AFAGH_ENROLLMENT_DEBT_THRESHOLD', group: 'شهریه و امور مالی', label: 'آستانهٔ بدهی مجاز در انتخاب واحد (ریال)', type: 'number', default: '0', help: 'حداکثر بدهی‌ای که با وجود آن دانشجو مجاز به ثبت‌نامی نهایی است؛ ۰ = تسویه‌کامل لازم است' },
   { key: 'EQUIV_FIXED_TUITION_MODE', env: 'AFAGH_EQUIV_FIXED_TUITION_MODE', group: 'شهریه و امور مالی', label: 'نحوهٔ محاسبهٔ شهریهٔ ثابت معادل‌سازی', type: 'text', default: 'ONCE', help: 'ONCE = یک بار به ازای هر دانشجو (روی اولین نیمسال معادل‌سازی)؛ PER_TERM = به ازای هر نیمسال معادل‌سازی (۰۰EQ)؛ NONE = بدون شهریهٔ ثابت. شهریهٔ متغیر همیشه به ازای هر واحد محاسبه می‌شود' },
   { key: 'CHEQUE_REMIND_DAYS', env: 'AFAGH_CHEQUE_REMIND_DAYS', group: 'شهریه و امور مالی', label: 'یادآوری چک — چند روز پیش از سررسید', type: 'text', default: '7', help: 'چند روز پیش از سررسید چک، پیام یادآوری به دانشجو برود. چکِ گذشته از سررسید هم یک بار یادآوری می‌شود' },
   { key: 'CHEQUE_REMIND_ENABLED', env: 'AFAGH_CHEQUE_REMIND_ENABLED', group: 'شهریه و امور مالی', label: 'یادآوری خودکار چک فعال باشد', type: 'text', default: '1', help: '۱ = پویش زمان‌بندی‌شدهٔ /api/cron/cheque-reminders پیام بفرستد؛ ۰ = فقط فهرست آماده شود، پیامی نرود' },

@@ -6,6 +6,7 @@ import { loadAvailabilityAction, saveAvailabilityAction, type AvailabilityCell }
 import { DEMO_AVAILABILITY_SUMMARY } from '@/lib/demo-professor-data';
 import { buildTimeSlots, DEFAULT_SLOT_CONFIG, parseTimeToMinutes, type TimeSlot } from '@/lib/time-slots';
 import { useToast } from '@/components/ui/Toast';
+import { isEvenWeekday, isOddWeekday } from '@/lib/availability-presets';
 
 export type SlotStatus = 'PREF' | 'AVAIL' | 'UNAVAIL';
 
@@ -126,8 +127,8 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
           const want = preset === 'MORNING_ONLY' ? isMorning : !isMorning;
           updated[d][s] = want ? 'PREF' : 'UNAVAIL';
         }
-        else if (preset === 'EVEN_DAYS') updated[d][s] = (d % 2 === 0) ? 'PREF' : 'UNAVAIL';
-        else if (preset === 'ODD_DAYS') updated[d][s] = (d % 2 === 1) ? 'PREF' : 'UNAVAIL';
+        else if (preset === 'EVEN_DAYS') updated[d][s] = isEvenWeekday(d) ? 'PREF' : 'UNAVAIL';
+        else if (preset === 'ODD_DAYS') updated[d][s] = isOddWeekday(d) ? 'PREF' : 'UNAVAIL';
       });
     }
     setAvailability(updated);
