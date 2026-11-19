@@ -14,6 +14,8 @@ import { currentExpertFilters, scopedMajorIds } from '@/lib/expert-scope';
 import { resolveStudentCurriculum, resolutionReasonMessage } from '@/lib/curriculum-apply';
 import { evaluateLogicTree } from '@/lib/enroll-engine/prereqs';
 import { escapeLikeChars } from '@/lib/persian-search';
+import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { assertFinancialClearance, clearedStudentIds } from '@/lib/enrollment-financial-gate';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 
@@ -165,12 +167,33 @@ export async function manualEnrollAction(input: ManualEnrollInput): Promise<{ ok
   if (blocks.length && !override) {
     return { ok: false, error: `اخطار آیین‌نامه: ${blocks.map(b => b.title).join('، ')} — برای صدور مجوز، نادیده‌گرفتن+دلیل را فعال کن.` };
   }
+  // ── گیت پنجرهٔ انتخاب واحد ──
+  // ثبت دستی پیش‌تر هیچ قید زمانی نداشت ⇒ امکان ثبت برای ترم گذشته (backdating)
+  // و ثبت با پنجرهٔ بسته، بدون هیچ ردی. اکنون فقط با override+دلیل مجاز است.
+  const winGate = await assertEnrollmentWrite(off.termId, 'ADD');
+  const windowBlocked = !winGate.ok;
+  if (windowBlocked && !override) {
+    return { ok: false, error: `${(winGate as { error: string }).error} — برای صدور مجوز، نادیده‌گرفتن+دلیل را فعال کن.` };
+  }
+
+  // ── گیت تسویهٔ مالی (همان قاعدهٔ مسیر «ثبت نهایی» دانشجو) ──
+  // پیش‌تر این مسیر هیچ بررسی مالی نداشت و رکورد با enrollOverride=0 ذخیره می‌شد،
+  // یعنی «هیچ چیزی نقض نشده» — در حالی که دانشجو بدهکار بود. اکنون یا رد می‌شود
+  // یا با override+دلیل و ثبت صادقانهٔ enrollOverride=1 پذیرفته می‌شود.
+  const finGate = await assertFinancialClearance(sid, off.termId, stu.universityId ?? null);
+  const financialBlocked = !finGate.ok;
+  if (financialBlocked && !override) {
+    return { ok: false, error: `${(finGate as { error: string }).error} — برای صدور مجوز، نادیده‌گرفتن+دلیل را فعال کن.` };
+  }
+
   const overriddenCodes = override ? JSON.stringify([
     ...new Set([
       ...warnings.map(w => w.code),
       ...(conflicts ? ['conflict'] : []),
       ...(prereqViolated ? ['prereq'] : []),
       ...(allowedMax != null && curUnits + newUnits > allowedMax ? ['max_units'] : []),
+      ...(windowBlocked ? ['window'] : []),
+      ...(financialBlocked ? ['financial'] : []),
     ]),
   ]) : null;
 
@@ -290,6 +313,20 @@ export async function bulkEnrollAction(
   const offRows = await db.select().from(course_offerings).where(inArray(course_offerings.id, ids));
   const offMap = new Map(offRows.map(o => [o.id, o]));
 
+  // ── گیت تسویهٔ مالی (دسته‌ای) ──
+  // پیش‌تر ثبت دسته‌جمعی هیچ بررسی مالی نداشت ⇒ یک فراخوان می‌توانست صدها
+  // دانشجوی بدهکار را ثبت کند، با enrollOverride=0 («هیچ نقضی رخ نداده»).
+  let eligibleSids = sids;
+  let financiallyExcluded = 0;
+  if (!override) {
+    const termIds = [...new Set(offRows.map(o => o.termId).filter((x): x is number => x != null))];
+    if (termIds.length === 1) {
+      const cleared = await clearedStudentIds(sids, termIds[0], ub);
+      eligibleSids = sids.filter(sid => cleared.has(sid));
+      financiallyExcluded = sids.length - eligibleSids.length;
+    }
+  }
+
   const existingPairs = new Set<string>();
   const dupRows = await db
     .select({ sid: enrollments.studentId, oid: enrollments.offeringId })
@@ -309,7 +346,7 @@ export async function bulkEnrollAction(
     if (ub && off.universityId && off.universityId !== ub) { skipped++; continue; }
     // گیت ظرفیت مگر با override — همان snapshot قبلی، ثابت برای همهٔ دانشجویان این کلاس
     const full = !override && off.enrolledCount != null && off.capacity > 0 && off.enrolledCount >= off.capacity;
-    for (const sid of sids) {
+    for (const sid of eligibleSids) {
       if (planned + skipped >= CAP) break;
       if (existingPairs.has(`${oid}:${sid}`)) { skipped++; continue; }
       if (full) { skipped++; continue; }
@@ -318,6 +355,8 @@ export async function bulkEnrollAction(
       planned++;
     }
   }
+
+  skipped += financiallyExcluded;
 
   let inserted = 0;
   if (toInsert.length) {
