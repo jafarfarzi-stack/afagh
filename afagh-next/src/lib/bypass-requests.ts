@@ -10,6 +10,7 @@ import {
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
 import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { assertFinancialClearance } from '@/lib/enrollment-financial-gate';
 import { recountOffering } from '@/lib/enrollment-count';
 import {
   BYPASS_KIND_LABEL,
@@ -369,7 +370,39 @@ async function fulfillEnrollment(requestId: number, actorUserId: number): Promis
   const [req] = await db.select().from(enroll_bypass_requests).where(eq(enroll_bypass_requests.id, requestId)).limit(1);
   if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
 
-  const [stu] = await db.select({ universityId: students.universityId }).from(students).where(eq(students.id, req.studentId)).limit(1);
+  const [stu] = await db
+    .select({ universityId: students.universityId, status: students.status })
+    .from(students)
+    .where(eq(students.id, req.studentId))
+    .limit(1);
+
+  // ── گیت‌های تأیید ────────────────────────────────────────────────────────
+  // پیش‌تر این تابع بی‌قیدوشرط ثبت می‌کرد: نه وضعیت دانشجو، نه پنجرهٔ زمانی،
+  // نه تسویهٔ مالی. یعنی «تأیید درخواست» یک کلید همه‌کاره برای دور زدن گیت بدهی
+  // و پنجره بود. اکنون:
+  //   ۱) دانشجو باید ACTIVE باشد.
+  //   ۲) زمان *ثبت درخواست* باید داخل پنجرهٔ انتخاب واحد بوده باشد (تأیید دیرهنگام
+  //      مجاز است، ولی درخواستِ ساخته‌شده بیرون از پنجره پذیرفته نمی‌شود).
+  //   ۳) تسویهٔ مالی همان ترم الزامی است — bypass فقط برای پیش‌نیاز/تداخل است،
+  //      نه برای بدهی.
+  if (!stu || stu.status !== 'ACTIVE') {
+    return { ok: false, error: 'وضعیت دانشجو برای ثبت انتخاب واحد فعال نیست.' };
+  }
+
+  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, req.termId)).limit(1);
+  if (term) {
+    const at = req.createdAt ? new Date(req.createdAt) : new Date();
+    const start = term.enrollmentStartDate ? new Date(term.enrollmentStartDate) : null;
+    const end = term.enrollmentEndDate ? new Date(term.enrollmentEndDate) : null;
+    if ((start && at < start) || (end && at > end)) {
+      return { ok: false, error: 'این درخواست بیرون از پنجرهٔ انتخاب واحد ثبت شده است؛ قابل تأیید نیست.' };
+    }
+  }
+
+  const finGate = await assertFinancialClearance(req.studentId, req.termId, stu.universityId ?? null);
+  if (!finGate.ok) {
+    return { ok: false, error: `${finGate.error} (درخواست بدون رعایت پیش‌نیاز/تداخل، گیت تسویهٔ مالی را دور نمی‌زند.)` };
+  }
 
   await db.insert(enrollments).values({
     studentId: req.studentId,
