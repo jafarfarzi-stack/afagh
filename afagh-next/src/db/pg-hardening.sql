@@ -143,6 +143,23 @@ DROP POLICY IF EXISTS students_self_read ON "students";
 CREATE POLICY students_self_read ON "students" FOR SELECT TO afagh_app
   USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
 
+-- ⚠ F-31: سیاست RLSِ enrollments/bypass نیاز دارد «دانشگاهٔ واقعی دانشجو» را
+-- مستقل از مقدار اعلامشده توسط اپ تأیید کند. بدون سیاست خواندن کارمند، آن
+-- subquery خودش توسط students_self_read مسدود میشد و هر درج کارمند رد میگشت.
+-- دامنه: فقط شناسه/دانشگاه/رشتهٔ دانشجوی همان دانشگاه کارمند (HQ محدودیت ستونی
+-- قبلاً اعمال شده و اینجا فقط USING است).
+DROP POLICY IF EXISTS students_staff_read ON "students";
+CREATE POLICY students_staff_read ON "students" FOR SELECT TO afagh_app
+  USING (
+    EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+            WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+              AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD'))
+    AND "universityId" IS NOT NULL
+    AND "universityId" = (
+      SELECT "universityId" FROM "users"
+      WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+  );
+
 DROP POLICY IF EXISTS staff_self_read ON "staff";
 CREATE POLICY staff_self_read ON "staff" FOR SELECT TO afagh_app
   USING ("userId" = nullif(current_setting('app.user_id', true), '')::int);
@@ -309,16 +326,26 @@ CREATE POLICY enroll_self_read ON "enrollments" FOR SELECT TO afagh_app USING (
   "studentId" IN (SELECT "id" FROM "students"
                   WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
   OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
 );
@@ -328,16 +355,26 @@ CREATE POLICY enroll_self_ins ON "enrollments" FOR INSERT TO afagh_app
     "studentId" IN (SELECT "id" FROM "students"
                     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
     OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
   );
@@ -347,16 +384,26 @@ CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
     "studentId" IN (SELECT "id" FROM "students"
                     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
     OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
   )
@@ -364,16 +411,26 @@ CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
     "studentId" IN (SELECT "id" FROM "students"
                     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
     OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
   );
@@ -389,16 +446,26 @@ CREATE POLICY bypass_app_access ON "enroll_bypass_requests" FOR ALL TO afagh_app
     "studentId" IN (SELECT "id" FROM "students"
                     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
     OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
   )
@@ -406,16 +473,26 @@ CREATE POLICY bypass_app_access ON "enroll_bypass_requests" FOR ALL TO afagh_app
     "studentId" IN (SELECT "id" FROM "students"
                     WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
     OR (
-      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
-              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
-                AND r."code" = 'ADMIN')
+      EXISTS (
+        SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+        WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+          AND r."code" = 'ADMIN'
+          AND EXISTS (SELECT 1 FROM "students" stu
+                      WHERE stu."id" = "studentId" AND stu."universityId" IS NOT NULL)
+      )
       OR (
         EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
                 WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
                   AND r."code" IN ('EDU_EXPERT', 'VICE_EDU', 'DEP_HEAD'))
-        AND "universityId" IS NOT DISTINCT FROM (
-          SELECT "universityId" FROM "users"
-          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+        AND EXISTS (
+          SELECT 1 FROM "students" stu
+          WHERE stu."id" = "studentId"
+            AND stu."universityId" IS NOT NULL
+            AND stu."universityId" = (
+              SELECT "universityId" FROM "users"
+              WHERE "id" = nullif(current_setting('app.user_id', true), '')::int
+            )
+        )
       )
     )
   );

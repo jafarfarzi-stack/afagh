@@ -316,16 +316,20 @@ export async function bulkEnrollAction(
   // ── گیت تسویهٔ مالی (دسته‌ای) ──
   // پیش‌تر ثبت دسته‌جمعی هیچ بررسی مالی نداشت ⇒ یک فراخوان می‌توانست صدها
   // دانشجوی بدهکار را ثبت کند، با enrollOverride=0 («هیچ نقضی رخ نداده»).
-  let eligibleSids = sids;
-  let financiallyExcluded = 0;
+  // F-29:formerly the check was skipped unless every offering had the SAME term —
+  // a direct action call with mixed terms (or NULL termId) silently disabled it.
+  // Resolve a clearance set PER TERM and intersect at the offering loop below.
+  const clearedByTerm = new Map<number, Set<number>>();
+  let financialTermUnknown = false;
   if (!override) {
-    const termIds = [...new Set(offRows.map(o => o.termId).filter((x): x is number => x != null))];
-    if (termIds.length === 1) {
-      const cleared = await clearedStudentIds(sids, termIds[0], ub);
-      eligibleSids = sids.filter(sid => cleared.has(sid));
-      financiallyExcluded = sids.length - eligibleSids.length;
+    for (const off of offRows) {
+      if (off.termId == null) { financialTermUnknown = true; continue; }
+      if (!clearedByTerm.has(off.termId)) {
+        clearedByTerm.set(off.termId, await clearedStudentIds(sids, off.termId, ub));
+      }
     }
   }
+  let financiallyExcluded = 0;
 
   const existingPairs = new Set<string>();
   const dupRows = await db
@@ -344,10 +348,18 @@ export async function bulkEnrollAction(
     // کلاس ناموجود یا متعلق به دانشگاه دیگر: یک «رد» (نه به‌ازای هر دانشجو)
     if (!off) { skipped++; continue; }
     if (ub && off.universityId && off.universityId !== ub) { skipped++; continue; }
+    // F-29: a NULL/unknown term can never be financial-gated — refuse it outright
+    // instead of letting the whole batch run without a check.
+    if (!override && off.termId == null) {
+      skipped += sids.length;
+      continue;
+    }
     // گیت ظرفیت مگر با override — همان snapshot قبلی، ثابت برای همهٔ دانشجویان این کلاس
     const full = !override && off.enrolledCount != null && off.capacity > 0 && off.enrolledCount >= off.capacity;
-    for (const sid of eligibleSids) {
+    const clearedForTerm = override ? null : clearedByTerm.get(off.termId!);
+    for (const sid of sids) {
       if (planned + skipped >= CAP) break;
+      if (!override && clearedForTerm && !clearedForTerm.has(sid)) { financiallyExcluded++; skipped++; continue; }
       if (existingPairs.has(`${oid}:${sid}`)) { skipped++; continue; }
       if (full) { skipped++; continue; }
       existingPairs.add(`${oid}:${sid}`); // جلوگیری از تکرار داخل همین دسته
@@ -355,8 +367,6 @@ export async function bulkEnrollAction(
       planned++;
     }
   }
-
-  skipped += financiallyExcluded;
 
   let inserted = 0;
   if (toInsert.length) {
