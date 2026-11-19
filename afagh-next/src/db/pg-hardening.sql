@@ -298,21 +298,85 @@ GRANT INSERT ON "notifications" TO afagh_app;
 REVOKE INSERT, UPDATE ON "student_requests" FROM afagh_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO afagh_app;   -- serialها برای INSERT
 
+-- ⚠ ثبت‌نام دستی/دسته‌جمعی توسط کارشناس آموزش از مسیر withUserRls(me.id) انجام
+-- می‌شود؛ یعنی app.user_id شناسهٔ *کارمند* است، نه دانشجو. سیاست‌های قبلی فقط
+-- «دانشجوی خودِ کاربر» را می‌پذیرفتند ⇒ هر درج/به‌روزرسانی کارشناس با خطای
+-- «new row violates row-level security policy» شکست می‌خورد (P0 — ثبت‌نام دستی
+-- در تولید کاملاً از کار افتاده بود). اکنون شاخهٔ کارمند با کنترل نقش و دانشگاه
+-- اضافه شده است؛ دامنهٔ ریزترِ رشته/گرایش همچنان در لایهٔ سرور اعمال می‌شود.
 DROP POLICY IF EXISTS enroll_self_read ON "enrollments";
 CREATE POLICY enroll_self_read ON "enrollments" FOR SELECT TO afagh_app USING (
   "studentId" IN (SELECT "id" FROM "students"
                   WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+  OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
 );
 DROP POLICY IF EXISTS enroll_self_ins ON "enrollments";
 CREATE POLICY enroll_self_ins ON "enrollments" FOR INSERT TO afagh_app
-  WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
-                              WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+  WITH CHECK (
+    "studentId" IN (SELECT "id" FROM "students"
+                    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
+  );
 DROP POLICY IF EXISTS enroll_self_upd ON "enrollments";
 CREATE POLICY enroll_self_upd ON "enrollments" FOR UPDATE TO afagh_app
-  USING ("studentId" IN (SELECT "id" FROM "students"
-                         WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int))
-  WITH CHECK ("studentId" IN (SELECT "id" FROM "students"
-                              WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+  USING (
+    "studentId" IN (SELECT "id" FROM "students"
+                    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
+  )
+  WITH CHECK (
+    "studentId" IN (SELECT "id" FROM "students"
+                    WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int)
+    OR (
+      EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+              WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                AND r."code" = 'ADMIN')
+      OR (
+        EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+                WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+                  AND r."code" IN ('EDU_EXPERT', 'VICE_EDU'))
+        AND "universityId" IS NOT DISTINCT FROM (
+          SELECT "universityId" FROM "users"
+          WHERE "id" = nullif(current_setting('app.user_id', true), '')::int)
+      )
+    )
+  );
 
 -- RLS برای درخواست‌های بدون رعایت پیش‌نیاز/تداخل امتحانی (پوشش کامل migrator)
 ALTER TABLE "enroll_bypass_requests" ENABLE ROW LEVEL SECURITY;
@@ -441,6 +505,22 @@ ALTER TABLE "student_term_states" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS student_term_states_self_read ON "student_term_states";
 CREATE POLICY student_term_states_self_read ON "student_term_states" FOR SELECT TO afagh_app
   USING ("studentId" IN (SELECT "id" FROM "students" WHERE "userId" = nullif(current_setting('app.user_id', true), '')::int));
+-- فعال‌سازی ترم توسط کارشناس آموزش نیز از withUserRls(me.id) می‌نویسد ⇒ شاخهٔ کارمند
+DROP POLICY IF EXISTS student_term_states_staff_ins ON "student_term_states";
+CREATE POLICY student_term_states_staff_ins ON "student_term_states" FOR INSERT TO afagh_app
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+            WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+              AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU'))
+  );
+DROP POLICY IF EXISTS student_term_states_staff_upd ON "student_term_states";
+CREATE POLICY student_term_states_staff_upd ON "student_term_states" FOR UPDATE TO afagh_app
+  USING (
+    EXISTS (SELECT 1 FROM "user_roles" ur JOIN "roles" r ON r."id" = ur."roleId"
+            WHERE ur."userId" = nullif(current_setting('app.user_id', true), '')::int
+              AND r."code" IN ('ADMIN', 'EDU_EXPERT', 'VICE_EDU'))
+  )
+  WITH CHECK (true);
 
 ALTER TABLE "clearance_checklist" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS clearance_checklist_self_read ON "clearance_checklist";
