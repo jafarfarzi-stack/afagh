@@ -3,6 +3,7 @@ import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import { normalizeTermCode } from '@/lib/scheduling-core';
 import { PAY_TYPE_LABELS, type DiscountBreakdownItem } from '@/lib/finance-rules/statement';
 import { buildTermSummary, visibleSummaryRows } from '@/lib/finance-rules/term-summary';
+import { TermCompactTable, FullDiscountSection } from './FinancialTranscript';
 import { courseTypeLabelOf } from '@/lib/mali-types';
 import { courseTypeFa } from '@/lib/student-labels';
 
@@ -186,6 +187,8 @@ export interface TranscriptTotalsView {
 export interface TranscriptStudentView {
   fullName: string | null;
   studentCode: string | null;
+  /** شمارهٔ پروندهٔ سما (students.parvandehNo) — منبع «شمارهٔ پرونده» سربرگ */
+  parvandehNo?: string | null;
   nationalCode?: string | null;
   majorTitle?: string | null;
   degreeTitle?: string | null;
@@ -436,8 +439,10 @@ export default function FinancialTranscriptFlat({
     );
   }
 
-  // همهٔ رویدادهای مالی در یک دفترِ پیوسته (مثل دفترِ کل)
-  const allEvents = terms.flatMap(t => t.events.map(e => ({ term: t, e })));
+  // همهٔ رویدادهای مالی در یک دفترِ پیوسته (مثل دفترِ کل) — بدونِ ردیفهای «بدهی»:
+  // شهریهٔ ثابت/متغیرِ هر ترم در جدولِ خلاصهٔ بالا تفکیک شده و چاپِ دوبارهٔ
+  // «بدهی: … (سما)» تکرار بود (شکایت کاربر: «دو ردیف در حالی که بالاتر همانها به تفکیک هستند»).
+  const allEvents = terms.flatMap(t => t.events.filter(e => e.kind !== 'CHARGE').map(e => ({ term: t, e })));
 
   return (
     <div dir="rtl" className="transcript-print-area tr-root tr-flat-root bg-white border-2 border-slate-900 shadow-xl print:shadow-none text-slate-900 text-xs">
@@ -497,7 +502,8 @@ export default function FinancialTranscriptFlat({
                     </div>
                     <div className="flex gap-1">
                       <dt className="shrink-0 text-slate-500">شمارهٔ پرونده:</dt>
-                      <dd className="truncate font-mono font-bold" dir="ltr">{faDigits(student.studentCode || '—')}</dd>
+                      {/* شمارهٔ پروندهٔ سما (parvandehNo)؛ studentCode فقط پشتیبان رکوردهای بدون پرونده */}
+                      <dd className="truncate font-mono font-bold" dir="ltr">{faDigits(student.parvandehNo || student.studentCode || '—')}</dd>
                     </div>
                     <div className="flex gap-1 items-center">
                       <dt className="shrink-0 text-slate-500">وضعیت مالی:</dt>
@@ -823,6 +829,22 @@ export default function FinancialTranscriptFlat({
                       </tr>
                     </tfoot>
                   </table>
+                </div>
+
+                {/* ── ⑤′ ریز جزئیات فشردهٔ ترم‌ها + شرح تخفیف‌های صددرصدی ──
+                    جدولِ فشردهٔ ترم‌به‌ترم با ردیفِ «مجموع (کل)» زیرِ هر ستون
+                    (درخواست کاربر) + ترمهای با پوشش کامل تخفیف؛ هر دو از
+                    تعریفِ مشترکِ نوع الف میآیند تا دو چیدمان یک شکل باشند. */}
+                <div className="tr-fin-block break-inside-avoid mt-3">
+                  <TermCompactTable
+                    terms={terms}
+                    totals={totals}
+                    paidTotal={paidTotal}
+                    sumFixed={sumFixed}
+                    sumVariable={sumVariable}
+                    totalNet={totalNet}
+                  />
+                  <FullDiscountSection terms={terms} />
                 </div>
 
                 {/* ── ⑥ دفترِ رویدادهای مالی ── */}

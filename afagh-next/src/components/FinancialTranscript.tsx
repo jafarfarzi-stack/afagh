@@ -220,6 +220,8 @@ export interface TranscriptTotalsView {
 export interface TranscriptStudentView {
   fullName: string | null;
   studentCode: string | null;
+  /** شمارهٔ پروندهٔ سما (students.parvandehNo) — منبع «شماره پرونده» سربرگ */
+  parvandehNo?: string | null;
   nationalCode?: string | null;
   majorTitle?: string | null;
   degreeTitle?: string | null;
@@ -423,6 +425,8 @@ export default function FinancialTranscript({
   // جمعِ شهریهٔ ثابت/متغیرِ کل دوره — برای تفکیکِ خانهٔ «جمع شهریه» در جدول بالا
   const sumFixed = terms.reduce((a, t) => a + (t.tuitionFixed ?? 0), 0);
   const sumVariable = terms.reduce((a, t) => a + (t.tuitionVariable ?? 0), 0);
+  // جمعِ «خالص» کل دوره — از خودِ ردیفهای ترم (تعریفِ موتور: netPayable)، مثل نوع ب
+  const totalNet = terms.reduce((a, t) => a + t.netPayable, 0);
 
   return (
     <div dir="rtl" className="transcript-print-area tr-root tr-fin-root bg-white border-2 border-slate-800 shadow-xl print:shadow-none text-xs text-slate-800">
@@ -458,7 +462,9 @@ export default function FinancialTranscript({
           {/* ستون چپ (اطلاعات سند) */}
           <div className="space-y-1 text-left font-mono text-2xs">
             {student.documentNo ? <p><span className="font-sans text-slate-500">شماره سند: </span><b>{student.documentNo}</b></p> : null}
-            <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{faDigits(student.studentCode || '—')}</b></p>
+            {/* «شماره پرونده» = شمارهٔ پروندهٔ سما (parvandehNo)؛ studentCode فقط
+                پشتیبانِ رکوردهای بدون پرونده است (پیشتر اشتباهاً شمارهٔ دانشجویی چاپ میشد). */}
+            <p><span className="font-sans text-slate-500">شماره پرونده: </span><b>{faDigits(student.parvandehNo || student.studentCode || '—')}</b></p>
             {issuedAt ? <p><span className="font-sans text-slate-500">تاریخ صدور: </span><b>{issuedAt}</b></p> : null}
             {/* شمارهٔ صفحهٔ واقعی را پاصفحهٔ چاپ (@page) می‌زند؛ این خط ثابت در چاپ حذف می‌شود */}
             <p className="tr-print-hide"><span className="font-sans text-slate-500">صفحه: </span><b>۱ از ۱</b></p>
@@ -684,9 +690,12 @@ export default function FinancialTranscript({
                             </table>
                           </div>
                         )}
-                        {showEvents && t.events.length > 0 && (
+                        {/* ردیفهای «بدهی» (CHARGE) عمداً حذف شدهاند: همان مبالغ در
+                            خلاصهٔ ترم (شهریه / ثابت / متغیر) بالای همین کارت تفکیک شدهاند و
+                            چاپِ دوبارهٔ «بدهی: … (سما)» تکرار بود (شکایت کاربر). */}
+                        {showEvents && t.events.some((e) => e.kind !== 'CHARGE') && (
                           <ul className="space-y-0.5 border-t border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                            {t.events.map((e, i) => (
+                            {t.events.filter((e) => e.kind !== 'CHARGE').map((e, i) => (
                               <li key={i} className="flex items-start justify-between gap-1 text-[9px]">
                                 <span className="min-w-0 flex-1 text-slate-600">
                                   <span className="font-bold text-slate-700">{EVENT_LABEL[e.kind] || e.kind}:</span>{' '}
@@ -760,6 +769,28 @@ export default function FinancialTranscript({
               </td>
             </tr>
           ))}
+
+          {/* ── ردیف «مجموع»: جدولِ فشردهٔ ریزِ ترم‌ها + جمعِ زیرِ هر ستون ──
+              درخواست کاربر: «مجموع زیر هر ستون نیست چرا؟» — جدول فشردهٔ ترم‌به‌ترم
+              با ردیفِ «مجموع (کل)» زیرِ هر ستون اینجا میآید؛ همهٔ اعداد از همان
+              پراپهای موتور کانونی (terms/totals) میآیند، محاسبهٔ تازهای نیست. */}
+          {terms.length > 0 && (
+            <tr className="tr-doc-row">
+              <td className="tr-doc-cell">
+                <div className="px-4 pb-2">
+                  <TermCompactTable
+                    terms={terms}
+                    totals={totals}
+                    paidTotal={paidTotal}
+                    sumFixed={sumFixed}
+                    sumVariable={sumVariable}
+                    totalNet={totalNet}
+                  />
+                  <FullDiscountSection terms={terms} />
+                </div>
+              </td>
+            </tr>
+          )}
 
           {/* ── ردیف پایانی: چک‌ها، وام‌ها و بلوک رسمیت ──
               جدا از ردیف ترم‌ها تا اگر جای کافی نبود، یک‌جا به صفحهٔ بعد برود
@@ -1038,5 +1069,152 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  جدولِ فشردهٔ ریزِ ترم‌ها + شرح تخفیفهای صددرصدی (درخواست کاربر)
+// ══════════════════════════════════════════════════════════════════════
+
+/** جمعِ اقلام تخفیف «باتی» (سما) — کلیدهایی که با BATES آغاز میشوند */
+function batesDiscountOf(t: TranscriptTermView): number {
+  return (t.discountBreakdown || [])
+    .filter((d) => String(d.key || '').startsWith('BATES'))
+    .reduce((a, d) => a + (Number(d.amount) || 0), 0);
+}
+
+/** آیا تخفیفهای ترم، شهریهٔ همان ترم را کامل پوشش میدهند (تخفیف صددرصدی)؟ */
+function isFullDiscountTerm(t: TranscriptTermView): boolean {
+  return t.charges > 0 && t.discounts >= t.charges;
+}
+
+/**
+ * جدولِ فشردهٔ ریزِ ترم‌ها — طرحِ درخواستی کاربر («زیر ریز جزئیات را مثل این
+ * طراحی کن»): برای هر ترم یک ردیف و ردیفِ «مجموع (کل)» زیرِ هر ستون.
+ * در هر دو چیدمان (نوع الف و ب) استفاده میشود؛ به همین دلیل export است.
+ *
+ * ⚠ ستونهای «تخفیف مقطع» و «تخفیف ویژه» در موتور مالی (getStudentFinance /
+ *   buildTranscript) هیچ منبعِ داده ندارند — عمداً «—» چاپ میشوند تا عددِ
+ *   ساختگی وارد سندِ رسمی نشود (شکافِ داده، جداگانه گزارش شده است).
+ */
+export function TermCompactTable({
+  terms,
+  totals,
+  paidTotal,
+  sumFixed,
+  sumVariable,
+  totalNet,
+}: {
+  terms: TranscriptTermView[];
+  totals: TranscriptTotalsView;
+  paidTotal: number;
+  sumFixed: number;
+  sumVariable: number;
+  totalNet: number;
+}) {
+  const sumItems = terms.reduce((a, t) => a + t.events.length, 0);
+  const grand = balanceBadge(totals.balance);
+  const th = 'border border-slate-300 bg-slate-100 px-1 py-1 text-center font-bold text-slate-700';
+  const td = 'border border-slate-300 px-1 py-1 text-center';
+  return (
+    <div className="tr-breakdown break-inside-avoid">
+      <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">ریز جزئیات ترم‌ها — به ریال</h3>
+      <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-3xs rt" style={{ tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '11%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '9%' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col" className={th}>نیمسال</th>
+            <th scope="col" className={th}>تعداد اقلام</th>
+            <th scope="col" className={th}>شهریه (باتی)</th>
+            <th scope="col" className={th}>تخفیف (باتی)</th>
+            <th scope="col" className={th}>تخفیف مقطع</th>
+            <th scope="col" className={th}>تخفیف ویژه</th>
+            <th scope="col" className={th}>مبلغ پرداختی</th>
+            <th scope="col" className={th}>ملاحظات</th>
+            <th scope="col" className={th}>بدهکار / بستانکار</th>
+            <th scope="col" className={th}>مبلغ باقی پرداخت</th>
+          </tr>
+        </thead>
+        <tbody>
+          {terms.map((t) => {
+            const b = balanceBadge(t.balance);
+            const paid = t.payments + t.chequesCleared + t.loans;
+            return (
+              <tr key={t.termId}>
+                <td className={`${td} text-right font-bold`}><TermTitle t={t} /></td>
+                <td className={`${td} font-mono`}>{fa(t.events.length)}</td>
+                <td className={`${td} font-mono`}>{fa(t.charges)}</td>
+                <td className={`${td} font-mono text-violet-700`} title={`سهم تخفیف سما: ${fa(batesDiscountOf(t))}`}>{fa(t.discounts)}</td>
+                <td className={`${td} text-slate-400`}>—</td>
+                <td className={`${td} text-slate-400`}>—</td>
+                <td className={`${td} font-mono text-emerald-700`}>{fa(paid)}</td>
+                <td className={td}>{paid === 0 ? <span className="font-bold text-rose-700">پرداخت نشده</span> : 'پرداخت شده'}</td>
+                <td className={td}><span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span></td>
+                <td className={`${td} font-mono font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>{fa(Math.abs(t.balance))}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-800 bg-slate-50 font-black">
+            <td className={`${td} text-right`}>مجموع (کل)</td>
+            <td className={`${td} font-mono`}>{fa(sumItems)}</td>
+            <td className={`${td} font-mono`}>{fa(totals.charges)}</td>
+            <td className={`${td} font-mono text-violet-700`}>{fa(totals.discounts)}</td>
+            <td className={`${td} text-slate-400`}>—</td>
+            <td className={`${td} text-slate-400`}>—</td>
+            <td className={`${td} font-mono text-emerald-700`}>{fa(paidTotal)}</td>
+            <td className={td} />
+            <td className={td}>{grand.text}</td>
+            <td className={`${td} font-mono`}>{fa(Math.abs(totals.balance))}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p className="mt-1 text-[9px] font-bold text-slate-600">
+        کل دوره: شهریهٔ ثابت {fa(sumFixed)} · شهریهٔ متغیر {fa(sumVariable)} · خالص {fa(totalNet)} ریال
+      </p>
+    </div>
+  );
+}
+
+/**
+ * «شرح تخفیف‌های صددرصدی» — ترمهایی که تخفیفهایشان شهریهٔ همان ترم را کامل
+ * پوشش میدهند (t.discounts >= t.charges). فقط وقتی چنین ترمی باشد رندر
+ * میشود؛ اقلامِ تخفیف از discountBreakdown همان موتور کانونی میآید.
+ */
+export function FullDiscountSection({ terms }: { terms: TranscriptTermView[] }) {
+  const full = terms.filter(isFullDiscountTerm);
+  if (full.length === 0) return null;
+  return (
+    <div className="tr-breakdown break-inside-avoid mt-2 rounded-lg border border-violet-300 bg-violet-50/70 px-2 py-1.5">
+      <h4 className="mb-1 text-2xs font-black text-violet-900">شرح تخفیف‌های صددرصدی</h4>
+      <ul className="space-y-0.5 text-[9px] text-slate-700">
+        {full.map((t) => (
+          <li key={t.termId} className="flex flex-wrap items-baseline justify-between gap-1">
+            <span className="font-bold">
+              <TermTitle t={t} />
+              {' — پوشش کامل شهریهٔ ترم با تخفیف'}
+            </span>
+            <span className="text-violet-800">
+              {(t.discountBreakdown || [])
+                .filter((d) => Number(d.amount) !== 0)
+                .map((d) => `${d.label}: ${fa(d.amount)}`)
+                .join(' · ') || `جمع تخفیف: ${fa(t.discounts)}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
