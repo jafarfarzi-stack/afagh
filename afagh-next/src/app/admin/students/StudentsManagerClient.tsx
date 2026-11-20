@@ -123,6 +123,8 @@ export default function StudentsManagerClient(props: {
   canEditProfile?: boolean;
   /** ADMIN / EDU_EXPERT / GRADUATEAFFAIRS — اکشن تغییر آیین‌نامهٔ دانشجو */
   canEditRegulation?: boolean;
+  /** ADMIN / FINANCE_EXPERT / FINANCE — میانبر کارنامهٔ مالی (همان نقش‌های صفحهٔ مالی) */
+  canViewFinance?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
   userRoleIds?: Record<number, number[]>;
   universities?: { id: number; code: string; title: string; kind: string; saminCode?: string | null }[];
@@ -873,6 +875,15 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             >
               📊 کارنامه و نمرات
             </button>
+            {props.canViewFinance && currentStudent && (
+              <button
+                type="button"
+                onClick={() => router.push(`/admin/finance/student/${currentStudent.id}`)}
+                className="px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors bg-emerald-50 border-transparent hover:bg-emerald-100 text-emerald-900"
+              >
+                📄 کارنامهٔ مالی
+              </button>
+            )}
           </div>
 
           {/* ── پروندهٔ دانشجو: سربرگ چسبان + کارت‌ها + تب‌های داخلی پرونده ── */}

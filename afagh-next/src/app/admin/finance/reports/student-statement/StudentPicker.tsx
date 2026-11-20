@@ -42,11 +42,13 @@ type SortKey = 'code' | 'balance' | 'name';
 export default function StudentPicker({
   students,
   universityTitle,
+  initialQuery = '',
 }: {
   students: PickerStudent[];
   universityTitle: string;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [onlyDebtors, setOnlyDebtors] = useState(false);
   const [sort, setSort] = useState<SortKey>('code');
 
@@ -149,15 +151,18 @@ export default function StudentPicker({
 
       {/* ── نوار ابزار ── */}
       <div className="card flex flex-wrap items-center gap-2 p-3">
-        <div className="relative min-w-[220px] flex-1">
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="جستجو بر اساس نام، کد دانشجویی، کد ملی یا رشته…"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pr-9 pl-3 text-xs text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
-          />
-        </div>
+        <form action="/admin/finance/reports/student-statement" method="get" className="min-w-[220px] flex-1">
+          <div className="relative">
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+            <input
+              name="q"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="جستجو بر اساس نام، کد دانشجویی، کد ملی یا رشته…"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pr-9 pl-3 text-xs text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+        </form>
         <button
           type="button"
           onClick={() => setOnlyDebtors((v) => !v)}

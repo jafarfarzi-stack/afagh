@@ -110,7 +110,8 @@ export default async function FinanceWorklistPage(props: {
   const search = (sp.q || '').trim();
   const onlyDebtors = sp.debtors === '1';
   // پیش‌فرض فقط دانشجویان فعال؛ با ?all=1 همهٔ وضعیت‌ها (فارغ‌التحصیل/انصرافی…)
-  const statusScope = sp.all === '1' ? 'ALL' : 'ACTIVE';
+  const statusScope = sp.all === '1' || search !== '' ? 'ALL' : 'ACTIVE';
+  // جستجوی صریح کد/نام هم فارغالتحصیلها را میگنجاند؛ داشبورد بدون کوئری ACTIVE میماند.
   const page = Math.max(1, Number(sp.page) || 1);
   // ⚡ ۵۰ ردیف در هر صفحه (پیشتر ۱۰۰): `FinanceTable` یک کامپوننت کلاینت است،
   //    پس ردیفها هم بهعنوان props در payloadـ RSC سریال میشوند و هم **دوبار** در
@@ -298,7 +299,14 @@ export default async function FinanceWorklistPage(props: {
         </div>
 
         {students.length === 0 ? (
-          <p className="py-8 text-center text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</p>
+          <div className="py-8 text-center">
+            <p className="text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</p>
+            {search !== '' && sp.all !== '1' && (
+              <p className="mt-1 text-2xs text-amber-700">
+                اگر دانشجو فارغالتحصیل/غیرفعال است، گزینهٔ «همهٔ وضعیتها» را فعال کنید.
+              </p>
+            )}
+          </div>
         ) : (
           <FinanceTable students={students} />
         )}

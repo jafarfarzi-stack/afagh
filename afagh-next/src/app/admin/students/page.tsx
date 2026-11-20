@@ -55,6 +55,7 @@ export default async function AdminStudentsPage({
     ['students:view_dossier'],
   );
   const canEditGrades = user.roles.some(r => r === 'ADMIN' || r === 'GRADUATEAFFAIRS');
+  const canViewFinance = user.roles.some(r => r === 'ADMIN' || r === 'FINANCE_EXPERT' || r === 'FINANCE');
   const sp = await searchParams;
   const cookieStore = await cookies();
 
@@ -505,6 +506,7 @@ const [head] = await db.select().from(roles).where(eq(roles.code, 'DEP_HEAD')).l
         canEditGrades={canEditGrades}
         canEditProfile={user.roles.includes('ADMIN')}
         canEditRegulation={user.roles.some(r => r === 'ADMIN' || r === 'EDU_EXPERT' || r === 'GRADUATEAFFAIRS')}
+        canViewFinance={canViewFinance}
         rolesAll={roleRows}
         userRoleIds={undefined}
         universities={allUniversities.map(u => ({ id: u.id, code: u.code, title: u.title, kind: u.kind, saminCode: u.saminCode }))}
