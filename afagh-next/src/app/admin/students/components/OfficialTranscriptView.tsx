@@ -266,7 +266,8 @@ export default function OfficialTranscriptView({
       )}
       {/* پانوشت */}
       <tr><td className="tr-doc-cell">
-      <div className="border-t-2 border-slate-700 px-3 py-2 text-3xs space-y-1">
+      <div className="flex items-start gap-3 border-t-2 border-slate-700 px-3 py-2 text-3xs">
+        <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
           <span>وضعیت کلی دانشجو: <b>{studentStatusFa(student.status, student.samaStatusCode, universityCode)}</b></span>
@@ -291,9 +292,10 @@ export default function OfficialTranscriptView({
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
-        {/* بلوک رسمیت: QR استعلام — در پانوشت، بالای جدول کاتالوگ (درخواست کاربر) */}
+        </div>
+        {/* QR در فضای خالیِ سمت چپِ پانوشت — نه یک بلوکِ جدا زیرِ متن (درخواست کاربر) */}
         {verifyQr && (
-          <div className="pt-1">
+          <div className="w-[38mm] shrink-0">
             <VerifyQrBlock
               title="استعلام برخط اصالت این کارنامه"
               url={verifyQr.url}

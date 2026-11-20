@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     const publicBaseUrl = await getPublicBaseUrl();
     const issued = await issueTranscriptToken(stu.userId, { id: stu.id, code: stu.studentCode, universityId: stu.universityId });
     const verifyUrl = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
-    const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
+    const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'M', size: 256, margin: 4 });
 
     return Response.json({ url: verifyUrl, qr, expiresAt: issued.expiresAt });
   } catch (e) {
