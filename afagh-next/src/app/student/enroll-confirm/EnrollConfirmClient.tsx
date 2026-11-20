@@ -41,12 +41,14 @@ export default function EnrollConfirmClient(props: {
   termTitle: string;
   blocked: string | null;
   verifyUrl: string | null;
+  /** کدِ کوتاهِ استعلام از سرور (قابل تایپ در /verify) */
+  verifyCode?: string | null;
   expiresAt: string | null;
   qrSvg: string;
   data: OkData | null;
   emptyMessage: string | null;
 }) {
-  const { termTitle, blocked, verifyUrl, expiresAt, qrSvg, data, emptyMessage } = props;
+  const { termTitle, blocked, verifyUrl, verifyCode, expiresAt, qrSvg, data, emptyMessage } = props;
 
   if (blocked || !data) {
     return (
@@ -134,7 +136,7 @@ export default function EnrollConfirmClient(props: {
         <div className="mt-3 flex items-end justify-between gap-3 text-3xs text-slate-500">
           <div>
             استعلام اصالت: <span className="font-mono" dir="ltr">{verifyEntry(verifyUrl)}</span>
-            {verifyUrl ? <> · کد رهگیری: <span className="font-mono tracking-widest" dir="ltr">{refCodeOf(verifyUrl)}</span></> : null}
+            {verifyUrl ? <> · کد استعلام: <span className="font-mono tracking-widest" dir="ltr">{verifyCode || refCodeOf(verifyUrl)}</span></> : null}
             <br />
             صدور: {new Date(data.checkedAt).toLocaleString('fa-IR')}
           </div>

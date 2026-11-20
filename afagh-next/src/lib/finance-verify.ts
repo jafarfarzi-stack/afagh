@@ -4,12 +4,13 @@ import { getPublicBaseUrl } from '@/lib/settings';
 import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { createLogger } from '@/lib/logger';
+import { issueShortCode } from '@/lib/verify-short-code';
 
 // خطاهای خام (مثل پیام یکتایی Postgres) می‌توانند کد ملی/شناسه را حمل کنند؛
 // به‌جای console.error مستقیم از لاگر می‌فرستیم تا maskSecrets اعمال شود.
 const log = createLogger({ mod: 'finance-verify' });
 
-export type FinanceVerify = { url: string; qr: string; expiresAt: string | null } | null;
+export type FinanceVerify = { url: string; qr: string; expiresAt: string | null; code?: string | null } | null;
 
 export async function buildFinanceStatementVerify(
   userId: number,
@@ -22,11 +23,13 @@ export async function buildFinanceStatementVerify(
     const url = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
     let qr = '';
     try {
-      qr = await qrSvg(url, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
+      qr = await qrSvg(url, { errorCorrectionLevel: 'M', size: 256, margin: 4 });
     } catch (err) {
       log.error('qr_failed', { err });
     }
-    return { url, qr, expiresAt: issued.expiresAt };
+    // کدِ کوتاهِ قابلِ تایپ برای صفحهٔ یکتای /verify
+    const code = await issueShortCode(issued.token, 'FINANCE', issued.expiresAt);
+    return { url, qr, expiresAt: issued.expiresAt, code };
   } catch (err) {
     log.error('token_failed', { err });
     return null;

@@ -7,6 +7,7 @@ import { createLogger } from '@/lib/logger';
 import { appendAudit } from '@/lib/audit';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { issueEnrollConfirmToken } from '@/lib/verification';
+import { issueShortCode } from '@/lib/verify-short-code';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,7 +105,8 @@ export async function GET(req: NextRequest) {
       )
       .catch(e => log.warn('enrollment-confirmation audit failed', { err: e }));
 
-    return NextResponse.json({ token: issued.token, verifyUrl, expiresAt: issued.expiresAt });
+    const code = await issueShortCode(issued.token, 'ENROLLMENT', issued.expiresAt);
+    return NextResponse.json({ token: issued.token, verifyUrl, expiresAt: issued.expiresAt, code });
   } catch (e) {
     log.error('enrollment-confirmation GET failed', e);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

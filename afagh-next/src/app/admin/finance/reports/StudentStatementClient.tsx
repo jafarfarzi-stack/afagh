@@ -80,7 +80,7 @@ interface Props {
   degreeTitle?: string | null;
   universityTitle?: string | null;
   logoUrl?: string | null;
-  verify?: { url: string; qr: string; expiresAt: string | null } | null;
+  verify?: { url: string; qr: string; expiresAt: string | null; code?: string | null } | null;
 }
 
 function generateCSV(data: StatementRow[], studentName: string, studentCode: string): string {
@@ -323,7 +323,7 @@ export default function StudentStatementClient({
           viewerRole="FINANCE"
           universityTitle={universityTitle}
           logoUrl={logoUrl}
-          verifyBlock={verify ? <FinanceVerifyBlock url={verify.url} qr={verify.qr} expiresAt={verify.expiresAt} /> : undefined}
+          verifyBlock={verify ? <FinanceVerifyBlock url={verify.url} qr={verify.qr} expiresAt={verify.expiresAt} code={verify.code} /> : undefined}
         />
       </div>
     </div>

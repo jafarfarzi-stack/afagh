@@ -171,7 +171,7 @@ const fin = await getStudentFinance(studentId, {
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
           viewerRole="FINANCE"
-          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}
+          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} code={financeVerify.code} /> : undefined}
           cheques={fin.cheques.map((c) => ({
             id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
             amount: Number(c.amount), dueDate: c.dueDate, status: c.status,
