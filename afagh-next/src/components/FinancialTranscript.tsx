@@ -760,8 +760,10 @@ export default function FinancialTranscript({
                             ))}
                           </ul>
                         )}
-                        {/* خلاصهٔ ترم — پایین کارت (نه بالا)، سه قلم در هر سطر تا فشرده شود */}
-                        <div className="border-t border-slate-300 bg-slate-100/70">
+                        {/* خلاصهٔ ترم — پایین کارت (نه بالا)، سه قلم در هر سطر تا فشرده شود.
+                            خودِ جدول کادرِ کامل دارد (مثل جدولِ ریز)، پس پوششِ بیرونی
+                            کادر/پس‌زمینه نمی‌گیرد تا خطِ دوتایی چاپ نشود. */}
+                        <div className="pt-1">
                           <TermSummary t={t} priorBalance={priorByTermId.get(t.termId) ?? 0} />
                         </div>
                       </div>
@@ -1050,17 +1052,24 @@ function TermSummary({ t, priorBalance = 0 }: { t: TranscriptTermView; priorBala
   for (let i = 0; i < items.length; i += 3) grid.push(items.slice(i, i + 3));
 
   return (
-    <table className="tr-fin-sum w-full border-collapse text-[9px] rt" style={{ tableLayout: 'fixed' }}>
+    <table className="tr-fin-sum w-full border-collapse border border-slate-700 text-[9px] rt" style={{ tableLayout: 'fixed' }}>
       <colgroup>
         {[0, 1, 2].map((i) => (
           <col key={i} style={{ width: '33.33%' }} />
         ))}
       </colgroup>
+      <thead>
+        <tr>
+          <th scope="col" colSpan={3} className="border border-slate-300 bg-slate-100 px-1 py-1 text-center font-bold text-slate-700">
+            خلاصهٔ مالی ترم — به ریال
+          </th>
+        </tr>
+      </thead>
       <tbody>
         {grid.map((r, ri) => (
-          <tr key={ri} className="border-t border-slate-200">
+          <tr key={ri} className={r.some((c) => c.bold) ? 'bg-slate-50' : ''}>
             {r.map((c, ci) => (
-              <td key={ci} className="tr-sum-cell px-1 py-0.5 align-top">
+              <td key={ci} className="tr-sum-cell border border-slate-300 px-1 py-1 align-middle">
                 {/* برچسب و مبلغ در یک سلول تا هیچ‌کدام بریده نشود */}
                 <div className="flex items-baseline justify-between gap-1">
                   <span className={`text-slate-600 ${c.bold ? 'font-bold text-slate-800' : ''}`}>{c.label}</span>

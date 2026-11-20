@@ -716,7 +716,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   /* خلاصهٔ ترم (پایین کارت): سه قلم در هر سطر، هر قلم برچسب+مبلغ در یک سلول
      تا هیچ عددی بریده نشود (overflow/ellipsis عمداً حذف شد). */
   .tr-fin-root .tr-fin-sum { font-size: 5.8pt !important; line-height: 1.15 !important; }
-  .tr-fin-root .tr-fin-sum td { padding: 0.18mm 0.8mm !important; }
+  .tr-fin-root .tr-fin-sum td { padding: 0.45mm 0.9mm !important; }
+  .tr-fin-root .tr-fin-sum th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   .tr-fin-root .tr-fin-sum td > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1mm; }
   .tr-fin-root .tr-fin-sum td > div > span:last-child { white-space: nowrap; flex: 0 0 auto; }
 
