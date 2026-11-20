@@ -220,6 +220,7 @@ export type TranscriptPrintOptions = {
   showLogo: boolean;          // آرم دانشگاه
   showAcceptance: boolean;    // نحوه ورود
   showStudyMode: boolean;     // شیوه آموزشی
+  showAllQuotas?: boolean;    // همهٔ انواع سهمیه (سهمیه قبولی و نهایی)
   thesisQualitative: boolean; // نمرهٔ پایان‌نامه/رساله به‌صورت کیفی
   layout?: '3col' | '2col'; // تعداد ستون نیمسالها (پیشفرض ۳)
 };
@@ -234,6 +235,7 @@ export const DEFAULT_PRINT_OPTIONS: TranscriptPrintOptions = {
   showLogo: true,
   showAcceptance: true,
   showStudyMode: true,
+  showAllQuotas: true,
   thesisQualitative: false,
 };
 

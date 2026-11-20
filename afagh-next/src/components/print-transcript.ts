@@ -33,10 +33,25 @@ export function doPrintTranscript(orientation: 'landscape' | 'portrait' = 'lands
    */
   pageStyle.textContent =
     `@page { size: ${size}; margin: ${margins}; }`;
+  // نمره حتماً در یک سطر چاپ شود: globals.css روی سلولهای جدول
+  // overflow-wrap:anywhere میگذارد که اعداد را میشکند. قاعدهٔ اختصاصی زیر
+  // هم در پیشنمایش و هم در کپی چاپی (inside #transcript-print-root) اعمال میشود.
+  const gradeStyle = document.createElement('style');
+  gradeStyle.id = 'transcript-grade-nowrap';
+  gradeStyle.textContent = `
+    .transcript-print-area .tr-term-table td.tr-grade-cell,
+    .transcript-print-area .tr-term-table td.tr-grade-cell > * {
+      white-space: nowrap !important;
+      overflow-wrap: normal !important;
+      word-break: keep-all !important;
+    }
+  `;
   document.head.appendChild(pageStyle);
+  document.head.appendChild(gradeStyle);
   const done = () => {
     document.body.classList.remove('printing-transcript', 'printing-portrait');
     pageStyle.remove();
+    gradeStyle.remove();
     holder.remove();
     window.removeEventListener('afterprint', done);
   };

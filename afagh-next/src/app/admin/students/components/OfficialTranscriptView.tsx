@@ -85,8 +85,9 @@ export default function OfficialTranscriptView({
     ['کد ملی', faDigits(student.nationalCode)],
     ['تاریخ تولد', dateToJalali(student.birthDate)],
     ['مقطع', student.degreeLevel],
-    // نوع دوره در ستون studyingMode است (COURSTYPE)؛ اول نگاشت مدیریتی، بعد جدول سما
-    ['نوع دوره', lbl.period(student.studyingMode) !== '—' ? lbl.period(student.studyingMode) : courseTypeFa(student.studyingMode)],
+    // نوع دوره در ستون studyingMode است (COURSTYPE).
+    // نگاشت جدول سما (COURSE_TYPE_FA) — نه PERIOD_TYPE؛ وگرنه کد ۴ «پیام نور» می‌شد
+    ['نوع دوره', courseTypeFa(student.studyingMode)],
     ['دانشکده', student.facultyName || '—'],
     ['رشته تحصیلی', student.majorName],
     ...(printOptions.showAcceptance ? [['نحوه ورود', lbl.accept(student.acceptanceType)] as [string, string]] : []),
@@ -95,9 +96,11 @@ export default function OfficialTranscriptView({
       originUniversity.dissolved ? `${originUniversity.title} (منحله)` : originUniversity.title,
     ] as [string, string]] : []),
     ...(printOptions.showStudyMode ? [['شیوه آموزشی', studyModeFa(student.trainingMethod)] as [string, string]] : []),
-    ['سهمیه قبولی', quotaFa(student.quotaType)],
-    ['سهمیه نهایی', quotaFa(student.quotaType)],
-    ['سهمیه ثبت‌نامی', lbl.quota(student.acceptanceAllocation) !== '—' ? lbl.quota(student.acceptanceAllocation) : quotaFa(student.quotaType)],
+    ...(printOptions.showAllQuotas ? [
+      ['سهمیه قبولی', quotaFa(student.quotaType)] as [string, string],
+      ['سهمیه نهایی', quotaFa(student.quotaType)] as [string, string],
+    ] : []),
+    ['سهمیه ثبت‌نامی', quotaFa(student.quotaType)],
     ...(printOptions.showNationality ? [[
       'ملیت',
       student.nationality === '120001' ? 'ایرانی' : (!student.nationality || /^\s*unknown\s*$/i.test(student.nationality) ? '—' : student.nationality),
@@ -133,7 +136,7 @@ export default function OfficialTranscriptView({
   /** سلول نمره: اگر تیک «پایان‌نامه کیفی» روشن و درس پایان‌نامه/رساله است، برچسب کیفی */
   const gradeCell = (r: TermGroup['rows'][number]) => {
     if (printOptions.thesisQualitative && courseTypeGroup(r.courseType) === 'پایان‌نامه') {
-      return <span className="font-sans">{thesisQualitativeLabel(numOrNull(r.gradeValue), summary.passGrade)}</span>;
+      return <span className="font-sans whitespace-nowrap">{thesisQualitativeLabel(numOrNull(r.gradeValue), summary.passGrade)}</span>;
     }
     return faStr(r.gradeValue);
   };
@@ -145,11 +148,12 @@ export default function OfficialTranscriptView({
       </div>
       <table className="tr-term-table w-full text-[9px] rt" style={{ tableLayout: 'fixed' }}>
         <colgroup>
+          {/* نمره همیشه در یک سطر بماند: ۴٪ از نام درس و ۱٪ از وضع به ستون نمره منتقل شد */}
           <col style={{ width: '15%' }} />
-          <col style={{ width: '40%' }} />
+          <col style={{ width: '38%' }} />
           <col style={{ width: '12%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '21%' }} />
+          <col style={{ width: '16%' }} />
+          <col style={{ width: '19%' }} />
         </colgroup>
         <thead>
           <tr className="border-b border-slate-300 text-slate-500">
@@ -178,7 +182,7 @@ export default function OfficialTranscriptView({
                 )}
               </td>
               <td className="p-1 text-center font-mono">{r.units == null ? '—' : faStr(r.units, 1)}</td>
-              <td className="p-1 text-center font-mono font-bold">{gradeCell(r)}</td>
+              <td className="tr-grade-cell p-1 text-center font-mono font-bold whitespace-nowrap">{gradeCell(r)}</td>
               <td className="p-1 text-center text-[8px]">{statusCell(r)}</td>
             </tr>
           ))}

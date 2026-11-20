@@ -1031,6 +1031,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       ['showLogo', 'آرم دانشگاه'],
                       ['showAcceptance', 'نحوه ورود'],
                       ['showStudyMode', 'شیوه آموزشی'],
+                      ['showAllQuotas', 'همهٔ انواع سهمیه'],
                       ['thesisQualitative', 'پایان‌نامه کیفی'],
                     ] as [keyof Omit<TranscriptPrintOptions, 'layout'>, string][]).map(([k, label]) => (
                       <label
