@@ -798,6 +798,15 @@ export default function FinancialTranscript({
                     totals={totals}
                     paidTotal={paidTotal}
                     sumFixed={sumFixed}
+                    footerExtra={
+                      <TotalsBlock
+                        totals={totals}
+                        sumFixed={sumFixed}
+                        sumVariable={sumVariable}
+                        paidTotal={paidTotal}
+                        scopeLabel={scopeLabel}
+                      />
+                    }
                     sumVariable={sumVariable}
                     totalNet={totalNet}
                   />
@@ -890,19 +899,7 @@ export default function FinancialTranscript({
               در سندِ سما این بلوک آخرین بخشِ سند است (درخواست کاربر)، پس
               اینجا — بعد از ریزِ ترم‌ها و بعد از چک‌ها/وام‌ها — می‌آید و
               قبل از پاصفحهٔ امضا می‌نشیند. */}
-          <tr className="tr-doc-row">
-            <td className="tr-doc-cell">
-              <div className="px-4 pb-3">
-                <TotalsBlock
-                  totals={totals}
-                  sumFixed={sumFixed}
-                  sumVariable={sumVariable}
-                  paidTotal={paidTotal}
-                  scopeLabel={scopeLabel}
-                />
-              </div>
-            </td>
-          </tr>
+
         </tbody>
         <tfoot>
           <tr>
@@ -1125,6 +1122,7 @@ export function TermCompactTable({
   sumFixed,
   sumVariable,
   totalNet,
+  footerExtra,
 }: {
   terms: TranscriptTermView[];
   totals: TranscriptTotalsView;
@@ -1132,6 +1130,8 @@ export function TermCompactTable({
   sumFixed: number;
   sumVariable: number;
   totalNet: number;
+  /** محتوای اضافیِ پاصفحه — «جمع کل دوره» داخلِ همین جدول (یکپارچه). */
+  footerExtra?: ReactNode;
 }) {
   const grand = balanceBadge(totals.balance);
   const th = 'border border-slate-300 bg-slate-100 px-0.5 py-1 text-center font-bold text-slate-700';
@@ -1232,6 +1232,13 @@ export function TermCompactTable({
               <td key={i} className={`${td} ${c.tdCls || ''}`}>{c.foot}</td>
             ))}
           </tr>
+          {footerExtra ? (
+            <tr>
+              <td colSpan={cols.length} className="border-t border-slate-400 p-0 align-top">
+                {footerExtra}
+              </td>
+            </tr>
+          ) : null}
         </tfoot>
       </table>
       <p className="mt-1 text-[9px] font-bold text-slate-600">

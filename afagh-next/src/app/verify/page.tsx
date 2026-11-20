@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getSetting } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,13 +19,23 @@ const DOC_TYPES = [
   { value: 'certificate', label: 'گواهینامهٔ دورهٔ آزاد' },
 ];
 
-export default function VerifyIndexPage() {
+export default async function VerifyIndexPage() {
+  // آرم دانشگاه به‌جای حرفِ «آ» (درخواست کاربر)
+  const logo = await getSetting('UNIVERSITY_LOGO').catch(() => '');
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 py-12 font-sans" dir="rtl">
       <div className="w-full max-w-md space-y-5 rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-400 bg-gradient-to-tr from-indigo-950 to-indigo-800 text-2xl font-black text-white shadow-lg">
-          آ
-        </div>
+        {logo ? (
+          <img
+            src={logo}
+            alt="آرم دانشگاه"
+            className="mx-auto h-20 w-20 object-contain"
+          />
+        ) : (
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-400 bg-gradient-to-tr from-indigo-950 to-indigo-800 text-2xl font-black text-white shadow-lg">
+            آ
+          </div>
+        )}
 
         <div>
           <h1 className="text-xl font-black text-slate-900">سامانهٔ استعلام مدارک و گواهینامه‌ها</h1>

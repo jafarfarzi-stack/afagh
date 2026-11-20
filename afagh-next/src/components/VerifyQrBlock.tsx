@@ -10,11 +10,10 @@ type Props = {
   hint?: string;
   /**
    * چاپِ تمیز: نشانیِ کاملِ حاوی توکن (۱۲۰+ کاراکتر) در سندِ رسمی زشت است.
-   * در این حالت فقط مبدأ («b.afagh.ac.ir/verify-transcript») و یک کدِ
-   * رهگیریِ کوتاه چاپ می‌شود؛ توکنِ کامل داخل خودِ QR می‌ماند.
+   * در این حالت فقط مبدأ و کدِ کوتاه چاپ می‌شود؛ توکن داخل خودِ QR می‌ماند.
    */
   shortUrl?: boolean;
-  /** فشرده: QR کوچک‌تر و پدینگ کم — برای نشستن در پانوشت سند. */
+  /** فشرده: چیدمانِ عمودی و متنِ کوتاه — برای نشستن در ستونِ باریکِ پانوشت. */
   compact?: boolean;
   /** کدِ کوتاهِ استعلامِ قابلِ تایپ (از سرور). نبودش → هشِ محلی. */
   code?: string | null;
@@ -28,17 +27,68 @@ function jdate(d: string | Date | null | undefined): string {
   return faDigits(jy + '/' + String(jm).padStart(2, '0') + '/' + String(jd).padStart(2, '0'));
 }
 
-export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUrl = false, compact = false, code }: Props) {
+/**
+ * بلوک رسمیت اسناد چاپی: QR استعلام + کد + اعتبار.
+ *
+ * دو حالت:
+ *  • عادی (صفحه‌های وب): دو ستون، QR کنار متن.
+ *  • compact (پانوشتِ سند): **عمودی** — QR بالا و متنِ کوتاه زیرش. علت: ستونِ
+ *    پانوشت فقط ۳۸ میلی‌متر است و در حالتِ افقی، متن به عرضِ چند میلی‌متر
+ *    می‌رسید و حرف‌به‌حرف می‌شکست و پانوشت را بی‌دلیل بلند می‌کرد.
+ */
+export default function VerifyQrBlock({
+  title,
+  url,
+  qr,
+  expiresAt,
+  hint,
+  shortUrl = false,
+  compact = false,
+  code,
+}: Props) {
+  const refCode = code || refCodeOf(url);
+  // فقط دامنه (بدونِ مسیرِ طولانی) — یک خطِ کوتاه در پانوشت
+  let host = '';
+  try { host = new URL(url).host; } catch { host = ''; }
+  const qrEl = qr ? (
+    <QrSvg
+      svg={qr}
+      className="qr-verify-svg h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+    />
+  ) : null;
+
+  if (compact) {
+    return (
+      <div className="break-inside-avoid rounded-lg border border-slate-700 bg-slate-50 p-1.5">
+        <div className="flex flex-col items-center gap-1">
+          {qrEl}
+          <div className="text-center text-3xs leading-4 text-slate-600">
+            <p className="font-bold text-slate-800">{title}</p>
+            <p>QR را با دوربینِ گوشی اسکن کنید.</p>
+            {refCode ? (
+              <p>
+                کد: <b className="font-mono tracking-widest text-slate-700" dir="ltr">{refCode}</b>
+              </p>
+            ) : null}
+            {host ? (
+              <p className="font-mono text-[8px] text-slate-500" dir="ltr">{host}</p>
+            ) : null}
+            {expiresAt ? (
+              <p>
+                اعتبار تا <b className="font-mono">{jdate(new Date(expiresAt))}</b>
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`break-inside-avoid rounded-lg border border-slate-700 bg-slate-50 ${compact ? 'p-1.5' : 'p-3'}`}>
-      <div className={`flex flex-wrap items-start ${compact ? 'gap-2' : 'gap-4'}`}>
-        {qr ? (
-          <QrSvg
-            svg={qr}
-            className="qr-verify-svg h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
-          />
-        ) : null}
-        <div className={`min-w-0 flex-1 text-2xs text-slate-600 ${compact ? 'leading-4' : 'leading-6'}`}>
+    <div className="break-inside-avoid rounded-lg border border-slate-700 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-start gap-4">
+        {qrEl}
+        <div className="min-w-0 flex-1 text-2xs leading-6 text-slate-600">
           <p className="font-bold text-slate-800">{title}</p>
 
           {shortUrl ? (
@@ -53,7 +103,7 @@ export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUr
                 </span>
                 <span>
                   کدِ رهگیری:{' '}
-                  <b className="font-mono tracking-widest text-slate-700" dir="ltr">{code || refCodeOf(url)}</b>
+                  <b className="font-mono tracking-widest text-slate-700" dir="ltr">{refCode}</b>
                 </span>
                 {expiresAt && (
                   <span>

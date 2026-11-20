@@ -324,7 +324,7 @@ export default function OfficialTranscriptView({
         {verifyQr && (
           <div className="w-[38mm] shrink-0">
             <VerifyQrBlock
-              title="استعلام برخط اصالت این کارنامه"
+              title="استعلام اصالت"
               url={verifyQr.url}
               qr={verifyQr.qr}
               expiresAt={verifyQr.expiresAt}
