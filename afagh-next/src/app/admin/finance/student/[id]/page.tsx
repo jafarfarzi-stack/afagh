@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link';
+import ExportWordButton from '@/components/ExportWordButton';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
@@ -158,6 +159,11 @@ const fin = await getStudentFinance(studentId, {
               ? `✅ تأییدشده برای چاپ معتبر${approval.trackingCode ? ` — ${approval.trackingCode}` : ''}`
               : '⏳ بدون تأیید کارشناس مالی (QR برای دانشجو غیرفعال)'}
           </span>
+          <ExportWordButton
+            targetSelector=".print-area"
+            fileName={`کارنامه-مالی-${student.studentCode ?? studentId}`}
+            label="📄 Word"
+          />
         </div>
       </div>
 

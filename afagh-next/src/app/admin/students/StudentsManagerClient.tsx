@@ -17,6 +17,7 @@ import Modal from '@/components/ui/Modal';
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
 import { DEFAULT_PRINT_OPTIONS } from './types';
 import { regThresholds, groupTranscript, faNum } from './transcript-utils';
+import ExportWordButton from '@/components/ExportWordButton';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
 import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
@@ -1010,6 +1011,14 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                     >
                       🖨️ چاپ عمودی
                     </button>
+                  )}
+                  {transcript && transcript.length > 0 && (
+                    <ExportWordButton
+                      targetSelector=".transcript-print-area"
+                      fileName={`کارنامه-تحصیلی-${currentStudent.studentCode}`}
+                      label="📄 Word"
+                      className="rounded-lg bg-sky-700 px-2.5 py-1 text-2xs font-bold text-white hover:bg-sky-800"
+                    />
                   )}
                 </div>
                 {transcript && transcript.length > 0 && (
