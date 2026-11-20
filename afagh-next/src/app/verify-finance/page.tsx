@@ -26,11 +26,14 @@ export default function VerifyLandingPage() {
           خودِ QR است.
         </p>
         <Link
-          href="/"
+          href="/verify"
           className="mt-6 inline-block rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700"
         >
-          بازگشت به سامانه
+          استعلامِ سایر مدارک
         </Link>
+        <div className="mt-2">
+          <Link href="/" className="text-2xs text-slate-500 hover:underline">بازگشت به سامانه</Link>
+        </div>
       </div>
     </div>
   );

@@ -83,7 +83,7 @@ export default function OfficialTranscriptView({
     ['محل صدور', student.placeOfIssue || '—'],
     ['محل تولد', student.placeOfBirth || '—'],
     ['کد ملی', faDigits(student.nationalCode)],
-    ['تاریخ تولد', dateToJalali(student.birthDate)],
+    ['تاریخ تولد', faDigits(dateToJalali(student.birthDate))],
     ['مقطع', student.degreeLevel],
     // نوع دوره در ستون studyingMode است (COURSTYPE).
     // نگاشت جدول سما (COURSE_TYPE_FA) — نه PERIOD_TYPE؛ وگرنه کد ۴ «پیام نور» می‌شد
@@ -213,7 +213,7 @@ export default function OfficialTranscriptView({
           <p className="font-bold">باسمه تعالی</p>
           <p>اداره کل امور آموزشی</p>
           <p className="font-extrabold">کارنامه کل</p>
-          <p className="mt-1">تاریخ تهیه: <b className="font-mono">{todayJalali()}</b></p>
+          <p className="mt-1">تاریخ تهیه: <b className="font-mono">{faDigits(todayJalali())}</b></p>
         </div>
         {/* آرم در وسط، نام دانشگاه زیرِ آن (درخواست کاربر) */}
         <div className="flex flex-1 flex-col items-center">
@@ -291,7 +291,7 @@ export default function OfficialTranscriptView({
         {printOptions.thesisQualitative && (
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
-        <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
+        <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{faDigits(todayJalali())}</b></p>
         </div>
         {/* QR در فضای خالیِ سمت چپِ پانوشت — نه یک بلوکِ جدا زیرِ متن (درخواست کاربر) */}
         {verifyQr && (
