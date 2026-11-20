@@ -3,6 +3,11 @@ import { getSetting } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
+// 🔒 صفحهٔ استعلام نباید در موتورهای جست‌وجو ایندکس شود (کدها نباید عمومی شوند).
+export const metadata = {
+  robots: { index: false, follow: false },
+};
+
 /**
  * صفحهٔ کلیِ استعلام مدارک و گواهینامه‌ها.
  *
@@ -19,7 +24,12 @@ const DOC_TYPES = [
   { value: 'certificate', label: 'گواهینامهٔ دورهٔ آزاد' },
 ];
 
-export default async function VerifyIndexPage() {
+export default async function VerifyIndexPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ limited?: string }>;
+}) {
+  const limited = (await searchParams)?.limited === '1';
   // آرم دانشگاه به‌جای حرفِ «آ» (درخواست کاربر)
   const logo = await getSetting('UNIVERSITY_LOGO').catch(() => '');
   return (
@@ -36,6 +46,12 @@ export default async function VerifyIndexPage() {
             آ
           </div>
         )}
+
+        {limited ? (
+          <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-2xs font-bold text-rose-800">
+            ⏳ تعداد استعلام‌ها بیش از حد مجاز شد. چند دقیقهٔ دیگر دوباره تلاش کنید.
+          </div>
+        ) : null}
 
         <div>
           <h1 className="text-xl font-black text-slate-900">سامانهٔ استعلام مدارک و گواهینامه‌ها</h1>
