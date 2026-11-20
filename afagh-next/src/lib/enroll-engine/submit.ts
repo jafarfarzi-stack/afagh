@@ -597,6 +597,34 @@ export async function processQueuedSubmit(userId: number, studentId: number, acc
       if (takenTotal + newUnits > allowedMaxUnits) {
         throw new Error(`سقف مجاز انتخاب واحد طبق آیین‌نامه آموزشی (${allowedMaxUnits} واحد) رعایت نشده است (ثبت‌شدهٔ هم‌زمان: ${takenTotal} + جدید: ${newUnits}).`);
       }
+      // ── قیدِ «یک درس، یک بار در هر نیمسال» ──
+      // قبلاً یکتایی فقط روی (studentId, offeringId) بود؛ اگر همان درس روی
+      // «ارائه»ی دیگری در همان ترم ثبت می‌شد، دو ردیفِ فعال ساخته می‌شد و
+      // کارنامه درس را دوبار چاپ می‌کرد. اینجا در سطحِ «درس» جلوگیری می‌کنیم.
+      const wantedOfferingIds = plans.filter((p) => !p.excluded).map((p) => p.o.id);
+      if (wantedOfferingIds.length > 0) {
+        const dupRes = await tx.execute(sql`
+          select c.title as title, co."courseId" as cid
+          from enrollments e
+          join course_offerings co on co.id = e."offeringId"
+          join courses c on c.id = co."courseId"
+          where e."studentId" = ${studentId}
+            and e.status <> 'DROPPED'
+            and co."termId" = ${term.id}
+            and co."courseId" in (
+              select co2."courseId" from course_offerings co2
+              where co2.id in (${sql.join(wantedOfferingIds.map((id) => sql`${id}`), sql`, `)})
+            )
+          limit 1
+        `);
+        const dup = ((dupRes.rows ?? []) as { title: string | null }[])[0];
+        if (dup) {
+          throw new Error(
+            `درس «${dup.title ?? 'انتخاب‌شده'}» قبلاً در همین نیمسال ثبت شده است؛ ثبتِ دوبارهٔ یک درس در یک نیمسال مجاز نیست.`,
+          );
+        }
+      }
+
       for (const p of plans) {
         if (p.excluded) continue;
         await tx.execute(sql.raw('SAVEPOINT enroll_sp'));
