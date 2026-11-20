@@ -52,7 +52,7 @@ export default function OfficialTranscriptView({
   const probation = summary.terms.filter(t => t.probation).length;
 
   // ── QR استعلام برخط اصالت کارنامه (از API ادمین؛ فقط برای دانشجوی بازشده) ──
-  const [verifyQr, setVerifyQr] = useState<{ url: string; qr: string; expiresAt: string | null } | null>(null);
+  const [verifyQr, setVerifyQr] = useState<{ url: string; qr: string; expiresAt: string | null; code?: string | null } | null>(null);
   useEffect(() => {
     let alive = true;
     setVerifyQr(null);
@@ -292,7 +292,34 @@ export default function OfficialTranscriptView({
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{faDigits(todayJalali())}</b></p>
-        </div>
+                {/* جدول وضعیت دروس گذرانده — در فضای خالیِ پانوشت کنارِ QR (درخواست کاربر) */}
+        {printOptions.showBreakdown && (
+          <div className="tr-breakdown border-t border-slate-300 pt-1">
+            <p className="mb-1 text-2xs font-extrabold">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
+            <table className="rt w-full border border-slate-400 text-3xs">
+              <thead>
+                <tr className="border-b border-slate-300 bg-slate-100">
+                  <th scope="col" className="border-l border-slate-300 p-1">نوع درس</th>
+                  {breakdown.map(b => <th scope="col" key={b.type} className="border-l border-slate-300 p-1">{b.type}</th>)}
+                  <th scope="col" className="p-1">مجموع</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-slate-200">
+                  <td className="border-l border-slate-300 p-1 font-bold">تعداد واحد</td>
+                  {breakdown.map(b => <td key={b.type} className="border-l border-slate-300 p-1 text-center font-mono">{faNum(b.units, 1)}</td>)}
+                  <td className="p-1 text-center font-mono font-bold">{faNum(summary.totalPassed, 1)}</td>
+                </tr>
+                <tr>
+                  <td className="border-l border-slate-300 p-1 font-bold">معدل</td>
+                  {breakdown.map(b => <td key={b.type} className="border-l border-slate-300 p-1 text-center font-mono">{faNum(b.gpa)}</td>)}
+                  <td className="p-1 text-center font-mono font-bold">{faNum(summary.gpa)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+</div>
         {/* QR در فضای خالیِ سمت چپِ پانوشت — نه یک بلوکِ جدا زیرِ متن (درخواست کاربر) */}
         {verifyQr && (
           <div className="w-[38mm] shrink-0">
@@ -303,40 +330,12 @@ export default function OfficialTranscriptView({
               expiresAt={verifyQr.expiresAt}
               shortUrl
               compact
+              code={verifyQr.code}
             />
           </div>
         )}
       </div>
       </td></tr>
-      {/* صفحه دوم: جدول وضعیت دروس گذرانده — در جریان طبیعی صفحه می‌آید، تکه نمی‌شود */}
-      {printOptions.showBreakdown && (
-      <tr><td className="tr-doc-cell">
-      <div className="tr-breakdown border-t-2 border-slate-700 px-3 py-2">
-        <p className="font-extrabold text-2xs mb-1">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
-        <table className="w-full text-3xs border border-slate-400 rt">
-          <thead>
-            <tr className="bg-slate-100 border-b border-slate-300">
-              <th scope="col" className="p-1 border-l border-slate-300">نوع درس</th>
-              {breakdown.map(b => <th scope="col" key={b.type} className="p-1 border-l border-slate-300">{b.type}</th>)}
-              <th scope="col" className="p-1">مجموع</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-slate-200">
-              <td className="p-1 font-bold border-l border-slate-300">تعداد واحد</td>
-              {breakdown.map(b => <td key={b.type} className="p-1 text-center font-mono border-l border-slate-300">{faNum(b.units, 1)}</td>)}
-              <td className="p-1 text-center font-mono font-bold">{faNum(summary.totalPassed, 1)}</td>
-            </tr>
-            <tr>
-              <td className="p-1 font-bold border-l border-slate-300">معدل</td>
-              {breakdown.map(b => <td key={b.type} className="p-1 text-center font-mono border-l border-slate-300">{faNum(b.gpa)}</td>)}
-              <td className="p-1 text-center font-mono font-bold">{faNum(summary.gpa)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      </td></tr>
-      )}
       {/* رتبه در رشته ورودی و میانگین هم‌رشته‌ای‌ها (تیک سما) */}
       {printOptions.showRank && (
         <tr><td className="tr-doc-cell">

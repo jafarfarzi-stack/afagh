@@ -16,6 +16,8 @@ type Props = {
   shortUrl?: boolean;
   /** فشرده: QR کوچک‌تر و پدینگ کم — برای نشستن در پانوشت سند. */
   compact?: boolean;
+  /** کدِ کوتاهِ استعلامِ قابلِ تایپ (از سرور). نبودش → هشِ محلی. */
+  code?: string | null;
 };
 
 function jdate(d: string | Date | null | undefined): string {
@@ -26,7 +28,7 @@ function jdate(d: string | Date | null | undefined): string {
   return faDigits(jy + '/' + String(jm).padStart(2, '0') + '/' + String(jd).padStart(2, '0'));
 }
 
-export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUrl = false, compact = false }: Props) {
+export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUrl = false, compact = false, code }: Props) {
   return (
     <div className={`break-inside-avoid rounded-lg border border-slate-700 bg-slate-50 ${compact ? 'p-1.5' : 'p-3'}`}>
       <div className={`flex flex-wrap items-start ${compact ? 'gap-2' : 'gap-4'}`}>
@@ -51,7 +53,7 @@ export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUr
                 </span>
                 <span>
                   کدِ رهگیری:{' '}
-                  <b className="font-mono tracking-widest text-slate-700" dir="ltr">{refCodeOf(url)}</b>
+                  <b className="font-mono tracking-widest text-slate-700" dir="ltr">{code || refCodeOf(url)}</b>
                 </span>
                 {expiresAt && (
                   <span>

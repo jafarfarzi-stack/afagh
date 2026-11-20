@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { resolveShortCode, KIND_ROUTE } from '@/lib/verify-short-code';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +13,10 @@ const ROUTE_BY_TYPE: Record<string, string> = {
 };
 
 /**
- * فرمِ صفحهٔ /verify به اینجا GET می‌زند و کاربر را به صفحهٔ همان نوع سند
- * می‌فرستد. اگر نوع تعیین نشده باشد، مسیرِ عمومیِ `/verify/<code>` حفظ
- * می‌شود تا لینک‌های قدیمی نشکنند.
+ * فرمِ صفحهٔ /verify به اینجا GET می‌زند.
+ *
+ * ترتیب: ① اگر ورودی «کدِ کوتاه» باشد، از جدول به توکن تبدیل و به مسیرِ همان
+ * نوع سند هدایت می‌شود. ② وگرنه مثل قبل توکن/کدِ عمومی در نظر گرفته می‌شود.
  */
 export default async function VerifySearchPage({
   searchParams,
@@ -26,6 +28,12 @@ export default async function VerifySearchPage({
   const type = (rawType ?? '').trim();
 
   if (!code) redirect('/verify');
+
+  const resolved = await resolveShortCode(code);
+  if (resolved) {
+    const base = KIND_ROUTE[resolved.kind] ?? ROUTE_BY_TYPE[type] ?? '/verify';
+    redirect(`${base}/${encodeURIComponent(resolved.token)}`);
+  }
 
   const base = ROUTE_BY_TYPE[type];
   if (!base) redirect(`/verify/${encodeURIComponent(code)}`);

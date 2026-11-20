@@ -4352,3 +4352,22 @@ export const gl_posting_rules = pgTable('gl_posting_rules', {
 }, (t) => [
   uniqueIndex('uq_gl_rules_uni_event').on(t.universityId, t.eventKey),
 ]);
+
+
+/**
+ * کدِ کوتاهِ استعلام — نگاشتِ «کدِ روی کاغذ» به توکنِ امضاشده.
+ *
+ * توکن‌های استعلام ۱۰۰+ کاراکترند و روی سند چاپی قابل تایپ نیستند. این جدول
+ * یک کدِ ۸ کاراکتری می‌دهد که کاربر می‌تواند در صفحهٔ /verify بزند.
+ * ⚠ این کد خودش اعتبارسنجی نمی‌کند؛ فقط به توکنِ امضاشده اشاره می‌کند و
+ * اعتبار/انقضا در همان مسیرِ verify-* دوباره بررسی می‌شود.
+ */
+export const document_verify_codes = pgTable('document_verify_codes', {
+  code: varchar('code', { length: 16 }).primaryKey(),
+  token: text('token').notNull(),
+  kind: varchar('kind', { length: 20 }).notNull(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => [
+  index('idx_dvc_expires').on(t.expiresAt),
+]);
