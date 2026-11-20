@@ -266,7 +266,7 @@ export default function OfficialTranscriptView({
       )}
       {/* پانوشت */}
       <tr><td className="tr-doc-cell">
-      <div className="flex min-w-0 items-start gap-3 overflow-hidden border-t-2 border-slate-700 px-3 py-2 text-3xs">
+      <div className="flex items-start gap-3 border-t-2 border-slate-700 px-3 py-2 text-3xs">
         <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap gap-x-6">
           <span>تعداد نیمسال مشروط: <b className="font-mono">{probation.toLocaleString('fa-IR')}</b></span>
@@ -296,7 +296,7 @@ export default function OfficialTranscriptView({
         {printOptions.showBreakdown && (
           <div className="tr-breakdown border-t border-slate-300 pt-1">
             <p className="mb-1 text-2xs font-extrabold">جدول وضعیت دروس گذرانده (کاتالوگ رشته)</p>
-            <table className="rt w-full border-collapse border border-slate-400 text-3xs" style={{ tableLayout: 'fixed' }}>
+            <table className="rt w-full border border-slate-400 text-3xs">
               <thead>
                 <tr className="border-b border-slate-300 bg-slate-100">
                   <th scope="col" className="border-l border-slate-300 p-1">نوع درس</th>
@@ -322,7 +322,7 @@ export default function OfficialTranscriptView({
 </div>
         {/* QR در فضای خالیِ سمت چپِ پانوشت — نه یک بلوکِ جدا زیرِ متن (درخواست کاربر) */}
         {verifyQr && (
-          <div className="w-[38mm] max-w-[38mm] shrink-0 overflow-hidden">
+          <div className="w-[38mm] shrink-0">
             <VerifyQrBlock
               title="استعلام اصالت"
               url={verifyQr.url}
