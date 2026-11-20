@@ -700,7 +700,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
      ردیف بیرونی و خودِ گرید در چاپ آزاد میشکنند تا کارتهای پشتسرهم
      بین صفحهها تقسیم شوند، ولی هر کارت (term-block) avoid میماند. */
   .tr-fin-root .tr-fin-row { grid-template-columns: minmax(0, 1fr) !important; gap: 1.2mm !important; break-inside: auto !important; page-break-inside: auto !important; }
-  .tr-fin-root .term-block { break-inside: avoid !important; page-break-inside: avoid !important; }
+  /* کارتِ ترم در چاپ آزاد می‌شکند: با avoid، کارتِ بلند که در باقی‌ماندهٔ صفحه
+     جا نمی‌شد کلِ پایینِ صفحه را خالی می‌گذاشت (شکایت کاربر: «زیرش خالیه»).
+     ردیف‌های داخلی (دروس/خلاصه/سربرگ) خودشان avoid دارند، پس هیچ ردیفی
+     نصف نمی‌شود. */
+  .tr-fin-root .term-block { break-inside: auto !important; page-break-inside: auto !important; }
+  /* سربرگ کارت از بدنه‌اش جدا نشود (یتیم‌ماندنِ عنوان در انتهای صفحه) */
+  .tr-fin-root .term-block > div:first-child { break-after: avoid !important; page-break-after: avoid !important; }
   /* عنوان «ریز ترم‌به‌ترم» از کارت اولش جدا نشود */
   .tr-fin-root .tr-courses-title { break-after: avoid !important; page-break-after: avoid !important; }
   .tr-fin-root .term-block { border-width: 0.6pt !important; border-radius: 1.2mm !important; }

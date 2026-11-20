@@ -1112,7 +1112,6 @@ function isFullDiscountTerm(t: TranscriptTermView): boolean {
 export function TermCompactTable({
   terms,
   totals,
-  paidTotal,
   sumFixed,
   sumVariable,
   totalNet,
@@ -1124,72 +1123,104 @@ export function TermCompactTable({
   sumVariable: number;
   totalNet: number;
 }) {
-  const sumItems = terms.reduce((a, t) => a + t.events.length, 0);
   const grand = balanceBadge(totals.balance);
-  const th = 'border border-slate-300 bg-slate-100 px-1 py-1 text-center font-bold text-slate-700';
-  const td = 'border border-slate-300 px-1 py-1 text-center';
+  const th = 'border border-slate-300 bg-slate-100 px-0.5 py-1 text-center font-bold text-slate-700';
+  const td = 'border border-slate-300 px-0.5 py-1 text-center';
+
+  /**
+   * اقلامِ تخفیف بر اساسِ کلیدِ کانونی — هر نوع، ستونِ مستقل.
+   * کاربر خواست «ثابت/متغیر/مبلغی» مثلِ سما جدا دیده شوند و دو ستونِ
+   * همیشه‌خالیِ «تخفیف مقطع» و «تخفیف ویژه» حذف شوند.
+   */
+  const sumKeys = (t: TranscriptTermView, keys: string[]): number =>
+    (t.discountBreakdown || [])
+      .filter((d) => d && keys.includes(String(d.key || '')))
+      .reduce((a, d) => a + (Number(d.amount) || 0), 0);
+
+  const FIXED_KEYS = ['BATES_FIXED', 'DISCOUNT_FIXED'];
+  const VAR_KEYS = ['BATES_VARIABLE', 'DISCOUNT_VARIABLE'];
+  const AMOUNT_KEYS = ['BATES_AMOUNT'];
+
+  const discFixed = (t: TranscriptTermView) => sumKeys(t, FIXED_KEYS);
+  const discVar = (t: TranscriptTermView) => sumKeys(t, VAR_KEYS);
+  const discAmount = (t: TranscriptTermView) => sumKeys(t, AMOUNT_KEYS);
+  // باقی‌ماندهٔ تخفیف (بیتسِ ادغام‌شده، کاهش موضوعی، تعدیل افزایشی)
+  const discOther = (t: TranscriptTermView) =>
+    Math.max(0, (Number(t.discounts) || 0) - discFixed(t) - discVar(t) - discAmount(t));
+  const sponsorOnly = (t: TranscriptTermView) =>
+    Math.max(0, (Number(t.sponsorships) || 0) - (Number(t.charityCoverage) || 0));
+  const charityOf = (t: TranscriptTermView) => Number(t.charityCoverage) || 0;
+  const loanOf = (t: TranscriptTermView) => Number(t.loans) || 0;
+  // وام ستونِ جداگانه دارد؛ «پرداختی» فقط پولِ نقدی/چکِ وصولی است تا دوبار شمرده نشود.
+  const paidOf = (t: TranscriptTermView) =>
+    (Number(t.payments) || 0) + (Number(t.chequesCleared) || 0);
+
+  const sumOf = (f: (t: TranscriptTermView) => number) =>
+    terms.reduce((a, t) => a + f(t), 0);
+
+  type Col = {
+    w: string;
+    label: string;
+    tdCls?: string;
+    cell: (t: TranscriptTermView) => ReactNode;
+    foot: ReactNode;
+  };
+
+  const cols: Col[] = [
+    { w: '16%', label: 'نیمسال', tdCls: 'text-right font-bold', cell: (t) => <TermTitle t={t} />, foot: 'مجموع (کل)' },
+    { w: '9%', label: 'شهریهٔ ثابت', tdCls: 'font-mono', cell: (t) => fa(t.tuitionFixed), foot: fa(sumFixed) },
+    { w: '9%', label: 'شهریهٔ متغیر', tdCls: 'font-mono', cell: (t) => fa(t.tuitionVariable), foot: fa(sumVariable) },
+    { w: '8%', label: 'تخفیف ثابت', tdCls: 'font-mono text-violet-700', cell: (t) => fa(discFixed(t)), foot: fa(sumOf(discFixed)) },
+    { w: '8%', label: 'تخفیف متغیر', tdCls: 'font-mono text-violet-700', cell: (t) => fa(discVar(t)), foot: fa(sumOf(discVar)) },
+    { w: '8%', label: 'تخفیف مبلغی', tdCls: 'font-mono text-violet-700', cell: (t) => fa(discAmount(t)), foot: fa(sumOf(discAmount)) },
+    { w: '6%', label: 'سایر تخفیف', tdCls: 'font-mono text-violet-700', cell: (t) => fa(discOther(t)), foot: fa(sumOf(discOther)) },
+    { w: '8%', label: 'پوشش بنیاد', tdCls: 'font-mono text-indigo-700', cell: (t) => fa(sponsorOnly(t)), foot: fa(sumOf(sponsorOnly)) },
+    { w: '6%', label: 'پوشش خیرین', tdCls: 'font-mono text-teal-700', cell: (t) => fa(charityOf(t)), foot: fa(sumOf(charityOf)) },
+    { w: '7%', label: 'وام', tdCls: 'font-mono text-sky-700', cell: (t) => fa(loanOf(t)), foot: fa(sumOf(loanOf)) },
+    { w: '7%', label: 'پرداختی', tdCls: 'font-mono text-emerald-700', cell: (t) => fa(paidOf(t)), foot: fa(sumOf(paidOf)) },
+    {
+      w: '8%',
+      label: 'مانده',
+      tdCls: 'font-mono font-black',
+      cell: (t) => (
+        <span className={t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}>
+          {fa(Math.abs(t.balance))}
+        </span>
+      ),
+      foot: <span className={grand.cls}>{fa(Math.abs(totals.balance))}</span>,
+    },
+  ];
+
   return (
     <div className="tr-breakdown break-inside-avoid">
       <h3 className="mb-1 border-b-2 border-slate-800 pb-1 text-[12px] font-black text-slate-900">ریز جزئیات ترم‌ها — به ریال</h3>
       <table className="tr-fin-list w-full border-collapse border border-slate-700 text-center text-3xs rt" style={{ tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '6%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '11%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '10%' }} />
-          <col style={{ width: '8%' }} />
-          <col style={{ width: '9%' }} />
+          {cols.map((c, i) => (
+            <col key={i} style={{ width: c.w }} />
+          ))}
         </colgroup>
         <thead>
           <tr>
-            <th scope="col" className={th}>نیمسال</th>
-            <th scope="col" className={th}>تعداد اقلام</th>
-            <th scope="col" className={th}>شهریه (باتی)</th>
-            <th scope="col" className={th}>تخفیف (باتی)</th>
-            <th scope="col" className={th}>تخفیف مقطع</th>
-            <th scope="col" className={th}>تخفیف ویژه</th>
-            <th scope="col" className={th}>مبلغ پرداختی</th>
-            <th scope="col" className={th}>ملاحظات</th>
-            <th scope="col" className={th}>بدهکار / بستانکار</th>
-            <th scope="col" className={th}>مبلغ باقی پرداخت</th>
+            {cols.map((c, i) => (
+              <th key={i} scope="col" className={th}>{c.label}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {terms.map((t) => {
-            const b = balanceBadge(t.balance);
-            const paid = t.payments + t.chequesCleared + t.loans;
-            return (
-              <tr key={t.termId}>
-                <td className={`${td} text-right font-bold`}><TermTitle t={t} /></td>
-                <td className={`${td} font-mono`}>{fa(t.events.length)}</td>
-                <td className={`${td} font-mono`}>{fa(t.charges)}</td>
-                <td className={`${td} font-mono text-violet-700`} title={`سهم تخفیف سما: ${fa(batesDiscountOf(t))}`}>{fa(t.discounts)}</td>
-                <td className={`${td} text-slate-400`}>—</td>
-                <td className={`${td} text-slate-400`}>—</td>
-                <td className={`${td} font-mono text-emerald-700`}>{fa(paid)}</td>
-                <td className={td}>{paid === 0 ? <span className="font-bold text-rose-700">پرداخت نشده</span> : 'پرداخت شده'}</td>
-                <td className={td}><span className={`rounded-full border px-1.5 py-px text-[9px] font-black ${b.cls}`}>{b.text}</span></td>
-                <td className={`${td} font-mono font-black ${t.balance > 0 ? 'text-rose-700' : t.balance < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>{fa(Math.abs(t.balance))}</td>
-              </tr>
-            );
-          })}
+          {terms.map((t) => (
+            <tr key={t.termId}>
+              {cols.map((c, i) => (
+                <td key={i} className={`${td} ${c.tdCls || ''}`}>{c.cell(t)}</td>
+              ))}
+            </tr>
+          ))}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-slate-800 bg-slate-50 font-black">
-            <td className={`${td} text-right`}>مجموع (کل)</td>
-            <td className={`${td} font-mono`}>{fa(sumItems)}</td>
-            <td className={`${td} font-mono`}>{fa(totals.charges)}</td>
-            <td className={`${td} font-mono text-violet-700`}>{fa(totals.discounts)}</td>
-            <td className={`${td} text-slate-400`}>—</td>
-            <td className={`${td} text-slate-400`}>—</td>
-            <td className={`${td} font-mono text-emerald-700`}>{fa(paidTotal)}</td>
-            <td className={td} />
-            <td className={td}>{grand.text}</td>
-            <td className={`${td} font-mono`}>{fa(Math.abs(totals.balance))}</td>
+            {cols.map((c, i) => (
+              <td key={i} className={`${td} ${c.tdCls || ''}`}>{c.foot}</td>
+            ))}
           </tr>
         </tfoot>
       </table>
