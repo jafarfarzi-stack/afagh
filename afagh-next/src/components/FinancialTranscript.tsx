@@ -683,7 +683,10 @@ export default function FinancialTranscript({
                                   </tr>
                                 ))}
                                 <tr className="border-t border-slate-200 bg-slate-50/60">
-                                  <td colSpan={10} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
+                                  <td colSpan={2} className="px-1 py-0.5 font-black">جمع متغیر دروس</td>
+                                  <td className="px-1 py-0.5 text-center font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.theoreticalUnits) || 0), 0))}</td>
+                                  <td className="px-1 py-0.5 text-center font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.practicalUnits) || 0), 0))}</td>
+                                  <td colSpan={6} className="px-1 py-0.5"></td>
                                   <td className="px-1 py-0.5 text-left font-black">{fa(t.courses.reduce((a, c) => a + (Number(c.amount) || 0), 0))}</td>
                                 </tr>
                               </tbody>
