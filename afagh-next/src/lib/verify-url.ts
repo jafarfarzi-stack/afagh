@@ -40,3 +40,20 @@ export function refCodeOf(url: string | null | undefined): string {
     return '';
   }
 }
+
+
+/**
+ * نشانیِ یکتای استعلام که روی **همهٔ** اسناد چاپی درج می‌شود.
+ *
+ * درخواست کاربر: «از این به بعد همه b.afagh.ac.ir/verify». کاربر به همان
+ * صفحه می‌رود، نوع سند را انتخاب می‌کند و کد را می‌زند — بدونِ اینکه لازم
+ * باشد بداند کارنامهٔ مالی و تحصیلی مسیرِ جدا دارند.
+ */
+export function verifyEntry(url: string | null | undefined): string {
+  if (!url) return '';
+  try {
+    return `${new URL(url).host}/verify`;
+  } catch {
+    return '';
+  }
+}

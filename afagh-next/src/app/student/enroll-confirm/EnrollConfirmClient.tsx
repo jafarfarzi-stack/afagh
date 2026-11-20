@@ -1,7 +1,7 @@
 'use client';
 
 import QrSvg from '@/components/QrSvg';
-import { prettyBase, refCodeOf } from '@/lib/verify-url';
+import { verifyEntry, refCodeOf } from '@/lib/verify-url';
 
 // (تایپ محلی — عمداً از @/lib/verification ایمپورت نمی‌شود چون آن ماژول server-only است)
 interface EnrollConfirmData {
@@ -133,7 +133,7 @@ export default function EnrollConfirmClient(props: {
 
         <div className="mt-3 flex items-end justify-between gap-3 text-3xs text-slate-500">
           <div>
-            استعلام اصالت: <span className="font-mono" dir="ltr">{prettyBase(verifyUrl)}</span>
+            استعلام اصالت: <span className="font-mono" dir="ltr">{verifyEntry(verifyUrl)}</span>
             {verifyUrl ? <> · کد رهگیری: <span className="font-mono tracking-widest" dir="ltr">{refCodeOf(verifyUrl)}</span></> : null}
             <br />
             صدور: {new Date(data.checkedAt).toLocaleString('fa-IR')}

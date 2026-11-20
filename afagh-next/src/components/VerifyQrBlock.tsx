@@ -1,6 +1,6 @@
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import QrSvg from '@/components/QrSvg';
-import { prettyBase, refCodeOf } from '@/lib/verify-url';
+import { verifyEntry, refCodeOf } from '@/lib/verify-url';
 
 type Props = {
   title: string;
@@ -48,7 +48,7 @@ export default function VerifyQrBlock({
 }: Props) {
   const refCode = code || refCodeOf(url);
   // مبدأ + مسیرِ سامانه (بدونِ توکن) — مثلاً b.afagh.ac.ir/verify-transcript
-  const systemPath = prettyBase(url);
+  const systemPath = verifyEntry(url);
   const qrEl = qr ? (
     <QrSvg
       svg={qr}
@@ -98,7 +98,7 @@ export default function VerifyQrBlock({
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-3xs">
                 <span>
                   سامانه:{' '}
-                  <b className="font-mono text-slate-700" dir="ltr">{prettyBase(url)}</b>
+                  <b className="font-mono text-slate-700" dir="ltr">{verifyEntry(url)}</b>
                 </span>
                 <span>
                   کدِ رهگیری:{' '}
