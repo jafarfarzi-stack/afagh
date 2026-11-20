@@ -293,13 +293,15 @@ const TERM_FA: Record<number, string> = { 1: 'مهرماه', 2: 'بهمن‌ما
  * بین دو عدد فارسی، جداکنندهٔ دوجهته نیست و مرورگر دو عدد را جابه‌جا می‌چاپ می‌کند
  * («۱۴۰۵-۱۴۰۴» به‌جای «۱۴۰۴-۱۴۰۵»). با span LTR ترتیب درست تضمین می‌شود.
  */
-function TermTitle({ t }: { t: TranscriptTermView }) {
+function TermTitle({ t, compact = false }: { t: TranscriptTermView; compact?: boolean }) {
   const norm = normalizeTermCode(t.termCode);
   if (!norm) return <>{t.termTitle || '—'}</>;
   if (norm.termType === 'EQUIVALENCE') return <>نیمسال معادل‌سازی</>;
   const year = <span dir="ltr">{faDigits(norm.displayYear)}</span>;
   // ترم تابستان در کارنامه با عنوان «دوره تابستانی» آورده می‌شود (درخواست کاربر).
   if (norm.termType === 'SUMMER') return <>دوره تابستانی {year}</>;
+  // compact = ستونِ باریکِ جدول (۱۶٪): «سال تحصیلی» حذف می‌شود تا دوخطی نشود.
+  if (compact) return <>{`${norm.displaySemester} `}{year}</>;
   return <>{`${norm.displaySemester} سال تحصیلی `}{year}</>;
 }
 
@@ -1167,7 +1169,7 @@ export function TermCompactTable({
   };
 
   const cols: Col[] = [
-    { w: '16%', label: 'نیمسال', tdCls: 'text-right font-bold', cell: (t) => <TermTitle t={t} />, foot: 'مجموع (کل)' },
+    { w: '16%', label: 'نیمسال', tdCls: 'text-right font-bold', cell: (t) => <TermTitle t={t} compact />, foot: 'مجموع (کل)' },
     { w: '9%', label: 'شهریهٔ ثابت', tdCls: 'font-mono', cell: (t) => fa(t.tuitionFixed), foot: fa(sumFixed) },
     { w: '9%', label: 'شهریهٔ متغیر', tdCls: 'font-mono', cell: (t) => fa(t.tuitionVariable), foot: fa(sumVariable) },
     { w: '8%', label: 'تخفیف ثابت', tdCls: 'font-mono text-violet-700', cell: (t) => fa(discFixed(t)), foot: fa(sumOf(discFixed)) },
