@@ -9,6 +9,7 @@ import { qrSvg } from '@/lib/qr';
 import PersonPhoto from '@/app/admin/students/components/PersonPhoto';
 import PrintButton from '@/components/PrintButton';
 import QrSvg from '@/components/QrSvg';
+import { prettyBase, refCodeOf } from '@/lib/verify-url';
 import { toShamsi } from '@/lib/shamsi';
 
 export const dynamic = 'force-dynamic';
@@ -151,7 +152,7 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
 
         <div className="border-t border-slate-300 bg-slate-50 px-4 py-1.5 text-[9px] leading-4 text-slate-600">
           این کارت امانت است و در صورت درخواست مأموران باید ارائه شود. استعلام برخط هویت از پایگاه دادهٔ مرکزی دانشگاه انجام می‌شود
-          {verifyUrl ? <> — نشانی: <span className="font-mono" dir="ltr">{verifyUrl}</span></> : null}.
+          {verifyUrl ? <> — سامانه: <span className="font-mono" dir="ltr">{prettyBase(verifyUrl)}</span> · کد رهگیری: <span className="font-mono tracking-widest" dir="ltr">{refCodeOf(verifyUrl)}</span></> : null}.
         </div>
       </div>
     </div>

@@ -209,7 +209,7 @@ export default function OfficialTranscriptView({
       {/* گریدِ سه‌ستونه (1fr / auto / 1fr): ستونِ میانی همیشه دقیقاً وسط
           می‌ماند، حتی اگر متنِ راست یا عکس چپ بلندتر شود. */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 border-b-2 border-slate-700 px-3 py-2">
-        <div className="text-3xs text-center">
+        <div className="text-3xs text-right">
           <p className="font-bold">باسمه تعالی</p>
           <p>اداره کل امور آموزشی</p>
           <p className="font-extrabold">کارنامه کل</p>
@@ -291,6 +291,19 @@ export default function OfficialTranscriptView({
           <p className="text-slate-500 text-[9px]">توضیح: نمرهٔ دروس پایان‌نامه/رساله به‌صورت کیفی درج شده است ({thesisLegend(summary.passGrade)}).</p>
         )}
         <p className="text-center text-slate-500 text-[9px]">سیستم مدیریت آموزش دانشگاه‌ها — آفاق · شماره دانشجویی <b className="font-mono">{faDigits(student.studentCode)}</b> · تاریخ تهیه <b className="font-mono">{todayJalali()}</b></p>
+        {/* بلوک رسمیت: QR استعلام — در پانوشت، بالای جدول کاتالوگ (درخواست کاربر) */}
+        {verifyQr && (
+          <div className="pt-1">
+            <VerifyQrBlock
+              title="استعلام برخط اصالت این کارنامه"
+              url={verifyQr.url}
+              qr={verifyQr.qr}
+              expiresAt={verifyQr.expiresAt}
+              shortUrl
+              compact
+            />
+          </div>
+        )}
       </div>
       </td></tr>
       {/* صفحه دوم: جدول وضعیت دروس گذرانده — در جریان طبیعی صفحه می‌آید، تکه نمی‌شود */}
@@ -334,19 +347,6 @@ export default function OfficialTranscriptView({
         </div>
         </td></tr>
       )}
-        {/* بلوک رسمیت: QR استعلام برخط اصالت کارنامه (پیش از امضاها) */}
-        {verifyQr && (
-          <tr><td className="tr-doc-cell">
-            <div className="px-3 pt-3">
-              <VerifyQrBlock
-                title="استعلام برخط اصالت این کارنامه"
-                url={verifyQr.url}
-                qr={verifyQr.qr}
-                expiresAt={verifyQr.expiresAt}
-              />
-            </div>
-          </td></tr>
-        )}
         {/* امضاها — فقط یکبار در پایان سند (نه تکرار در هر صفحه) */}
         <tr><td className="tr-doc-cell">
           <div className="tr-signatures flex justify-between px-3 py-2 text-3xs">

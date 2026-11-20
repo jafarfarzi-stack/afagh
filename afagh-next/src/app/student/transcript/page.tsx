@@ -728,7 +728,7 @@ export default async function StudentTranscriptPage({
           <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
             <h3 className="font-extrabold text-emerald-900 text-sm mb-1">✅ کارنامهٔ معتبر (پس از تأیید کارشناس) — رمز تایید برخط</h3>
             <p className="text-xs text-emerald-800 mb-3">این کارنامه دارای اعتبار اداری است و با اسکن رمز تایید (QR) در آدرس زیر قابل استعلام می‌باشد.</p>
-            <VerifyQrBlock title="استعلام برخط اصالت کارنامهٔ معتبر" url={transcriptQr.url} qr={transcriptQr.qr} expiresAt={transcriptQr.expiresAt} />
+            <VerifyQrBlock title="استعلام برخط اصالت کارنامهٔ معتبر" url={transcriptQr.url} qr={transcriptQr.qr} expiresAt={transcriptQr.expiresAt} shortUrl />
           </div>
         ) : (
           <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">

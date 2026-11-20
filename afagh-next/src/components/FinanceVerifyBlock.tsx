@@ -1,5 +1,6 @@
-﻿import { toJalaliFromDate, faDigits } from '@/lib/calendar';
+import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import QrSvg from '@/components/QrSvg';
+import { prettyBase, refCodeOf } from '@/lib/verify-url';
 
 type Props = { url: string; qr?: string; expiresAt?: string | null };
 
@@ -12,12 +13,10 @@ function jdate(d: string | Date | null | undefined): string {
 }
 
 /**
- * بلوک رسمیت انتهای کارنامه: QR استعلام + نشانی + اعتبار.
+ * بلوک رسمیت انتهای کارنامهٔ مالی: QR استعلام + مبدأ + کدِ رهگیری + اعتبار.
  *
- * چیدمان: دو ستون (QR در یک ستون، متن در ستون دیگر) تا نشانی بلند روی QR نیفتد.
- * اندازهٔ جعبهٔ QR با اندازهٔ SVG یکی است و SVG با `[&>svg]` داخل همان جعبه جا
- * می‌شود؛ پیش‌تر SVG ۱۶۰ پیکسلی داخل جعبهٔ ۹۶ پیکسلی سرریز می‌کرد، متن را
- * می‌پوشاند و در چاپ بریده می‌شد (اسکن نمی‌شد).
+ * ⚠ نشانیِ کامل (با توکنِ ۱۰۰+ کاراکتری) عمداً چاپ نمی‌شود؛ سندِ رسمی با
+ * یک ردیف متنِ بلندِ بی‌معنا غیرحرفه‌ای می‌شد. توکن داخل QR است.
  */
 export default function FinanceVerifyBlock({ url, qr, expiresAt }: Props) {
   return (
@@ -31,11 +30,22 @@ export default function FinanceVerifyBlock({ url, qr, expiresAt }: Props) {
         ) : null}
         <div className="min-w-0 flex-1 text-2xs leading-6 text-slate-600">
           <p className="font-bold text-slate-800">استعلام برخط اصالت این کارنامه</p>
-          <p className="break-all font-mono text-3xs text-slate-500" dir="ltr">{url}</p>
-          {expiresAt && <p>اعتبار استعلام تا {jdate(new Date(expiresAt))}</p>}
-          <p className="mt-0.5 text-3xs text-slate-500">
-            QR را با دوربین گوشی اسکن کنید یا نشانی بالا را در مرورگر باز کنید.
+          <p className="mt-0.5">
+            برای استعلامِ اصالت، <b>QR</b> را با دوربینِ گوشی اسکن کنید.
           </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-3xs">
+            <span>
+              سامانه: <b className="font-mono text-slate-700" dir="ltr">{prettyBase(url)}</b>
+            </span>
+            <span>
+              کدِ رهگیری: <b className="font-mono tracking-widest text-slate-700" dir="ltr">{refCodeOf(url)}</b>
+            </span>
+            {expiresAt && (
+              <span>
+                اعتبار تا <b className="font-mono">{jdate(new Date(expiresAt))}</b>
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
