@@ -533,9 +533,17 @@ export default function FinancialTranscript({
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">دانشکده</td>
               <td className="border border-slate-300 px-1.5 py-1">{student.facultyTitle || '—'}</td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">سهمیه</td>
-              <td className="border border-slate-300 px-1.5 py-1">{quotaLabel(student.quotaType)}</td>
+              <td className="border border-slate-300 px-1.5 py-1">
+                {quotaLabel(student.quotaType)}
+                {/* کدِ خامِ سهمیه کنار عنوان — کارشناس مالی برای تطبیق با سما به آن نیاز دارد */}
+                {student.quotaType ? <span className="ms-1 whitespace-nowrap font-mono font-bold text-slate-700" dir="ltr">({priceCode(student.quotaType)})</span> : null}
+              </td>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">نوع دوره</td>
-              <td className="border border-slate-300 px-1.5 py-1">{courseTypeFa(student.courseType)}</td>
+              <td className="border border-slate-300 px-1.5 py-1">
+                {courseTypeFa(student.courseType)}
+                {/* کدِ نوع دوره (students.studyingMode) کنار عنوان — مثلِ مقطع و رشته */}
+                {student.courseType ? <span className="ms-1 whitespace-nowrap font-mono font-bold text-slate-700" dir="ltr">({priceCode(student.courseType)})</span> : null}
+              </td>
             </tr>
             <tr>
               <td className="border border-slate-300 bg-slate-100 px-1.5 py-1 font-bold text-slate-700">تاریخ ورود</td>

@@ -10,7 +10,7 @@ import PersonPhoto from './PersonPhoto';
 import VerifyQrBlock from '@/components/VerifyQrBlock';
 import { DEFAULT_PRINT_OPTIONS } from '../types';
 import type { TranscriptRow } from '../actions';
-import { courseTypeFa, gradeStatusFa, quotaFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
+import { courseTypeFa, gradeStatusFa, quotaFinalFa, studentStatusFa, studyModeFa } from '@/lib/student-labels';
 import { breakdownByType, codeLabel, courseTypeGroup, dateToJalali, entryDateFa, faDigits, faNum, faStr, faWords, numOrNull, termDisplayTitle, thesisLegend, thesisQualitativeLabel, todayJalali } from '../transcript-utils';
 import { DEGREE_LEVEL_CONFIGS } from '@/lib/degree-configs';
 
@@ -97,10 +97,10 @@ export default function OfficialTranscriptView({
     ] as [string, string]] : []),
     ...(printOptions.showStudyMode ? [['شیوه آموزشی', studyModeFa(student.trainingMethod)] as [string, string]] : []),
     ...(printOptions.showAllQuotas ? [
-      ['سهمیه قبولی', quotaFa(student.quotaType)] as [string, string],
-      ['سهمیه نهایی', quotaFa(student.quotaType)] as [string, string],
+      ['سهمیه قبولی', quotaFinalFa(student.quotaType)] as [string, string],
+      ['سهمیه نهایی', quotaFinalFa(student.quotaType)] as [string, string],
     ] : []),
-    ['سهمیه ثبت‌نامی', quotaFa(student.quotaType)],
+    ['سهمیه ثبت‌نامی', quotaFinalFa(student.quotaType)],
     ...(printOptions.showNationality ? [[
       'ملیت',
       student.nationality === '120001' ? 'ایرانی' : (!student.nationality || /^\s*unknown\s*$/i.test(student.nationality) ? '—' : student.nationality),
@@ -148,12 +148,14 @@ export default function OfficialTranscriptView({
       </div>
       <table className="tr-term-table w-full text-[9px] rt" style={{ tableLayout: 'fixed' }}>
         <colgroup>
-          {/* نمره همیشه در یک سطر بماند: ۴٪ از نام درس و ۱٪ از وضع به ستون نمره منتقل شد */}
+          {/* کدِ درس باید یک‌خطی بماند: با ۱۵٪، کدِ ۷ رقمی می‌شکست و ردیف
+              دوخطی می‌شد (شکایت کاربر). ۲٪ از «وضع» و ۱٪ از «نام» به کد
+              منتقل شد؛ «نام» هم ۳٪ پهن‌تر شد تا عنوان کمتر بشکند. */}
+          <col style={{ width: '17%' }} />
+          <col style={{ width: '41%' }} />
+          <col style={{ width: '10%' }} />
           <col style={{ width: '15%' }} />
-          <col style={{ width: '38%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '19%' }} />
+          <col style={{ width: '17%' }} />
         </colgroup>
         <thead>
           <tr className="border-b border-slate-300 text-slate-500">
@@ -174,8 +176,8 @@ export default function OfficialTranscriptView({
               }}
               title={canEditGrades && onEditGrade ? 'برای ویرایش یا ثبت نمره کلیک کنید' : undefined}
             >
-              <td className="p-1 font-mono text-center" dir="ltr">{faDigits(r.courseCode)}</td>
-              <td className={`tr-course-title p-1 leading-tight ${(r.courseTitle || '').length > 18 ? 'text-[8px] break-words' : ''}`}>
+              <td className="whitespace-nowrap p-1 font-mono text-center text-[8px]" dir="ltr">{faDigits(r.courseCode)}</td>
+              <td className={`tr-course-title p-1 leading-[1.12] ${(r.courseTitle || '').length > 18 ? 'text-[8px] break-words' : ''}`}>
                 {r.courseTitle}
                 {r._excludedByRegulation && (
                   <span className="block text-[7px] text-amber-600 font-bold">({r._excludedByRegulation} اعمال شد)</span>
@@ -213,14 +215,19 @@ export default function OfficialTranscriptView({
         </div>
         <div className="text-center">
           <p className="text-3xs">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
+        </div>
+        {/* عکس و آرم در ستونِ چپِ سربرگ — همان چیدمانی که در کارنامهٔ مالی
+            تأیید شد: کادرِ ۳×۴ِ ثابت با object-cover تا چهره کشیده نشود.
+            پیش‌تر عکس وسطِ سربرگ و شناور بود و «خراب» دیده می‌شد. */}
+        <div className="flex items-start gap-2">
           {printOptions.showPhoto && student.photoKey ? (
-            <div className="mx-auto mt-1 w-14 h-[70px] flex items-center justify-center">
-              <PersonPhoto userId={student.userId} hasPhoto={!!student.photoKey} className="w-14 h-[70px]" icon="👤" label="عکس" />
+            <div className="h-[22mm] w-[17mm] shrink-0 overflow-hidden">
+              <PersonPhoto userId={student.userId} hasPhoto={!!student.photoKey} className="h-full w-full object-cover" icon="👤" label="عکس" />
             </div>
           ) : null}
-        </div>
-        <div className="w-16 h-16 flex items-center justify-center">
-          {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>) : null}
+          <div className="w-16 h-16 flex items-center justify-center">
+            {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>) : null}
+          </div>
         </div>
       </div>
       {/* مشخصات — در چاپ همیشه ۳ ستونه (مثل سما) */}
