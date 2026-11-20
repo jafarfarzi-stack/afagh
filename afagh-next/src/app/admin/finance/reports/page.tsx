@@ -17,6 +17,7 @@ const DOCKS: { href: string; icon: string; title: string; desc: string; tone: st
   { href: '/admin/finance/base-data', icon: '🗂️', title: 'دادهٔ پایهٔ مالی', desc: 'بودجه، پیمانکار، هزینه، VAT، انبار و پروندهٔ حقوقی', tone: 'from-fuchsia-500/15 to-fuchsia-50/60 border-fuchsia-300 hover:border-fuchsia-500' },
   { href: '/admin/tuition', icon: '🧮', title: 'موتور شهریه', desc: 'تعرفه، ضریب و محاسبهٔ شهریه', tone: 'from-slate-500/15 to-slate-50/60 border-slate-300 hover:border-slate-500' },
   { href: '/admin/finance/rules', icon: '⚙️', title: 'قواعد مالی', desc: 'انواع تخفیف، بنیادها و فرمول‌ها', tone: 'from-slate-500/15 to-slate-50/60 border-slate-300 hover:border-slate-500' },
+  { href: '/admin/finance/reconciliation', icon: '🧩', title: 'گزارش مغایرت حساب', desc: 'ثبت تکراری، پرداخت بدون فیش، مبلغ نامعتبر، ترم بدون شهریه', tone: 'from-rose-500/15 to-rose-50/60 border-rose-300 hover:border-rose-500' },
   { href: '/admin/finance/student-formula', icon: '🎯', title: 'فرمول ویژهٔ دانشجو', desc: 'استثناهای شهریهٔ دانشجویی', tone: 'from-amber-500/15 to-amber-50/60 border-amber-300 hover:border-amber-500' },
   { href: '/admin/finance/welfare', icon: '🤝', title: 'صندوق رفاه', desc: 'وام‌ها و پوشش‌های رفاهی', tone: 'from-sky-500/15 to-sky-50/60 border-sky-300 hover:border-sky-500' },
   { href: '/admin/finance/pos', icon: '🏧', title: 'ترمینال‌های POS', desc: 'دستگاه‌ها و تراکنش‌ها', tone: 'from-teal-500/15 to-teal-50/60 border-teal-300 hover:border-teal-500' },
