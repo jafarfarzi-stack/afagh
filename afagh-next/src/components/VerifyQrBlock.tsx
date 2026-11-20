@@ -47,9 +47,8 @@ export default function VerifyQrBlock({
   code,
 }: Props) {
   const refCode = code || refCodeOf(url);
-  // فقط دامنه (بدونِ مسیرِ طولانی) — یک خطِ کوتاه در پانوشت
-  let host = '';
-  try { host = new URL(url).host; } catch { host = ''; }
+  // مبدأ + مسیرِ سامانه (بدونِ توکن) — مثلاً b.afagh.ac.ir/verify-transcript
+  const systemPath = prettyBase(url);
   const qrEl = qr ? (
     <QrSvg
       svg={qr}
@@ -70,8 +69,8 @@ export default function VerifyQrBlock({
                 کد: <b className="font-mono tracking-widest text-slate-700" dir="ltr">{refCode}</b>
               </p>
             ) : null}
-            {host ? (
-              <p className="font-mono text-[8px] text-slate-500" dir="ltr">{host}</p>
+            {systemPath ? (
+              <p className="break-all font-mono text-[8px] text-slate-500" dir="ltr">{systemPath}</p>
             ) : null}
             {expiresAt ? (
               <p>
