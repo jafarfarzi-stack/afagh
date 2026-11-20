@@ -187,6 +187,37 @@ export default async function FinanceWorklistPage(props: {
         </div>
       </div>
 
+      {/* ── ابزارهای سریع مالی ──
+          پیش‌تر این ابزارها فقط پشتِ صفحهٔ /admin/c/fin بودند و کارشناس مالی
+          داخلِ کارتابل هیچ دسترسی مستقیمی نداشت (گلایهٔ کاربر: «فقط کارنامهٔ
+          مالی داره»). حالا همان‌جا یک ردیف چسبیده به سربرگ نشسته است. */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="px-1 text-2xs font-black text-slate-500">دسترسی سریع:</span>
+          {[
+            { href: '/admin/student-finance', icon: '📒', label: 'دفتر مالی دانشجویان' },
+            { href: '/admin/tuition', icon: '⚙️', label: 'موتور شهریه' },
+            { href: '/admin/course-finance', icon: '📚', label: 'نوع درس مالی' },
+            { href: '/admin/finance/rules', icon: '🧮', label: 'قواعد مالی' },
+            { href: '/admin/finance/course-tuition', icon: '🎯', label: 'شهریهٔ ویژهٔ درس' },
+            { href: '/admin/finance/reconciliation', icon: '🧩', label: 'مغایرت حساب' },
+            { href: '/admin/finance/reports', icon: '📊', label: 'گزارش‌ها' },
+            { href: '/admin/finance/reports/student-statement', icon: '🧾', label: 'صورت حساب' },
+            { href: '/admin/finance/pos', icon: '💳', label: 'POS' },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              prefetch={false}
+              href={l.href}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-2xs font-bold text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-800"
+            >
+              <span>{l.icon}</span>
+              {l.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {/* ── نوار KPI ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
         <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
