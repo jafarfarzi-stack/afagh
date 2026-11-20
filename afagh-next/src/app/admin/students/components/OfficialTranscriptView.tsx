@@ -206,28 +206,28 @@ export default function OfficialTranscriptView({
         <thead>
           <tr><td className="tr-doc-cell">
       {/* سربرگ سما */}
-      <div className="flex items-start justify-between border-b-2 border-slate-700 px-3 py-2">
+      {/* گریدِ سه‌ستونه (1fr / auto / 1fr): ستونِ میانی همیشه دقیقاً وسط
+          می‌ماند، حتی اگر متنِ راست یا عکس چپ بلندتر شود. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 border-b-2 border-slate-700 px-3 py-2">
         <div className="text-3xs text-center">
           <p className="font-bold">باسمه تعالی</p>
           <p>اداره کل امور آموزشی</p>
           <p className="font-extrabold">کارنامه کل</p>
           <p className="mt-1">تاریخ تهیه: <b className="font-mono">{todayJalali()}</b></p>
         </div>
-        <div className="text-center">
-          <p className="text-3xs">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
+        {/* آرم در وسط، نام دانشگاه زیرِ آن (درخواست کاربر) */}
+        <div className="flex flex-col items-center">
+          {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="آرم دانشگاه" className="max-h-16 max-w-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">آرم دانشگاه</span>) : null}
+          <p className="mt-1 text-center text-3xs">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
         </div>
-        {/* عکس و آرم در ستونِ چپِ سربرگ — همان چیدمانی که در کارنامهٔ مالی
-            تأیید شد: کادرِ ۳×۴ِ ثابت با object-cover تا چهره کشیده نشود.
-            پیش‌تر عکس وسطِ سربرگ و شناور بود و «خراب» دیده می‌شد. */}
-        <div className="flex items-start gap-2">
+        {/* عکس دانشجو — چپ‌چین در انتهای سربرگ. کادرِ ۳×۴ِ ثابت با
+            object-cover تا چهره کشیده نشود (همان چیدمانِ کارنامهٔ مالی). */}
+        <div className="flex justify-end">
           {printOptions.showPhoto && student.photoKey ? (
             <div className="h-[22mm] w-[17mm] shrink-0 overflow-hidden">
               <PersonPhoto userId={student.userId} hasPhoto={!!student.photoKey} className="h-full w-full object-cover" icon="👤" label="عکس" />
             </div>
           ) : null}
-          <div className="w-16 h-16 flex items-center justify-center">
-            {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="ارم دانشگاه" className="max-w-16 max-h-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">ارم دانشگاه</span>) : null}
-          </div>
         </div>
       </div>
       {/* مشخصات — در چاپ همیشه ۳ ستونه (مثل سما) */}
