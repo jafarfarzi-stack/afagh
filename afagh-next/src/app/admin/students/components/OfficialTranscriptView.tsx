@@ -206,23 +206,23 @@ export default function OfficialTranscriptView({
         <thead>
           <tr><td className="tr-doc-cell">
       {/* سربرگ سما */}
-      {/* گریدِ سه‌ستونه (1fr / auto / 1fr): ستونِ میانی همیشه دقیقاً وسط
-          می‌ماند، حتی اگر متنِ راست یا عکس چپ بلندتر شود. */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 border-b-2 border-slate-700 px-3 py-2">
-        <div className="justify-self-start text-3xs text-right">
+      {/* چیدمانِ فلکس مثل نسخهٔ قبلی: متنِ راست به لبه می‌چسبد، ستونِ میانی
+          با flex-1 وسط می‌ماند، عکس در انتها (سمت چپ در RTL). */}
+      <div className="flex items-start justify-between gap-2 border-b-2 border-slate-700 px-3 py-2">
+        <div className="text-3xs text-right">
           <p className="font-bold">باسمه تعالی</p>
           <p>اداره کل امور آموزشی</p>
           <p className="font-extrabold">کارنامه کل</p>
           <p className="mt-1">تاریخ تهیه: <b className="font-mono">{todayJalali()}</b></p>
         </div>
         {/* آرم در وسط، نام دانشگاه زیرِ آن (درخواست کاربر) */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-1 flex-col items-center">
           {printOptions.showLogo ? (logoUrl ? <img src={logoUrl} alt="آرم دانشگاه" className="max-h-16 max-w-16 object-contain" /> : <span className="text-[9px] text-slate-400 border border-dashed border-slate-300 rounded p-1">آرم دانشگاه</span>) : null}
           <p className="mt-1 text-center text-3xs">موسسه آموزش عالی غیرانتفاعی - غیردولتی آفاق</p>
         </div>
         {/* عکس دانشجو — چپ‌چین در انتهای سربرگ. کادرِ ۳×۴ِ ثابت با
             object-cover تا چهره کشیده نشود (همان چیدمانِ کارنامهٔ مالی). */}
-        <div className="flex justify-end">
+        <div className="flex w-[17mm] shrink-0 justify-end">
           {printOptions.showPhoto && student.photoKey ? (
             <div className="h-[22mm] w-[17mm] shrink-0 overflow-hidden">
               <PersonPhoto userId={student.userId} hasPhoto={!!student.photoKey} className="h-full w-full object-cover" icon="👤" label="عکس" />

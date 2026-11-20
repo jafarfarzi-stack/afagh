@@ -33,7 +33,7 @@ export default function VerifyQrBlock({ title, url, qr, expiresAt, hint, shortUr
         {qr ? (
           <QrSvg
             svg={qr}
-            className={`${compact ? 'h-20 w-20' : 'h-32 w-32'} shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full`}
+            className="qr-verify-svg h-36 w-36 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
           />
         ) : null}
         <div className={`min-w-0 flex-1 text-2xs text-slate-600 ${compact ? 'leading-4' : 'leading-6'}`}>

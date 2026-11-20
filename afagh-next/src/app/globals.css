@@ -730,6 +730,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent-text); bo
   /* بلوک رسمیت (QR استعلام برخط) — باید در چاپ دیده و اسکن شود؛ اندازه متعادل */
   .tr-fin-root .tr-fin-verify { margin-top: 1mm; }
   .tr-fin-root .tr-fin-verify .fin-verify-qr { width: 24mm !important; height: 24mm !important; }
+  /* QR استعلام — کفِ اندازهٔ چاپی. با کوچک‌تر از این، اسکنر گوشی در چاپ
+     نمی‌خواند (باگ گزارش‌شده). کلاس روی هر دو بلوک (کارنامهٔ مالی/آموزشی) هست. */
+  .qr-verify-svg { width: 30mm !important; height: 30mm !important; break-inside: avoid !important; page-break-inside: avoid !important; }
   .tr-fin-root .tr-fin-verify p { font-size: 6.5pt !important; line-height: 1.4 !important; }
 
   /* ریز شهریهٔ متغیر دروس */

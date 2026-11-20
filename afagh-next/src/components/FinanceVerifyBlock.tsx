@@ -25,7 +25,7 @@ export default function FinanceVerifyBlock({ url, qr, expiresAt }: Props) {
         {qr ? (
           <QrSvg
             svg={qr}
-            className="fin-verify-qr h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+            className="qr-verify-svg fin-verify-qr h-32 w-32 shrink-0 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
           />
         ) : null}
         <div className="min-w-0 flex-1 text-2xs leading-6 text-slate-600">
