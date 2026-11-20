@@ -177,6 +177,19 @@ export default async function StudentFinancePage({
     total_amount: number;
   }[];
 
+  // متنِ هشدار باید عددی باشد، نه ادعای کلی: چند پرداخت واقعاً تاریخِ واریز ندارند؟
+  let missingDateCount = 0;
+  try {
+    const nd = await db.execute(sql`
+      select count(*)::int as c
+      from student_ledger ${ledgerScope}
+      where "transactionType" = 'PAYMENT' and "depositDate" is null
+    `);
+    missingDateCount = Number((nd.rows ?? [])[0]?.c ?? 0);
+  } catch {
+    missingDateCount = 0;
+  }
+
   const totalDebt = debtors.reduce((s, d) => s + -d.bal, 0);
   const methodTotal = byMethod.reduce((s, r) => s + r.total_amount, 0);
   const methodCount = byMethod.reduce((s, r) => s + r.txn_count, 0);
@@ -319,11 +332,17 @@ export default async function StudentFinancePage({
           )}
         </form>
 
-        <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-2xs font-bold leading-5 text-amber-900">
-          ⚠️ این تفکیک از متنِ شرحِ ردیف‌های منتقل‌شده از سیستم قدیمی استخراج شده است
-          («پرداخت از سیستم قدیمی — فیش N (نوع واریز)»). <b>تاریخ واریز واقعی در مهاجرت حفظ نشده</b>
-          و جداول جزئیاتِ چک و پرداخت آنلاین خالی‌اند؛ برای گزارشِ تاریخ‌دار باید داده از سیستم قدیمی دوباره وارد شود.
-        </p>
+        {missingDateCount > 0 ? (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-2xs font-bold leading-5 text-amber-900">
+            ⚠️ از پرداخت‌های این بازه، <b className="font-mono">{fa(missingDateCount)}</b> ردیف تاریخِ واریز ندارند
+            (بقیه تاریخِ واقعی دارند). نوع واریز از متنِ شرحِ ردیف‌های منتقل‌شده استخراج شده است؛
+            جزئیاتِ چک و پرداخت آنلاین برای ردیف‌های قدیمی خالی است.
+          </p>
+        ) : (
+          <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-2xs font-bold leading-5 text-emerald-900">
+            ✅ همهٔ پرداخت‌های این بازه تاریخِ واقعی واریز دارند.
+          </p>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-sm rt">
