@@ -202,6 +202,7 @@ export default async function FinanceWorklistPage(props: {
             { href: '/admin/finance/course-tuition', icon: '🎯', label: 'شهریهٔ ویژهٔ درس' },
             { href: '/admin/finance/reconciliation', icon: '🧩', label: 'مغایرت حساب' },
             { href: '/admin/finance/reports', icon: '📊', label: 'گزارش‌ها' },
+            { href: '/admin/finance/reports/faculty-financial', icon: '🏢', label: 'گزارش مالی دانشکده ها' },
             { href: '/admin/finance/reports/student-statement', icon: '🧾', label: 'صورت حساب' },
             { href: '/admin/finance/pos', icon: '💳', label: 'POS' },
           ].map((l) => (

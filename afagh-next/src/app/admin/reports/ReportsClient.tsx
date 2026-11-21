@@ -692,6 +692,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                       pick(c.kind);
                       // کارتهای «بهزودی» پیادهای ندارند؛ همانجا پیام بدهیم تا ۴۰۴ نگیرند.
                       if (c.soon) { setInfoMsg(`گزارش «${c.title}» هنوز پیاده نشده است.`); return; }
+                      // Exact SAMASOFT print shape uses a dedicated page.
+                      if (c.kind === 'faculty-financial') {
+                        router.push('/admin/finance/reports/faculty-financial');
+                        return;
+                      }
                       router.push(`/admin/reports/${c.kind}${scope === 'finance' ? '?scope=finance' : ''}`);
                     }}
                   />
