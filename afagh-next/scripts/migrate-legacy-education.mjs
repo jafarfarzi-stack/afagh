@@ -253,7 +253,10 @@ async function main() {
       const oh = num(col(r, lt7.header, 'Oh'));
       const typeId = int(col(r, lt7.header, 'Type'));
       const title = col(r, lt7.header, 'Name') || code;
-      const deptId = int(col(r, lt7.header, 'Daneshkadeh'));
+      // UEMS commonly stores Daneshkadeh=0 for "no department". courses.departmentId is
+      // nullable; 0 has no row in departments and breaks the FK on new course inserts.
+      const deptRaw = int(col(r, lt7.header, 'Daneshkadeh'));
+      const deptId = deptRaw != null && deptRaw > 0 ? deptRaw : null;
       const courseType = UEMS_TYPEMAP[typeId] || 'تخصصی';
       await cw.push([UNI, code, title, units,
         oh != null ? oh : (th != null && units != null ? units - th : null), courseType, deptId]);
