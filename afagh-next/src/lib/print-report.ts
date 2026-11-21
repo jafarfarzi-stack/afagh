@@ -141,6 +141,10 @@ function paginateReportPrint(root: HTMLElement, orientation: ReportPrintOrientat
         if (rows[i]) tb.appendChild(rows[i].cloneNode(true));
       });
     }
+    // ردیفِ «جمع» (tfoot) فقط در برگهٔ آخر می‌آید — مثل فرم‌های رسمی.
+    if (idx === total - 1 && table.tFoot) {
+      t.appendChild(table.tFoot.cloneNode(true));
+    }
     body.appendChild(t);
     if (idx === total - 1 && summary) body.appendChild(summary.cloneNode(true));
     page.appendChild(body);

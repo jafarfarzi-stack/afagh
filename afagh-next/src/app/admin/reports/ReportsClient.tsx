@@ -85,7 +85,7 @@ const SUB: Record<string, string> = {
   'contractor-report': 'قرارداد و انبار', 'contractor-settlement': 'قرارداد و انبار',
   'insurance-report': 'قرارداد و انبار', 'legal-report': 'قرارداد و انبار', 'inventory-report': 'قرارداد و انبار',
   'tuition-statement': 'شهریهٔ دانشجو', 'tuition-overview': 'شهریهٔ دانشجو',
-  'tuition-faculty-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
+  'tuition-faculty-detail': 'شهریهٔ دانشجو', 'semester-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
   'major-financial': 'شهریهٔ دانشجو', 'term-financial': 'شهریهٔ دانشجو',
   'tuition-tariff': 'تعرفه', 'payroll-overview': 'حق‌التدریس',
   'bi-teaching-quality': 'کیفیت و امکانات', 'bi-facilities': 'کیفیت و امکانات',
@@ -218,6 +218,8 @@ const CARDS: Card[] = [
   { kind: 'term-financial', cat: 'finance-academic', icon: '📈', title: 'گزارش مالی نیمسال (تجمیعی)', needsTerm: true },
   { kind: 'tuition-overview', cat: 'finance-academic', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
   { kind: 'tuition-faculty-detail', cat: 'finance-academic', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
+  // فرمِ رسمیِ سیستم قدیم (fqTrDaTe2) — دقیقاً همان ۱۴ ستون
+  { kind: 'semester-detail', cat: 'finance-academic', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
   { kind: 'faculty-financial', cat: 'finance-academic', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
   { kind: 'major-financial', cat: 'finance-academic', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
@@ -653,6 +655,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 columns={res.columns}
                 rows={res.rows}
                 summary={res.summary}
+                totals={res.totals}
                 universityTitle={opts.universityTitle}
                 universityLogoUrl={opts.universityLogoUrl}
                 signers={opts.signers}
@@ -1183,6 +1186,17 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                     </tr>
                   ))}
                 </tbody>
+                {res.totals && (
+                  <tfoot className="bg-amber-50 border-t-2 border-slate-400 font-extrabold text-slate-900">
+                    <tr>
+                      {res.columns.map(c => (
+                        <td key={c.key} className="p-2 font-mono print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(res.totals?.[c.key] ?? '')) ? 'ltr' : 'auto'}>
+                          {fmtCell(res.totals?.[c.key], c.format)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
             {res.totalPages > 1 && (

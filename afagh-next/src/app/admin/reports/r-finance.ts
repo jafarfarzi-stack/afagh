@@ -1,8 +1,8 @@
 import type { ReportFilters, ReportResult } from './report-helpers';
-import { joinAnd, paged, studentWhere } from './report-helpers';
+import { PER, joinAnd, paged, studentWhere } from './report-helpers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES, ledgerTypesCsv } from '@/lib/ledger-balance';
+import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LEDGER_TYPES, ledgerTypesCsv } from '@/lib/ledger-balance';
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { faNum } from '@/lib/report-format';
@@ -116,6 +116,7 @@ export const CARDS = [
   // ── گزارش‌های مدیریتی تجمیعی شهریه ──
   { kind: 'tuition-overview', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
   { kind: 'tuition-faculty-detail', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
+  { kind: 'semester-detail', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
   { kind: 'faculty-financial', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
   { kind: 'major-financial', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
 ];
@@ -641,9 +642,162 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     return r;
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  //  ۱۰) «گزارش تفصیلی مالی دانشجویان در نیمسال» — فرم رسمی fqTrDaTe2
+  //  ستون‌ها عیناً همان فرمِ کاغذیِ سیستم قدیم است (۱۴ ستون + ردیف جمع):
+  //   کد | دانشکده | مقطع | تعداد دانشجو | طلب دانشجو | بدهی دانشجو |
+  //   نقل از ترم قبل | شهریه ثبت جاری | شهریه متغیر جاری | تخفیفات جاری |
+  //   مبالغ نیمسال | دریافت جاری در ترم | مانده بدهی | مانده طلب دانشجو
+  //
+  //  قرارداد اعداد (هیچ عددی جعلی نیست؛ همه از `student_ledger`):
+  //   • طلب/بدهی دانشجو = ماندهٔ **پیش از** این نیمسال، تفکیک‌شده به بستانکار/
+  //     بدهکار در سطح هر دانشجو (نه جمع خالص). `نقل از ترم قبل` = بدهی − طلب.
+  //   • مبالغ نیمسال = همهٔ انواع بدهکار − تخفیف‌ها (شامل تعدیل کاهشی).
+  //   • مانده = نقل از ترم قبل + مبالغ نیمسال − دریافت جاری، سپس تفکیک به
+  //     `مانده بدهی` (مثبت) و `مانده طلب` (منفی) — همان ساختار فرم.
+  //  جمعِ ستون‌ها همیشه تراز است: بدهی − طلب = نقل از ترم قبل.
+  // ══════════════════════════════════════════════════════════════════
+  if (kind === 'semester-detail') {
+    const columns = [
+      { key: 'n', title: 'کد' },
+      { key: 'faculty', title: 'دانشکده' },
+      { key: 'degree', title: 'مقطع' },
+      { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' as const },
+      { key: 'creditOpen', title: 'طلب دانشجو', format: 'MONEY' as const },
+      { key: 'debitOpen', title: 'بدهی دانشجو', format: 'MONEY' as const },
+      { key: 'carry', title: 'نقل از ترم قبل', format: 'MONEY' as const },
+      { key: 'fixed', title: 'شهریه ثبت جاری', format: 'MONEY' as const },
+      { key: 'variable', title: 'شهریه متغیر جاری', format: 'MONEY' as const },
+      { key: 'discount', title: 'تخفیفات جاری', format: 'MONEY' as const },
+      { key: 'termAmount', title: 'مبالغ نیمسال', format: 'MONEY' as const },
+      { key: 'paid', title: 'دریافت جاری در ترم', format: 'MONEY' as const },
+      { key: 'debtBalance', title: 'مانده بدهی', format: 'MONEY' as const },
+      { key: 'creditBalance', title: 'مانده طلب دانشجو', format: 'MONEY' as const },
+    ];
+
+    if (!f.term || !f.universityId) {
+      return {
+        columns, rows: [], total: 0, page: 1, per: PER, totalPages: 1,
+        summary: !f.universityId
+          ? 'دانشگاه فعال مشخص نیست؛ ابتدا دانشگاه خود را انتخاب کنید.'
+          : 'برای این گزارش ابتدا یک نیمسال را در فیلترها انتخاب کنید.',
+      };
+    }
+
+    // ترمِ هدف — همیشه در همان دانشگاهِ فعال (کد ترم بین دانشگاه‌ها تکراری است).
+    const termId = sql`(SELECT id FROM academic_terms
+      WHERE "termCode" = ${String(f.term)} AND "universityId" = ${f.universityId}
+      ORDER BY id DESC LIMIT 1)`;
+
+    /**
+     * تجمیعِ دفتر **یک‌بار** در سطح (دانشجو × ترم) و بعد چرخش به یک ردیف برای
+     * هر دانشجو. نسخهٔ اولِ این گزارش با `JOIN LATERAL` نوشته شده بود و روی
+     * ۴۰ هزار دانشجو ۲ دقیقه طول می‌کشید (هر دانشجو یک اسکن جدا). این شکل،
+     * همان اعداد را در کمتر از یک ثانیه می‌دهد.
+     */
+    const led = sql`LEFT JOIN (
+      SELECT per."studentId",
+        COUNT(*) FILTER (WHERE per."termId" = ${termId})::int AS "termRows",
+        COALESCE(SUM(per."fixed") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "fixed",
+        COALESCE(SUM(per."variable") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "variable",
+        COALESCE(SUM(per."discount") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "discount",
+        COALESCE(SUM(per."charge") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "termCharge",
+        COALESCE(SUM(per."paid") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "paid",
+        COALESCE(SUM(per."charge" - per."credit") FILTER (WHERE per."termId" < ${termId}), 0)::bigint AS "opening"
+      FROM (
+        SELECT sl2."studentId", sl2."termId",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DEBT_LEDGER_TYPES)}), 0) AS "charge",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', CREDIT_LEDGER_TYPES)}), 0) AS "credit",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', ['TUITION_FIXED', 'TUITION_CHARGE'])}), 0) AS "fixed",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', ['TUITION_VARIABLE', 'SUBJECT_ADDITIVE'])}), 0) AS "variable",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DISCOUNT_LEDGER_TYPES)}), 0) AS "discount",
+          COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', PAID_LEDGER_TYPES)}), 0) AS "paid"
+        FROM student_ledger sl2
+        WHERE sl2."universityId" = ${f.universityId}
+          AND sl2."termId" <= ${termId}
+        GROUP BY sl2."studentId", sl2."termId"
+      ) per
+      GROUP BY per."studentId"
+    ) led ON led."studentId" = s.id`;
+
+    const from = sql`FROM students s
+      JOIN users u ON u.id = s."userId"
+      LEFT JOIN majors m ON m.id = s."majorId"
+      LEFT JOIN faculties fc ON fc.id = m."facultyId"
+      LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
+      ${led}`;
+
+    // فقط دانشجویانی که در همین نیمسال ردیفِ مالی دارند (فرم «دانشجویان در نیمسال»).
+    const conds = [...studentWhere(f), sql`led."termRows" > 0`];
+
+    const closing = sql`(led."opening" + led."termCharge" - led."discount" - led."paid")`;
+    const cols = sql`COALESCE(fc.name, 'نامشخص') AS faculty, COALESCE(d.title, 'نامشخص') AS degree,
+      COUNT(*)::int AS students,
+      COALESCE(SUM(GREATEST(led."opening", 0)), 0)::bigint AS "debitOpen",
+      COALESCE(SUM(GREATEST(-led."opening", 0)), 0)::bigint AS "creditOpen",
+      COALESCE(SUM(led."opening"), 0)::bigint AS "carry",
+      COALESCE(SUM(led."fixed"), 0)::bigint AS "fixed",
+      COALESCE(SUM(led."variable"), 0)::bigint AS "variable",
+      COALESCE(SUM(led."discount"), 0)::bigint AS "discount",
+      COALESCE(SUM(led."termCharge" - led."discount"), 0)::bigint AS "termAmount",
+      COALESCE(SUM(led."paid"), 0)::bigint AS "paid",
+      COALESCE(SUM(GREATEST(${closing}, 0)), 0)::bigint AS "debtBalance",
+      COALESCE(SUM(GREATEST(-(${closing}), 0)), 0)::bigint AS "creditBalance"`;
+
+    const r = await paged(
+      columns, from, conds, cols,
+      // ترتیب عیناً مثل فرمِ قدیم: به ترتیب شناسهٔ دانشکده، سپس مقطع
+      // (گروهِ «نامشخص» هم اول می‌آید چون fc.id تهی است).
+      sql`ORDER BY fc.id NULLS FIRST, d.id NULLS FIRST`, f,
+      sql`fc.id, fc.name, d.id, d.title`,
+    );
+
+    // «کد» = شمارهٔ ردیف در همان فرم (پیوسته در صفحه‌بندی، نه از ۱ در هر صفحه).
+    r.rows = r.rows.map((row, i) => ({ n: (r.page - 1) * r.per + i + 1, ...row }));
+
+    // ردیفِ جمع: همان تجمیع، این بار روی کلِ مجموعه (نه صفحهٔ جاری).
+    const totRes = await db.execute<Record<string, string | number>>(sql`
+      SELECT COUNT(*)::int AS students,
+        COALESCE(SUM(GREATEST(led."opening", 0)), 0)::bigint AS "debitOpen",
+        COALESCE(SUM(GREATEST(-led."opening", 0)), 0)::bigint AS "creditOpen",
+        COALESCE(SUM(led."opening"), 0)::bigint AS "carry",
+        COALESCE(SUM(led."fixed"), 0)::bigint AS "fixed",
+        COALESCE(SUM(led."variable"), 0)::bigint AS "variable",
+        COALESCE(SUM(led."discount"), 0)::bigint AS "discount",
+        COALESCE(SUM(led."termCharge" - led."discount"), 0)::bigint AS "termAmount",
+        COALESCE(SUM(led."paid"), 0)::bigint AS "paid",
+        COALESCE(SUM(GREATEST(${closing}, 0)), 0)::bigint AS "debtBalance",
+        COALESCE(SUM(GREATEST(-(${closing}), 0)), 0)::bigint AS "creditBalance"
+      ${from} ${joinAnd(conds)}`);
+    const t = totRes.rows[0] ?? {};
+    const num = (k: string) => Number(t[k] ?? 0);
+    r.totals = {
+      n: '',
+      faculty: `جمع نیمسال ${faNum(String(f.term))}`,
+      degree: '',
+      students: num('students'),
+      debitOpen: num('debitOpen'),
+      creditOpen: num('creditOpen'),
+      carry: num('carry'),
+      fixed: num('fixed'),
+      variable: num('variable'),
+      discount: num('discount'),
+      termAmount: num('termAmount'),
+      paid: num('paid'),
+      debtBalance: num('debtBalance'),
+      creditBalance: num('creditBalance'),
+    };
+    r.summary = `${faAmount(r.total)} ردیف (دانشکده × مقطع) — نیمسال ${faNum(String(f.term))}`
+      + ` · مبالغ نیمسال ${faAmount(num('termAmount'))}`
+      + ` · دریافت ${faAmount(num('paid'))}`
+      + ` · مانده بدهی ${faAmount(num('debtBalance'))}`
+      + ` · مانده طلب ${faAmount(num('creditBalance'))}`
+      + ` · کنترل: بدهی − طلب = نقل از ترم قبل (${faAmount(num('debitOpen') - num('creditOpen') - num('carry'))} اختلاف)`
+      + pagedNote(r);
+    return r;
+  }
+
   return null;
 }
-
-
 
 
