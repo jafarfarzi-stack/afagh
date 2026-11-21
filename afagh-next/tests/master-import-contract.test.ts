@@ -66,7 +66,9 @@ async function main(): Promise<void> {
   // که صریحاً با --apply قفل شده و هیچ ردیف تازهای درج نمیکند.
   ok(/--enrich نیازمند --apply/.test(IMPORT), 'enrich بدون --apply رد میشود');
   ok(/if \(ENRICH\) break/.test(IMPORT), 'enrich هیچ ردیف تازهای درج نمیکند');
-  ok(/ENRICH_SIGNATURE_SQL/.test(IMPORT), 'enrich فقط پروندههای ناقص (امضای اسکریپت شکسته) را هدف میگیرد');
+  ok(/ENRICH_SCOPE_SQL/.test(IMPORT) && /entrydate:/.test(IMPORT),
+  'enrich فقط پروندههای ناقص (امضای اسکریپت شکسته) را هدف میگیرد');
+  ok(/entryDateFromSama/.test(IMPORT), 'تاریخ ورود در نبود Startdate از پیشفرض سال/ترم پنل میآید');
   ok(/enrichUser|enrichStudent/.test(IMPORT), 'هر UPDATE قبل از نوشتن در بکاپ JSONL ثبت میشود');
   ok(/INSERT INTO majors/.test(IMPORT) && /INSERT INTO staff/.test(IMPORT)
     && /INSERT INTO students/.test(IMPORT) && /INSERT INTO users/.test(IMPORT),

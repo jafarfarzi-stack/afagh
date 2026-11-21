@@ -54,7 +54,7 @@ import { pathToFileURL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { mapSamaStatus, isValidStudentCode } from './lib/student-status-map.mjs';
 import {
-  birthDateToGregorian, entryDateJalali, mapQuotaSahm, mapMilitaryNezam, mapNativeBoomi,
+  birthDateToGregorian, entryDateFromSama, mapQuotaSahm, mapMilitaryNezam, mapNativeBoomi,
   mapNationality, mapTrainingMethod, mapCourseType, mapAdvisorCode, clip, LIMITS,
 } from './lib/sama-student-fields.mjs';
 
@@ -197,7 +197,7 @@ export const nativeFromBoomi = mapNativeBoomi;
 export const birthDateFromSama = birthDateToGregorian;
 
 /** تاریخ ورود سما (شمسی) ⇒ literal شمسی `YYYY-MM-DD` (قرارداد students.entryDate). */
-export const jalaliDateFromSama = entryDateJalali;
+export const jalaliDateFromSama = entryDateFromSama;
 
 /** انتخاب آیین‌نامه از سال ورود + مقطع — آینهٔ ensureRegulation در import-sama-afagh. */
 export function regulationWhich(maghta, entryYear) {
@@ -373,7 +373,7 @@ export function buildMasterPlan(src, maps, uni, opts = {}) {
       // students
       majorId, degreeLevelId: degId, regulationId: regId,
       entryYear: entry?.entryYear ?? 0, entryTerm: entry?.entryTerm ?? 1,
-      entryDate: entryDateJalali(col(r, mainHdr, 'Startdate')), // شمسی literal
+      entryDate: entryDateFromSama(col(r, mainHdr, 'Startdate'), entry?.entryYear, entry?.entryTerm), // شمسی literal + پیشفرض پنل
       quotaType: mapQuotaSahm(col(r, mainHdr, 'SAHMN')),
       acceptanceType: null, // سما در MAININFO ستون نحوهٔ ورود ندارد
       trainingMethod: mapTrainingMethod(col(r, mainHdr, 'TraningMethodId')),
@@ -456,11 +456,17 @@ WHERE s."studentCode" = $1 AND s."universityId" = $2`;
  * ردیف لایو (۱٬۵۴۴ از بچ ۲۰۲۶/۱۱/۲۱) این امضا را دارند. `all` تمام
  * دانشجوهای موجود را پر میکند و فقط برای موارد نیاز است.
  */
-const ENRICH_SIGNATURE_SQL = ` AND u."fatherName" IS NULL AND u."birthDate" IS NULL AND s."entryDate" IS NULL`;
+const ENRICH_SCOPE_SQL = Object.freeze({
+  // امضای دقیق اسکریپت شکسته (پیشفرض)
+  incomplete: ` AND u."fatherName" IS NULL AND u."birthDate" IS NULL AND s."entryDate" IS NULL`,
+  // فقط تاریخ ورود خالی (برای اجرای دوم پس از پرشدن سایر فیلدها)
+  entrydate: ` AND s."entryDate" IS NULL AND s."entryYear" IS NOT NULL`,
+  all: '',
+});
 
 async function enrichStudents(list, uni, q, logRec, scope = 'incomplete') {
   let nStu = 0, nUsr = 0, seen = 0;
-  const sql = ENRICH_SELECT_SQL + (scope === 'incomplete' ? ENRICH_SIGNATURE_SQL : '');
+  const sql = ENRICH_SELECT_SQL + (ENRICH_SCOPE_SQL[scope] ?? ENRICH_SCOPE_SQL.incomplete);
   for (const s of list) {
     const cur = (await q(sql, [s.code, uni]))[0];
     if (!cur) continue;
@@ -514,7 +520,8 @@ async function main() {
   const RESTORE = args.restore && args.restore !== 'true' ? args.restore : '';
   const REPORT = args.report && args.report !== 'true' ? args.report : '';
   const ENRICH = args.enrich === 'true';
-  const ENRICH_SCOPE = args['enrich-scope'] === 'all' ? 'all' : 'incomplete';
+  const ENRICH_SCOPE = ['incomplete', 'all', 'entrydate'].includes(args['enrich-scope'])
+    ? args['enrich-scope'] : 'incomplete';
   const UNI = Number(args.uni || 1);
   const DIR = args.dir || '';
   const EDU_DIR = args['edu-dir'] || '';

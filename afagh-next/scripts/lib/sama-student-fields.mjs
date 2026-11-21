@@ -101,6 +101,24 @@ export function entryDateJalali(v) {
 }
 
 /**
+ * تاریخ ورود نهایی: Startdate سما اگر بود، در غیر اینصورت همان پیشفرضی که
+ * پنل پروندهٔ دانشجو از روی سال/ترم ورود میسازد
+ * (`StudentProfilePanel.tsx` → `defaultEntryDate`):
+ *   ترم ۱ ⇒ ۰۷/۰۱ · ترم ۲ ⇒ ۱۱/۰۱ · ترم ۳ ⇒ ۰۵/۰۱
+ * فقط ۱٬۲۰۱ از ۲٬۹۴۰ دانشجوی ۱۴۰۵ در سما Startdate دارند ⇒ بدون این
+ * پیشفرض ~۷۰٪ از پروندهها تاریخ ورود خالی میماند.
+ */
+export function entryDateFromSama(startdate, entryYear, entryTerm) {
+  const direct = entryDateJalali(startdate);
+  if (direct) return direct;
+  const y = Number(entryYear);
+  const t = Number(entryTerm);
+  if (!Number.isInteger(y) || y < 1300 || y > 1500 || ![1, 2, 3].includes(t)) return null;
+  const mo = t === 2 ? '11' : t === 3 ? '05' : '07';
+  return `${y}-${mo}-01`;
+}
+
+/**
  * سهمیه از شمارهٔ سهمیهٔ سما (SAHMN) — همان نگاشت `mapQuota` در مهاجرت
  * قدیمی (import-sama-afagh) تا سهمیهٔ دانشجوی تازه با قدیمی یکی باشد:
  *   شاهد/ایثارگر ⇒ SHAHED · کارکنان ⇒ STAFF · استعداد درخشان ⇒ TOP_TALENT
