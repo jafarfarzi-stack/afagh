@@ -91,12 +91,23 @@ const PEOPLE_COLUMNS = [
   ['Address', 'V'], ['eMail', 'V'],
 ];
 
+/**
+ * هویت تکمیلی دانشجو — ⚠️ MAININFO.IDNO **شمارهٔ شناسنامه** است، کد ملی نیست
+ * (برای student=4051292042: IDNO=204 ولی کد ملی واقعی 2756021946 است).
+ * کد ملی و بقیهٔ فیلدهای هویتی در `Std_info_1` و `Applicants`اند.
+ */
+const IDENTITY_COLUMNS = [
+  'STNO', 'NationalCode', 'BirthCertificateNo', 'CertificatePlace', 'LastCertifyPlace',
+  'PostalCode', 'Mobile', 'Email', 'Address',
+];
+
 /** سرستون صریح (قرارداد موتور همگامسازی). */
 export const STUDENT_HEADERS = Object.freeze({
   MAININFO_students: MAININFO_COLUMNS.map(([n]) => n).join('\t'),
   People_identity: PEOPLE_COLUMNS.map(([n]) => n).join('\t'),
+  STUDENT_IDENTITY: IDENTITY_COLUMNS.join('\t'),
 });
-export const STUDENT_FILES = ['MAININFO_students.tsv', 'People_identity.tsv'];
+export const STUDENT_FILES = ['MAININFO_students.tsv', 'People_identity.tsv', 'STUDENT_IDENTITY.tsv'];
 
 const V = (c) => `ISNULL(${c},'')`;
 const N = (c) => `ISNULL(CONVERT(varchar(60),${c}),'')`;
@@ -112,6 +123,23 @@ SELECT ${selectList(PEOPLE_COLUMNS)}
 FROM dbo.People
 ORDER BY PersonId;`;
 
+// جداول منبع: MAININFO (تمام دانشجویان) + Std_info_1 (کد ملی/پست/موبایل) +
+// Applicants (شمارهٔ شناسنامه/محل صدور). STNO در هر سه جدول یکتاست.
+const Q_IDENTITY = `SET NOCOUNT ON;
+SELECT LTRIM(RTRIM(m.STNO)) AS STNO,
+  ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(a.NationalCode)),''),NULLIF(LTRIM(RTRIM(s.NationalCode)),'')),LTRIM(RTRIM(m.IDNO))) AS NationalCode,
+  ISNULL(NULLIF(LTRIM(RTRIM(a.BirthCertificateNo)),''),LTRIM(RTRIM(m.IDNO))) AS BirthCertificateNo,
+  ISNULL(LTRIM(RTRIM(a.CertificatePlace)),'') AS CertificatePlace,
+  ISNULL(NULLIF(LTRIM(RTRIM(s.LastCertifyPlace)),'0'),'') AS LastCertifyPlace,
+  ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(a.HomePostalCode)),''),NULLIF(LTRIM(RTRIM(s.PostCod)),'')),'') AS PostalCode,
+  ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(a.Mobile)),''),NULLIF(LTRIM(RTRIM(s.MobileNO)),'')),'') AS Mobile,
+  ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(a.eMail)),''),NULLIF(LTRIM(RTRIM(s.EMail)),'')),'') AS Email,
+  ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(a.HomeAddress)),''),NULLIF(LTRIM(RTRIM(s.CurrentADDRESS)),'')),LTRIM(RTRIM(m.ADDRESS))) AS Address
+FROM dbo.MAININFO m
+LEFT JOIN dbo.Std_info_1 s ON LTRIM(RTRIM(s.Stno))=LTRIM(RTRIM(m.STNO))
+LEFT JOIN dbo.Applicants a ON LTRIM(RTRIM(a.STNO))=LTRIM(RTRIM(m.STNO))
+ORDER BY m.STNO;`;
+
 const Q_STATS = `SET NOCOUNT ON;
 SELECT (SELECT COUNT(*) FROM dbo.MAININFO),
        (SELECT COUNT(DISTINCT STNO) FROM dbo.MAININFO),
@@ -125,6 +153,7 @@ FROM dbo.MAININFO GROUP BY STATUS ORDER BY STATUS;`;
 const EXPORTS = [
   { label: 'MAININFO_students', header: STUDENT_HEADERS.MAININFO_students, sql: Q_MAININFO },
   { label: 'People_identity', header: STUDENT_HEADERS.People_identity, sql: Q_PEOPLE },
+  { label: 'STUDENT_IDENTITY', header: STUDENT_HEADERS.STUDENT_IDENTITY, sql: Q_IDENTITY },
 ];
 
 function parseArgs(argv) {
@@ -278,6 +307,7 @@ function main() {
   const checks = [
     ['MAININFO_students.tsv', stats.maininfo],
     ['People_identity.tsv', stats.people],
+    ['STUDENT_IDENTITY.tsv', stats.maininfo], // LEFT JOIN ⇒ همان تعداد ردیف MAININFO
   ];
   for (const [name, want] of checks) {
     if (byName[name] !== want) {
@@ -295,7 +325,7 @@ function main() {
 
   const manifest = {
     generatedAt: new Date().toISOString(),
-    source: { server: SERVER, database: DB, auth: TRUSTED ? 'windows-integrated' : 'sql-user', tables: ['dbo.MAININFO', 'dbo.People'] },
+    source: { server: SERVER, database: DB, auth: TRUSTED ? 'windows-integrated' : 'sql-user', tables: ['dbo.MAININFO', 'dbo.People', 'dbo.Std_info_1', 'dbo.Applicants'] },
     stats,
     files,
   };

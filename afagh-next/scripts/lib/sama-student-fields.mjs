@@ -219,7 +219,7 @@ export function mapAdvisorCode(v) {
 
 /** حداکثر طول ستون‌های متنی آفاق (برای برش ایمن). */
 export const LIMITS = Object.freeze({
-  address: 300, fatherName: 100, homeTell: 20, advisorCode: 50,
+  address: 300, fatherName: 100, birthCertNo: 20, homeTell: 20, advisorCode: 50,
   militaryStatus: 50, scholarshipType: 100, militaryExemptionNo: 50,
 });
 

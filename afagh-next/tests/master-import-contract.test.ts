@@ -186,7 +186,31 @@ async function main(): Promise<void> {
   eq(s1?.nationality, '120001', 'isIranian=1 ⇒ nationality=120001');
   eq(s1?.totalAverage, 16.5, 'TotalAvg ⇒ totalAverage');
   eq(s1?.acceptanceType, null, 'نحوهٔ ورود در MAININFO منبعی ندارد ⇒ تهی');
-  eq(s1?.postalCode, null, 'کد پستی در MAININFO منبعی ندارد ⇒ تهی');
+  eq(s1?.postalCode, null, 'بدون STUDENT_IDENTITY کد پستی تهی میماند');
+
+  // ── هویت تکمیلی: MAININFO.IDNO شمارهٔ شناسنامه است، کد ملی منبع دیگری دارد ──
+  const imp2: any = imp;
+  const mainHdr2 = MAIN_HDR;
+  const idRow = ['4051999999', 'تازه-دانشجو', '2', '0', '14051', '2', '93', '1', '204', '1382/05/10', '1405/07/01',
+    'عباس', '', '5', '1', '4', '4', '1', '5', '922404', '04433660625', '1', '', '16.5'];
+  const src2 = { ...src, maininfo: mk(mainHdr2, [idRow]), maininfoHeader: mainHdr2.split('\t') };
+  const identities = new Map([['4051999999', {
+    nationalCode: '2756021946', birthCertNo: '204', place: 'اروميه',
+    postalCode: '5711111111', mobile: '09143493822', email: '', address: 'نشانی کامل',
+  }]]);
+  const plan2 = imp2.buildMasterPlan(src2, { ...maps, students: new Map() }, 1, { identities });
+  const idStu = plan2.students[0] as any;
+  eq(idStu?.nc, '2756021946', 'کد ملی واقعی جایگزین IDNO سهرقمی میشود');
+  ok(idStu && !idStu.ncSynthetic, 'دیگر کد مصنوعی SA ساخته نمیشود');
+  eq(idStu?.birthCertNo, '204', 'IDNO/Applicants.BirthCertificateNo ⇒ birthCertNo');
+  eq(idStu?.placeOfBirth, 'اروميه', 'CertificatePlace/LastCertifyPlace ⇒ placeOfBirth');
+  eq(idStu?.placeOfIssue, 'اروميه', 'همان مقدار ⇒ placeOfIssue');
+  eq(idStu?.postalCode, '5711111111', 'HomePostalCode ⇒ postalCode');
+  eq(idStu?.mobile, '09143493822', 'MobileNO ⇒ mobile');
+  eq(idStu?.address, 'نشانی کامل', 'HomeAddress ⇒ address');
+  ok(/readIdentityMap/.test(IMPORT) && /STUDENT_IDENTITY\.tsv/.test(IMPORT), 'خواندن جدول هویت تکمیلی گارد شده است');
+  eq(imp.mergeEnrichField('SA51292042', '2756021946', 'nationalCode').value, '2756021946', 'کد مصنوعی در enrich اصلاح میشود');
+  eq(imp.mergeEnrichField('2756021946', '2756021946', 'nationalCode').changed, false, 'کد ملی معتبر بازنویسی نمیشود');
   const s2 = plan.students.find((s: any) => s.code === '4051666666') as any;
   ok(s2 && s2.nc === 'SA51666666' && s2.ncSynthetic, 'کدملی کوتاه ⇒ کد مصنوعی');
   ok(s2 && s2.status === 'SUSPENDED' && s2.rawStatus === '22', 'وضعیت ۲۲ = تعلیق');
@@ -202,6 +226,7 @@ async function main(): Promise<void> {
       "passwordHash" varchar(100) NOT NULL, "isActive" integer DEFAULT 1,
       "mustChangePassword" integer DEFAULT 1, "universityId" integer NOT NULL,
       "fatherName" varchar(100), "birthDate" timestamp, "birthCertNo" varchar(20),
+      "placeOfBirth" varchar(150), "placeOfIssue" varchar(150),
       "address" varchar(300), "postalCode" varchar(10), "mobile" varchar(11),
       "email" varchar(150), "nationality" varchar(10),
       UNIQUE ("nationalCode","universityId"));
@@ -226,7 +251,8 @@ async function main(): Promise<void> {
       UNIQUE ("universityId","studentCode"));
   `);
   // کاربر: درج دوباره بینه است
-  const profUser = ['SD00933201', '', 'استاد تازه', null, 'MIGRATED:x', 1, null, null, null, null, null, null, null, null];
+  const profUser = ['SD00933201', '', 'استاد تازه', null, 'MIGRATED:x', 1,
+    null, null, null, null, null, null, null, null, null, null];
   const u1 = (await db.query(imp.USER_INSERT_SQL, profUser)).rows as any;
   eq(u1.length, 1, 'کاربر استاد درج شد');
   const u2 = (await db.query(imp.USER_INSERT_SQL, profUser)).rows as any;

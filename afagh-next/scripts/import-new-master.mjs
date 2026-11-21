@@ -58,6 +58,38 @@ import {
   mapNationality, mapTrainingMethod, mapCourseType, mapAdvisorCode, clip, LIMITS,
 } from './lib/sama-student-fields.mjs';
 
+/**
+ * خواندن جدول هویت تکمیلی (STUDENT_IDENTITY.tsv).
+ * ⚠️ MAININFO.IDNO شمارهٔ شناسنامه است، نه کد ملی — کد ملی واقعی در
+ * Std_info_1 / Applicants است و بدون این جدول ۳۹۶ دانشجوی تازه با کد
+ * مصنوعی `SA…` درج میشدند.
+ */
+function readIdentityMap(dir) {
+  const p = join(dir, 'STUDENT_IDENTITY.tsv');
+  if (!existsSync(p)) return new Map();
+  const txt = readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+  const lines = txt.split(/\r?\n/).filter((l) => l.trim() !== '');
+  const hdr = lines[0].split('\t').map((h) => h.trim());
+  const ix = (name) => hdr.indexOf(name);
+  const at = (cols, name) => { const i = ix(name); return i >= 0 ? String(cols[i] ?? '').trim() : ''; };
+  const map = new Map();
+  for (const line of lines.slice(1)) {
+    const c = line.split('\t');
+    const stno = at(c, 'STNO');
+    if (!stno) continue;
+    map.set(stno, {
+      nationalCode: at(c, 'NationalCode'),
+      birthCertNo: at(c, 'BirthCertificateNo'),
+      place: at(c, 'CertificatePlace') || at(c, 'LastCertifyPlace'),
+      postalCode: at(c, 'PostalCode'),
+      mobile: at(c, 'Mobile'),
+      email: at(c, 'Email'),
+      address: at(c, 'Address'),
+    });
+  }
+  return map;
+}
+
 // ── SQL های درج (قابلتست در tests/master-import-contract.test.ts) ──────────
 export const MAJOR_INSERT_SQL = `
 INSERT INTO majors (name, "majorCode", "degreeLevelId", "facultyId", "universityId")
@@ -77,9 +109,9 @@ RETURNING id`;
 // برمیگرداند) ⇒ سما که شمسی میدهد باید تبدیل شود (sama-student-fields).
 export const USER_INSERT_SQL = `
 INSERT INTO users ("nationalCode","firstName","lastName",gender,"passwordHash","isActive","mustChangePassword","universityId",
-    "fatherName","birthDate","birthCertNo","address","postalCode","mobile","email","nationality")
+    "fatherName","birthDate","birthCertNo","placeOfBirth","placeOfIssue","address","postalCode","mobile","email","nationality")
 SELECT $1::varchar,$2::varchar,$3::varchar,$4::varchar,$5::varchar,1,1,$6::int,
-    $7::varchar,$8::timestamp,$9::varchar,$10::varchar,$11::varchar,$12::varchar,$13::varchar,$14::varchar
+    $7::varchar,$8::timestamp,$9::varchar,$10::varchar,$11::varchar,$12::varchar,$13::varchar,$14::varchar,$15::varchar,$16::varchar
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE "nationalCode"=$1::varchar AND "universityId"=$6::int)
 RETURNING id`;
 
@@ -260,6 +292,7 @@ const col = (row, header, ...names) => {
  */
 export function buildMasterPlan(src, maps, uni, opts = {}) {
   const enrichMode = !!opts.enrich;
+  const identities = opts.identities instanceof Map ? opts.identities : new Map();
   const lt66Rows = Array.isArray(src.lt66) ? src.lt66 : (src.lt66.rows ?? []);
   const lt66Hdr = src.lt66Header ?? (Array.isArray(src.lt66) ? [] : src.lt66.header);
   const donbinRows = Array.isArray(src.donbin) ? src.donbin : (src.donbin.rows ?? []);
@@ -348,7 +381,11 @@ export function buildMasterPlan(src, maps, uni, opts = {}) {
     if (!entry) { plan.skipped.stuNoEntry++; if (!relax) continue; }
     const regId = regulations.get(REG_TITLES['R' + regulationWhich(maghta, entry?.entryYear)]);
     if (!regId) { plan.skipped.stuNoRegulation++; if (!relax) continue; }
-    const validNc = /^\d{10}$/.test(idno) ? idno : '';
+    const ident = identities.get(code) || {};
+    // ⚠️ MAININFO.IDNO = شمارهٔ شناسنامه (مثلاً «204»). کد ملی واقعی از
+    // Std_info_1/Applicants میآید؛ فقط اگر آنجا نبود، IDNO دهرقمی معتبر است.
+    const realNc = /^\d{10}$/.test(ident.nationalCode || '') ? ident.nationalCode : '';
+    const validNc = realNc || (/^\d{10}$/.test(idno) ? idno : '');
     const nc = validNc || placeholderNc('A', code);
     const owner = users.get(nc);
     if (owner !== undefined && owner !== null && !enrichMode) { plan.skipped.stuUserTaken++; continue; }
@@ -362,13 +399,16 @@ export function buildMasterPlan(src, maps, uni, opts = {}) {
       firstName: name.firstName,
       lastName: name.lastName,
       gender: genderFromSex(col(r, mainHdr, 'SEX')),
-      // users
+      // users — هویت تکمیلی از STUDENT_IDENTITY ( Std_info_1 + Applicants )
       fatherName: clip(col(r, mainHdr, 'NAMEP'), LIMITS.fatherName),
       birthDate: birthDateFromSama(col(r, mainHdr, 'BIRTHDATE')), // شمسی ⇒ میلادی
-      address: clip(col(r, mainHdr, 'ADDRESS'), LIMITS.address),
-      postalCode: clip(col(r, mainHdr, 'POSTALCODE'), 10),
-      mobile: clip(col(r, mainHdr, 'MOBILE'), 11),
-      email: clip(col(r, mainHdr, 'EMAIL'), 150),
+      birthCertNo: clip(ident.birthCertNo, LIMITS.birthCertNo),
+      placeOfBirth: clip(ident.place, 150),
+      placeOfIssue: clip(ident.place, 150),
+      address: clip(ident.address || col(r, mainHdr, 'ADDRESS'), LIMITS.address),
+      postalCode: clip(ident.postalCode, 10),
+      mobile: clip(ident.mobile, 11),
+      email: clip(ident.email, 150),
       nationality: mapNationality(col(r, mainHdr, 'isIranian'), col(r, mainHdr, 'Nationality')),
       // students
       majorId, degreeLevelId: degId, regulationId: regId,
@@ -412,7 +452,10 @@ function parseArgs(argv) {
 // این گام **فقط** خانه‌های خالی را پر میکند ⇒ هیچ دادهٔ دستیِ پرشده‌ای
 // بازنویسی نمیشود. قبل از هر UPDATE، مقادیر «قبل» در بکاپ JSONL ثبت
 // میشود تا `--restore` بتواند دقیقاً برگرداند.
-const ENRICH_USER_FIELDS = ['fatherName', 'birthDate', 'address', 'postalCode', 'mobile', 'email', 'nationality'];
+const ENRICH_USER_FIELDS = [
+  'nationalCode', 'fatherName', 'birthDate', 'birthCertNo', 'placeOfBirth', 'placeOfIssue',
+  'address', 'postalCode', 'mobile', 'email', 'nationality',
+];
 const ENRICH_STUDENT_FIELDS = [
   'entryDate', 'quotaType', 'acceptanceType', 'trainingMethod', 'studyingMode', 'tuitionType',
   'nativeType', 'ethnicity', 'advisorCode', 'documentStatus', 'scholarshipType',
@@ -435,13 +478,21 @@ export function mergeEnrichField(current, incoming, key) {
     }
     return { value: current, changed: false };
   }
+  if (key === 'nationalCode') {
+    // کد مصنوعی `SA…`/`SD…` را فقط با کد ملی واقعی ۱۰رقمی جایگزین میکند.
+    const cur = String(current ?? '').trim();
+    const next = String(incoming ?? '').trim();
+    if (/^\d{10}$/.test(next) && !/^\d{10}$/.test(cur)) return { value: next, changed: true };
+    return { value: current, changed: false };
+  }
   if (isBlank(current)) return { value: incoming, changed: true };
   return { value: current, changed: false };
 }
 
 const ENRICH_SELECT_SQL = `
 SELECT s.id AS sid, s."userId", u.id AS uid,
-  u."fatherName", u."birthDate"::text AS "birthDate", u."address", u."postalCode", u."mobile",
+  u."fatherName", u."birthDate"::text AS "birthDate", u."nationalCode", u."birthCertNo",
+  u."placeOfBirth", u."placeOfIssue", u."address", u."postalCode", u."mobile",
   u."email", u."nationality",
   s."entryDate"::text AS "entryDate", s."quotaType", s."acceptanceType", s."trainingMethod",
   s."studyingMode", s."nativeType", s."ethnicity", s."advisorCode", s."documentStatus",
@@ -461,6 +512,9 @@ const ENRICH_SCOPE_SQL = Object.freeze({
   incomplete: ` AND u."fatherName" IS NULL AND u."birthDate" IS NULL AND s."entryDate" IS NULL`,
   // فقط تاریخ ورود خالی (برای اجرای دوم پس از پرشدن سایر فیلدها)
   entrydate: ` AND s."entryDate" IS NULL AND s."entryYear" IS NOT NULL`,
+  // هویت تکمیلی: کد ملی مصنوعی یا فیلد شناسنامه/محل تولد/کد پستی خالی
+  identity: ` AND (u."nationalCode" LIKE 'SA%' OR u."nationalCode" LIKE 'SD%'
+    OR u."birthCertNo" IS NULL OR u."placeOfBirth" IS NULL OR u."postalCode" IS NULL OR u."mobile" IS NULL)`,
   all: '',
 });
 
@@ -474,7 +528,8 @@ async function enrichStudents(list, uni, q, logRec, scope = 'incomplete') {
     // ── کاربر ──
     const uSet = {}; const uBefore = {};
     for (const f of ENRICH_USER_FIELDS) {
-      const r = mergeEnrichField(cur[f], s[f], f);
+      const incoming = f === 'nationalCode' ? s.nc : s[f];
+      const r = mergeEnrichField(cur[f], incoming, f);
       if (r.changed) { uSet[f] = r.value; uBefore[f] = cur[f] ?? null; }
     }
     if (Object.keys(uSet).length) {
@@ -520,7 +575,7 @@ async function main() {
   const RESTORE = args.restore && args.restore !== 'true' ? args.restore : '';
   const REPORT = args.report && args.report !== 'true' ? args.report : '';
   const ENRICH = args.enrich === 'true';
-  const ENRICH_SCOPE = ['incomplete', 'all', 'entrydate'].includes(args['enrich-scope'])
+  const ENRICH_SCOPE = ['incomplete', 'all', 'entrydate', 'identity'].includes(args['enrich-scope'])
     ? args['enrich-scope'] : 'incomplete';
   const UNI = Number(args.uni || 1);
   const DIR = args.dir || '';
@@ -611,7 +666,9 @@ async function main() {
     };
     maps.professorRoleId = Number((await q(`SELECT id FROM roles WHERE code='PROFESSOR' LIMIT 1`))[0]?.id ?? 0) || null;
 
-    const plan = buildMasterPlan(src, maps, UNI, { enrich: ENRICH });
+    const identities = readIdentityMap(STU_DIR);
+    console.log(`  هویت تکمیلی: ${identities.size.toLocaleString('en-US')} ردیف (کد ملی واقعی/شناسنامه/محل صدور)`);
+    const plan = buildMasterPlan(src, maps, UNI, { enrich: ENRICH, identities });
 
     // حذف تکراری کدملی داخل برنامه (users قید DB ندارد) — دو ردیف سما با یک
     // کدملی معتبر = یک شخص؛ فقط نخستین کد دانشجویی وارد میشود و بقیه گزارش.
@@ -681,7 +738,7 @@ async function main() {
       // استادها: users → staff → user_roles
       if (!ENRICH) for (const p of plan.professors) {
         let uid = (await q(USER_INSERT_SQL, [p.nc, p.firstName, p.lastName, p.gender, 'MIGRATED:' + randomBytes(8).toString('hex'), p.universityId,
-          null, null, null, null, null, null, null, null]))[0]?.id;
+          null, null, null, null, null, null, null, null, null, null, null]))[0]?.id;
         if (!uid) uid = (await q(USER_LOOKUP_SQL, [p.nc, p.universityId]))[0]?.id;
         if (!uid) { plan.skipped.profUserTaken++; continue; }
         if (!maps.users.has(p.nc)) logRec('user', 'users', uid, p.nc);
@@ -698,7 +755,8 @@ async function main() {
         if (mid === -1) mid = majorIdRuntime.get(s.reshte) ?? null; // رشتهٔ تازهٔ همین اجرا
         if (!mid) { plan.skipped.stuNoMajor++; continue; }
         let uid = (await q(USER_INSERT_SQL, [s.nc, s.firstName, s.lastName, s.gender, 'MIGRATED:' + randomBytes(8).toString('hex'), s.universityId,
-          s.fatherName, s.birthDate, null, s.address, s.postalCode, s.mobile, s.email, s.nationality]))[0]?.id;
+          s.fatherName, s.birthDate, s.birthCertNo, s.placeOfBirth, s.placeOfIssue,
+          s.address, s.postalCode, s.mobile, s.email, s.nationality]))[0]?.id;
         if (!uid) uid = (await q(USER_LOOKUP_SQL, [s.nc, s.universityId]))[0]?.id;
         if (!uid) { plan.skipped.stuUserTaken++; continue; }
         if (!maps.users.has(s.nc)) logRec('user', 'users', uid, s.nc);
