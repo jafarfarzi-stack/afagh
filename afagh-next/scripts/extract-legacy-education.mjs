@@ -132,7 +132,9 @@ run(
    SELECT STNO, OLDSTNO, NAME, SEX, STATUS, TERMCODE, COURSTYPE, MAGHTA, RESHTE, DANESHKADEH,
           NAMEP, DAV, IDNO, BIRTHDATE, MADRAKSTAT, MOADEL, Startdate, Stopdate, TotalAvg,
           PunitCount, SUnitCount, RUnitCount, TotalPoint, FareghMaghta, CurrentMaghta,
-          TraningMethodId, MajorSpecID, GroupCode, BranchCode, IsActive, Grade, TDIP
+          TraningMethodId, MajorSpecID, GroupCode, BranchCode, IsActive, Grade, TDIP,
+          SAHMN, SahmGhaboli, ADVISORDONCODE, BOOMI, NEZAM, MoafiatNumber, ScholarshipRef,
+          Nationality, isIranian, TuitionTypeId, ADDRESS, HOMETELL, Religion, Gallantry, MARRIED
    FROM MAININFO ORDER BY STNO;`, 'MAININFO_students');
 
 run(

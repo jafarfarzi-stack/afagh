@@ -11,11 +11,13 @@
  *  (دو پرسوجو، ≈۵MB) دارد تا گام `migrate-legacy-students.mjs` روی دادهٔ تازه
  *  اجرا شود، بیآنکه وابسته به استخراج ۳۳۳MB آموزشی باشد.
  *
- *  قرارداد خروجی — سرستونها عیناً همان `MAININFO_students.tsv` قدیمیاند،
- *  بنابراین موتور همگامسازی میتواند هم پوشهٔ تازه و هم `uems_edu` قدیمی
- *  (پس از تبدیل UTF-16LE→UTF-8 توسط اورکستراتور) را بخواند:
- *    MAININFO_students.tsv  32 ستون — STNO/STATUS/NAME/IDNO/…
- *    People_identity.tsv    13 ستون — هویت تکمیلی (تشخیصی/گزارش)
+ *  قرارداد خروجی — ۳۲ ستون اول عیناً همان `MAININFO_students.tsv` قدیمی‌اند
+ *  (مصرف‌کننده‌های دیگر به همان ترتیب ارجاع می‌دهند) و **۱۶ ستون تازهٔ
+ *  پروندهٔ دانشجو در انتها افزوده شده** تا «اطلاعات ناقص دانشجوی تازه»
+ *  (نام پدر، تاریخ تولد، سهمیه، شیوهٔ آموزش، نوع دوره، نشانی، تلفن،
+ *  استاد راهنما، نظام وظیفه، …) دیگر در آفاق خالی نماند:
+ *    MAININFO_students.tsv  ۴۸ ستون — STNO/STATUS/NAME/IDNO/… + پروندهٔ کامل
+ *    People_identity.tsv    ۱۳ ستون — هویت تکمیلی (تشخیصی/گزارش)
  *    _manifest.json         زمان استخراج، شمارشها، توزیع STATUS، SHA256 فایلها
  *
  *  نکات فنی (همان درسهای استخراج مالی/آموزشی):
@@ -63,6 +65,24 @@ const MAININFO_COLUMNS = [
   ['CurrentMaghta', 'N'], ['TraningMethodId', 'N'], ['MajorSpecID', 'N'],
   ['GroupCode', 'N'], ['BranchCode', 'N'], ['IsActive', 'N'], ['Grade', 'N'],
   ['TDIP', 'V'],
+  // ── پروندهٔ کامل دانشجو (افزوده ۱۴۰۵/۰۸/۳۰ — شکاف «اطلاعات ناقص») ──────
+  // این ستون‌ها **در انتهای فهرست** افزوده شده‌اند تا ترتیب ۳۲ ستون قبلی
+  // (که مصرف‌کننده‌های دیگر به آن ارجاع می‌دهند) دست‌نخورده بماند.
+  ['SAHMN', 'N'],            // شمارهٔ سهمیه ⇒ students.quotaType
+  ['SahmGhaboli', 'N'],      // سهمیهٔ قبولی (کد خام)
+  ['ADVISORDONCODE', 'N'],   // کد استاد راهنما ⇒ students.advisorCode
+  ['BOOMI', 'N'],            // بومی/غیربومی ⇒ students.nativeType
+  ['NEZAM', 'N'],            // وضعیت نظام وظیفه ⇒ students.militaryStatus
+  ['MoafiatNumber', 'N'],    // شمارهٔ معافیت ⇒ students.militaryExemptionNo
+  ['ScholarshipRef', 'N'],   // کد بورسیه ⇒ students.scholarshipType
+  ['Nationality', 'N'],      // ملیت (۱ = ایران)
+  ['isIranian', 'N'],        // پرچم ایرانی بودن ⇒ users.nationality
+  ['TuitionTypeId', 'N'],    // نوع دوره/شهریه ⇒ students.tuitionType
+  ['ADDRESS', 'V'],          // نشانی ⇒ users.address
+  ['HOMETELL', 'V'],         // تلفن ثابت ⇒ students.homeTell
+  ['Religion', 'N'],
+  ['Gallantry', 'N'],
+  ['MARRIED', 'N'],
 ];
 const PEOPLE_COLUMNS = [
   ['PersonId', 'N'], ['LastName', 'V'], ['FirstName', 'V'], ['FatherName', 'V'],

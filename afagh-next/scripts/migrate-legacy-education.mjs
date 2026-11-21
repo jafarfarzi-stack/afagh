@@ -44,6 +44,7 @@ import {
   enrollmentKey, historyKey, EXISTING_KEYS_SQL,
   readTsvStream as streamFrom, DEDUPE_SELECT_SQL, DEDUPE_DELETE_SQL,
 } from './lib/legacy-education-batch.mjs';
+import { mapGradeStatus, isUngradedRegistration } from './lib/sama-grade-map.mjs';
 
 const raw = process.argv.slice(2);
 const args = {};
@@ -366,13 +367,19 @@ async function main() {
       const don = num(col(row, header, 'DonMark'));
       const gradeValue = mark != null ? mark : don;
       const markStat = int(col(row, header, 'MarkStat'));
-      const status = markStat === 10 && gradeValue == null ? 'REGISTERED' : 'FINALIZED';
+      const isUngraded = isUngradedRegistration(markStat, gradeValue);
+      const status = isUngraded ? 'REGISTERED' : 'FINALIZED';
+      // ⚠️ gradeStatus نباید بدون شرط FINALIZED باشد: ردیفهای Mark=NULL /
+      // DonMark=NULL (اکثراً MarkStat=10 = ثبتنام) نمرهای ندارند ⇒ PENDING.
+      // فقط مواردی که سما تصمیم قطعی داده (معاف/قبول/مردود/حذف بدون نمره)
+      //FINALIZED میمانند (همان منطق import-sama-afagh قدیمی).
+      const gradeStatus = mapGradeStatus(markStat, gradeValue);
       enr++;
       const key = enrollmentKey(stuId, offeringId);
       if (existingEnrollments.has(key)) { enrPresent++; }
       else {
         existingEnrollments.add(key); // تکراری درون فایل منبع هم فقط یکبار درج میشود
-        await ew.push([UNI, stuId, offeringId, status, gradeValue, 'FINALIZED', null]);
+        await ew.push([UNI, stuId, offeringId, status, gradeValue, gradeStatus, null]);
       }
       if (enr % 250000 === 0) console.log(`  … enrollments ${enr} rows / ${ew.statements} statements / ${((Date.now() - START) / 1000).toFixed(1)}s`);
     }
