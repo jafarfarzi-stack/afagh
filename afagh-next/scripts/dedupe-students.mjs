@@ -50,24 +50,26 @@ async function main() {
   const tables = await refTables();
   console.log(`جدول‌های وابسته: ${tables.length}`);
 
+  // ⚠ تفکیک بر اساس (دانشگاه، کد) — نه فقط کد!
+  // نسخهٔ اول فقط با studentCode گروه می‌کرد و ردیفِ آفاق را با ردیفِ دانشگاه
+  // دیگر «تکراری» می‌دید؛ نتیجه: ۲٬۳۲۰ پروندهٔ آفاق حذف شد. ایندکس یکتای
+  // students هم (universityId, studentCode) است، پس دامنهٔ درست همین است.
   const { rows: groups } = await pool.query(`
-    SELECT s."studentCode" AS code,
-           count(*) AS n,
-           count(DISTINCT s."userId") AS users
+    SELECT s."universityId" AS uni, s."studentCode" AS code,
+           count(*) AS n, count(DISTINCT s."userId") AS users
     FROM students s
-    WHERE s."studentCode" IN (SELECT "studentCode" FROM students GROUP BY 1 HAVING count(*)>1)
-    GROUP BY 1
-    HAVING count(DISTINCT s."userId") = 1
+    GROUP BY s."universityId", s."studentCode"
+    HAVING count(*) > 1 AND count(DISTINCT s."userId") = 1
   `);
-  console.log(`گروه‌های تک‌کاربری: ${groups.length}`);
+  console.log(`گروه‌های تک‌کاربری (در سطح دانشگاه): ${groups.length}`);
 
   let candidates = 0, deleted = 0, skippedWithData = 0;
   const backupRows = [];
 
   for (const g of groups) {
     const { rows: st } = await pool.query(
-      `SELECT id, "studentCode", "userId", status FROM students WHERE "studentCode"=$1 ORDER BY id ASC`,
-      [g.code],
+      `SELECT id, "studentCode", "userId", status FROM students WHERE "studentCode"=$1 AND "universityId"=$2 ORDER BY id ASC`,
+      [g.code, g.uni],
     );
     if (st.length < 2) continue;
 
