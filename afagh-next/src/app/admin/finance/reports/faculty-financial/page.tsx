@@ -135,7 +135,6 @@ export default async function FacultyFinancialReportPage(props: {
       COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—') AS code,
       COALESCE(fc.name, '—') AS faculty,
       (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::int AS "entryCode",
-      // شمارش دانشجو مطابق سام: کسی که ردیف شهریه/تخفیف دارد، نه صرفاً پرداختی.
       COUNT(DISTINCT s.id) FILTER (WHERE ${inTypes(CHARGE_TYPES)})::int AS students,
       ${sumOf(VARIABLE)} AS variable,
       ${sumOf(FIXED)} AS fixed,
