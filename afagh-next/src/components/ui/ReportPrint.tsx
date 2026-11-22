@@ -133,7 +133,7 @@ export default function ReportPrint({
   const orientation: ReportPrintOrientation = columns.length >= 7 ? 'landscape' : 'portrait';
   const renderCols = columns.filter(c => c.line !== 'bottom');
   const widths = useMemo(
-    () => columnWeights(renderCols, c => columns.find(x => x.pair === c.pair && x.line === 'bottom')),
+    () => columnWeights(renderCols, pair => columns.find(x => x.pair === pair && x.line === 'bottom')),
     [columns, renderCols],
   );
   const signLabels = signers && signers.length ? signers : DEFAULT_SIGNERS;
