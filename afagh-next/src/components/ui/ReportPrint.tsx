@@ -267,6 +267,7 @@ export default function ReportPrint({
                   return (
                     <th key={c.key} scope="col">{b ? `${c.title}\n${b.title}` : c.title}</th>
                   );
+                })}
               </tr>
             </thead>
             <tbody data-rp-tbody>

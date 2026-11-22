@@ -932,13 +932,14 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)::bigint AS "debit",
         COALESCE(SUM(sl.amount) FILTER (WHERE ${CREDIT}), 0)::bigint AS "credit"
       FROM students s
+      JOIN users u ON u.id = s."userId"
       LEFT JOIN majors m ON m.id = s."majorId"
       LEFT JOIN faculties fc ON fc.id = m."facultyId"
       JOIN student_ledger sl
         ON sl."studentId" = s.id
        AND sl."universityId" = ${f.universityId}
        AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${String(f.term)} AND "universityId" = ${f.universityId} ORDER BY id DESC LIMIT 1)
-      WHERE s."universityId" = ${f.universityId}
+      WHERE ${joinAnd([...studentWhere(f)])}
       GROUP BY 1, 2, 3, 4, 5
       ORDER BY 1, 3, 5
     `);
