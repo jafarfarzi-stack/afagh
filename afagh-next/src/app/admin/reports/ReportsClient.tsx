@@ -662,6 +662,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 fetchAll={staleResult
                   ? async () => ({ rows: res.rows, total: res.total, truncated: false })
                   : () => fetchReportForPrint(kind, { ...filters })}
+                              form={kind === 'semester-detail' ? 'semester-detail' : undefined}
               />
             </>
           )}
