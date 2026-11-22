@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { academic_terms } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import GroupTransferClient from './GroupTransferClient';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export default async function GroupTransferPage() {
 
   const terms = (await db.select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
-    .where(u ? eq(academic_terms.universityId, u) : undefined)
+    .where(universityEq(academic_terms.universityId, u))
     .orderBy(desc(academic_terms.id)))
     .map(t => ({ id: t.id, title: t.title, isCurrent: (t.isCurrent ?? 0) === 1 }));
 

@@ -11,7 +11,7 @@ import {
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { ensureDefaultProcesses } from '@/lib/workflow-engine';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import { getWorkflowAnalytics } from '@/lib/workflow-analytics';
 import { getExecutiveRealtimeOps } from '@/lib/executive-analytics';
 import AdminWorkflowsClient from './AdminWorkflowsClient';
@@ -25,7 +25,7 @@ export default async function AdminWorkflowsPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
+  const scopeOf = (c: any) => (isRealUniversityId(currentUniversityId) ? or(eq(c, currentUniversityId), isNull(c)) : sql`1 = 0`);
 
   const now = new Date();
 
@@ -112,11 +112,11 @@ export default async function AdminWorkflowsPage() {
     .innerJoin(students, eq(students.id, student_requests.studentId))
     .innerJoin(users, eq(users.id, students.userId))
     .innerJoin(process_definitions, eq(process_definitions.id, student_requests.processId))
-    .where(currentUniversityId ? or(
+    .where(isRealUniversityId(currentUniversityId) ? or(
       eq(student_requests.universityId, currentUniversityId),
       eq(students.universityId, currentUniversityId),
       and(isNull(student_requests.universityId), isNull(students.universityId)),
-    ) : undefined)
+    ) : sql`1 = 0`)
     .orderBy(desc(student_requests.id))
     .limit(50);
 

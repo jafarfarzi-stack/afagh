@@ -14,6 +14,7 @@ import { isDemoStudentUser } from '@/lib/demo-accounts';
 import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { issueFinanceStatementToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
+import { issueShortCode } from '@/lib/verify-short-code';
 import { toJalaliFromDate, faDigits } from '@/lib/calendar';
 import PrintTranscriptButton from '@/components/PrintTranscriptButton';
 import FinanceVerifyBlock from '@/components/FinanceVerifyBlock';
@@ -159,11 +160,13 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
   let stmtVerifyUrl: string | null = null;
   let stmtQr = '';
   let stmtExpiresAt: string | null = null;
+  let stmtCode: string | null = null;
   if (approval) {
     try {
       const issued = await issueFinanceStatementToken(user.id, { id: me.id, code: me.studentCode, universityId: me.universityId });
       stmtVerifyUrl = `${publicBaseUrl}/verify-finance/${encodeURIComponent(issued.token)}`;
       stmtExpiresAt = issued.expiresAt;
+      stmtCode = await issueShortCode(issued.token, 'FINANCE', issued.expiresAt);
       try {
         stmtQr = await qrSvg(stmtVerifyUrl, { errorCorrectionLevel: 'M' });
       } catch (err) {
@@ -193,7 +196,7 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
       amount: toNum(l.amount), installments: l.installments, status: l.status,
     })),
     verifyBlock: stmtVerifyUrl ? (
-      <FinanceVerifyBlock url={stmtVerifyUrl} qr={stmtQr} expiresAt={stmtExpiresAt} />
+      <FinanceVerifyBlock url={stmtVerifyUrl} qr={stmtQr} expiresAt={stmtExpiresAt} code={stmtCode} />
     ) : undefined,
   };
 

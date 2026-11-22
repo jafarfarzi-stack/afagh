@@ -88,11 +88,12 @@ async function main(): Promise<void> {
   ok(EXTRACT.includes('backupExisting') && EXTRACT.includes('.bak-'),
     'آینهکردن پیش از بازنویسی بکاپ میگیرد');
   ok(EXTRACT.includes('pathToFileURL(process.argv[1])'), 'import توسط تست اثر جانبی ندارد');
-  eq(ext.STUDENT_HEADERS.MAININFO_students.split('\t').length, 32, 'MAININFO دقیقاً ۳۲ ستون دارد');
+  // ۳۲ ستون قدیمی + ۱۵ ستون پروندهٔ کامل(student profile) در انتها
+eq(ext.STUDENT_HEADERS.MAININFO_students.split('\t').length, 47, 'MAININFO دقیقاً ۴۷ ستون دارد');
   eq(ext.STUDENT_HEADERS.People_identity.split('\t').length, 13, 'People دقیقاً ۱۳ ستون دارد');
   ok(ext.STUDENT_HEADERS.MAININFO_students.startsWith('STNO\tOLDSTNO\tNAME\tSEX\tSTATUS'),
     'سرستون با MAININFO_students.tsv قدیمی سازگار است');
-  eq(ext.STUDENT_FILES.length, 2, 'دو فایل TSV خروجی است');
+  eq(ext.STUDENT_FILES.length, 3, 'سه فایل TSV خروجی است (MAININFO + People + STUDENT_IDENTITY)');
 
   // ── ۳) قرارداد موتور همگامسازی ─────────────────────────────────────────
   ok(MIGRATE.includes("from './lib/student-status-map.mjs'"), 'موتور از نگاشت مشترک استفاده میکند');

@@ -4,7 +4,7 @@ import { degree_level_configs, majors, student_cards, students, users } from '@/
 import { requireRole } from '@/lib/auth';
 import { escapeLikeChars, normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getNumber, getSetting } from '@/lib/settings';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import StudentCardsClient from './StudentCardsClient';
 
 export const dynamic = 'force-dynamic';
@@ -74,7 +74,7 @@ export default async function AdminStudentCardsPage({
 
   // ── جستجو + محدودیت دانشگاه (هم‌راستا با /admin/students: ادمین محدود فقط دانشگاه خودش را می‌بیند) ──
   const conds: unknown[] = [];
-  if (currentUniversityId) conds.push(eq(students.universityId, currentUniversityId));
+  conds.push(universityEq(students.universityId, currentUniversityId));
   if (q) {
     conds.push(
       or(

@@ -47,6 +47,17 @@ function columnWeights(columns: ReportColumn[]): number[] {
 
 const DEFAULT_SIGNERS = ['تهیهکنندهٔ گزارش', 'تأیید حسابدار', 'مدیر مالی'];
 
+/** سرستونهای دوخطی فرم کاغذی fqTrDaTe2 (سام قدیمی) — عیناً همان ترتیب و عبارت. */
+const SEMESTER_HEADERS: Record<string, [string, string]> = {
+  n: ['کد', ''], faculty: ['دانشکده', ''], degree: ['مقطع', ''],
+  students: ['تعداد', 'دانشجو'], creditOpen: ['طلب', 'دانشجو'],
+  debitOpen: ['بدهی', 'دانشجو'], carry: ['نقل از', 'ترم قبل'],
+  fixed: ['شهریه ثبت', 'جاری'], variable: ['شهریه متغیر', 'جاری'],
+  discount: ['تخفیفات', 'جاری'],
+  termAmount: ['مبالغ', 'نیمسال'], paid: ['دریافتی از دانشجو', 'در ترم جاری'],
+  debtBalance: ['مانده', 'بدهی'], creditBalance: ['مانده طلب', 'دانشجو'],
+};
+
 /**
  * تاریخِ امروزِ شمسی با ساعتِ رسمیِ تهران (Asia/Tehran).
  *
@@ -85,6 +96,7 @@ export default function ReportPrint({
   signers,
   reportDate,
   fetchAll,
+  form,
 }: {
   /** عنوان گزارش */
   title: string;
@@ -112,6 +124,8 @@ export default function ReportPrint({
    * می‌شود؛ در غیر این صورت همان `rows` (صفحهٔ جاری) چاپ می‌شود.
    */
   fetchAll?: () => Promise<{ rows: Record<string, unknown>[]; total: number; truncated: boolean }>;
+  /** الگوی چاپ ویژهٔ فرم قدیمی (مثلاً fqTrDaTe2 — تفصیلی مالی نیمسال). */
+  form?: 'semester-detail';
 }) {
   const faDate = reportDate || todayJalaliTehran();
   const orientation: ReportPrintOrientation = columns.length >= 7 ? 'landscape' : 'portrait';
@@ -231,7 +245,14 @@ export default function ReportPrint({
             </colgroup>
             <thead>
               <tr>
-                {columns.map(c => <th key={c.key} scope="col">{c.title}</th>)}
+                {columns.map(c => {
+                  const pair = form === 'semester-detail' ? SEMESTER_HEADERS[c.key] : undefined;
+                  return (
+                    <th key={c.key} scope="col">
+                      {pair ? <><span style={{ display: 'block' }}>{pair[0]}</span><span style={{ display: 'block' }}>{pair[1]}</span></> : c.title}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody data-rp-tbody>

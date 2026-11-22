@@ -176,11 +176,37 @@ export function groupTranscript(rows: TranscriptRow[], cfg?: RegulationConfig | 
       // حذف در حذف و اضافه (کد ۱-) در کارنامه رسمی نمایش داده نمی‌شود (در سوابق نمرات هست)
       const visibleRows = rs.filter(r => (r.gradeStatusCode?.trim() ?? '') !== '-1');
       if (visibleRows.length === 0) return [];
+
+      /**
+       * حذفِ ردیف‌های تکراریِ همان درس در همان نیمسال.
+       *
+       * چرا: اگر دانشجو یک درس را روی دو «ارائه» ثبت کرده باشد (مثلاً یک رکوردِ
+       * مهاجرت‌شده + یک ثبتِ تازه)، کارنامه همان درس را دو بار چاپ می‌کرد —
+       * یکی با نمره و یکی بدونِ نمره با وضعِ «نهایی». ردیفِ برتر نگه داشته
+       * می‌شود: اولویت با نمرهٔ عددی، بعد FINALIZED، بعد داشتنِ کدِ وضع.
+       */
+      const bestOf = new Map<string, TranscriptRow>();
+      const scoreOf = (r: TranscriptRow): number =>
+        (numOrNull(r.gradeValue) !== null ? 4 : 0) +
+        (r.gradeStatus === 'FINALIZED' ? 2 : 0) +
+        ((r.gradeStatusCode || '').trim() ? 1 : 0);
+      for (const r of visibleRows) {
+        const key = String(r.courseCode || '').trim();
+        if (!key) continue;
+        const cur = bestOf.get(key);
+        if (!cur || scoreOf(r) > scoreOf(cur)) bestOf.set(key, r);
+      }
+      const deduped = visibleRows.filter((r) => {
+        const key = String(r.courseCode || '').trim();
+        if (!key) return true;
+        return bestOf.get(key) === r;
+      });
+
       // اعمال حذف مردودی از نیمسال (فقط EXCLUDE_IF_PASSED_1391)
       // کدهای منجمد (۵/۶/۷/۲۲) آیین‌نامه رویشان اثر ندارد: نه تغییر، نه برچسب
-      let effectiveRows = visibleRows;
+      let effectiveRows = deduped;
       if (th.exclFromTerm && passedSet) {
-        effectiveRows = rs.map(r => {
+        effectiveRows = deduped.map(r => {
           const code = (r.gradeStatusCode || '').trim();
           if (code && REGULATION_FROZEN_CODES.has(code)) return r;
           const g = numOrNull(r.gradeValue);

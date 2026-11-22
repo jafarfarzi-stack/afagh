@@ -1,6 +1,7 @@
 'use client';
 
 import QrSvg from '@/components/QrSvg';
+import { verifyEntry, refCodeOf } from '@/lib/verify-url';
 
 // (تایپ محلی — عمداً از @/lib/verification ایمپورت نمی‌شود چون آن ماژول server-only است)
 interface EnrollConfirmData {
@@ -40,12 +41,14 @@ export default function EnrollConfirmClient(props: {
   termTitle: string;
   blocked: string | null;
   verifyUrl: string | null;
+  /** کدِ کوتاهِ استعلام از سرور (قابل تایپ در /verify) */
+  verifyCode?: string | null;
   expiresAt: string | null;
   qrSvg: string;
   data: OkData | null;
   emptyMessage: string | null;
 }) {
-  const { termTitle, blocked, verifyUrl, expiresAt, qrSvg, data, emptyMessage } = props;
+  const { termTitle, blocked, verifyUrl, verifyCode, expiresAt, qrSvg, data, emptyMessage } = props;
 
   if (blocked || !data) {
     return (
@@ -131,8 +134,9 @@ export default function EnrollConfirmClient(props: {
         </table>
 
         <div className="mt-3 flex items-end justify-between gap-3 text-3xs text-slate-500">
-          <div className="break-all">
-            استعلام اصالت: {verifyUrl}
+          <div>
+            استعلام اصالت: <span className="font-mono" dir="ltr">{verifyEntry(verifyUrl)}</span>
+            {verifyUrl ? <> · کد استعلام: <span className="font-mono tracking-widest" dir="ltr">{verifyCode || refCodeOf(verifyUrl)}</span></> : null}
             <br />
             صدور: {new Date(data.checkedAt).toLocaleString('fa-IR')}
           </div>

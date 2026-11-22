@@ -17,6 +17,7 @@ import Modal from '@/components/ui/Modal';
 import type { StudentItem, RegulationPick, Pagination, StaffItem, CodeLabels, TranscriptPrintOptions, OriginUniversity, CohortStats} from './types';
 import { DEFAULT_PRINT_OPTIONS } from './types';
 import { regThresholds, groupTranscript, faNum } from './transcript-utils';
+import ExportWordButton from '@/components/ExportWordButton';
 import OfficialTranscriptView from './components/OfficialTranscriptView';
 import { adminSetGradeAction, getStudentGradeAuditLog, resolveSamaCodeForGradeAction } from '@/app/admin/grades/actions';
 import { GRADE_STATUS_CODES } from '@/lib/grade-status-codes';
@@ -123,6 +124,8 @@ export default function StudentsManagerClient(props: {
   canEditProfile?: boolean;
   /** ADMIN / EDU_EXPERT / GRADUATEAFFAIRS — اکشن تغییر آیین‌نامهٔ دانشجو */
   canEditRegulation?: boolean;
+  /** ADMIN / FINANCE_EXPERT / FINANCE — میانبر کارنامهٔ مالی (همان نقش‌های صفحهٔ مالی) */
+  canViewFinance?: boolean;
   rolesAll?: { id: number; code: string; title: string; isSystem: number | boolean | null }[];
   userRoleIds?: Record<number, number[]>;
   universities?: { id: number; code: string; title: string; kind: string; saminCode?: string | null }[];
@@ -873,6 +876,15 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
             >
               📊 کارنامه و نمرات
             </button>
+            {props.canViewFinance && currentStudent && (
+              <button
+                type="button"
+                onClick={() => router.push(`/admin/finance/student/${currentStudent.id}`)}
+                className="px-3 py-1.5 font-bold rounded-t-md border-t border-x transition-colors bg-emerald-50 border-transparent hover:bg-emerald-100 text-emerald-900"
+              >
+                📄 کارنامهٔ مالی
+              </button>
+            )}
           </div>
 
           {/* ── پروندهٔ دانشجو: سربرگ چسبان + کارت‌ها + تب‌های داخلی پرونده ── */}
@@ -1000,6 +1012,14 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       🖨️ چاپ عمودی
                     </button>
                   )}
+                  {transcript && transcript.length > 0 && (
+                    <ExportWordButton
+                      targetSelector=".transcript-print-area"
+                      fileName={`کارنامه-تحصیلی-${currentStudent.studentCode}`}
+                      label="📄 Word"
+                      className="rounded-lg bg-sky-700 px-2.5 py-1 text-2xs font-bold text-white hover:bg-sky-800"
+                    />
+                  )}
                 </div>
                 {transcript && transcript.length > 0 && (
                   <p className="text-3xs text-slate-500">
@@ -1020,8 +1040,9 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                       ['showLogo', 'آرم دانشگاه'],
                       ['showAcceptance', 'نحوه ورود'],
                       ['showStudyMode', 'شیوه آموزشی'],
+                      ['showAllQuotas', 'همهٔ انواع سهمیه'],
                       ['thesisQualitative', 'پایان‌نامه کیفی'],
-                    ] as [keyof TranscriptPrintOptions, string][]).map(([k, label]) => (
+                    ] as [keyof Omit<TranscriptPrintOptions, 'layout'>, string][]).map(([k, label]) => (
                       <label
                         key={k}
                         className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-2xs font-bold border cursor-pointer ${printOptions[k] ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-slate-50 border-slate-300 text-slate-500'}`}
@@ -1035,6 +1056,21 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                         {label}
                       </label>
                     ))}
+                    {/* تعداد ستونهای نیمسالها — کنترل دوگزینهای (نه چکباکس) */}
+                    <div className="flex items-center gap-1 border-r border-slate-200 pr-2 mr-1">
+                      <span className="text-2xs font-bold text-slate-500">چیدمان:</span>
+                      {([['3col', 'سه\u200cستونه'], ['2col', 'دوستونه']] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setPrintOptions(o => ({ ...o, layout: value }))}
+                          className={`px-2 py-0.5 rounded-lg text-2xs font-bold border ${(printOptions.layout ?? '3col') === value ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}
+                          aria-pressed={(printOptions.layout ?? '3col') === value}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     {printOptions.showRank && (
                       <select
                         value={rankScope}

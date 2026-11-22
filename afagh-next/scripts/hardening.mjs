@@ -281,7 +281,7 @@ try {
   }
 
   console.log(`✅ RLS فعال است (${RLS_TABLES.length}/${RLS_TABLES.length} جدول — شامل deny-all) و نقش afagh_app امن است (NOSUPERUSER + NOBYPASSRLS).`);
-  console.log('✅ گرنت ستونی: نوشتن دانشجو فقط روی enrollments("status","waitlistPosition") + cart_items(INSERT/DELETE) + notifications(INSERT).');
+  console.log('✅ گرنت ستونی: نوشتن دانشجو فقط روی enrollments("status","waitlistPosition","hasAcceptedSameDayExam") + cart_items(INSERT/DELETE) + notifications(INSERT).');
 
   // ═══ اثبات پوشش کامل (بازبینی — بند ۴): هیچ جدولی که ستون هویتی/مالی دارد،
   // بدون RLS نمی‌ماند. جدول‌های مرجع/کاتالوگ (بدون دادهٔ شخصی) مجازند.

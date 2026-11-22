@@ -50,9 +50,46 @@ export function evaluateLogicTree(
   return { ok: results.some(r => r.ok), missing: results.every(r => !r.ok) ? results.flatMap(r => r.missing) : [] };
 }
 
+/**
+ * ارزیابی درخت هم‌نیاز (COREQ) در ثبت: برگِ درسی وقتی برآورده است که کدش در
+ * «همین ترم» باشد (ثبت‌شده یا در همین سبد)؛ برگ‌های غیردرسی (واحد/ترم) به
+ * وضعیت ثبتِ ترم ربطی ندارند و همیشه برآورده تلقی می‌شوند. AND/OR تودرتو
+ * رعایت می‌شود؛ در شکست، گروه‌های ناقص برمی‌گردد (هر گروه = گزینه‌های جایگزین).
+ */
+export function evaluateCoreqTree(
+  node: LogicNode | null | undefined,
+  presentCodes: Set<string>,
+): { ok: boolean; missingGroups: string[][] } {
+  if (!node || typeof node !== 'object') return { ok: true, missingGroups: [] };
+  const results = (node.conditions || []).map(c => {
+    if (c.course) {
+      const ok = presentCodes.has(c.course);
+      return ok ? { ok: true, groups: [] as string[][] } : { ok: false, groups: [[c.course]] };
+    }
+    if (c.operator) {
+      const sub = evaluateCoreqTree(c as LogicNode, presentCodes);
+      return { ok: sub.ok, groups: sub.missingGroups };
+    }
+    // برگ غیردرسی: به وضعیت ثبتِ ترم ربط ندارد → برآورده
+    return { ok: true, groups: [] as string[][] };
+  });
+  const op = (node.operator || 'AND').toUpperCase();
+  if (op === 'AND') {
+    return { ok: results.every(r => r.ok), missingGroups: results.flatMap(r => r.groups) };
+  }
+  // OR: دست‌کم یک شاخهٔ برآورده کل گره را برآورده می‌کند؛ در شکست، گزینه‌های
+  // ناتمام همهٔ شاخه‌ها برای پیام نمایشی یکجا گزارش می‌شوند.
+  if (results.some(r => r.ok)) return { ok: true, missingGroups: [] };
+  return { ok: false, missingGroups: [results.flatMap(r => r.groups.flat())] };
+}
+
 export type PrereqContext = {
   passed: Map<string, number>;                                  // code → بهترین نمرهٔ قبولی
   ruleByCourse: Map<number, LogicNode>;                          // courseId → درخت PREREQ مؤثر
+  /** courseId → درخت COREQ مؤثر (هم‌نیاز) — اختیاری برای سازگاریِ فراخوان‌های قدیمی */
+  coreqRuleByCourse?: Map<number, LogicNode>;
+  /** کدهای دروسی که دانشجو سابقهٔ تلاشِ ناموفق دارد (FINALIZED غیریابی/بی‌نمره یا DROPPED) */
+  attempted?: Set<string>;
   titles: Map<string, string>;                                   // code → عنوان درس
   defaultPassing: number;
   /** جمع واحدهای دروس پاس‌شده (برای شرط «۴۷ واحد پاس‌کرده») */
@@ -105,9 +142,20 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
   }
   const ruleByCourse = new Map<number, LogicNode>([...globalRule, ...scopedRule]); // scoped بازنویسی می‌کند
 
+  // هم‌نیاز (COREQ): همان شکل درخت منطقی؛ نقشهٔ جدا از PREREQ تا خطای نرمِ
+  // پیش‌نیاز و خطای سختِ هم‌نیاز قابل تفکیک بمانند.
+  const { global: globalCoreq, scoped: scopedCoreq } = selectEffectiveRules(
+    allRules, resolvedVersionId, ['COREQ']
+  );
+  const coreqRuleByCourse = new Map<number, LogicNode>();
+  for (const r of globalCoreq) {
+    if (!coreqRuleByCourse.has(r.courseId)) coreqRuleByCourse.set(r.courseId, JSON.parse(r.logicTree) as LogicNode);
+  }
+  for (const r of scopedCoreq) coreqRuleByCourse.set(r.courseId, JSON.parse(r.logicTree) as LogicNode); // scoped بازنویسی می‌کند
+
   // دروس پاس‌شده
   const rows = await db
-    .select({ code: courses.code, courseId: courses.id, grade: enrollments.gradeValue, status: enrollments.gradeStatus, gradingType: courses.gradingType, units: courses.units })
+    .select({ code: courses.code, courseId: courses.id, enrollStatus: enrollments.status, grade: enrollments.gradeValue, status: enrollments.gradeStatus, gradingType: courses.gradingType, units: courses.units })
     .from(enrollments)
     .innerJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
     .innerJoin(courses, eq(courses.id, course_offerings.courseId))
@@ -118,6 +166,18 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
     const g = Number(r.grade);
     const ok = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingFor(r.courseId, overrides, defaultPassing);
     if (ok && (!passed.has(r.code) || (passed.get(r.code) as number) < g)) passed.set(r.code, g);
+  }
+
+  // سابقهٔ تلاش (برای سیاست PREREQ_FAIL_POLICY) — از همان ردیف‌های بالا، بدون کوئریِ افزوده:
+  // ردیف DROPPED یا FINALIZED با نمرهٔ غیریابی/بی‌نمره = «تلاش‌شده».
+  const attempted = new Set<string>();
+  for (const r of rows) {
+    if (r.enrollStatus === 'DROPPED') { attempted.add(r.code); continue; }
+    if (r.status !== 'FINALIZED') continue;
+    if (r.grade == null) { attempted.add(r.code); continue; }
+    const g = Number(r.grade);
+    const okPass = r.gradingType === 'DESCRIPTIVE' ? g === 1 : g >= passingFor(r.courseId, overrides, defaultPassing);
+    if (!okPass) attempted.add(r.code);
   }
 
   // جمع واحدهای پاس‌شده — پیش از گسترش هم‌ارزی‌ها محاسبه می‌شود تا واحدِ هم‌ارز
@@ -135,6 +195,8 @@ export async function buildPrereqContext(studentId: number): Promise<PrereqConte
   return {
     passed: expandPassedWithEquivalents(passed, members),
     ruleByCourse,
+    coreqRuleByCourse,
+    attempted,
     titles,
     defaultPassing,
     unitsPassed,

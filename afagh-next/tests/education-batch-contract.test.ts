@@ -41,6 +41,21 @@ async function main(): Promise<void> {
   const mod: any = await import('../scripts/migrate-legacy-education.mjs');
 
   ok(MIGRATE.includes("from './lib/legacy-education-batch.mjs'"), 'مهاجرت از لایهٔ مشترک import میکند');
+
+  // ── گارد «نهایی بدون نمره» (شکاف ۱۴۰۵/۰۸/۳۰) ─────────────────────────
+  const gm: any = await import('../scripts/lib/sama-grade-map.mjs');
+  eq(gm.mapGradeStatus('10', null), 'PENDING', 'MarkStat=10 بدون نمره ⇒ PENDING (ثبتنام)');
+  eq(gm.mapGradeStatus('7', null), 'FINALIZED', 'MarkStat=7 (حذف) بدون نمره ⇒ FINALIZED');
+  eq(gm.mapGradeStatus('3', null), 'FINALIZED', 'MarkStat=3 (معاف) بدون نمره ⇒ FINALIZED');
+  eq(gm.mapGradeStatus('12', null), 'FINALIZED', 'MarkStat=12 (قبول بدون نمره) ⇒ FINALIZED');
+  eq(gm.mapGradeStatus('2', null), 'FINALIZED', 'MarkStat=2 (مردود بدون نمره) ⇒ FINALIZED');
+  eq(gm.mapGradeStatus('10', 18.5), 'FINALIZED', 'نمرهٔ عددی ⇒ FINALIZED');
+  eq(gm.computeGradeStatus(null), 'PENDING', 'computeGradeStatus(null) ⇒ PENDING');
+  ok(gm.isUngradedRegistration('10', null) && !gm.isUngradedRegistration('7', null),
+    'تشخیص ثبتنامِ بدون نمره');
+  ok(MIGRATE.includes('mapGradeStatus(markStat, gradeValue)') &&
+     !/ew\.push\(\[UNI, stuId, offeringId, status, gradeValue, 'FINALIZED'/.test(MIGRATE),
+    'gradeStatus در مهاجرت هفتگی بدون شرط FINALIZED نوشته نمیشود');
   ok(LIB.includes('createReadStream') && LIB.includes('createInterface') &&
      MIGRATE.includes('streamFrom(DIR, name)'),
     'TSVهای بزرگ جریانی خوانده میشوند (حافظهٔ ثابت)');

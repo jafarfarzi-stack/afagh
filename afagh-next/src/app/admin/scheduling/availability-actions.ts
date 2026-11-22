@@ -38,13 +38,14 @@ export async function saveProfessorAvailabilityForStaffAction(
 
     const { getStaffByUser } = await import('@/lib/auth');
     const { headedDepartments } = await import('@/lib/group-manager');
-    const { getCurrentUniversity } = await import('@/lib/university-scope');
+    const { getCurrentUniversity, isRealUniversityId } = await import('@/lib/university-scope');
 
     const [prof] = await db.select({ id: staff.id, departmentId: staff.departmentId, universityId: staff.universityId }).from(staff).where(eq(staff.id, sid)).limit(1);
     if (!prof) return { ok: false, error: 'پروندهٔ استاد یافت نشد.' };
 
     const curUni = await getCurrentUniversity().catch(() => null);
     const uniId = curUni && curUni.id > 0 ? curUni.id : null;
+    if (!isRealUniversityId(uniId)) return { ok: false, error: 'دانشگاه شما شناسایی نشد.' };
     if (uniId && prof.universityId && Number(prof.universityId) !== uniId) {
       return { ok: false, error: 'این استاد متعلق به دانشگاه دیگری است.' };
     }

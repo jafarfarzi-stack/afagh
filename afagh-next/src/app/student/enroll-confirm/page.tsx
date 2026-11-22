@@ -3,6 +3,7 @@ import { getTermScope } from '@/lib/term-scope';
 import { getPublicBaseUrl } from '@/lib/settings';
 import { issueEnrollConfirmToken, verifyEnrollConfirm } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
+import { issueShortCode } from '@/lib/verify-short-code';
 import EnrollConfirmClient from './EnrollConfirmClient';
 
 export const dynamic = 'force-dynamic';
@@ -34,11 +35,13 @@ export default async function StudentEnrollConfirmPage() {
   // صدور توکن امضاشده برای همین نیمسال + خواندن زندهٔ دروس (تک‌منبع: verifyEnrollConfirm)
   let token: string | null = null;
   let expiresAt: string | null = null;
+  let verifyCode: string | null = null;
   let blocked: string | null = null;
   try {
     const issued = await issueEnrollConfirmToken(user.id, selectedTerm.id, me ? { id: me.id, code: me.studentCode, universityId: me.universityId } : null);
     token = issued.token;
     expiresAt = issued.expiresAt;
+    verifyCode = await issueShortCode(issued.token, 'ENROLLMENT', issued.expiresAt);
   } catch (err) {
     blocked = (err as Error)?.message || 'صدور تأییدیه ممکن نشد.';
   }
@@ -64,6 +67,7 @@ export default async function StudentEnrollConfirmPage() {
         blocked={blocked}
         verifyUrl={token ? `${publicBaseUrl}/verify-enrollment/${encodeURIComponent(token)}` : null}
         expiresAt={expiresAt}
+        verifyCode={verifyCode}
         qrSvg={qr}
         data={data && data.ok ? data : null}
         emptyMessage={!data || data.ok === false ? (data && !data.ok ? data.message : blocked) : null}

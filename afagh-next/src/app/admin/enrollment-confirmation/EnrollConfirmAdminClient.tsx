@@ -23,7 +23,7 @@ export default function EnrollConfirmAdminClient() {
   const [picked, setPicked] = useState<StudentHit | null>(null);
   const [terms, setTerms] = useState<TermHit[]>([]);
   const [termId, setTermId] = useState<number | ''>('');
-  const [result, setResult] = useState<{ verifyUrl: string; expiresAt: string } | null>(null);
+  const [result, setResult] = useState<{ verifyUrl: string; expiresAt: string; code?: string | null } | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, startTransition] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +63,7 @@ export default function EnrollConfirmAdminClient() {
       if (!picked) { setMsg({ text: 'دانشجو را از لیست جست‌وجو انتخاب کنید.', kind: 'error' }); return; }
       if (!termId) { setMsg({ text: 'نیمسال را انتخاب کنید.', kind: 'error' }); return; }
       const data = await api(`/api/admin/enrollment-confirmation?studentId=${picked.studentId}&termId=${termId}`);
-      setResult({ verifyUrl: data.verifyUrl, expiresAt: data.expiresAt });
+      setResult({ verifyUrl: data.verifyUrl, expiresAt: data.expiresAt, code: data.code });
       setMsg({ text: 'تأییدیه صادر شد؛ با باز کردن پیوند، برگه قابل چاپ نمایش داده می‌شود.', kind: 'ok' });
     } catch (e: any) {
       setMsg({ text: e.message, kind: 'error' });
@@ -146,7 +146,7 @@ export default function EnrollConfirmAdminClient() {
           >
             باز کردن برگهٔ قابل چاپ ←
           </a>
-          <div className="text-2xs text-slate-500 break-all" dir="ltr">{result.verifyUrl}</div>
+          <div className="text-2xs text-slate-500">کد استعلام: <b className="font-mono tracking-widest text-slate-700" dir="ltr">{result.code || "—"}</b></div>
         </div>
       )}
     </div>

@@ -662,6 +662,21 @@ export const ADMIN_MODULES: AdminModule[] = [
     inNav: true,
     inGrid: true,
   },
+  {
+    // شهریهٔ ویژهٔ یک درس برای یک دانشجوی خاص — سندِ سما: «شهریهٔ متغیر ویژه
+    // برای یک دانشجو خاص برای درس‌های مورد نظر».
+    href: '/admin/finance/course-tuition',
+    icon: <Icon emoji="🎯" />,
+    title: 'شهریهٔ ویژهٔ درس',
+    desc: 'نرخ هر واحد یک درس برای یک دانشجوی خاص (اولویت بر تعرفهٔ عمومی)',
+    group: 'fin',
+    subgroup: 'rules',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
 
   /* ── زیردستهٔ ۳: ابزارها و گزارشها ── */
   {

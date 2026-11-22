@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { DEBT_LEDGER_TYPES, CREDIT_LEDGER_TYPES, ledgerTypesCsv } from '@/lib/ledger-balance';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,22 +29,29 @@ export default async function StudentFinancePage({
   const sp = await searchParams;
 
   const currentUniversity = await getCurrentUniversity();
+
+  // فهرستِ کانونیِ انواعِ تراکنش — منبعِ واحدِ مانده (lib/ledger-balance).
+  // پیش‌تر این صفحه فقط 'TUITION_CHARGE','CHARGE' را بدهی می‌شمرد و
+  // TUITION_FIXED/VARIABLE (شارژِ واقعی) را نادیده می‌گرفت؛ نتیجه: «جمع
+  // شارژ» صفر و فهرستِ بدهکاران غلط می‌شد.
+  const DEBT_CSV = sql.raw(`(${ledgerTypesCsv(DEBT_LEDGER_TYPES)})`);
+  const CREDIT_CSV = sql.raw(`(${ledgerTypesCsv(CREDIT_LEDGER_TYPES)})`);
   const currentUniversityId = currentUniversity?.id ?? null;
   // دفتر مالی دانشگاه فعال: ردیف‌های همین دانشگاه + سراسری (universityId=null)
   const ledgerScope = currentUniversityId
     ? sql`where ("universityId" = ${currentUniversityId} or "universityId" is null)`
-    : sql``;
+    : sql`where 1 = 0`;
   const studentScope = currentUniversityId
     ? sql`and (st."universityId" = ${currentUniversityId} or st."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
   const requestScope = currentUniversityId
     ? sql`and (r."universityId" = ${currentUniversityId} or r."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
 
   // ── تفکیک وصولی بر اساس «نوع واریز» ──
   const payScope = currentUniversityId
     ? sql`and (l."universityId" = ${currentUniversityId} or l."universityId" is null)`
-    : sql``;
+    : sql`and 1 = 0`;
 
   // ── فیلتر نوع واریز (از ستون ساختاریافتهٔ جدید — مهاجرت ۰۱۱۹) ──
   const depositTypeFilter =
@@ -75,8 +83,8 @@ export default async function StudentFinancePage({
     // ۱) جمع کل شارژ/وصول و تعداد تراکنش‌ها
     db.execute(sql`
       select
-        coalesce(sum(case when "transactionType" in ('TUITION_CHARGE','CHARGE') then amount else 0 end),0)::float8 as charged,
-        coalesce(sum(case when "transactionType" in ('PAYMENT','CREDIT') then amount else 0 end),0)::float8 as paid,
+        coalesce(sum(case when "transactionType" in ${DEBT_CSV} then amount else 0 end),0)::float8 as charged,
+        coalesce(sum(case when "transactionType" in ${CREDIT_CSV} then amount else 0 end),0)::float8 as paid,
         count(*)::int as txns
       from student_ledger ${ledgerScope}`),
 
@@ -85,14 +93,14 @@ export default async function StudentFinancePage({
       select b.bal::float8 as bal, st."studentCode", u."firstName", u."lastName"
       from (
         select "studentId",
-          sum(case when "transactionType" in ('TUITION_CHARGE','CHARGE') then -amount
-                   when "transactionType" in ('PAYMENT','CREDIT') then amount else 0 end) as bal
+          sum(case when "transactionType" in ${DEBT_CSV} then amount
+                   when "transactionType" in ${CREDIT_CSV} then -amount else 0 end) as bal
         from student_ledger ${ledgerScope} group by "studentId"
       ) b
       join students st on st.id = b."studentId"
       join users u on u.id = st."userId"
-      where b.bal < 0 ${studentScope}
-      order by b.bal asc
+      where b.bal > 0 ${studentScope}
+      order by b.bal desc
       limit 12`),
 
     // ۳) پرونده‌های در انتظار اقدام مالی
@@ -177,7 +185,20 @@ export default async function StudentFinancePage({
     total_amount: number;
   }[];
 
-  const totalDebt = debtors.reduce((s, d) => s + -d.bal, 0);
+  // متنِ هشدار باید عددی باشد، نه ادعای کلی: چند پرداخت واقعاً تاریخِ واریز ندارند؟
+  let missingDateCount = 0;
+  try {
+    const nd = await db.execute(sql`
+      select count(*)::int as c
+      from student_ledger ${ledgerScope}
+      where "transactionType" = 'PAYMENT' and "depositDate" is null
+    `);
+    missingDateCount = Number((nd.rows ?? [])[0]?.c ?? 0);
+  } catch {
+    missingDateCount = 0;
+  }
+
+  const totalDebt = debtors.reduce((s, d) => s + d.bal, 0);
   const methodTotal = byMethod.reduce((s, r) => s + r.total_amount, 0);
   const methodCount = byMethod.reduce((s, r) => s + r.txn_count, 0);
   const pct = (v: number) => (methodTotal ? (v / methodTotal) * 100 : 0);
@@ -224,6 +245,18 @@ export default async function StudentFinancePage({
         {/* بدهکاران */}
         <div className="card">
           <h2 className="font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">دانشجویان بدهکار (بیشترین بدهی)</h2>
+          {/* جای جست‌وجو: قبلاً فقط ۱۲ بدهکارِ اول دیده می‌شد و راهی برای
+              رسیدن به بقیهٔ دانشجویان نبود (گلایهٔ کاربر). */}
+          <form action="/admin/finance" method="GET" className="mb-2 flex gap-1">
+            <input
+              name="q"
+              placeholder="جست‌وجوی دانشجو (نام یا شمارهٔ دانشجویی)"
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+            />
+            <button type="submit" className="rounded-lg bg-slate-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-slate-800">
+              جست‌وجو
+            </button>
+          </form>
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm rt">
               <thead>
@@ -245,7 +278,7 @@ export default async function StudentFinancePage({
                   <tr key={d.studentCode} className="border-t border-slate-100">
                     <td className="p-2 font-semibold text-slate-800">{d.firstName} {d.lastName}</td>
                     <td className="p-2 font-mono text-xs text-slate-500" dir="ltr">{d.studentCode}</td>
-                    <td className="p-2 font-bold text-rose-700">{fa(-d.bal)}</td>
+                    <td className="p-2 font-bold text-rose-700">{fa(d.bal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -319,11 +352,17 @@ export default async function StudentFinancePage({
           )}
         </form>
 
-        <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-2xs font-bold leading-5 text-amber-900">
-          ⚠️ این تفکیک از متنِ شرحِ ردیف‌های منتقل‌شده از سیستم قدیمی استخراج شده است
-          («پرداخت از سیستم قدیمی — فیش N (نوع واریز)»). <b>تاریخ واریز واقعی در مهاجرت حفظ نشده</b>
-          و جداول جزئیاتِ چک و پرداخت آنلاین خالی‌اند؛ برای گزارشِ تاریخ‌دار باید داده از سیستم قدیمی دوباره وارد شود.
-        </p>
+        {missingDateCount > 0 ? (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-2xs font-bold leading-5 text-amber-900">
+            ⚠️ از پرداخت‌های این بازه، <b className="font-mono">{fa(missingDateCount)}</b> ردیف تاریخِ واریز ندارند
+            (بقیه تاریخِ واقعی دارند). نوع واریز از متنِ شرحِ ردیف‌های منتقل‌شده استخراج شده است؛
+            جزئیاتِ چک و پرداخت آنلاین برای ردیف‌های قدیمی خالی است.
+          </p>
+        ) : (
+          <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-2xs font-bold leading-5 text-emerald-900">
+            ✅ همهٔ پرداخت‌های این بازه تاریخِ واقعی واریز دارند.
+          </p>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-sm rt">

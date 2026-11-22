@@ -6,6 +6,7 @@ import { getCurrentUniversity } from '@/lib/university-scope';
 import { issueTranscriptToken } from '@/lib/verification';
 import { qrSvg } from '@/lib/qr';
 import { getPublicBaseUrl } from '@/lib/settings';
+import { issueShortCode } from '@/lib/verify-short-code';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +40,11 @@ export async function GET(request: Request) {
     const publicBaseUrl = await getPublicBaseUrl();
     const issued = await issueTranscriptToken(stu.userId, { id: stu.id, code: stu.studentCode, universityId: stu.universityId });
     const verifyUrl = `${publicBaseUrl}/verify-transcript/${encodeURIComponent(issued.token)}`;
-    const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'Q', size: 128, margin: 4 });
+    const qr = await qrSvg(verifyUrl, { errorCorrectionLevel: 'M', size: 256, margin: 4 });
+    // کدِ کوتاهِ قابلِ تایپ برای صفحهٔ /verify (توکن در چاپ قابل تایپ نیست)
+    const code = await issueShortCode(issued.token, 'TRANSCRIPT', issued.expiresAt);
 
-    return Response.json({ url: verifyUrl, qr, expiresAt: issued.expiresAt });
+    return Response.json({ url: verifyUrl, qr, expiresAt: issued.expiresAt, code });
   } catch (e) {
     const msg = e instanceof Error ? e.message : '';
     if (msg === 'NEXT_REDIRECT' || msg === 'NEXT_NOT_FOUND') throw e;

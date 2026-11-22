@@ -662,6 +662,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 fetchAll={staleResult
                   ? async () => ({ rows: res.rows, total: res.total, truncated: false })
                   : () => fetchReportForPrint(kind, { ...filters })}
+                              form={kind === 'semester-detail' ? 'semester-detail' : undefined}
               />
             </>
           )}
@@ -695,6 +696,11 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                       pick(c.kind);
                       // کارتهای «بهزودی» پیادهای ندارند؛ همانجا پیام بدهیم تا ۴۰۴ نگیرند.
                       if (c.soon) { setInfoMsg(`گزارش «${c.title}» هنوز پیاده نشده است.`); return; }
+                      // Exact SAMASOFT print shape uses a dedicated page.
+                      if (c.kind === 'faculty-financial') {
+                        router.push('/admin/finance/reports/faculty-financial');
+                        return;
+                      }
                       router.push(`/admin/reports/${c.kind}${scope === 'finance' ? '?scope=finance' : ''}`);
                     }}
                   />
@@ -1172,11 +1178,14 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         const shown = fmtCell(r[c.key], c.format);
                         // ✓/✗ فقط در خطِ «کنترل این‌همانیِ» ترازنامهٔ دفتر کل می‌آید
                         // (r-gl)؛ سبز/سرخ‌کردنش بدون افزودن ستونِ تازه به داده است.
+                        const isNegativeMoney = c.format === 'MONEY' && Number(r[c.key]) < 0;
                         const tone = shown.startsWith('✓')
                           ? ' text-emerald-700 font-extrabold'
                           : shown.startsWith('✗')
                             ? ' text-rose-700 font-extrabold'
-                            : '';
+                            : isNegativeMoney
+                              ? ' text-rose-700 font-extrabold print:text-rose-700'
+                              : '';
                         return (
                           <td key={c.key} className={`p-2 font-mono print:whitespace-normal print:break-words${tone}`} dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
                             {shown}

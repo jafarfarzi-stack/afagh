@@ -5,7 +5,7 @@ import {
   academic_terms, course_offerings, courses, enrollments, student_ledger,
   students, tuition_rules, tuition_coefficients, subject_fee_types, student_subject_fees,
 } from '@/db/schema';
-import { student_tuition_overrides } from '@/db/schema-welfare';
+import { student_course_tuition_overrides, student_tuition_overrides } from '@/db/schema-welfare';
 
 /**
  * موتور شهریهٔ آفاق — بدون هیچ نرخ سخت‌کد.
@@ -237,6 +237,24 @@ export async function computeTermTuition(
   const override = await findActiveTuitionOverride(studentId, termId);
   const overrideRate = override ? toNum(override.perUnitAmount) : 0;
 
+  // شهریهٔ ویژهٔ «یک درس» (دقیق‌تر از override کلِ دانشجو) — نگاشت courseId → نرخ واحد
+  const perCourseOverrides = new Map<number, number>();
+  try {
+    const rowsO = await db
+      .select()
+      .from(student_course_tuition_overrides)
+      .where(and(
+        eq(student_course_tuition_overrides.studentId, studentId),
+        eq(student_course_tuition_overrides.isActive, 1),
+      ));
+    for (const o of rowsO) {
+      if (o.termId !== null && o.termId !== termId) continue;
+      perCourseOverrides.set(o.courseId, toNum(o.perUnitAmount));
+    }
+  } catch {
+    // نبودِ جدول نباید محاسبهٔ شهریه را بشکند
+  }
+
   // شهریهٔ ثابت — یک‌بار به ازای نوع ترم؛ فقط قواعد سطح ترم (بدون offeringType)
   const fixedRule = resolveTuitionRule(feeRules, {
     degreeLevelId, majorId, termType, entryYear, termLevelOnly: true, universityId,
@@ -249,6 +267,7 @@ export async function computeTermTuition(
   // دروس ثبت‌شدهٔ دانشجو در این ترم + نوع گذراندن هر درس
   const rows = await db
     .select({
+      courseId: courses.id,
       courseCode: courses.code,
       courseTitle: courses.title,
       units: courses.units,
@@ -272,7 +291,23 @@ export async function computeTermTuition(
   let variableTuition = 0;
   for (const r of rows) {
     const units = toNum(r.units);
-    // فرمول ویژه: نرخ واحدِ اختصاصی برای همهٔ دروس (بدون سطل‌بندی نوع درس)
+    // ① شهریهٔ ویژهٔ همین درس (بالاترین اولویت)
+    const courseRate = perCourseOverrides.get(r.courseId);
+    if (courseRate !== undefined) {
+      const amount = Math.round(units * courseRate);
+      variableTuition += amount;
+      lines.push({
+        courseCode: r.courseCode,
+        courseTitle: r.courseTitle,
+        offeringType: r.offeringType,
+        units,
+        perUnit: courseRate,
+        amount,
+      });
+      continue;
+    }
+
+    // ② فرمول ویژهٔ دانشجو: نرخ واحدِ اختصاصی برای همهٔ دروس
     if (override) {
       const amount = Math.round(units * overrideRate);
       variableTuition += amount;

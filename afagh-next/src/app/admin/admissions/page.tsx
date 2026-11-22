@@ -1,4 +1,4 @@
-import { desc, eq, isNull, or } from 'drizzle-orm';
+import { desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   admissions_staging,
@@ -12,7 +12,7 @@ import {
 import { requireRole } from '@/lib/auth';
 import { ensureDefaultSanjeshMappings, resyncStagingMappings } from '@/lib/admissions-engine';
 import { ensureDefaultIntegrations } from '@/lib/api-integrations';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import AdmissionsClient from './AdmissionsClient';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ export default async function AdminAdmissionsPage() {
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
-  const scopeOf = (c: any) => (currentUniversityId ? or(eq(c, currentUniversityId), isNull(c)) : undefined);
+  const scopeOf = (c: any) => (isRealUniversityId(currentUniversityId) ? or(eq(c, currentUniversityId), isNull(c)) : sql`1 = 0`);
 
   // پنج خواندنِ مستقل (بدون وابستگی بین‌شان) — یک رفت‌وبرگشتِ موازی به‌جای پنج تای پشتِ‌سرهم.
   const [allMajors, allLevels, allMappings, allFormulas, rawStaging, rawModels] = await Promise.all([

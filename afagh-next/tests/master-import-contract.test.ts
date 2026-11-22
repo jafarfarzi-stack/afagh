@@ -38,6 +38,10 @@ const ok = (c: boolean, m: string): void => {
 };
 const eq = (a: unknown, b: unknown, m: string): void => ok(a === b, `${m} (got ${String(a)}, want ${String(b)})`);
 
+/** هدر MAININFO شامل ستونهای پروندهٔ کامل (افزوده ۱۴۰۵/۰۸/۳۰). */
+const MAIN_HDR = 'STNO\tNAME\tSEX\tSTATUS\tTERMCODE\tMAGHTA\tRESHTE\tDANESHKADEH\tIDNO\tBIRTHDATE\tStartdate'
+  + '\tNAMEP\tADDRESS\tSAHMN\tTraningMethodId\tCOURSTYPE\tTuitionTypeId\tBOOMI\tNEZAM\tADVISORDONCODE\tHOMETELL\tisIranian\tNationality\tTotalAvg';
+
 async function main(): Promise<void> {
   const ext: any = await import('../scripts/extract-legacy-master.mjs');
   const imp: any = await import('../scripts/import-new-master.mjs');
@@ -58,7 +62,14 @@ async function main(): Promise<void> {
   ok(EXTRACT.includes('COUNT(*)'), 'شمارش فایل با COUNT(*) منبع تطبیق داده میشود');
 
   // ── ۲) قرارداد واردکننده ────────────────────────────────────────────────
-  ok(!/UPDATE /i.test(IMPORT), 'هیچ UPDATE وجود ندارد (فقط درج)');
+  // مسیر پیشفرض فقط درج است؛ UPDATE تنها در گام اختیاری --enrich وجود دارد
+  // که صریحاً با --apply قفل شده و هیچ ردیف تازهای درج نمیکند.
+  ok(/--enrich نیازمند --apply/.test(IMPORT), 'enrich بدون --apply رد میشود');
+  ok(/if \(ENRICH\) break/.test(IMPORT), 'enrich هیچ ردیف تازهای درج نمیکند');
+  ok(/ENRICH_SCOPE_SQL/.test(IMPORT) && /entrydate:/.test(IMPORT),
+  'enrich فقط پروندههای ناقص (امضای اسکریپت شکسته) را هدف میگیرد');
+  ok(/entryDateFromSama/.test(IMPORT), 'تاریخ ورود در نبود Startdate از پیشفرض سال/ترم پنل میآید');
+  ok(/enrichUser|enrichStudent/.test(IMPORT), 'هر UPDATE قبل از نوشتن در بکاپ JSONL ثبت میشود');
   ok(/INSERT INTO majors/.test(IMPORT) && /INSERT INTO staff/.test(IMPORT)
     && /INSERT INTO students/.test(IMPORT) && /INSERT INTO users/.test(IMPORT),
   'چهار درج master وجود دارد');
@@ -119,14 +130,15 @@ async function main(): Promise<void> {
       ['933101', 'کاظم زاده-رقيه', '0', '3', '4', '3', '1', '50', '', '0', '', ''],   // موجود ⇒ رد
     ]),
     donbinHeader: 'Code\tTitle\tGroupCode\tDaneshkadeh\tDegree\tEmploymentStatus\tisActive\tmadrak\tEmploymentDate\tActiveTerm\tRESHTE\tNAMEP'.split('\t'),
-    maininfo: mk('STNO\tNAME\tSEX\tSTATUS\tTERMCODE\tMAGHTA\tRESHTE\tDANESHKADEH\tIDNO\tBIRTHDATE\tStartdate', [
-      ['4051999999', 'تازه-دانشجو', '2', '0', '14051', '2', '93', '1', '2742999999', '1382/05/10', '1405/07/01'],
-      ['', '', '0', '0', '', '0', '0', '0', '', '', ''],                        // زباله
-      ['4051888888', 'بی رشته', '1', '0', '14051', '2', '77', '1', '', '', '1405/07/01'], // رشتهٔ حلنشده
-      ['12345', 'کدبد-مجید', '2', '0', '14051', '2', '93', '1', 'abc', '', '1405/07/01'], // کد دانشجویی نامعتبر (۵ رقم)
-      ['4051666666', 'بدون ملی-سارا', '1', '22', '14051', '2', '93', '1', '8507', '', '1405/07/01'], // کدملی کوتاه ⇒ مصنوعی
+    maininfo: mk(MAIN_HDR, [
+      ['4051999999', 'تازه-دانشجو', '2', '0', '14051', '2', '93', '1', '2742999999', '1382/05/10', '1405/07/01',
+        'عباس', 'نشانی تست', '5', '1', '4', '4', '1', '5', '922404', '04433660625', '1', '', '16.5'],
+      ['', '', '0', '0', '', '0', '0', '0', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['4051888888', 'بی رشته', '1', '0', '14051', '2', '77', '1', '', '', '1405/07/01', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['12345', 'کدبد-مجید', '2', '0', '14051', '2', '93', '1', 'abc', '', '1405/07/01', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['4051666666', 'بدون ملی-سارا', '1', '22', '14051', '2', '93', '1', '8507', '', '1405/07/01', '', '', '', '', '', '', '', '', '', '', '', ''],
     ]),
-    maininfoHeader: 'STNO\tNAME\tSEX\tSTATUS\tTERMCODE\tMAGHTA\tRESHTE\tDANESHKADEH\tIDNO\tBIRTHDATE\tStartdate'.split('\t'),
+    maininfoHeader: MAIN_HDR.split('\t'),
   };
   const maps = {
     majors: new Map([['27', 501]]),
@@ -159,6 +171,46 @@ async function main(): Promise<void> {
     && s1.gender === 'MALE' && s1.firstName === 'دانشجو' && s1.lastName === 'تازه'
     && s1.reshte === '93',
     'دانشجوی تازه با کلیهٔ اطلاعات (کد ملی واقعی، نگاشت جنسیت/وضعیت/ورود)');
+  // ── پروندهٔ کامل: نگاشت ستونهای تازهٔ MAININFO ────────────────────────
+  ok(s1 && s1.fatherName === 'عباس' && s1.address === 'نشانی تست', 'NAMEP/ADDRESS ⇒ users');
+  eq(s1?.birthDate, '2003-08-01', 'BIRTHDATE شمسی ⇒ میلادی (قرارداد users.birthDate)');
+  eq(s1?.entryDate, '1405-07-01', 'Startdate ⇒ literal شمسی (قرارداد students.entryDate)');
+  eq(s1?.quotaType, 'SHAHED', 'SAHMN=5 ⇒ SHAHED');
+  eq(s1?.trainingMethod, '1', 'TraningMethodId ⇒ trainingMethod');
+  eq(s1?.studyingMode, '4', 'COURSTYPE ⇒ studyingMode');
+  eq(s1?.tuitionType, '4', 'TuitionTypeId ⇒ tuitionType');
+  eq(s1?.nativeType, '1', 'BOOMI ⇒ nativeType');
+  eq(s1?.militaryStatus, 'کارت پایان خدمت', 'NEZAM=5 ⇒ عنوان نظام وظیفه');
+  eq(s1?.advisorCode, '922404', 'ADVISORDONCODE ⇒ advisorCode');
+  eq(s1?.homeTell, '04433660625', 'HOMETELL ⇒ homeTell (نه users.mobile)');
+  eq(s1?.nationality, '120001', 'isIranian=1 ⇒ nationality=120001');
+  eq(s1?.totalAverage, 16.5, 'TotalAvg ⇒ totalAverage');
+  eq(s1?.acceptanceType, null, 'نحوهٔ ورود در MAININFO منبعی ندارد ⇒ تهی');
+  eq(s1?.postalCode, null, 'بدون STUDENT_IDENTITY کد پستی تهی میماند');
+
+  // ── هویت تکمیلی: MAININFO.IDNO شمارهٔ شناسنامه است، کد ملی منبع دیگری دارد ──
+  const imp2: any = imp;
+  const mainHdr2 = MAIN_HDR;
+  const idRow = ['4051999999', 'تازه-دانشجو', '2', '0', '14051', '2', '93', '1', '204', '1382/05/10', '1405/07/01',
+    'عباس', '', '5', '1', '4', '4', '1', '5', '922404', '04433660625', '1', '', '16.5'];
+  const src2 = { ...src, maininfo: mk(mainHdr2, [idRow]), maininfoHeader: mainHdr2.split('\t') };
+  const identities = new Map([['4051999999', {
+    nationalCode: '2756021946', birthCertNo: '204', place: 'اروميه',
+    postalCode: '5711111111', mobile: '09143493822', email: '', address: 'نشانی کامل',
+  }]]);
+  const plan2 = imp2.buildMasterPlan(src2, { ...maps, students: new Map() }, 1, { identities });
+  const idStu = plan2.students[0] as any;
+  eq(idStu?.nc, '2756021946', 'کد ملی واقعی جایگزین IDNO سهرقمی میشود');
+  ok(idStu && !idStu.ncSynthetic, 'دیگر کد مصنوعی SA ساخته نمیشود');
+  eq(idStu?.birthCertNo, '204', 'IDNO/Applicants.BirthCertificateNo ⇒ birthCertNo');
+  eq(idStu?.placeOfBirth, 'اروميه', 'CertificatePlace/LastCertifyPlace ⇒ placeOfBirth');
+  eq(idStu?.placeOfIssue, 'اروميه', 'همان مقدار ⇒ placeOfIssue');
+  eq(idStu?.postalCode, '5711111111', 'HomePostalCode ⇒ postalCode');
+  eq(idStu?.mobile, '09143493822', 'MobileNO ⇒ mobile');
+  eq(idStu?.address, 'نشانی کامل', 'HomeAddress ⇒ address');
+  ok(/readIdentityMap/.test(IMPORT) && /STUDENT_IDENTITY\.tsv/.test(IMPORT), 'خواندن جدول هویت تکمیلی گارد شده است');
+  eq(imp.mergeEnrichField('SA51292042', '2756021946', 'nationalCode').value, '2756021946', 'کد مصنوعی در enrich اصلاح میشود');
+  eq(imp.mergeEnrichField('2756021946', '2756021946', 'nationalCode').changed, false, 'کد ملی معتبر بازنویسی نمیشود');
   const s2 = plan.students.find((s: any) => s.code === '4051666666') as any;
   ok(s2 && s2.nc === 'SA51666666' && s2.ncSynthetic, 'کدملی کوتاه ⇒ کد مصنوعی');
   ok(s2 && s2.status === 'SUSPENDED' && s2.rawStatus === '22', 'وضعیت ۲۲ = تعلیق');
@@ -173,6 +225,10 @@ async function main(): Promise<void> {
       "firstName" varchar(100) NOT NULL, "lastName" varchar(100) NOT NULL, gender varchar(10),
       "passwordHash" varchar(100) NOT NULL, "isActive" integer DEFAULT 1,
       "mustChangePassword" integer DEFAULT 1, "universityId" integer NOT NULL,
+      "fatherName" varchar(100), "birthDate" timestamp, "birthCertNo" varchar(20),
+      "placeOfBirth" varchar(150), "placeOfIssue" varchar(150),
+      "address" varchar(300), "postalCode" varchar(10), "mobile" varchar(11),
+      "email" varchar(150), "nationality" varchar(10),
       UNIQUE ("nationalCode","universityId"));
     CREATE TABLE majors (id serial PRIMARY KEY, name varchar(150) NOT NULL,
       "majorCode" varchar(10), "degreeLevelId" integer, "facultyId" integer,
@@ -186,12 +242,20 @@ async function main(): Promise<void> {
       "majorId" integer, "degreeLevelId" integer, "regulationId" integer,
       "entryYear" integer NOT NULL, "entryTerm" integer DEFAULT 1, status varchar(30) NOT NULL,
       "universityId" integer, "samaStatusCode" varchar(10), "admissionSource" varchar(20),
-      "saminLocalFieldCode" varchar(20), UNIQUE ("universityId","studentCode"));
+      "saminLocalFieldCode" varchar(20),
+      "entryDate" date, "quotaType" varchar(50) DEFAULT 'NORMAL', "acceptanceType" varchar(30),
+      "trainingMethod" varchar(20), "studyingMode" varchar(20), "nativeType" varchar(10),
+      "ethnicity" varchar(10), "advisorCode" varchar(50), "documentStatus" varchar(100),
+      "scholarshipType" varchar(100), "militaryStatus" varchar(50), "militaryExemptionNo" varchar(50),
+      "personId" integer, "homeTell" varchar(20), "tuitionType" varchar(50), "totalAverage" numeric(4,2),
+      UNIQUE ("universityId","studentCode"));
   `);
   // کاربر: درج دوباره بینه است
-  const u1 = (await db.query(imp.USER_INSERT_SQL, ['SD00933201', '', 'استاد تازه', null, 'MIGRATED:x', 1])).rows as any;
+  const profUser = ['SD00933201', '', 'استاد تازه', null, 'MIGRATED:x', 1,
+    null, null, null, null, null, null, null, null, null, null];
+  const u1 = (await db.query(imp.USER_INSERT_SQL, profUser)).rows as any;
   eq(u1.length, 1, 'کاربر استاد درج شد');
-  const u2 = (await db.query(imp.USER_INSERT_SQL, ['SD00933201', '', 'استاد تازه', null, 'MIGRATED:x', 1])).rows as any;
+  const u2 = (await db.query(imp.USER_INSERT_SQL, profUser)).rows as any;
   eq(u2.length, 0, 'درج مجدد کاربر بینه است');
   const lu = (await db.query(imp.USER_LOOKUP_SQL, ['SD00933201', 1])).rows as any;
   eq(lu.length, 1, 'LOOKUP پس از برخورد کاربر پیدا میکند (مسیر idempotency)');
@@ -210,11 +274,13 @@ async function main(): Promise<void> {
   const ur2 = (await db.query(imp.USER_ROLE_INSERT_SQL, [u1[0].id, 8])) as any;
   eq(ur2.rowCount, 0, 'نقش تکراری بی‌اثر');
   // دانشجو: پین uni+code — دانشگاه دیگر دستنخورده
-  const s3 = await db.query(imp.STUDENT_INSERT_SQL, [u1[0].id, '4051999999', 501, 19, 701, 1405, 1, 'UNKNOWN', 1, '0', '93']) as any;
+  const stuArgs = (uid: number, uni: number) => [uid, '4051999999', 501, 19, 701, 1405, 1, 'UNKNOWN', uni, '0', '93',
+    '1405-07-01', 'SHAHED', null, '1', '4', '1', null, '922404', null, null, 'کارت پایان خدمت', null, null, '04433660625', '4', 16.5];
+  const s3 = await db.query(imp.STUDENT_INSERT_SQL, stuArgs(u1[0].id, 1)) as any;
   eq(s3.rows.length, 1, 'دانشجو درج شد');
-  const s4 = await db.query(imp.STUDENT_INSERT_SQL, [u1[0].id, '4051999999', 501, 19, 701, 1405, 1, 'UNKNOWN', 1, '0', '93']) as any;
+  const s4 = await db.query(imp.STUDENT_INSERT_SQL, stuArgs(u1[0].id, 1)) as any;
   eq(s4.rows.length, 0, 'درج مجدد دانشجو بینه است');
-  const s5 = await db.query(imp.STUDENT_INSERT_SQL, [u1[0].id, '4051999999', 501, 19, 701, 1405, 1, 'UNKNOWN', 2, '0', '93']) as any;
+  const s5 = await db.query(imp.STUDENT_INSERT_SQL, stuArgs(u1[0].id, 2)) as any;
   eq(s5.rows.length, 1, 'کد تکراری در دانشگاه دیگر ردیف مستقل میسازد (یکتا = uni+code)');
   const row = (await db.query(`SELECT "samaStatusCode" AS raw, "admissionSource" AS src, "saminLocalFieldCode" AS lf FROM students WHERE "studentCode"='4051999999'`)).rows[0] as any;
   eq(row?.raw, '0', 'کد خام سما ذخیره شد');

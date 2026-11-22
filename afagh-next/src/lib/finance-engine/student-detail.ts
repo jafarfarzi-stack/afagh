@@ -35,7 +35,12 @@ export interface StudentFinanceDetail {
     // ── فیلدهای سربرگ کارنامه (انعکاس سیستم قدیمی) ──
     facultyTitle: string | null;
     quotaType: string | null;
+    /** «نوع دوره» سربرگ — از students.studyingMode (COURSTYPE سما؛ همگام با کارنامهٔ تحصیلی.
+     *  پیشتر از tuitionType میآمد که برای ۳۲۷۹۱ از ۴۸۵۳۲ دانشجو خالی است و سربرگ «—» میشد) */
     courseType: string | null;
+    /** شمارهٔ پروندهٔ سما (students.parvandehNo) — منبعِ «شماره پرونده» سربرگ
+     *  (پیشتر اشتباهاً studentCode چاپ میشد) */
+    parvandehNo: string | null;
     admissionMethod: string | null;
     entryDate: string | null;
     entryTerm: number | null;
@@ -79,7 +84,9 @@ export async function getStudentFinance(
     entryYear: students.entryYear,
     status: students.status,
     quotaType: students.quotaType,
-    courseType: students.tuitionType,
+    // «نوع دوره» = studyingMode (COURSTYPE سما) — همگام با کارنامهٔ تحصیلی؛ tuitionType اکثراً خالی
+    courseType: students.studyingMode,
+    parvandehNo: students.parvandehNo,
     admissionMethod: students.admissionMethod,
     entryDate: students.entryDate,
     entryTerm: students.entryTerm,
@@ -286,6 +293,7 @@ export async function getStudentFinance(
       facultyTitle: studentRow.facultyTitle,
       quotaType: studentRow.quotaType,
       courseType: studentRow.courseType,
+      parvandehNo: studentRow.parvandehNo,
       admissionMethod: studentRow.admissionMethod,
       entryDate: studentRow.entryDate,
       entryTerm: studentRow.entryTerm,

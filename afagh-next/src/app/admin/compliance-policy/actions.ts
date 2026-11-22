@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, isRealUniversityId } from '@/lib/university-scope';
 import {
   deleteComplianceOverride,
   saveComplianceOverride,
@@ -49,7 +49,8 @@ export async function seed1402GraduateRegulationsAction(): Promise<{
 }> {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const uni = await getCurrentUniversity().catch(() => null);
-  const res = await seed1402GraduateRegulations(uni?.id ?? 1);
+  if (!isRealUniversityId(uni?.id)) return { ok: false, created: [], skipped: [], error: 'دانشگاه شما شناسایی نشد.' };
+  const res = await seed1402GraduateRegulations(uni!.id);
   revalidatePath(PATH);
   return res;
 }

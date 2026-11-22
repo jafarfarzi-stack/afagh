@@ -2,6 +2,7 @@ import 'server-only';
 
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { appendAudit } from '@/lib/audit';
 import {
   academic_terms, cart_items, course_offerings, courses, departments,
   enroll_bypass_requests, enrollments, expert_scopes, majors, roles,
@@ -9,6 +10,8 @@ import {
 } from '@/db/schema';
 import { notifyUserMultichannel } from '@/lib/messaging';
 import { evaluateStudentRegulationStatus } from '@/lib/regulations-engine';
+import { assertEnrollmentWrite } from '@/lib/enrollment-window';
+import { assertFinancialClearance } from '@/lib/enrollment-financial-gate';
 import { recountOffering } from '@/lib/enrollment-count';
 import {
   BYPASS_KIND_LABEL,
@@ -183,6 +186,11 @@ export async function createBypassRequest(input: {
 
   const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, off.termId)).limit(1);
   if (!term) return { ok: false, error: 'ترم یافت نشد.' };
+
+  // ⏳ گیت پنجرهٔ انتخاب واحد (دفاع در عمق) — درخواست هم صندلی رزرو می‌کند،
+  // پس باید همان قید زمانی مسیر ثبت نهایی را داشته باشد.
+  const winGate = await assertEnrollmentWrite(term.id, 'ADD');
+  if (!winGate.ok) return { ok: false, error: winGate.error };
 
   const [dup] = await db.select({ id: enroll_bypass_requests.id })
     .from(enroll_bypass_requests)
@@ -359,13 +367,45 @@ export async function bypassOverviewForVice(): Promise<BypassRequestRow[]> {
 }
 
 /** ثبت نهایی درس پس از تأیید (صندلی از قبل رزرو شده است) */
-async function fulfillEnrollment(requestId: number, actorUserId: number): Promise<{ ok: boolean; error?: string }> {
+async function fulfillEnrollment(requestId: number, actorUserId: number, exec?: any): Promise<{ ok: boolean; error?: string }> {
   const [req] = await db.select().from(enroll_bypass_requests).where(eq(enroll_bypass_requests.id, requestId)).limit(1);
   if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
 
-  const [stu] = await db.select({ universityId: students.universityId }).from(students).where(eq(students.id, req.studentId)).limit(1);
+  const [stu] = await db
+    .select({ universityId: students.universityId, status: students.status })
+    .from(students)
+    .where(eq(students.id, req.studentId))
+    .limit(1);
 
-  await db.insert(enrollments).values({
+  // ── گیت‌های تأیید ────────────────────────────────────────────────────────
+  // پیش‌تر این تابع بی‌قیدوشرط ثبت می‌کرد: نه وضعیت دانشجو، نه پنجرهٔ زمانی،
+  // نه تسویهٔ مالی. یعنی «تأیید درخواست» یک کلید همه‌کاره برای دور زدن گیت بدهی
+  // و پنجره بود. اکنون:
+  //   ۱) دانشجو باید ACTIVE باشد.
+  //   ۲) زمان *ثبت درخواست* باید داخل پنجرهٔ انتخاب واحد بوده باشد (تأیید دیرهنگام
+  //      مجاز است، ولی درخواستِ ساخته‌شده بیرون از پنجره پذیرفته نمی‌شود).
+  //   ۳) تسویهٔ مالی همان ترم الزامی است — bypass فقط برای پیش‌نیاز/تداخل است،
+  //      نه برای بدهی.
+  if (!stu || stu.status !== 'ACTIVE') {
+    return { ok: false, error: 'وضعیت دانشجو برای ثبت انتخاب واحد فعال نیست.' };
+  }
+
+  const [term] = await db.select().from(academic_terms).where(eq(academic_terms.id, req.termId)).limit(1);
+  if (term) {
+    const at = req.createdAt ? new Date(req.createdAt) : new Date();
+    const start = term.enrollmentStartDate ? new Date(term.enrollmentStartDate) : null;
+    const end = term.enrollmentEndDate ? new Date(term.enrollmentEndDate) : null;
+    if ((start && at < start) || (end && at > end)) {
+      return { ok: false, error: 'این درخواست بیرون از پنجرهٔ انتخاب واحد ثبت شده است؛ قابل تأیید نیست.' };
+    }
+  }
+
+  const finGate = await assertFinancialClearance(req.studentId, req.termId, stu.universityId ?? null);
+  if (!finGate.ok) {
+    return { ok: false, error: `${finGate.error} (درخواست بدون رعایت پیش‌نیاز/تداخل، گیت تسویهٔ مالی را دور نمی‌زند.)` };
+  }
+
+  await (exec ?? db).insert(enrollments).values({
     studentId: req.studentId,
     offeringId: req.offeringId,
     status: 'REGISTERED',
@@ -383,7 +423,7 @@ async function fulfillEnrollment(requestId: number, actorUserId: number): Promis
     },
   });
 
-  await db.delete(cart_items).where(and(
+  await (exec ?? db).delete(cart_items).where(and(
     eq(cart_items.studentId, req.studentId),
     eq(cart_items.offeringId, req.offeringId),
   ));
@@ -398,6 +438,8 @@ export async function approveBypassRequest(input: {
   requestId: number;
   actorUserId: number;
   actorRole: BypassActorRole;
+  /** یادداشت اختیاری تأییدکننده — فقط در ردیفِ حسابرسی ثبت می‌شود */
+  note?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const [req] = await db.select().from(enroll_bypass_requests).where(eq(enroll_bypass_requests.id, input.requestId)).limit(1);
   if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
@@ -405,17 +447,36 @@ export async function approveBypassRequest(input: {
     return { ok: false, error: 'این درخواست قبلاً بسته شده است.' };
   }
 
-  const done = await fulfillEnrollment(input.requestId, input.actorUserId);
+  // تصمیم + ثبت خودکار درس + ردیف حسابرسی در **یک تراکنش**: شکستِ نوشتنِ
+  // حسابرسی، تأیید را هم برمی‌گرداند (تصمیم بدون رد حسابرسی کامیت نمی‌شود).
+  const done = await db.transaction(async (tx) => {
+    const enrolled = await fulfillEnrollment(input.requestId, input.actorUserId, tx);
+    if (!enrolled.ok) return enrolled;
+    await tx.update(enroll_bypass_requests).set({
+      status: 'APPROVED',
+      decidedRole: input.actorRole,
+      decidedByUserId: input.actorUserId,
+      decidedAt: new Date(),
+      seatReserved: 0,
+      updatedAt: new Date(),
+    }).where(eq(enroll_bypass_requests.id, input.requestId));
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      action: 'bypass_request_approved',
+      entityType: 'enroll_bypass_requests',
+      entityId: input.requestId,
+      details: JSON.stringify({
+        studentId: req.studentId,
+        offeringId: req.offeringId,
+        kind: req.kind,
+        from: req.status,
+        to: 'APPROVED',
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      }),
+    });
+    return { ok: true };
+  });
   if (!done.ok) return done;
-
-  await db.update(enroll_bypass_requests).set({
-    status: 'APPROVED',
-    decidedRole: input.actorRole,
-    decidedByUserId: input.actorUserId,
-    decidedAt: new Date(),
-    seatReserved: 0,
-    updatedAt: new Date(),
-  }).where(eq(enroll_bypass_requests.id, input.requestId));
 
   // تبدیلِ رزرو به ثبت‌نام: هم ردیفِ REGISTERED ساخته شد و هم seatReserved=0 شد.
   // بازشماری پس از هر دو نوشتن، شمارشِ مضاعفِ همان صندلی را قطعی حذف می‌کند.
@@ -452,16 +513,32 @@ export async function rejectBypassRequest(input: {
     return { ok: false, error: 'این درخواست قبلاً بسته شده است.' };
   }
 
-  await db.update(enroll_bypass_requests).set({
-    status: 'REJECTED',
-    reasonCode: input.reasonCode,
-    reasonText: input.reasonText ?? null,
-    decidedRole: input.actorRole,
-    decidedByUserId: input.actorUserId,
-    decidedAt: new Date(),
-    seatReserved: 0,
-    updatedAt: new Date(),
-  }).where(eq(enroll_bypass_requests.id, input.requestId));
+  await db.transaction(async (tx) => {
+    await tx.update(enroll_bypass_requests).set({
+      status: 'REJECTED',
+      reasonCode: input.reasonCode,
+      reasonText: input.reasonText ?? null,
+      decidedRole: input.actorRole,
+      decidedByUserId: input.actorUserId,
+      decidedAt: new Date(),
+      seatReserved: 0,
+      updatedAt: new Date(),
+    }).where(eq(enroll_bypass_requests.id, input.requestId));
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      action: 'bypass_request_rejected',
+      entityType: 'enroll_bypass_requests',
+      entityId: input.requestId,
+      details: JSON.stringify({
+        studentId: req.studentId,
+        offeringId: req.offeringId,
+        kind: req.kind,
+        from: req.status,
+        to: 'REJECTED',
+        reason: input.reasonText?.trim() || input.reasonCode,
+      }),
+    });
+  });
 
   if (req.seatReserved) await releaseReservedSeat(req.offeringId);
 
@@ -506,19 +583,34 @@ export async function returnBypassRequest(input: {
 
   if (input.target === 'MANAGER') {
     const deadline = new Date(now.getTime() + hoursOf(term?.bypassManagerHours, 48) * HOUR);
-    await db.update(enroll_bypass_requests).set({
-      status: 'PENDING_MANAGER',
-      managerDeadlineAt: deadline,
-      expertDeadlineAt: null,
-      escalatedAt: null,
-      managerReminderAt: null,
-      expertReminderAt: null,
-      studentWarnedAt: null,
-      decidedRole: null,
-      decidedByUserId: null,
-      decidedAt: null,
-      updatedAt: now,
-    }).where(eq(enroll_bypass_requests.id, input.requestId));
+    await db.transaction(async (tx) => {
+      await tx.update(enroll_bypass_requests).set({
+        status: 'PENDING_MANAGER',
+        managerDeadlineAt: deadline,
+        expertDeadlineAt: null,
+        escalatedAt: null,
+        managerReminderAt: null,
+        expertReminderAt: null,
+        studentWarnedAt: null,
+        decidedRole: null,
+        decidedByUserId: null,
+        decidedAt: null,
+        updatedAt: now,
+      }).where(eq(enroll_bypass_requests.id, input.requestId));
+      await appendAudit(tx, {
+        actorUserId: input.actorUserId,
+        action: 'bypass_request_returned',
+        entityType: 'enroll_bypass_requests',
+        entityId: input.requestId,
+        details: JSON.stringify({
+          studentId: req.studentId,
+          offeringId: req.offeringId,
+          kind: req.kind,
+          from: req.status,
+          to: 'PENDING_MANAGER',
+        }),
+      });
+    });
 
     if (off) {
       const managers = await managerUserIdsForCourse(off.courseId);
@@ -529,18 +621,33 @@ export async function returnBypassRequest(input: {
   }
 
   const deadline = new Date(now.getTime() + hoursOf(term?.bypassExpertHours, 12) * HOUR);
-  await db.update(enroll_bypass_requests).set({
-    status: 'ESCALATED_EXPERT',
-    expertDeadlineAt: deadline,
-    escalatedAt: now,
-    managerReminderAt: null,
-    expertReminderAt: null,
-    studentWarnedAt: null,
-    decidedRole: null,
-    decidedByUserId: null,
-    decidedAt: null,
-    updatedAt: now,
-  }).where(eq(enroll_bypass_requests.id, input.requestId));
+  await db.transaction(async (tx) => {
+    await tx.update(enroll_bypass_requests).set({
+      status: 'ESCALATED_EXPERT',
+      expertDeadlineAt: deadline,
+      escalatedAt: now,
+      managerReminderAt: null,
+      expertReminderAt: null,
+      studentWarnedAt: null,
+      decidedRole: null,
+      decidedByUserId: null,
+      decidedAt: null,
+      updatedAt: now,
+    }).where(eq(enroll_bypass_requests.id, input.requestId));
+    await appendAudit(tx, {
+      actorUserId: input.actorUserId,
+      action: 'bypass_request_escalated',
+      entityType: 'enroll_bypass_requests',
+      entityId: input.requestId,
+      details: JSON.stringify({
+        studentId: req.studentId,
+        offeringId: req.offeringId,
+        kind: req.kind,
+        from: req.status,
+        to: 'ESCALATED_EXPERT',
+      }),
+    });
+  });
 
   if (off) {
     const experts = await expertUserIdsForMajor(stu?.majorId ?? null);
@@ -559,8 +666,24 @@ export async function cancelBypassRequest(requestId: number, studentId: number):
   if (!['PENDING_MANAGER', 'ESCALATED_EXPERT'].includes(req.status)) {
     return { ok: false, error: 'این درخواست قابل لغو نیست.' };
   }
-  await db.update(enroll_bypass_requests).set({ status: 'CANCELLED', seatReserved: 0, updatedAt: new Date() })
-    .where(eq(enroll_bypass_requests.id, requestId));
+  const stu = await studentNameAndMajor(req.studentId);
+  await db.transaction(async (tx) => {
+    await tx.update(enroll_bypass_requests).set({ status: 'CANCELLED', seatReserved: 0, updatedAt: new Date() })
+      .where(eq(enroll_bypass_requests.id, requestId));
+    await appendAudit(tx, {
+      actorUserId: stu?.userId ?? null,
+      action: 'bypass_request_cancelled',
+      entityType: 'enroll_bypass_requests',
+      entityId: requestId,
+      details: JSON.stringify({
+        studentId: req.studentId,
+        offeringId: req.offeringId,
+        kind: req.kind,
+        from: req.status,
+        to: 'CANCELLED',
+      }),
+    });
+  });
   if (req.seatReserved) await releaseReservedSeat(req.offeringId);
   return { ok: true };
 }
@@ -597,12 +720,27 @@ export async function runBypassDeadlines(): Promise<{
       if (req.managerDeadlineAt.getTime() <= now.getTime()) {
         const expertHours = hoursOf(row.term.bypassExpertHours, 12);
         const expertDeadlineAt = new Date(now.getTime() + expertHours * HOUR);
-        await db.update(enroll_bypass_requests).set({
-          status: 'ESCALATED_EXPERT',
-          escalatedAt: now,
-          expertDeadlineAt,
-          updatedAt: now,
-        }).where(eq(enroll_bypass_requests.id, req.id));
+        await db.transaction(async (tx) => {
+          await tx.update(enroll_bypass_requests).set({
+            status: 'ESCALATED_EXPERT',
+            escalatedAt: now,
+            expertDeadlineAt,
+            updatedAt: now,
+          }).where(eq(enroll_bypass_requests.id, req.id));
+          await appendAudit(tx, {
+            actorUserId: null,
+            action: 'bypass_request_escalated',
+            entityType: 'enroll_bypass_requests',
+            entityId: req.id,
+            details: JSON.stringify({
+              studentId: req.studentId,
+              offeringId: req.offeringId,
+              kind: req.kind,
+              from: req.status,
+              to: 'ESCALATED_EXPERT',
+            }),
+          });
+        });
         stats.escalated += 1;
 
         const experts = await expertUserIdsForMajor(stu?.majorId ?? null);
@@ -628,14 +766,30 @@ export async function runBypassDeadlines(): Promise<{
     const expertDeadline = req.expertDeadlineAt;
     if (expertDeadline) {
       if (expertDeadline.getTime() <= now.getTime()) {
-        await db.update(enroll_bypass_requests).set({
-          status: 'AUTO_REJECTED',
-          reasonCode: 'NO_RESPONSE',
-          decidedRole: 'SYSTEM',
-          decidedAt: now,
-          seatReserved: 0,
-          updatedAt: now,
-        }).where(eq(enroll_bypass_requests.id, req.id));
+        await db.transaction(async (tx) => {
+          await tx.update(enroll_bypass_requests).set({
+            status: 'AUTO_REJECTED',
+            reasonCode: 'NO_RESPONSE',
+            decidedRole: 'SYSTEM',
+            decidedAt: now,
+            seatReserved: 0,
+            updatedAt: now,
+          }).where(eq(enroll_bypass_requests.id, req.id));
+          await appendAudit(tx, {
+            actorUserId: null,
+            action: 'bypass_request_auto_rejected',
+            entityType: 'enroll_bypass_requests',
+            entityId: req.id,
+            details: JSON.stringify({
+              studentId: req.studentId,
+              offeringId: req.offeringId,
+              kind: req.kind,
+              from: req.status,
+              to: 'AUTO_REJECTED',
+              reason: 'NO_RESPONSE',
+            }),
+          });
+        });
         if (req.seatReserved) await releaseReservedSeat(req.offeringId);
         stats.expired += 1;
 

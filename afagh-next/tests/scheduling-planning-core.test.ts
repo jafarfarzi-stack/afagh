@@ -197,7 +197,7 @@ eq('سهم ۳۳٪ دقیقاً ۰٫۳۳ است', [w33.theory, w33.lab], [0.33, 0
 
 console.log('\n۷) آرایش زنگ تفریح و سناریوی واقعی');
 eq('چهار فاز برچسب دارد', Object.keys(PHASE_LABELS).sort(), ['ALLOCATION', 'PUBLISHED', 'REVIEW', 'SUPPLY']);
-eq('شش روز کاری', DAY_NAMES.length, 6);
+eq('هفت روز کاری (شنبه تا جمعه)', DAY_NAMES.length, 7);
 for (const key of Object.keys(TIME_SLOT_PRESETS) as (keyof typeof TIME_SLOT_PRESETS)[]) {
   const p = TIME_SLOT_PRESETS[key];
   const bad = p.slots.filter((s, i) => {

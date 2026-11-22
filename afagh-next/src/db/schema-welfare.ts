@@ -10,8 +10,8 @@
 //  جدول‌های مستقل این ماژول — عمداً در schema.ts ثبت نشده تا فایل مشترک
 //  دست‌نخورده بماند. مهاجرت دستی: drizzle/0081_welfare_student_formula.sql.
 // ══════════════════════════════════════════════════════════════════════
-import { integer, numeric, pgTable, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core';
-import { academic_terms, students, universities, users } from '@/db/schema';
+import { index, integer, numeric, pgTable, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { academic_terms, courses, students, universities, users } from '@/db/schema';
 
 /** کاتالوگ صندوق‌های رفاهی/حمایتی (صندوق رفاه، قرض‌الحسنه، …) */
 export const welfare_funds = pgTable('welfare_funds', {
@@ -43,6 +43,28 @@ export const student_tuition_overrides = pgTable('student_tuition_overrides', {
   createdAt: timestamp('createdAt').defaultNow(),
   updatedAt: timestamp('updatedAt').defaultNow(),
 });
+
+/**
+ * شهریهٔ ویژهٔ **یک درس** برای یک دانشجو — دقیق‌تر از `student_tuition_overrides`.
+ *
+ * سندِ راهنمای سما: «شهریهٔ متغیر ویژه برای یک دانشجوی خاص برای درس‌های مورد
+ * نظر». اولویت: این رکورد > override کلِ دانشجو > تعرفهٔ عمومی.
+ * termId تهی = همهٔ ترم‌ها.
+ */
+export const student_course_tuition_overrides = pgTable('student_course_tuition_overrides', {
+  id: serial('id').primaryKey(),
+  studentId: integer('studentId').notNull().references(() => students.id),
+  termId: integer('termId').references(() => academic_terms.id),
+  courseId: integer('courseId').notNull().references(() => courses.id),
+  perUnitAmount: numeric('perUnitAmount', { precision: 12, scale: 0 }).notNull().default('0'),
+  reason: text('reason'),
+  isActive: integer('isActive').notNull().default(1),
+  createdBy: integer('createdBy').references(() => users.id),
+  universityId: integer('universityId').references(() => universities.id),
+  createdAt: timestamp('createdAt').defaultNow(),
+}, (t) => [
+  index('idx_scto_lookup').on(t.studentId, t.termId, t.courseId),
+]);
 
 export type WelfareFundRow = typeof welfare_funds.$inferSelect;
 export type TuitionOverrideRow = typeof student_tuition_overrides.$inferSelect;

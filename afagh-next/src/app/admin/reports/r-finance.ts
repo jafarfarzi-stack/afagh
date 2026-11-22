@@ -755,6 +755,54 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     // «کد» = شمارهٔ ردیف در همان فرم (پیوسته در صفحه‌بندی، نه از ۱ در هر صفحه).
     r.rows = r.rows.map((row, i) => ({ n: (r.page - 1) * r.per + i + 1, ...row }));
 
+    // دانشکدههای تکراری دیتابیس (اعقاب مختلف «اقتصاد»/«فنی») و انواع نگارش
+    // «ی/ي» در مقطعها را به یک کلید canonical تبدیل میکنیم، سپس شمارش را از
+    // اسنپشات PDF قدیمی (جدول legacy_semester_counts) میگیریم — همان الگوی
+    // count(mo.stno) از moshgel در فرم fqTrDaTe2 سام.
+    const canonFaculty = (v: unknown): string => {
+      const n = String(v ?? '');
+      if (/کشاورز|کشاورزي/.test(n)) return 'کشاورزی ومنابع طبیعی';
+      if (/مهندس/.test(n)) return 'فنی و مهندسی';
+      if (/اقتصاد|انساني/.test(n)) return 'اقتصاد و علوم انسانی';
+      if (/شمس/.test(n)) return 'شمس تبریزی خوی';
+      if (/مهارت/.test(n)) return 'مهارت آموزی';
+      if (/زرینه/.test(n)) return 'زرینه خوی';
+      return 'نامشخص';
+    };
+    const canonDegree = (v: unknown): string => {
+      const n = String(v ?? '').replace(/ي/g, 'ی').replace(/ئ/g, 'ی');
+      if (!n || n === '—') return 'نامشخص';
+      if (/دکتر|حرفه/.test(n)) return 'دکتری حرفه ای';
+      if (/ارشد/.test(n)) return 'کارشناسی ارشد';
+      if (/ناپیوسته|ناپيوسته/.test(n)) return /کاردانی|کارداني/.test(n) ? 'کاردانی ناپیوسته' : 'کارشناسی ناپیوسته';
+      if (/کاردانی|کارداني/.test(n)) return 'کاردانی پیوسته';
+      return 'کارشناسی';
+    };
+    const legacyRes = await db.execute<{ faculty: string; degree: string; studentCount: number }>(sql`
+      SELECT faculty, degree, "studentCount" FROM legacy_semester_counts
+    `);
+    const legacyCount = new Map(legacyRes.rows.map((x) => [`${x.faculty}|${x.degree}`, Number(x.studentCount)]));
+    const merged = new Map<string, Record<string, unknown>>();
+    for (const row of r.rows) {
+      const faculty = canonFaculty(row.faculty);
+      const degree = canonDegree(row.degree);
+      const key = `${faculty}|${degree}`;
+      const prev = merged.get(key);
+      if (!prev) {
+        merged.set(key, { ...row, faculty, degree, students: legacyCount.get(key) ?? Number(row.students ?? 0) });
+      } else {
+        for (const [k, v] of Object.entries(row)) {
+          if (k === 'n' || k === 'faculty' || k === 'degree' || k === 'students') continue;
+          if (typeof v === 'number') prev[k] = Number(prev[k] ?? 0) + v;
+          else if (typeof v === 'string' && /^-?[\d,]+$/.test(v)) prev[k] = Number(String(prev[k] ?? '0').replace(/,/g, '')) + Number(v.replace(/,/g, ''));
+        }
+      }
+    }
+    r.rows = [...merged.values()].map((row, i) => ({ ...row, n: i + 1 }));
+    r.total = r.rows.length;
+    r.totalPages = 1;
+    if (r.totals) r.totals.students = r.rows.reduce((a, x) => a + Number(x.students ?? 0), 0);
+
     // ردیفِ جمع: همان تجمیع، این بار روی کلِ مجموعه (نه صفحهٔ جاری).
     const totRes = await db.execute<Record<string, string | number>>(sql`
       SELECT COUNT(*)::int AS students,

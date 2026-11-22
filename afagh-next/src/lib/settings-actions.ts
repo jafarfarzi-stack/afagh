@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { resetSettings, saveSettings, SETTING_BY_KEY, getSetting } from '@/lib/settings';
+import { saveSettingsWithAudit } from '@/lib/settings-audit';
 import { SECRET_MASK } from '@/lib/settings-shared';
 import { magicMatches } from '@/lib/safe-input';
 
@@ -16,8 +17,9 @@ export interface SettingsActionResult {
  * مقادیر محرمانه اگر دست‌نخورده (••••) باشند، بازنویسی نمی‌شوند.
  */
 export async function saveSettingsAction(values: Record<string, string>): Promise<SettingsActionResult> {
+  let adminId: number;
   try {
-    await requirePlatformAdmin();
+    adminId = (await requirePlatformAdmin()).id;
   } catch {
     return { ok: false, message: 'دسترسی لازم را ندارید.' };
   }
@@ -50,7 +52,7 @@ export async function saveSettingsAction(values: Record<string, string>): Promis
   // حالتِ قبلیِ باز بودن اعلام حضور — برای تشخیصِ گذارِ به NEXT (ارسال اطلاعیه)
   const oldAvMode = (await getSetting('AVAILABILITY_TERM_MODE'))?.trim() || 'ACTIVE';
 
-  const n = await saveSettings(clean);
+  const n = await saveSettingsWithAudit(clean, adminId);
   revalidatePath('/admin/settings');
 
   let message = `${n} تنظیم ذخیره شد.`;

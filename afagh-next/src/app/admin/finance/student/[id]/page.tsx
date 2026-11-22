@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link';
+import ExportWordButton from '@/components/ExportWordButton';
 import { notFound } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
 import { getStudentFinance, computeFormulaTuition } from '@/lib/finance-engine';
@@ -158,6 +159,11 @@ const fin = await getStudentFinance(studentId, {
               ? `✅ تأییدشده برای چاپ معتبر${approval.trackingCode ? ` — ${approval.trackingCode}` : ''}`
               : '⏳ بدون تأیید کارشناس مالی (QR برای دانشجو غیرفعال)'}
           </span>
+          <ExportWordButton
+            targetSelector=".print-area"
+            fileName={`کارنامه-مالی-${student.studentCode ?? studentId}`}
+            label="📄 Word"
+          />
         </div>
       </div>
 
@@ -171,7 +177,7 @@ const fin = await getStudentFinance(studentId, {
           logoUrl={logoUrl}
           issuedAt={jdate(new Date())}
           viewerRole="FINANCE"
-          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} /> : undefined}
+          verifyBlock={financeVerify ? <FinanceVerifyBlock url={financeVerify.url} qr={financeVerify.qr} expiresAt={financeVerify.expiresAt} code={financeVerify.code} /> : undefined}
           cheques={fin.cheques.map((c) => ({
             id: c.id, chequeNo: c.chequeNo, bankName: c.bankName,
             amount: Number(c.amount), dueDate: c.dueDate, status: c.status,

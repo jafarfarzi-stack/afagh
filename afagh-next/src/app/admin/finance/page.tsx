@@ -110,7 +110,8 @@ export default async function FinanceWorklistPage(props: {
   const search = (sp.q || '').trim();
   const onlyDebtors = sp.debtors === '1';
   // پیش‌فرض فقط دانشجویان فعال؛ با ?all=1 همهٔ وضعیت‌ها (فارغ‌التحصیل/انصرافی…)
-  const statusScope = sp.all === '1' ? 'ALL' : 'ACTIVE';
+  const statusScope = sp.all === '1' || search !== '' ? 'ALL' : 'ACTIVE';
+  // جستجوی صریح کد/نام هم فارغالتحصیلها را میگنجاند؛ داشبورد بدون کوئری ACTIVE میماند.
   const page = Math.max(1, Number(sp.page) || 1);
   // ⚡ ۵۰ ردیف در هر صفحه (پیشتر ۱۰۰): `FinanceTable` یک کامپوننت کلاینت است،
   //    پس ردیفها هم بهعنوان props در payloadـ RSC سریال میشوند و هم **دوبار** در
@@ -183,6 +184,38 @@ export default async function FinanceWorklistPage(props: {
               🧰 ابزارهای مالی
             </Link>
           </div>
+        </div>
+      </div>
+
+      {/* ── ابزارهای سریع مالی ──
+          پیش‌تر این ابزارها فقط پشتِ صفحهٔ /admin/c/fin بودند و کارشناس مالی
+          داخلِ کارتابل هیچ دسترسی مستقیمی نداشت (گلایهٔ کاربر: «فقط کارنامهٔ
+          مالی داره»). حالا همان‌جا یک ردیف چسبیده به سربرگ نشسته است. */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="px-1 text-2xs font-black text-slate-500">دسترسی سریع:</span>
+          {[
+            { href: '/admin/student-finance', icon: '📒', label: 'دفتر مالی دانشجویان' },
+            { href: '/admin/tuition', icon: '⚙️', label: 'موتور شهریه' },
+            { href: '/admin/course-finance', icon: '📚', label: 'نوع درس مالی' },
+            { href: '/admin/finance/rules', icon: '🧮', label: 'قواعد مالی' },
+            { href: '/admin/finance/course-tuition', icon: '🎯', label: 'شهریهٔ ویژهٔ درس' },
+            { href: '/admin/finance/reconciliation', icon: '🧩', label: 'مغایرت حساب' },
+            { href: '/admin/finance/reports', icon: '📊', label: 'گزارش‌ها' },
+            { href: '/admin/finance/reports/faculty-financial', icon: '🏢', label: 'گزارش مالی دانشکده ها' },
+            { href: '/admin/finance/reports/student-statement', icon: '🧾', label: 'صورت حساب' },
+            { href: '/admin/finance/pos', icon: '💳', label: 'POS' },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              prefetch={false}
+              href={l.href}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-2xs font-bold text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-800"
+            >
+              <span>{l.icon}</span>
+              {l.label}
+            </Link>
+          ))}
         </div>
       </div>
 
@@ -298,7 +331,14 @@ export default async function FinanceWorklistPage(props: {
         </div>
 
         {students.length === 0 ? (
-          <p className="py-8 text-center text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</p>
+          <div className="py-8 text-center">
+            <p className="text-xs text-slate-500">دانشجویی با این فیلترها یافت نشد.</p>
+            {search !== '' && sp.all !== '1' && (
+              <p className="mt-1 text-2xs text-amber-700">
+                اگر دانشجو فارغالتحصیل/غیرفعال است، گزینهٔ «همهٔ وضعیتها» را فعال کنید.
+              </p>
+            )}
+          </div>
         ) : (
           <FinanceTable students={students} />
         )}

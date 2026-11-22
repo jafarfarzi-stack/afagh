@@ -19,7 +19,7 @@ import {
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { notifyUserMultichannel, type Channel } from '@/lib/messaging';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 
 const EDU = ['ADMIN', 'EDU_EXPERT'];
 
@@ -44,22 +44,22 @@ export async function getBroadcastFilters(): Promise<BroadcastFilters> {
   const u = await uniId();
   const [fac, dep, maj] = await Promise.all([
     db.select({ id: faculties.id, name: faculties.name }).from(faculties)
-      .where(u ? eq(faculties.universityId, u) : undefined).orderBy(asc(faculties.name)).limit(500),
+      .where(universityEq(faculties.universityId, u)).orderBy(asc(faculties.name)).limit(500),
     db.select({ id: departments.id, name: departments.name, facultyId: departments.facultyId }).from(departments)
-      .where(u ? eq(departments.universityId, u) : undefined).orderBy(asc(departments.name)).limit(2000),
+      .where(universityEq(departments.universityId, u)).orderBy(asc(departments.name)).limit(2000),
     db.select({ id: majors.id, name: majors.name, departmentId: majors.departmentId }).from(majors)
-      .where(u ? eq(majors.universityId, u) : undefined).orderBy(asc(majors.name)).limit(5000),
+      .where(universityEq(majors.universityId, u)).orderBy(asc(majors.name)).limit(5000),
   ]);
   const years = (await db
     .selectDistinct({ y: students.entryYear })
     .from(students)
-    .where(u ? eq(students.universityId, u) : undefined)
+    .where(universityEq(students.universityId, u))
     .orderBy(asc(students.entryYear))
     .limit(60)) as { y: number | null }[];
   const terms = await db
     .select({ id: academic_terms.id, title: academic_terms.title, isCurrent: academic_terms.isCurrent })
     .from(academic_terms)
-    .where(u ? eq(academic_terms.universityId, u) : undefined)
+    .where(universityEq(academic_terms.universityId, u))
     .orderBy(desc(academic_terms.id))
     .limit(24);
   return {
@@ -86,7 +86,7 @@ export async function getTermOfferings(termId: number): Promise<TermOffering[]> 
   if (!Number.isInteger(termId) || termId <= 0) return [];
   const u = await uniId();
   const conds = [eq(course_offerings.termId, termId), eq(course_offerings.isActive, 1)];
-  if (u) conds.push(eq(course_offerings.universityId, u));
+  conds.push(universityEq(course_offerings.universityId, u));
   const rows = await db
     .select({
       id: course_offerings.id,
@@ -154,7 +154,7 @@ async function audienceUserIds(a: BroadcastAudience): Promise<{ ids: number[]; c
       }
     } else {
       const conds = [eq(users.isActive, 1)];
-      if (u) conds.push(eq(students.universityId, u));
+      conds.push(universityEq(students.universityId, u));
       if (a.activeOnly) conds.push(eq(students.status, 'ACTIVE'));
       if (a.majorId) conds.push(eq(students.majorId, a.majorId));
       if (a.entryYear) conds.push(eq(students.entryYear, a.entryYear));
@@ -222,7 +222,7 @@ async function audienceUserIds(a: BroadcastAudience): Promise<{ ids: number[]; c
       }
     } else {
       const conds = [eq(users.isActive, 1)];
-      if (u) conds.push(eq(staff.universityId, u));
+      conds.push(universityEq(staff.universityId, u));
       if (a.activeOnly) conds.push(eq(staff.isActive, 1));
       // گروه دقیق‌تر از دانشکده است و آن را در خودش دارد؛ اگر هر دو انتخاب
       // شده باشند فقط گروه اعمال می‌شود تا ستون خالی facultyId کسی را

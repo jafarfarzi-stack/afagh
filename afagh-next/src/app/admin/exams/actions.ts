@@ -15,7 +15,7 @@ import {
   exam_halls, exam_sessions, invigilators, schedules, staff, users,
 } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
-import { getCurrentUniversity } from '@/lib/university-scope';
+import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import { pickEffectiveTerm } from '@/lib/term-scope';
 import * as engine from '@/lib/exam-engine';
 import { normalizeExamDate } from '@/lib/shamsi';
@@ -66,7 +66,7 @@ function normSessionDate(v: unknown): string {
 // ─────────────────────────── helpers (غیر export — گارد CI) ───────────────────────────
 
 async function listRealTerms(universityId?: number) {
-  const where = universityId ? eq(academic_terms.universityId, universityId) : undefined;
+  const where = universityEq(academic_terms.universityId, universityId);
   return db
     .select({
       id: academic_terms.id,
@@ -85,9 +85,7 @@ async function listRealTerms(universityId?: number) {
 
 /** سشن‌های واقعی ترم + مراقبین هر سشن + آمار حضور */
 async function loadSessions(termId: number, universityId?: number) {
-  const where = universityId
-    ? and(eq(exam_sessions.termId, termId), eq(exam_sessions.universityId, universityId))
-    : eq(exam_sessions.termId, termId);
+  const where = and(eq(exam_sessions.termId, termId), universityEq(exam_sessions.universityId, universityId));
   const sessions = await db
     .select()
     .from(exam_sessions)
@@ -149,7 +147,7 @@ async function loadSessions(termId: number, universityId?: number) {
 /** دروس امتحانی: schedules با scheduleType='EXAM' + جزئیات + بستهٔ اوراق */
 async function loadExamCourses(termId: number, universityId?: number) {
   // فیلتر دانشگاه از روی ارائهٔ درس (نه سالن) تا ردیف‌های بدون سالن حذف نشوند
-  const uniFilter = universityId ? eq(course_offerings.universityId, universityId) : undefined;
+  const uniFilter = universityEq(course_offerings.universityId, universityId);
   const rows = await db
     .select({
       offeringId: course_offerings.id,
@@ -203,7 +201,7 @@ async function loadExamCourses(termId: number, universityId?: number) {
 }
 
 async function loadHalls(universityId?: number) {
-  const where = universityId ? eq(exam_halls.universityId, universityId) : undefined;
+  const where = universityEq(exam_halls.universityId, universityId);
   const rows = await db
     .select({
       id: exam_halls.id,
@@ -363,7 +361,7 @@ export async function getExamPlanningAction(termId: number, universityId?: numbe
       planning.examCapacityRadar(termId, uid),
       planning.listEquivClusters(termId, uid),
     ]);
-    const hallWhere = uid ? eq(exam_halls.universityId, uid) : undefined;
+    const hallWhere = universityEq(exam_halls.universityId, uid);
     const halls = await db.select().from(exam_halls).where(hallWhere).orderBy(asc(exam_halls.id));
     return {
       ok: true,
