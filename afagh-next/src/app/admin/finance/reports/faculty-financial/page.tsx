@@ -26,6 +26,7 @@ const REFUND = ["POS_REFUND"] as const;
 const DISC_VARIABLE = ["DISCOUNT_VARIABLE", "TUITION_BATES_VARIABLE"] as const;
 const DISC_FIXED = ["DISCOUNT_FIXED", "TUITION_BATES_FIXED", "TUITION_BATES", "TUITION_ADJUST_INC"] as const;
 const DISC_AMOUNT = ["TUITION_BATES_AMOUNT"] as const;
+const CHARGE_TYPES = [...VARIABLE, ...FIXED, ...DISC_VARIABLE, ...DISC_FIXED, ...DISC_AMOUNT] as const;
 const PAYMENTS = ["PAYMENT", "POS_PAYMENT", "SPONSORSHIP", "CREDIT"] as const;
 const ADVANCE = ["LOAN"] as const;
 const TOPIC_ADD = ["SUBJECT_ADDITIVE"] as const;
@@ -134,7 +135,8 @@ export default async function FacultyFinancialReportPage(props: {
       COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—') AS code,
       COALESCE(fc.name, '—') AS faculty,
       (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::int AS "entryCode",
-      COUNT(DISTINCT s.id)::int AS students,
+      // شمارش دانشجو مطابق سام: کسی که ردیف شهریه/تخفیف دارد، نه صرفاً پرداختی.
+      COUNT(DISTINCT s.id) FILTER (WHERE ${inTypes(CHARGE_TYPES)})::int AS students,
       ${sumOf(VARIABLE)} AS variable,
       ${sumOf(FIXED)} AS fixed,
       ${sumOf(ADJ_DEC)} AS adjdec,
