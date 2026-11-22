@@ -1177,11 +1177,14 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         const shown = fmtCell(r[c.key], c.format);
                         // ✓/✗ فقط در خطِ «کنترل این‌همانیِ» ترازنامهٔ دفتر کل می‌آید
                         // (r-gl)؛ سبز/سرخ‌کردنش بدون افزودن ستونِ تازه به داده است.
+                        const isNegativeMoney = c.format === 'MONEY' && Number(r[c.key]) < 0;
                         const tone = shown.startsWith('✓')
                           ? ' text-emerald-700 font-extrabold'
                           : shown.startsWith('✗')
                             ? ' text-rose-700 font-extrabold'
-                            : '';
+                            : isNegativeMoney
+                              ? ' text-rose-700 font-extrabold print:text-rose-700'
+                              : '';
                         return (
                           <td key={c.key} className={`p-2 font-mono print:whitespace-normal print:break-words${tone}`} dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
                             {shown}

@@ -70,8 +70,9 @@ const n = (v: unknown): number => {
   return Number.isFinite(x) ? x : 0;
 };
 const money = (v: number): string => faNum(Math.round(v).toLocaleString("en-US"));
+// بدهکار (net>0): علامت منفی + رنگ قرمز؛ بستانکار: عدد معمولی سیاه و بدون پرانتز.
 const signedMoney = (v: number): string =>
-  v < 0 ? `(${money(Math.abs(v))})` : money(v);
+  v > 0 ? `-${money(v)}` : money(-v);
 
 function todayJalali(): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -170,7 +171,19 @@ export default async function FacultyFinancialReportPage(props: {
     ORDER BY COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—'), "entryCode"
   `);
 
-  const rows: Row[] = data.rows.map((r) => {
+  // فقط ردیفهایی که سام برایشان شمارش دارد چاپ شوند (مثلاً ۱۳۸۸۱/۱۳۹۸۱ در سام نیستند).
+  const legacyRows = await db.execute<{ "facultyCode": string; "cohort": string }>(sql`
+    SELECT "facultyCode", "cohort" FROM legacy_faculty_student_counts WHERE "termCode" = ${term}
+  `);
+  const legacyKeys = new Set(legacyRows.rows.map((x) => `${x.facultyCode}|${x.cohort}`));
+  const legacyFaculties = new Set([...legacyKeys].map((k) => k.split('|')[0]));
+  const visibleRows = data.rows.filter((r) => {
+    const code = String(r.code ?? '');
+    if (!legacyFaculties.has(code)) return true;
+    return legacyKeys.has(`${code}|${r.entryCode}`);
+  });
+
+  const rows: Row[] = visibleRows.map((r) => {
     const debit =
       n(r.variable) + n(r.fixed) + n(r.adjdec) + n(r.refund) + n(r.topicAdd);
     const credit =
@@ -221,6 +234,7 @@ export default async function FacultyFinancialReportPage(props: {
       .ff-table tfoot { display: table-footer-group !important; }
       .ff-table tr { break-inside: avoid; page-break-inside: avoid; }
       .ff-table th, .ff-table td { border-color:#111 !important; }
+      .ff-debt { color:#c0392b !important; font-weight:800 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     }
     .ff-doc { background:#fff; color:#111; border:1px solid #111; padding:10px; }
     .ff-head { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; border:1px solid #111; border-bottom:0; padding:6px 10px; min-height:78px; }
@@ -342,7 +356,7 @@ export default async function FacultyFinancialReportPage(props: {
                 <td className="ff-num"><Stack top={money(n(r.advance))} bottom={money(n(r.topicAdd) - n(r.topicDeduct))} /></td>
                 <td className="ff-num"><Stack top={money(r.debit)} bottom={money(r.credit)} /></td>
                 <td className="ff-num"><Stack top={money(r.debtor)} bottom={money(r.creditor)} /></td>
-                <td className="ff-num">{signedMoney(r.net)}</td>
+                <td className={`ff-num${r.net > 0 ? " ff-debt" : ""}`}>{signedMoney(r.net)}</td>
                 <td className="ff-name">{r.status}</td>
               </tr>
             ))}
@@ -359,7 +373,7 @@ export default async function FacultyFinancialReportPage(props: {
               <td className="ff-num"><Stack top={money(total.advance)} bottom={money(total.topicAdd - total.topicDeduct)} /></td>
               <td className="ff-num"><Stack top={money(total.debit)} bottom={money(total.credit)} /></td>
               <td className="ff-num"><Stack top={money(Math.max(total.net, 0))} bottom={money(Math.max(-total.net, 0))} /></td>
-              <td className="ff-num">{signedMoney(total.net)}</td>
+              <td className={`ff-num${total.net > 0 ? " ff-debt" : ""}`}>{signedMoney(total.net)}</td>
               <td>{total.net >= 0 ? "بدهکار" : "بستانکار"}</td>
             </tr>
           </tfoot>
