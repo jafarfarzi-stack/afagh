@@ -5,6 +5,7 @@ import { degree_level_configs, majors, student_cards, students, users } from '@/
 import { requireRole } from '@/lib/auth';
 import { escapeLikeChars, normalizeFa, normCol, toEnDigits } from '@/lib/persian-search';
 import { getNumber, getSetting } from '@/lib/settings';
+import { getCardDesigns } from '@/lib/student-card-designs';
 import { getCurrentUniversity, universityEq } from '@/lib/university-scope';
 import StudentCardsClient from './StudentCardsClient';
 
@@ -134,6 +135,7 @@ export default async function AdminStudentCardsPage({
       rfidSerialNumber: student_cards.rfidSerialNumber,
       issuedAt: student_cards.issuedAt,
       expiresAt: student_cards.expiresAt,
+      designId: student_cards.designId,
       debt: debtOf(students.id),
     })
     .from(students)
@@ -152,6 +154,9 @@ export default async function AdminStudentCardsPage({
   };
 
   const secretSet = secretValue.trim().length > 0;
+
+  // طراحی‌های نام‌دار کارت — برای انتخاب هنگام صدور
+  const { designs: cardDesigns, defaultId: defaultDesignId } = await getCardDesigns();
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -188,6 +193,8 @@ export default async function AdminStudentCardsPage({
         total={total}
         perPage={PER_PAGE}
         stats={stats}
+        designs={cardDesigns.map(d => ({ id: d.id, title: d.title }))}
+        defaultDesignId={defaultDesignId}
         rows={rows.map(r => ({
           studentId: r.studentId,
           studentCode: r.studentCode,
@@ -208,6 +215,7 @@ export default async function AdminStudentCardsPage({
                 expired: !!r.expiresAt && new Date(r.expiresAt).getTime() < Date.now(),
               }
             : null,
+          designId: r.designId ?? null,
           debt: Math.max(0, Math.round(Number(r.debt ?? 0))),
         }))}
       />

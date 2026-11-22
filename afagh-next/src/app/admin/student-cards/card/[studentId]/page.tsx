@@ -4,9 +4,10 @@ import { db } from '@/db';
 import { degree_level_configs, majors, student_cards, students, universities, users } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { getPublicBaseUrl, getSetting, getSettings } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting } from '@/lib/settings';
 import { qrSvg } from '@/lib/qr';
-import StudentCardView, { parseCardDesign } from '@/components/StudentCardView';
+import StudentCardView, { StudentCardBackView } from '@/components/StudentCardView';
+import { getCardDesign } from '@/lib/student-card-designs';
 import PrintButton from '@/components/PrintButton';
 import { verifyEntry, refCodeOf } from '@/lib/verify-url';
 import { toShamsi } from '@/lib/shamsi';
@@ -47,6 +48,7 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
       uniLogo: universities.logoUrl,
       cardToken: student_cards.secureToken,
       cardStatus: student_cards.printStatus,
+      cardDesignId: student_cards.designId,
       cardIssuedAt: student_cards.issuedAt,
       cardExpiresAt: student_cards.expiresAt,
     })
@@ -80,21 +82,28 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
   const logo = row.uniLogo || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
   const validUntil = row.cardExpiresAt ? toShamsi(row.cardExpiresAt.toISOString()) : null;
 
-  // طراحیِ ذخیره‌شده از فرم «طراحی کارت» — تنها منبعِ ظاهرِ کارت
-  const designValues = await getSettings([
-    'STUDENT_CARD_TEMPLATE',
-    'STUDENT_CARD_ACCENT',
-    'STUDENT_CARD_HEADER',
-    'STUDENT_CARD_FOOTER',
-    'STUDENT_CARD_FIELDS',
-    'STUDENT_CARD_SHOW_PHOTO',
-    'STUDENT_CARD_SHOW_QR',
-    'STUDENT_CARD_SHOW_LOGO',
-  ] as const);
-  const design = parseCardDesign(designValues);
+  // طراحیِ ثبت‌شده روی همین کارت (انتخاب‌شده هنگام صدور) — در نبودش، پیش‌فرض
+  const { design } = await getCardDesign(row.cardDesignId);
   const verifySuffix = verifyUrl
     ? ` — سامانه: ${verifyEntry(verifyUrl)} · کد رهگیری: ${refCodeOf(verifyUrl)}`
     : '';
+
+  const cardData = {
+    firstName: row.firstName ?? '',
+    lastName: row.lastName ?? '',
+    studentCode: row.studentCode ?? '',
+    nationalCode: row.nationalCode,
+    majorName: row.majorName,
+    degreeTitle: row.degreeTitle,
+    entryYear: row.entryYear,
+    status: row.cardStatus,
+    validUntil,
+    uniTitle: row.uniTitle || uni?.title || '',
+    logoUrl: logo,
+    photoUserId: row.userId,
+    hasPhoto: !!row.hasPhoto,
+    qrSvg: qr,
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4" dir="rtl">
@@ -112,26 +121,22 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
         </div>
       )}
 
-      <div className="print-area">
+      <div className="print-area space-y-4">
         <StudentCardView
-          design={{ ...design, footer: `${design.footer}${verifySuffix}` }}
-          data={{
-            firstName: row.firstName ?? '',
-            lastName: row.lastName ?? '',
-            studentCode: row.studentCode ?? '',
-            nationalCode: row.nationalCode,
-            majorName: row.majorName,
-            degreeTitle: row.degreeTitle,
-            entryYear: row.entryYear,
-            status: row.cardStatus,
-            validUntil,
-            uniTitle: row.uniTitle || uni?.title || '',
-            logoUrl: logo,
-            photoUserId: row.userId,
-            hasPhoto: !!row.hasPhoto,
-            qrSvg: qr,
-          }}
+          design={{ ...design.front, footer: `${design.front.footer}${verifySuffix}` }}
+          data={cardData}
         />
+        {design.back.enabled && (
+          <div className="mt-6 print:mt-0 print:break-before-page">
+            <p className="mb-1 text-2xs font-bold text-slate-500 print:hidden">پشت کارت</p>
+            <StudentCardBackView
+              design={design.back}
+              data={cardData}
+              widthMm={design.front.widthMm}
+              heightMm={design.front.heightMm}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

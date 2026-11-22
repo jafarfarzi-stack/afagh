@@ -23,6 +23,7 @@ export type CardRow = {
     expiresAt: string | null;
     expired: boolean;
   } | null;
+  designId: string | null;
   debt: number;
 };
 
@@ -46,6 +47,8 @@ export default function StudentCardsClient({
   total,
   perPage,
   stats,
+  designs,
+  defaultDesignId,
 }: {
   rows: CardRow[];
   q: string;
@@ -54,13 +57,20 @@ export default function StudentCardsClient({
   total: number;
   perPage: number;
   stats: Stats;
+  designs: { id: string; title: string }[];
+  defaultDesignId: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState(qProp);
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [choice, setChoice] = useState<Record<number, string>>({});
   const firstRender = useRef(true);
+
+  /** طراحیِ مؤثر برای هر ردیف: انتخاب کاربر ← طراحیِ ثبت‌شده روی کارت ← پیش‌فرض */
+  const designFor = (r: CardRow) =>
+    choice[r.studentId] || r.designId || defaultDesignId;
 
   // جستجوی سمت سرور با تأخیر کوتاه — ۴۸ هزار دانشجو هرگز یک‌جا به مرورگر نمی‌آید
   useEffect(() => {
@@ -183,10 +193,23 @@ export default function StudentCardsClient({
                 </td>
                 <td className="p-2.5">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    {designs.length > 1 && (
+                      <select
+                        value={designFor(r)}
+                        onChange={e => setChoice(c => ({ ...c, [r.studentId]: e.target.value }))}
+                        disabled={busy === r.studentId}
+                        title="طراحی کارت برای صدور/تمدید"
+                        className="max-w-36 rounded-lg border border-slate-300 bg-white px-1.5 py-1 text-3xs font-bold text-slate-700"
+                      >
+                        {designs.map(d => (
+                          <option key={d.id} value={d.id}>{d.title}</option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       disabled={busy === r.studentId}
                       onClick={() =>
-                        run(r.studentId, () => issueCardAction(r.studentId, false), `کارت «${r.fullName}» صادر/تمدید شد.`)
+                        run(r.studentId, () => issueCardAction(r.studentId, false, designFor(r)), `کارت «${r.fullName}» صادر/تمدید شد.`)
                       }
                       className="rounded-lg bg-indigo-700 px-2.5 py-1 text-3xs font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
                     >
@@ -197,7 +220,7 @@ export default function StudentCardsClient({
                         <button
                           disabled={busy === r.studentId}
                           onClick={() =>
-                            run(r.studentId, () => issueCardAction(r.studentId, true), 'توکن جدید ساخته شد؛ کارت قبلی از اعتبار افتاد.')
+                            run(r.studentId, () => issueCardAction(r.studentId, true, designFor(r)), 'توکن جدید ساخته شد؛ کارت قبلی از اعتبار افتاد.')
                           }
                           className="rounded-lg border border-slate-300 px-2 py-1 text-3xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                         >

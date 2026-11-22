@@ -2348,6 +2348,8 @@ export const student_cards = pgTable('student_cards', {
   secureToken: varchar('secureToken', { length: 64 }).notNull().unique(),
   printStatus: varchar('printStatus', { length: 20 }).default('PENDING'), // PENDING, PRINTED, LOST, REVOKED
   rfidSerialNumber: varchar('rfidSerialNumber', { length: 100 }),
+  /** شناسهٔ طراحیِ انتخاب‌شده هنگام صدور (STUDENT_CARD_DESIGNS) — null = طراحی پیش‌فرض */
+  designId: varchar('designId', { length: 40 }),
   issuedAt: timestamp('issuedAt'),
   expiresAt: timestamp('expiresAt'),
   createdAt: timestamp('createdAt').defaultNow(),

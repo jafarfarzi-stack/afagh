@@ -30,6 +30,8 @@ export interface SettingDef {
   envOnly?: boolean;
   /** گزینه‌های مجاز برای type === 'select' — مقدارِ خارج از این فهرست ذخیره نمی‌شود */
   options?: { value: string; label: string }[];
+  /** کلید داخلی — در پنل «تنظیمات» نمایش داده نمی‌شود (مثل کلید شیء پس‌زمینهٔ کارت) */
+  hidden?: boolean;
 }
 
 export const SETTING_GROUPS = [
@@ -304,6 +306,17 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'STUDENT_CARD_SHOW_PHOTO', env: 'STUDENT_CARD_SHOW_PHOTO', group: 'طراحی کارت دانشجو', label: 'نمایش عکس دانشجو', type: 'boolean', default: 'true' },
   { key: 'STUDENT_CARD_SHOW_QR', env: 'STUDENT_CARD_SHOW_QR', group: 'طراحی کارت دانشجو', label: 'نمایش QR استعلام هویت', type: 'boolean', default: 'true' },
   { key: 'STUDENT_CARD_SHOW_LOGO', env: 'STUDENT_CARD_SHOW_LOGO', group: 'طراحی کارت دانشجو', label: 'نمایش آرم دانشگاه', type: 'boolean', default: 'true' },
+  { key: 'STUDENT_CARD_LOGO_POS', env: 'STUDENT_CARD_LOGO_POS', group: 'طراحی کارت دانشجو', label: 'جای آرم در سربرگ', type: 'select', default: 'start', options: [
+    { value: 'start', label: 'راست (ابتدای کارت — پیش‌فرض)' },
+    { value: 'center', label: 'وسط سربرگ' },
+    { value: 'end', label: 'چپ (انتهای کارت)' },
+  ] },
+  { key: 'STUDENT_CARD_LOGO_MM', env: 'STUDENT_CARD_LOGO_MM', group: 'طراحی کارت دانشجو', label: 'اندازهٔ آرم (میلی‌متر)', type: 'number', default: '10', help: '۱۰ میلی‌متر برای کارت ID-1 مناسب است؛ بازهٔ مجاز ۶ تا ۲۵' },
+  { key: 'STUDENT_CARD_WIDTH_MM', env: 'STUDENT_CARD_WIDTH_MM', group: 'طراحی کارت دانشجو', label: 'عرض کارت (میلی‌متر)', type: 'number', default: '85.6', help: 'استاندارد ID-1: عرض ۸۵٫۶ و ارتفاع ۵۳٫۹۸ میلی‌متر' },
+  { key: 'STUDENT_CARD_HEIGHT_MM', env: 'STUDENT_CARD_HEIGHT_MM', group: 'طراحی کارت دانشجو', label: 'ارتفاع کارت (میلی‌متر)', type: 'number', default: '53.98', help: 'برای کارت عمودی، عرض و ارتفاع را جابه‌جا کنید' },
+  { key: 'STUDENT_CARD_BG_OVERLAY', env: 'STUDENT_CARD_BG_OVERLAY', group: 'طراحی کارت دانشجو', label: 'پوشش سفید روی تصویر پس‌زمینه (٪)', type: 'number', default: '65', help: '۰ = تصویر کاملاً واضح، ۱۰۰ = کاملاً سفید؛ برای خوانایی متن ۵۰ تا ۷۵ مناسب است' },
+  { key: 'STUDENT_CARD_DESIGNS', env: 'STUDENT_CARD_DESIGNS', group: 'طراحی کارت دانشجو', label: 'طراحی‌های ذخیره‌شده (JSON — داخلی)', type: 'textarea', default: '', hidden: true },
+  { key: 'STUDENT_CARD_DEFAULT_DESIGN_ID', env: 'STUDENT_CARD_DEFAULT_DESIGN_ID', group: 'طراحی کارت دانشجو', label: 'شناسهٔ طراحی پیش‌فرض (داخلی)', type: 'text', default: '', hidden: true },
   { key: 'PERF_SLA_TARGET', env: 'PERF_SLA_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف پایبندی به ضرب‌الاجل (SLA) استاد', type: 'number', default: '90', help: 'درصد؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_EVAL_TARGET', env: 'PERF_EVAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نمرهٔ ارزشیابی استاد', type: 'number', default: '4', help: 'از ۵؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_SESSION_HOLD_TARGET', env: 'PERF_SESSION_HOLD_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نرخ برگزاری جلسات کلاس', type: 'number', default: '90', help: 'درصد جلسات برگزارشده از کل جلسات' },
@@ -490,7 +503,7 @@ export interface ResolvedSetting extends SettingDef {
 /** همهٔ تنظیمات به همراه منبع هر مقدار — برای پنل مدیر */
 export async function resolveAllSettings(): Promise<ResolvedSetting[]> {
   const rows = await dbSettings();
-  return SETTING_DEFS.map(def => {
+  return SETTING_DEFS.filter(def => !def.hidden).map(def => {
     const env = envOf(def);
     const dbv = def.envOnly ? undefined : rows[def.key];
     const source: SettingSource = dbv !== undefined && dbv !== '' ? 'db' : env !== undefined ? 'env' : 'default';

@@ -520,3 +520,6 @@ ALTER TABLE "offering_professors" SET (autovacuum_vacuum_scale_factor = 0.05, au
 --  هزینهٔ ساخت: یک‌بار، چند ثانیه، ~۱۵ مگابایت.
 -- ═══════════════════════════════════════════════════════════════════════════
 CREATE INDEX IF NOT EXISTS "idx_enr_offering" ON "enrollments" ("offeringId");
+
+-- طراحیِ نام‌دار کارت دانشجو (انتخاب هنگام صدور) — بدون جدول جدید
+ALTER TABLE student_cards ADD COLUMN IF NOT EXISTS "designId" varchar(40);

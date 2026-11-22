@@ -301,25 +301,30 @@ export type StudentCardVerification =
     };
 
 /** صدور/تمدید کارت دانشجویی — توکن تصادفی ۳۲ بایتی در student_cards */
-export async function issueStudentCard(studentId: number, opts: { validDays?: number; force?: boolean } = {}) {
+export async function issueStudentCard(
+  studentId: number,
+  opts: { validDays?: number; force?: boolean; designId?: string | null } = {},
+) {
   const validDays = opts.validDays ?? (await getNumber('STUDENT_CARD_VALID_DAYS', 365));
   const existing = await db.select().from(student_cards).where(eq(student_cards.studentId, studentId)).limit(1);
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + validDays * 86400000);
+  // طراحیِ انتخابی هنگام صدور؛ اگر داده نشود، طراحیِ قبلیِ همان کارت حفظ می‌شود
+  const designId = opts.designId ?? existing[0]?.designId ?? null;
   if (existing[0] && !opts.force) {
     await db.update(student_cards)
-      .set({ printStatus: 'PRINTED', issuedAt, expiresAt })
+      .set({ printStatus: 'PRINTED', issuedAt, expiresAt, designId })
       .where(eq(student_cards.id, existing[0].id));
     return { token: existing[0].secureToken, expiresAt, renewed: true };
   }
   const token = randomBytes(24).toString('hex');
   if (existing[0]) {
     await db.update(student_cards)
-      .set({ secureToken: token, printStatus: 'PRINTED', issuedAt, expiresAt })
+      .set({ secureToken: token, printStatus: 'PRINTED', issuedAt, expiresAt, designId })
       .where(eq(student_cards.id, existing[0].id));
   } else {
     await db.insert(student_cards).values({
-      studentId, secureToken: token, printStatus: 'PRINTED',
+      studentId, secureToken: token, printStatus: 'PRINTED', designId,
       rfidSerialNumber: `E280-${randomBytes(2).toString('hex').toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`,
       issuedAt, expiresAt,
     });

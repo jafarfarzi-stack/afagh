@@ -2,40 +2,39 @@ import Link from 'next/link';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { degree_level_configs, majors, students, universities, users } from '@/db/schema';
-import { requireRole } from '@/lib/auth';
-import { getPublicBaseUrl, getSettings } from '@/lib/settings';
+import { getPublicBaseUrl } from '@/lib/settings';
 import { getCurrentUniversity } from '@/lib/university-scope';
+import { requirePlatformAdmin } from '@/lib/platform-admin';
 import { qrSvg } from '@/lib/qr';
 import { toShamsi } from '@/lib/shamsi';
-import { parseCardDesign, type CardData } from '@/components/StudentCardView';
+import { getCardDesigns } from '@/lib/student-card-designs';
+import type { CardData } from '@/components/StudentCardView';
 import CardDesignerClient from './CardDesignerClient';
 
 export const dynamic = 'force-dynamic';
 
-const DESIGN_KEYS = [
-  'STUDENT_CARD_TEMPLATE',
-  'STUDENT_CARD_ACCENT',
-  'STUDENT_CARD_HEADER',
-  'STUDENT_CARD_FOOTER',
-  'STUDENT_CARD_FIELDS',
-  'STUDENT_CARD_SHOW_PHOTO',
-  'STUDENT_CARD_SHOW_QR',
-  'STUDENT_CARD_SHOW_LOGO',
-] as const;
-
 /**
- * فرمِ حرفه‌ای «طراحی کارت دانشجو» — با پیش‌نمایشِ زنده.
- *
- * طراحی (قالب/رنگ/فیلدها/عکس/QR/آرم) در تنظیمات ذخیره می‌شود و صفحهٔ چاپ
- * کارت (`card/[studentId]`) دقیقاً از همان‌ها می‌خواند؛ پس آنچه این‌جا
- * می‌بینید همان چیزی است که دانشجو تحویل می‌گیرد.
+ * فرمِ حرفه‌ای «طراحی کارت دانشجو» — چند طراحیِ نام‌دار، رو و پشت، با
+ * پیش‌نمایشِ زنده. طراحی‌ها در تنظیمات ذخیره می‌شوند و هنگام صدور کارت
+ * از فهرست «صدور و مدیریت کارت» انتخاب می‌شوند؛ صفحهٔ چاپ هم دقیقاً
+ * طراحیِ ثبت‌شده روی همان کارت را می‌خواند.
  */
 export default async function CardDesignPage() {
-  await requireRole(['ADMIN']);
+  // طراحی کارت سراسری است (تنظیمات سامانه)؛ فقط مدیر کل پلتفرم
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return (
+      <div className="card !p-6 text-center text-sm font-bold text-rose-800" dir="rtl">
+        این صفحه فقط برای «مدیر کل سامانه» (بدون دانشگاه خانگی) در دسترس است.
+      </div>
+    );
+  }
 
-  const uni = await getCurrentUniversity().catch(() => null);
-  const values = await getSettings(DESIGN_KEYS);
-  const design = parseCardDesign(values);
+  const [{ designs, defaultId }, uni] = await Promise.all([
+    getCardDesigns(),
+    getCurrentUniversity().catch(() => null),
+  ]);
 
   // ── نمونهٔ واقعی برای پیش‌نمایش (اولین دانشجوی فعالِ همین دانشگاه) ──
   let sample: CardData = {
@@ -43,7 +42,7 @@ export default async function CardDesignPage() {
     lastName: 'دانشجو',
     studentCode: '401234567',
     nationalCode: '0012345678',
-    majorName: 'مهندسی کامپیوتر',
+    majorName: 'مهندسی کامپیوتر — نرم‌افزار',
     degreeTitle: 'کارشناسی',
     entryYear: 1404,
     status: 'PENDING',
@@ -104,7 +103,7 @@ export default async function CardDesignPage() {
         <div>
           <h1 className="text-base font-extrabold text-slate-900">🎨 طراحی کارت دانشجویی</h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            قالب، رنگ، فیلدها و اجزای کارت را این‌جا طراحی کنید؛ پیش‌نمایش زنده در کنار فرم است و چاپ کارت‌ها از همین طراحی استفاده می‌کند.
+            چند طراحیِ نام‌دار بسازید (رو و پشت، ابعاد، تصویر پس‌زمینه، آرم و امضا)؛ هنگام صدور کارت، طراحی را انتخاب می‌کنید.
           </p>
         </div>
         <Link
@@ -116,7 +115,7 @@ export default async function CardDesignPage() {
         </Link>
       </div>
 
-      <CardDesignerClient initial={design} sample={sample} />
+      <CardDesignerClient initialDesigns={designs} initialDefaultId={defaultId} sample={sample} />
     </div>
   );
 }

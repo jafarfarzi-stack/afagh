@@ -7,6 +7,7 @@ import { students } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { issueStudentCard, revokeStudentCard } from '@/lib/verification';
+import { getCardDesigns } from '@/lib/student-card-designs';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ mod: 'student-cards' });
@@ -25,11 +26,14 @@ async function assertStudentInUni(studentId: number): Promise<{ ok: true } | { o
 }
 
 /** صدور یا تمدید کارت دانشجویی — توکن تصادفی ۴۸ کاراکتری در پایگاه داده */
-export async function issueCardAction(studentId: number, forceNewToken: boolean) {
+export async function issueCardAction(studentId: number, forceNewToken: boolean, designId?: string | null) {
   await requireRole(['ADMIN', 'EDU_EXPERT']);
   const scope = await assertStudentInUni(Number(studentId));
   if (!scope.ok) return { ok: false as const, error: scope.error };
-  const res = await issueStudentCard(Number(studentId), { force: !!forceNewToken });
+  // طراحیِ انتخابی باید از طراحی‌های موجود باشد؛ وگرنه پیش‌فرض
+  const { designs, defaultId } = await getCardDesigns();
+  const chosen = designs.find(d => d.id === designId)?.id ?? defaultId;
+  const res = await issueStudentCard(Number(studentId), { force: !!forceNewToken, designId: chosen });
   revalidatePath('/admin/student-cards');
   return { ok: true as const, token: res.token, renewed: res.renewed };
 }
