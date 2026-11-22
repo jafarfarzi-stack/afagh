@@ -144,7 +144,7 @@ export default async function FacultyFinancialReportPage(props: {
       ${sumOf(DISC_VARIABLE)} AS "discVariable",
       ${sumOf(DISC_FIXED)} AS "discFixed",
       ${sumOf(DISC_AMOUNT)} AS "discAmount",
-      COALESCE(MAX(lpp."payments"), ${sumOf(PAYMENTS)}) AS payments,
+      COALESCE(MAX(lpp."payments")::text, ${sumOf(PAYMENTS)}) AS payments,
       ${sumOf(ADVANCE)} AS advance,
       ${sumOf(TOPIC_ADD)} AS "topicAdd",
       ${sumOf(TOPIC_DEDUCT)} AS "topicDeduct"
