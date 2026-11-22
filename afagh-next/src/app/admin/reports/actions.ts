@@ -63,6 +63,7 @@ const FINANCE_KINDS = new Set([
   'term-financial',
   'tuition-overview',
   'tuition-faculty-detail',
+  'semester-detail',
   'faculty-financial',
   'major-financial',
   // صورت‌های مالی کلان (r-finance-statements) — بدون این‌ها کارشناس مالی

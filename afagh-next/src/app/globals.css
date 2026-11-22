@@ -1669,6 +1669,12 @@ html {
   overflow-wrap: anywhere;
 }
 #report-print-root table.rp-table td.rp-longnum { word-break: break-all; }
+/* ردیفِ جمع (tfoot) — مثل فرمهای رسمی، پررنگ و فقط در برگهٔ آخر */
+#report-print-root table.rp-table td.rp-total {
+  font-weight: 800 !important;
+  background: #f4f4f4 !important;
+  border-top: 0.8pt solid #222222 !important;
+}
 
 /* ── خلاصهٔ گزارش (فقط برگهٔ آخر) ── */
 #report-print-root .rp-summary {

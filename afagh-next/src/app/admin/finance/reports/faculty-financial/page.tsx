@@ -110,7 +110,7 @@ export default async function FacultyFinancialReportPage(props: {
     db.execute<{ id: number; name: string; code: string | null }>(sql`
       SELECT id, name, "facultyCode" AS code FROM faculties
       ${uid ? sql`WHERE "universityId" = ${uid} OR "universityId" IS NULL` : sql``}
-      ORDER BY COALESCE(NULLIF("facultyCode", ""), id::text), name
+      ORDER BY COALESCE(NULLIF("facultyCode", ''), id::text), name
     `),
   ]);
 
@@ -131,8 +131,8 @@ export default async function FacultyFinancialReportPage(props: {
 
   const data = await db.execute<RawRow>(sql`
     SELECT
-      COALESCE(NULLIF(fc."facultyCode", ""), fc.id::text, "—") AS code,
-      COALESCE(fc.name, "—") AS faculty,
+      COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—') AS code,
+      COALESCE(fc.name, '—') AS faculty,
       (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::int AS "entryCode",
       COUNT(DISTINCT s.id)::int AS students,
       ${sumOf(VARIABLE)} AS variable,
@@ -153,7 +153,7 @@ export default async function FacultyFinancialReportPage(props: {
     LEFT JOIN faculties fc ON fc.id = m."facultyId"
     ${joinAnd(conds)}
     GROUP BY fc."facultyCode", fc.id, fc.name, s."entryYear", s."entryTerm"
-    ORDER BY COALESCE(NULLIF(fc."facultyCode", ""), fc.id::text, "—"), "entryCode"
+    ORDER BY COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—'), "entryCode"
   `);
 
   const rows: Row[] = data.rows.map((r) => {

@@ -83,6 +83,13 @@ export type ReportResult = {
   per: number;
   totalPages: number;
   summary?: string;
+  /**
+   * ردیفِ «جمع» برای پایینِ جدول (tfoot) — مثل فرم‌های رسمیِ کاغذی که یک ردیفِ
+   * جمعِ سیاه در انتها دارند. فقط ماژول‌هایی که خودشان این ردیف را می‌سازند
+   * پر می‌کنند؛ کلیدها همان `columns[].key` هستند. این ردیف **جزو** `rows`
+   * نیست، پس صفحه‌بندی/CSV دست‌نخورده می‌ماند.
+   */
+  totals?: Record<string, unknown>;
 };
 
 export type FilterOptions = {
@@ -267,6 +274,8 @@ export const ALL_REPORT_KINDS: string[] = [
   'total-payments', 'student-payments', 'term-payments', 'accounting-voucher', 'term-financial',
   // گزارش‌های مدیریتی تجمیعی شهریه (دانشکده/مقطع/رشته/ورودی)
   'tuition-overview', 'tuition-faculty-detail', 'faculty-financial', 'major-financial',
+  // فرمِ رسمیِ «گزارش تفصیلی مالی دانشجویان در نیمسال» (fqTrDaTe2)
+  'semester-detail',
   // گزارش‌های مالیِ کلان (r-finance-statements) — سود و زیان، ترازنامه،
   // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، کالا، هزینه، تخصیص، درآمد سلسله‌مراتبی
   'sales-report', 'income-statement', 'costing-report', 'budget-variance',

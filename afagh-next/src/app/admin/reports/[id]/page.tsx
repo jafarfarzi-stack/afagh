@@ -19,7 +19,9 @@ export default async function SingleReportPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ term?: string; courseCode?: string; scope?: string }>;
 }) {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER']);
+  // Report center routes are shared by the education and finance desks; the
+  // ?scope=finance query selects the finance filter/signer set.
+  await requireRole(['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER']);
 
   const { id } = await params;
   if (!ALL_REPORT_KINDS.includes(id)) notFound();

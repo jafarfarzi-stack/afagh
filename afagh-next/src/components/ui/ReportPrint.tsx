@@ -79,6 +79,7 @@ export default function ReportPrint({
   columns,
   rows,
   summary,
+  totals,
   universityTitle,
   universityLogoUrl,
   signers,
@@ -95,6 +96,8 @@ export default function ReportPrint({
   rows: Record<string, unknown>[];
   /** متن خلاصه */
   summary?: string;
+  /** ردیفِ جمع (tfoot) — فقط در برگهٔ آخر چاپ می‌شود */
+  totals?: Record<string, unknown>;
   /** نام دانشگاه (از پروفایل دانشگاه / تنظیمات) */
   universityTitle?: string;
   /** نشانی آرم دانشگاه (universities.logoUrl یا UNIVERSITY_LOGO) */
@@ -256,6 +259,22 @@ export default function ReportPrint({
                 </tr>
               ))}
             </tbody>
+            {totals && (
+              <tfoot>
+                <tr>
+                  {columns.map(c => {
+                    const formatted = fmtCell(totals[c.key], c.format);
+                    const text = c.format ? formatted : faNum(formatted);
+                    const isNumeric = /^[\d\u06F0-\u06F9,.،\s—-]+$/.test(text);
+                    return (
+                      <td key={c.key} dir={isNumeric ? 'ltr' : 'auto'} className={isNumeric ? 'rp-num rp-total' : 'rp-total'}>
+                        {text}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           {summary && <div className="rp-summary" data-rp-summary>{summary}</div>}
