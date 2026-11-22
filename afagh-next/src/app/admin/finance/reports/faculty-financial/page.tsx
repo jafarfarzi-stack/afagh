@@ -135,7 +135,8 @@ export default async function FacultyFinancialReportPage(props: {
       COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—') AS code,
       COALESCE(fc.name, '—') AS faculty,
       (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::int AS "entryCode",
-      COUNT(DISTINCT s.id) FILTER (WHERE ${inTypes(CHARGE_TYPES)})::int AS students,
+      COALESCE(MAX(lc."studentCount"),
+        COUNT(DISTINCT s.id) FILTER (WHERE ${inTypes(CHARGE_TYPES)}))::int AS students,
       ${sumOf(VARIABLE)} AS variable,
       ${sumOf(FIXED)} AS fixed,
       ${sumOf(ADJ_DEC)} AS adjdec,
@@ -152,6 +153,10 @@ export default async function FacultyFinancialReportPage(props: {
     JOIN academic_terms t ON t.id = sl."termId"
     LEFT JOIN majors m ON m.id = s."majorId"
     LEFT JOIN faculties fc ON fc.id = m."facultyId"
+    LEFT JOIN legacy_faculty_student_counts lc
+      ON lc."termCode" = ${term}
+     AND lc."facultyCode" = COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text)
+     AND lc."cohort" = (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::text
     ${joinAnd(conds)}
     GROUP BY fc."facultyCode", fc.id, fc.name, s."entryYear", s."entryTerm"
     ORDER BY COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—'), "entryCode"
