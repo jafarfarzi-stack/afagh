@@ -27,20 +27,22 @@ import {
  * سند را به برگههای A4 با ارتفاع اندازهگیری‌شده تقسیم میکند.
  */
 
-type ReportColumn = { key: string; title: string; format?: string };
+type ReportColumn = { key: string; title: string; format?: string; pair?: string; line?: 'top' | 'bottom' };
 
-/** وزن نسبی پهنای ستونها؛ شناسههای بلند جای بیشتری میگیرند تا روی تاریخ نیفتند. */
-function columnWeights(columns: ReportColumn[]): number[] {
-  const weight = (c: ReportColumn): number => {
-    if (c.format === 'DATE' || c.format === 'DATETIME') return 1.15;
-    if (c.format === 'MONEY') return 1.4;
-    if (c.format === 'NUMBER') return 1.0;
-    // شماره فیش / شماره حساب / شماره پیگیری / کدهای بلند: عرض بیشتر + شکستن ارقام
-    if (/شماره|فیش|حساب|پیگیری|سند|شناسه|کد|شبا/.test(c.title)) return 1.6;
-    if (/نام|رشته|دانشکده|عنوان|شرح|توضیح|آدرس|درس|استاد/.test(c.title)) return 1.9;
-    return 1.25;
-  };
-  const raw = columns.map(weight);
+/** وزنِ نسبی یک ستون — شناسههای بلند جای بیشتری میگیرند تا روی تاریخ نیفتند. */
+function columnWeight(c: ReportColumn): number {
+  if (c.format === 'DATE' || c.format === 'DATETIME') return 1.15;
+  if (c.format === 'MONEY' || c.format === 'AMOUNT') return 1.4;
+  if (c.format === 'NUMBER') return 1.0;
+  // شماره فیش / شماره حساب / شماره پیگیری / کدهای بلند: عرض بیشتر + شکستن ارقام
+  if (/شماره|فیش|حساب|پیگیری|سند|شناسه|کد|شبا/.test(c.title)) return 1.6;
+  if (/نام|رشته|دانشکده|عنوان|شرح|توضیح|آدرس|درس|استاد/.test(c.title)) return 1.9;
+  return 1.25;
+}
+
+/** وزن نسبی پهنای ستونها. ستونِ دوخطی (pair) عرضِ دو ستون را میگیرد. */
+function columnWeights(columns: ReportColumn[], bottomOf: (pair?: string) => ReportColumn | undefined): number[] {
+  const raw = columns.map(c => columnWeight(c) + (c.pair ? columnWeight(bottomOf(c.pair) ?? c) : 0));
   const total = raw.reduce((a, b) => a + b, 0) || 1;
   return raw.map(w => (w / total) * 100);
 }
@@ -115,7 +117,11 @@ export default function ReportPrint({
 }) {
   const faDate = reportDate || todayJalaliTehran();
   const orientation: ReportPrintOrientation = columns.length >= 7 ? 'landscape' : 'portrait';
-  const widths = useMemo(() => columnWeights(columns), [columns]);
+  const renderCols = columns.filter(c => c.line !== 'bottom');
+  const widths = useMemo(
+    () => columnWeights(renderCols, c => columns.find(x => x.pair === c.pair && x.line === 'bottom')),
+    [columns, renderCols],
+  );
   const signLabels = signers && signers.length ? signers : DEFAULT_SIGNERS;
 
   /** ردیف‌های کاملِ چاپ (اگر با fetchAll آمده باشند) + وضعیت آماده‌سازی */
@@ -231,38 +237,79 @@ export default function ReportPrint({
             </colgroup>
             <thead>
               <tr>
-                {columns.map(c => <th key={c.key} scope="col">{c.title}</th>)}
+                {renderCols.map(c => {
+                  const b = columns.find(x => x.pair === c.pair && x.line === 'bottom');
+                  return (
+                    <th key={c.key} scope="col">{b ? `${c.title}\n${b.title}` : c.title}</th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody data-rp-tbody>
-              {displayRows.map((row, i) => (
-                <tr key={i}>
-                  {columns.map(c => {
-                    const formatted = fmtCell(row[c.key], c.format);
-                    // ستونهای بدون format (کد دانشجو، شماره فیش، …) هم ارقام
-                    // فارسی بگیرند؛ ستونهای DATE/MONEY/NUMBER قبلتر قالب خوردهاند.
-                    const text = c.format ? formatted : faNum(formatted);
-                    const isNumeric = /^[\d\u06F0-\u06F9,.،\s—-]+$/.test(text);
-                    // شماره فیش/حساب/پیگیریِ بلند نباید nowrap بماند و وارد
-                    // ستون تاریخ شود؛ به آن کلاس rp-longnum میدهیم تا بشکند.
-                    const isLong = text.replace(/[\s,.،—-]/g, '').length > 13;
-                    return (
-                      <td
-                        key={c.key}
-                        dir={isNumeric ? 'ltr' : 'auto'}
-                        className={isNumeric ? (isLong ? 'rp-num rp-longnum' : 'rp-num') : undefined}
-                      >
-                        {text}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {displayRows.map((row, i) => {
+                if (row.__kind === 'band') {
+                  return (
+                    <tr key={i}>
+                      <td colSpan={columns.length} className="rp-band">{String(row.__label ?? '')}</td>
+                    </tr>
+                  );
+                }
+                const isSub = row.__kind === 'subtotal';
+                const labelCol = String((row as Record<string, unknown>).__labelCol ?? '');
+                return (
+                  <tr key={i}>
+                    {renderCols.map(c => {
+                      if (isSub && labelCol === c.key) {
+                        return (
+                          <td key={c.key} className="rp-band">{String(row.__label ?? '')}</td>
+                        );
+                      }
+                      const b = columns.find(x => x.pair === c.pair && x.line === 'bottom');
+                      if (b) {
+                        const top = fmtCell(row[c.key], c.format);
+                        const bot = fmtCell(row[b.key], b.format);
+                        return (
+                          <td key={c.key} dir="ltr" className="rp-num rp-pair">
+                            <div>{top}</div>
+                            <div>{bot}</div>
+                          </td>
+                        );
+                      }
+                      const formatted = fmtCell(row[c.key], c.format);
+                      // ستونهای بدون format (کد دانشجو، شماره فیش، …) هم ارقام
+                      // فارسی بگیرند؛ ستونهای DATE/MONEY/NUMBER قبلتر قالب خوردهاند.
+                      const text = c.format ? formatted : faNum(formatted);
+                      const isNumeric = /^[\d\u06F0-\u06F9,.،\s—-]+$/.test(text);
+                      const isLong = text.replace(/[\s,.،—-]/g, '').length > 13;
+                      return (
+                        <td
+                          key={c.key}
+                          dir={isNumeric ? 'ltr' : 'auto'}
+                          className={isNumeric ? (isLong ? 'rp-num rp-longnum' : 'rp-num') : undefined}
+                        >
+                          {text}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
             {totals && (
               <tfoot>
                 <tr>
-                  {columns.map(c => {
+                  {renderCols.map(c => {
+                    const b = columns.find(x => x.pair === c.pair && x.line === 'bottom');
+                    if (b) {
+                      const top = fmtCell(totals[c.key], c.format);
+                      const bot = fmtCell(totals[b.key], b.format);
+                      return (
+                        <td key={c.key} dir="ltr" className="rp-num rp-pair">
+                          <div>{top}</div>
+                          <div>{bot}</div>
+                        </td>
+                      );
+                    }
                     const formatted = fmtCell(totals[c.key], c.format);
                     const text = c.format ? formatted : faNum(formatted);
                     const isNumeric = /^[\d\u06F0-\u06F9,.،\s—-]+$/.test(text);

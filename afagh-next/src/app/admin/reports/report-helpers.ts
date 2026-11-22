@@ -65,7 +65,15 @@ export type ReportColumn = {
    * قالب نمایش/خروجی سلول — در `@/lib/report-format` تفسیر می‌شود تا هیچ تاریخ
    * میلادی یا مبلغ بدون جداکننده به کاربر نرسد.
    */
-  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'AMOUNT' | 'NUMBER' | 'YEAR';
+  /**
+   * ستون‌های «دوخطی» (pair): فرم‌های رسمی مثل fqSumTa هر ستون را با **دو عددِ
+   * انباشته** چاپ می‌کنند (شهریه متغیر روی شهریه ثابت). هر دو ستون یک `pair`
+   * مشترک دارند و `line` نشان می‌دهد کدام خطِ بالای سلول را می‌گیرد.
+   * رندر این دو ستون در یک `<td>` انجام می‌شود؛ CSV همچنان دو ستون جدا می‌دهد.
+   */
+  pair?: string;
+  line?: 'top' | 'bottom';
 };
 export type ReportResult = {
   columns: ReportColumn[];
