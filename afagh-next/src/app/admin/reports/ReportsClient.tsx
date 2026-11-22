@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { exportReport, fetchReportForPrint, runReport, type FilterOptions, type ReportResult } from './actions';
+import type { ReportColumn } from './report-helpers';
 import { LINK_CARDS } from './report-links';
 import { faIncludes } from '@/lib/persian-search';
 import { MAX_TERM_CODES, parseTermSelection } from '@/lib/term-selection';
@@ -19,6 +20,20 @@ type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTe
 
 /** تمام دستههای مالی — هم در فیلتر Scope و هم در فیلتر تبها استفاده میشود */
 const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-academic', 'finance-ops']);
+
+/**
+ * ستونهایی که در جدول دیده میشوند. در فرمهای رسمی (fqSumTa) هر ستون دو عددِ
+ * انباشته دارد: ستونِ خطِ دوم (`line: 'bottom'`) داخل سلولِ ستونِ خطِ اول
+ * رندر میشود، پس در _HEAD_/`_body_` ردیفِ جدا نمیگیرد.
+ */
+function visibleReportColumns(cols: ReportColumn[]): ReportColumn[] {
+  return cols.filter(c => c.line !== 'bottom');
+}
+
+/** ستونِ خطِ دومِ یک pair — اگر pair نبود، undefined. */
+function pairBottomColumn(cols: ReportColumn[], pair?: string): ReportColumn | undefined {
+  return pair ? cols.find(c => c.pair === pair && c.line === 'bottom') : undefined;
+}
 
 /** خطای حملونقل اکشن سرور (پروکسی/OOM/پاسخ HTML) را به پیام قابل فهم تبدیل میکند. */
 function reportError(e: unknown, fallback: string): string {
@@ -85,7 +100,8 @@ const SUB: Record<string, string> = {
   'contractor-report': 'قرارداد و انبار', 'contractor-settlement': 'قرارداد و انبار',
   'insurance-report': 'قرارداد و انبار', 'legal-report': 'قرارداد و انبار', 'inventory-report': 'قرارداد و انبار',
   'tuition-statement': 'شهریهٔ دانشجو', 'tuition-overview': 'شهریهٔ دانشجو',
-  'tuition-faculty-detail': 'شهریهٔ دانشجو', 'semester-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
+  'tuition-faculty-detail': 'شهریهٔ دانشجو', 'semester-detail': 'شهریهٔ دانشجو',
+  'semester-major-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
   'major-financial': 'شهریهٔ دانشجو', 'term-financial': 'شهریهٔ دانشجو',
   'tuition-tariff': 'تعرفه', 'payroll-overview': 'حق‌التدریس',
   'bi-teaching-quality': 'کیفیت و امکانات', 'bi-facilities': 'کیفیت و امکانات',
@@ -220,6 +236,7 @@ const CARDS: Card[] = [
   { kind: 'tuition-faculty-detail', cat: 'finance-academic', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
   // فرمِ رسمیِ سیستم قدیم (fqTrDaTe2) — دقیقاً همان ۱۴ ستون
   { kind: 'semester-detail', cat: 'finance-academic', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
+  { kind: 'semester-major-detail', cat: 'finance-academic', icon: '📐', title: 'گزارش مالی نیمسال (رشته × نیمسال ورود)', needsTerm: true },
   { kind: 'faculty-financial', cat: 'finance-academic', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
   { kind: 'major-financial', cat: 'finance-academic', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
@@ -1168,13 +1185,51 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               <table className="w-full text-right text-xs rt">
                 <thead className="bg-slate-100 border-b border-slate-300 font-bold text-slate-700 sticky top-0">
                   <tr>
-                    {res.columns.map(c => <th scope="col" key={c.key} className="p-2 print:whitespace-normal">{c.title}</th>)}
+                    {visibleReportColumns(res.columns).map(c => {
+                      const b = pairBottomColumn(res.columns, c.pair);
+                      return (
+                        <th key={c.key} scope="col" className={b ? 'p-2 rp-pair-head' : 'p-2 print:whitespace-normal'}>
+                          {b ? `${c.title}\n${b.title}` : c.title}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {res.rows.map((r, i) => (
-                    <tr key={i} className="border-b border-slate-200 hover:bg-slate-50">
-                      {res.columns.map(c => {
+                  {res.rows.map((r, i) => {
+                    // ردیفِ «دانشکده» — یک سلولِ تمامعرض، مثل بندِ فرم‌های رسمی
+                    if (r.__kind === 'band') {
+                      return (
+                        <tr key={i} className="bg-slate-200 border-y border-slate-400">
+                          <td colSpan={res.columns.length} className="px-2 py-1.5 font-extrabold text-slate-900">
+                            {String(r.__label ?? '')}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    // ردیفِ «جمع رشته» — برچسب در ستونِ `__labelCol` (پیش‌فرض: رشته)
+                    const isSub = r.__kind === 'subtotal';
+                    const labelCol = String(r.__labelCol ?? '');
+                    return (
+                    <tr key={i} className={isSub ? 'bg-slate-100 border-y border-slate-300 font-extrabold' : 'border-b border-slate-200 hover:bg-slate-50'}>
+                      {visibleReportColumns(res.columns).map(c => {
+                        if (isSub && labelCol === c.key) {
+                          return (
+                            <td key={c.key} className="p-2 font-extrabold text-slate-900">
+                              {String(r.__label ?? '')}
+                            </td>
+                          );
+                        }
+                        // ستونِ دوخطی: خطِ اول و خطِ دوم در یک سلول (مثل fqSumTa)
+                        const b = pairBottomColumn(res.columns, c.pair);
+                        if (b) {
+                          return (
+                            <td key={c.key} className="p-2 font-mono text-left print:whitespace-normal print:break-words" dir="ltr">
+                              <div>{fmtCell(r[c.key], c.format)}</div>
+                              <div>{fmtCell(r[b.key], b.format)}</div>
+                            </td>
+                          );
+                        }
                         const shown = fmtCell(r[c.key], c.format);
                         // ✓/✗ فقط در خطِ «کنترل این‌همانیِ» ترازنامهٔ دفتر کل می‌آید
                         // (r-gl)؛ سبز/سرخ‌کردنش بدون افزودن ستونِ تازه به داده است.
@@ -1193,16 +1248,28 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         );
                       })}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 {res.totals && (
                   <tfoot className="bg-amber-50 border-t-2 border-slate-400 font-extrabold text-slate-900">
                     <tr>
-                      {res.columns.map(c => (
-                        <td key={c.key} className="p-2 font-mono print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(res.totals?.[c.key] ?? '')) ? 'ltr' : 'auto'}>
-                          {fmtCell(res.totals?.[c.key], c.format)}
-                        </td>
-                      ))}
+                      {visibleReportColumns(res.columns).map(c => {
+                        const b = pairBottomColumn(res.columns, c.pair);
+                        if (b) {
+                          return (
+                            <td key={c.key} className="p-2 font-mono text-left print:whitespace-normal print:break-words" dir="ltr">
+                              <div>{fmtCell(res.totals?.[c.key], c.format)}</div>
+                              <div>{fmtCell(res.totals?.[b.key], b.format)}</div>
+                            </td>
+                          );
+                        }
+                        return (
+                          <td key={c.key} className="p-2 font-mono print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(res.totals?.[c.key] ?? '')) ? 'ltr' : 'auto'}>
+                            {fmtCell(res.totals?.[c.key], c.format)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   </tfoot>
                 )}

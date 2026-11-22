@@ -1675,6 +1675,11 @@ html {
   background: #f4f4f4 !important;
   border-top: 0.8pt solid #222222 !important;
 }
+/* ستونِ دوخطیِ فرمهای رسمی (fqSumTa و…) — دو عدد در یک سلول، خط به خط */
+#report-print-root table.rp-table td.rp-pair { white-space: normal; }
+#report-print-root table.rp-table th.rp-pair-head { white-space: pre-line; }
+/* ردیفِ «بند دانشکده» / «جمع رشته» */
+#report-print-root table.rp-table td.rp-band { font-weight: 800; background: #ececec; }
 
 /* ── خلاصهٔ گزارش (فقط برگهٔ آخر) ── */
 #report-print-root .rp-summary {

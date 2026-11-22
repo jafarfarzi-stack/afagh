@@ -64,6 +64,7 @@ const FINANCE_KINDS = new Set([
   'tuition-overview',
   'tuition-faculty-detail',
   'semester-detail',
+  'semester-major-detail',
   'faculty-financial',
   'major-financial',
   // صورت‌های مالی کلان (r-finance-statements) — بدون این‌ها کارشناس مالی
@@ -869,7 +870,8 @@ export async function exportReport(
    * اعداد منفی عدد می‌مانند (گارد فرمول فقط روی متن اعمال می‌شود).
    */
   const cellForCsv = (value: unknown, format?: string): string => {
-    if (format === 'MONEY' || format === 'NUMBER' || format === 'YEAR') {
+    // AMOUNT (مبلغ بدون «ریال» — فرم fqSumTa) هم مانند MONEY باید عدد خام شود
+    if (format === 'MONEY' || format === 'AMOUNT' || format === 'NUMBER' || format === 'YEAR') {
       const n = Number(value);
       return Number.isFinite(n) ? String(n) : '';
     }

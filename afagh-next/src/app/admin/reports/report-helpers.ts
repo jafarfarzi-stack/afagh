@@ -65,8 +65,31 @@ export type ReportColumn = {
    * قالب نمایش/خروجی سلول — در `@/lib/report-format` تفسیر می‌شود تا هیچ تاریخ
    * میلادی یا مبلغ بدون جداکننده به کاربر نرسد.
    */
-  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR';
+  format?: 'DATE' | 'DATETIME' | 'MONEY' | 'AMOUNT' | 'NUMBER' | 'YEAR';
+  /**
+   * ستون‌های «دوخطی» (pair): فرم‌های رسمی مثل fqSumTa هر ستون را با **دو عددِ
+   * انباشته** چاپ می‌کنند (شهریه متغیر روی شهریه ثابت). هر دو ستون یک `pair`
+   * مشترک دارند و `line` نشان می‌دهد کدام خطِ بالای سلول را می‌گیرد.
+   * رندر این دو ستون در یک `<td>` انجام می‌شود؛ CSV همچنان دو ستون جدا می‌دهد.
+   */
+  pair?: string;
+  line?: 'top' | 'bottom';
 };
+/**
+ * یک ردیفِ گزارش — علاوه بر ستونهای واقعی، میتواند «نشانگرهای ساختاری» داشته
+ * باشد تا گزارشهای گروهبندیشده (مثل fqSumTa) بدون تغییر نوعِ `ReportResult.rows`
+ * بتوانند ردیفِ «بند دانشکده» و «جمع رشته» را از ردیف داده تشخیص دهند.
+ * رندرکنندهها (جدولِ صفحه و چاپ) فقط همین چهار کلید را میخوانند.
+ */
+export type ReportRow = Record<string, unknown> & {
+  /** نوعِ ردیفِ ساختاری — نبودش یعنی ردیفِ معمولیِ داده */
+  __kind?: 'band' | 'subtotal';
+  /** متن برچسب (نام دانشکده / «جمع رشته») */
+  __label?: string;
+  /** کلیدِ ستونی که برچسب باید در آن نمایش داده شود */
+  __labelCol?: string;
+};
+
 export type ReportResult = {
   columns: ReportColumn[];
   rows: Record<string, unknown>[];
@@ -276,6 +299,8 @@ export const ALL_REPORT_KINDS: string[] = [
   'tuition-overview', 'tuition-faculty-detail', 'faculty-financial', 'major-financial',
   // فرمِ رسمیِ «گزارش تفصیلی مالی دانشجویان در نیمسال» (fqTrDaTe2)
   'semester-detail',
+  // فرمِ رسمیِ «گزارش مالی نیمسال به تفکیک رشته تحصیلی و نیمسال ورود» (fqSumTa)
+  'semester-major-detail',
   // گزارش‌های مالیِ کلان (r-finance-statements) — سود و زیان، ترازنامه،
   // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، کالا، هزینه، تخصیص، درآمد سلسله‌مراتبی
   'sales-report', 'income-statement', 'costing-report', 'budget-variance',

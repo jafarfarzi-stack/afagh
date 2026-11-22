@@ -29,7 +29,7 @@ export function jalaliSmart(value: unknown, withTime = false): string {
   return faDigits(`${date} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
 }
 
-export type ReportCellFormat = 'DATE' | 'DATETIME' | 'MONEY' | 'NUMBER' | 'YEAR' | undefined;
+export type ReportCellFormat = 'DATE' | 'DATETIME' | 'MONEY' | 'AMOUNT' | 'NUMBER' | 'YEAR' | undefined;
 
 /** قالب‌بندی یک سلول گزارش بر پایهٔ `format` ستون */
 export function formatReportCell(value: unknown, format?: string): string {
@@ -45,6 +45,14 @@ export function formatReportCell(value: unknown, format?: string): string {
       if (!Number.isFinite(n)) return '—';
       const r = Math.round(n);
       return `${r < 0 ? '−' : ''}${faNum(Math.abs(r).toLocaleString('en-US'))} ریال`;
+    }
+    /* مبلغ بدون واحد — فرم‌های رسمی قدیم (fqSumTa) خودشان واحد نمی‌نویسند و
+       هر سلول دو عدد انباشته دارند؛ «ریال» در هر خط باعث شلوغی می‌شد. */
+    case 'AMOUNT': {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      const r = Math.round(n);
+      return `${r < 0 ? '−' : ''}${faNum(Math.abs(r).toLocaleString('en-US'))}`;
     }
     case 'NUMBER': {
       const n = Number(value);
