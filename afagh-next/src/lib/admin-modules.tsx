@@ -530,6 +530,9 @@ export const ADMIN_MODULES: AdminModule[] = [
     desc: 'ثبتِ تشکیلِ کلاس‌های امروز در اتاق‌های تحت مسئولیت — به‌نامِ استاد هر درس',
     group: 'edu',
     roles: ['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER'],
+    // RBAC: هر نقشی که در ماتریس دسترسی، «ثبت حضور و غیاب کلاس‌ها» را بگیرد
+    // هم کاشی و هم صفحه را می‌بیند (نقش‌های بالا برای سازگاریِ قبلی می‌مانند).
+    permissions: ['edu:attendance_control'],
     accent: 'from-indigo-950 to-slate-950 border-indigo-700/50',
     iconBg: 'bg-indigo-800/80 border-indigo-500/50',
     inNav: true,

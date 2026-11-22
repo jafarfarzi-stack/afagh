@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { requireRole, endCurrentSession } from '@/lib/auth';
+import { endCurrentSession, getSessionUser, homeFor } from '@/lib/auth';
 import HeaderActions from '@/components/HeaderActions';
 import { logoutAction } from '../login/actions';
 import AdminNav from './AdminNav';
@@ -45,13 +45,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   //   • GRADUATION_EXPERT  → تأیید پروپوزال، تعیین وقت، ثبت نتیجه، استخر داوران
   const LIMITED_ROLES = ['PROFESSOR', 'GRADUATION_EXPERT'];
 
-  const user = await requireRole([...AREA_ROLES, ...LIMITED_ROLES]);
-  // نقش‌های سفارشی (کارشناس ثبت‌نام/فارغ‌التحصیلی و…) که مجوز دارند ولی در لیست
-  // نقش‌های بالا نیستند، با داشتنِ هر مجوزِ واقعی اجازهٔ ورود به شاخهٔ /admin می‌گیرند
-  // تا به ماژول‌های مجاز خودشان برسند (گاردِ هر صفحه + منو، خودش مجوز را چک می‌کند).
-  if (!user.roles.some(r => AREA_ROLES.includes(r) || LIMITED_ROLES.includes(r))) {
-    const { requireRoleOrPermission } = await import('@/lib/permissions-enforcer');
-    await requireRoleOrPermission([], ['*']).catch(() => {});
+  // گاردِ شاخهٔ /admin: نقش‌های شناخته‌شده همیشه عبور می‌کنند؛ نقشِ سفارشی (یا
+  // نقشی که فقط از ماتریس دسترسی، مجوزِ یک ماژول را گرفته) اگر حداقل یک
+  // ماژولِ منو را ببیند هم عبور می‌کند. گاردِ هر صفحه همچنان مستقل است.
+  // ⚠ پیش‌تر `requireRole` این‌جا صدا زده می‌شد و نقشِ سفارشی پیش از رسیدن به
+  //   بررسیِ مجوز، redirect می‌شد؛ یعنی مجوزهای ماتریس برایشان بی‌اثر بود.
+  const user = await getSessionUser({ allowPendingPasswordChange: true });
+  if (!user) redirect('/login');
+  if (user.mustChangePassword) redirect('/change-password');
+  const hasAreaRole = user.roles.some(r => r === 'ADMIN' || AREA_ROLES.includes(r) || LIMITED_ROLES.includes(r));
+  if (!hasAreaRole) {
+    const { getUserPermissionCodes } = await import('@/lib/permissions-enforcer');
+    const codes = await getUserPermissionCodes(user.id).catch(() => [] as string[]);
+    const seesModule = ADMIN_MODULES.some(m => m.inNav && canSeeModule(user.roles, m, codes));
+    if (!seesModule) redirect(homeFor(user.roles));
   }
   // ── ⚡ واکشیِ موازیِ سربرگ ─────────────────────────────────────────────────
   // پیش‌تر این‌ها **پشتِ سرِ هم** اجرا می‌شدند: مجوزها، مجوزهای سفارشی، فهرست

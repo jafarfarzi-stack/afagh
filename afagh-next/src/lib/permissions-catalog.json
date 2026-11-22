@@ -98,6 +98,12 @@
       "description": "صدور مجوز ورود موقت (تعهد) بدون کارت"
     },
     {
+      "code": "edu:attendance_control",
+      "title": "ثبت حضور و غیاب کلاس‌ها",
+      "category": "آموزش و نمرات",
+      "description": "ثبت تشکیل کلاس و حضور استاد از کنسول کنترل حضور و غیاب (به‌نام استاد هر درس)"
+    },
+    {
       "code": "grades:enter_temporary",
       "title": "ثبت نمرهٔ موقت",
       "category": "آموزش و نمرات",
@@ -684,7 +690,8 @@
       "exams:plan_calendar",
       "exams:manage_halls",
       "grades:resolve_appeals",
-      "reports:edu"
+      "reports:edu",
+      "edu:attendance_control"
     ],
     "VICE_EDU": [
       "students:view_dossier",
@@ -716,6 +723,9 @@
     "VAULT_MANAGER": [
       "exams:vault_handover",
       "exams:manage_halls"
+    ],
+    "ATTENDANCE_CONTROLLER": [
+      "edu:attendance_control"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { requireRole } from '@/lib/auth';
+import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import { faDigits } from '@/lib/calendar';
 import { checkinState, checkinWindowLabel, tehranNow, iranDowFromJalali } from '@/lib/room-checkin';
@@ -28,7 +28,13 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AttendanceControlPage({ searchParams }: { searchParams?: Promise<{ date?: string; day?: string }> }) {
   const sp = await (searchParams ?? Promise.resolve<{ date?: string; day?: string }>({}));
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER']);
+  // RBAC: نقش‌های سنتی همیشه عبور می‌کنند؛ از این پس هر نقشی که در ماتریس
+  // دسترسی «ثبت حضور و غیاب کلاس‌ها» (edu:attendance_control) را داشته باشد
+  // هم می‌تواند وارد شود — بدون نیاز به افزودن نقشِ جدید به کد.
+  const user = await requireRoleOrPermission(
+    ['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER'],
+    ['edu:attendance_control'],
+  );
   const uni = await getCurrentUniversity().catch(() => null);
 
   const rooms = await listControlledRooms(user.id, uni?.id ?? null);

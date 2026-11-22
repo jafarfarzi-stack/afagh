@@ -45,6 +45,7 @@ export const SETTING_GROUPS = [
   'حضور و غیاب کلاس‌ها',
   'ساعت کلاس و برنامه‌ریزی',
   'امضاکنندگان فرمها و اسناد',
+  'طراحی کارت دانشجو',
   'زیرساخت (فقط ENV)',
 ] as const;
 
@@ -286,6 +287,23 @@ export const SETTING_DEFS: SettingDef[] = [
   //   اجرا را نامعتبر کند؛ فقط پیش از شروع ترم تغییر دهید.
   { key: 'EXAM_MIDTERM_FINAL_TARGET', env: 'AFAGH_EXAM_MIDTERM_FINAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف مجموع بارم میان‌ترم + پایان‌ترم (۰ = خاموش)', type: 'number', default: '0', help: '۰ = بررسی خاموش و رفتار فعلی حفظ می‌شود؛ عدد مثبت = مجموع دو جزء میان‌ترم و پایان‌ترم باید دقیقاً برابر آن باشد. ۱۵ مطابق بارم پیش‌فرض سامانه (۵+۱۰) است؛ ۲۰ انتظار رایج است ولی بارم پیش‌فرض فعلی را رد می‌کند. تغییر میان ترم می‌تواند بارم و نمرات درس‌های جاری را نامعتبر کند.' },
   { key: 'STUDENT_CARD_VALID_DAYS', env: 'STUDENT_CARD_VALID_DAYS', group: 'ارزشیابی و هوش تجاری', label: 'اعتبار کارت دانشجویی (روز)', type: 'number', default: '365' },
+
+  // ── طراحی کارت دانشجو ──
+  // این هشت کلید را فرمِ «طراحی کارت» (/admin/student-cards/design) با
+  // پیش‌نمایش زنده می‌نویسد؛ صفحهٔ چاپ کارت هم دقیقاً از همین‌ها می‌خواند تا
+  // آنچه مدیر طراحی می‌کند همان چیزی باشد که چاپ می‌شود.
+  { key: 'STUDENT_CARD_TEMPLATE', env: 'STUDENT_CARD_TEMPLATE', group: 'طراحی کارت دانشجو', label: 'قالب کارت', type: 'select', default: 'CLASSIC', options: [
+    { value: 'CLASSIC', label: 'کلاسیک — سربرگ خاکستری، رسمی و ساده' },
+    { value: 'MODERN', label: 'مدرن — نوار رنگی و عکس بزرگ' },
+    { value: 'MINIMAL', label: 'مینیمال — سفید، خط‌کشی نازک' },
+  ], help: 'قالب پایهٔ چیدمان؛ پیش‌نمایش زنده در «طراحی کارت»' },
+  { key: 'STUDENT_CARD_ACCENT', env: 'STUDENT_CARD_ACCENT', group: 'طراحی کارت دانشجو', label: 'رنگ اصلی کارت (HEX)', type: 'text', default: '#1e3a8a', help: 'مثال: #1e3a8a — در قالب مدرن/مینیمال برای نوار و عنوان استفاده می‌شود' },
+  { key: 'STUDENT_CARD_HEADER', env: 'STUDENT_CARD_HEADER', group: 'طراحی کارت دانشجو', label: 'عنوان بالای کارت', type: 'text', default: 'کارت شناسایی دانشجویی' },
+  { key: 'STUDENT_CARD_FOOTER', env: 'STUDENT_CARD_FOOTER', group: 'طراحی کارت دانشجو', label: 'متن پانویس کارت', type: 'text', default: 'این کارت امانت است و در صورت درخواست مأموران باید ارائه شود.' },
+  { key: 'STUDENT_CARD_FIELDS', env: 'STUDENT_CARD_FIELDS', group: 'طراحی کارت دانشجو', label: 'فیلدهای چاپی (با کاما)', type: 'text', default: 'studentCode,nationalCode,major,degree,entryYear,status,validUntil', help: 'کلیدهای مجاز: studentCode, nationalCode, major, degree, entryYear, status, validUntil' },
+  { key: 'STUDENT_CARD_SHOW_PHOTO', env: 'STUDENT_CARD_SHOW_PHOTO', group: 'طراحی کارت دانشجو', label: 'نمایش عکس دانشجو', type: 'boolean', default: 'true' },
+  { key: 'STUDENT_CARD_SHOW_QR', env: 'STUDENT_CARD_SHOW_QR', group: 'طراحی کارت دانشجو', label: 'نمایش QR استعلام هویت', type: 'boolean', default: 'true' },
+  { key: 'STUDENT_CARD_SHOW_LOGO', env: 'STUDENT_CARD_SHOW_LOGO', group: 'طراحی کارت دانشجو', label: 'نمایش آرم دانشگاه', type: 'boolean', default: 'true' },
   { key: 'PERF_SLA_TARGET', env: 'PERF_SLA_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف پایبندی به ضرب‌الاجل (SLA) استاد', type: 'number', default: '90', help: 'درصد؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_EVAL_TARGET', env: 'PERF_EVAL_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نمرهٔ ارزشیابی استاد', type: 'number', default: '4', help: 'از ۵؛ مبنای نشان عملکرد و پاداش بهره‌وری' },
   { key: 'PERF_SESSION_HOLD_TARGET', env: 'PERF_SESSION_HOLD_TARGET', group: 'ارزشیابی و هوش تجاری', label: 'هدف نرخ برگزاری جلسات کلاس', type: 'number', default: '90', help: 'درصد جلسات برگزارشده از کل جلسات' },

@@ -1,4 +1,5 @@
 import { and, count, desc, eq, or, sql } from 'drizzle-orm';
+import Link from 'next/link';
 import { db } from '@/db';
 import { degree_level_configs, majors, student_cards, students, users } from '@/db/schema';
 import { requireRole } from '@/lib/auth';
@@ -155,10 +156,21 @@ export default async function AdminStudentCardsPage({
   return (
     <div className="space-y-4" dir="rtl">
       <div className="card !p-4 bg-white border-slate-300 shadow-sm">
-        <h1 className="text-base font-extrabold text-slate-900">🪪 صدور و مدیریت کارت دانشجویی</h1>
-        <p className="text-xs text-slate-500 mt-0.5">
-          توکن امنیتی چاپ‌شده روی کارت، همان چیزی است که گیت حراست در <span className="font-mono">/id/[token]</span> استعلام می‌کند.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-base font-extrabold text-slate-900">🪪 صدور و مدیریت کارت دانشجویی</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              توکن امنیتی چاپ‌شده روی کارت، همان چیزی است که گیت حراست در <span className="font-mono">/id/[token]</span> استعلام می‌کند.
+            </p>
+          </div>
+          <Link
+            prefetch={false}
+            href="/admin/student-cards/design"
+            className="rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-extrabold text-indigo-900 hover:bg-indigo-100"
+          >
+            🎨 طراحی کارت
+          </Link>
+        </div>
         <div className="mt-2 flex flex-wrap gap-2 text-2xs font-bold">
           <span className="rounded-lg bg-indigo-50 px-2 py-1 text-indigo-900 border border-indigo-200">
             اعتبار پیش‌فرض کارت: {fa(validDays)} روز (از تنظیمات سامانه)

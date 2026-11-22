@@ -4,18 +4,14 @@ import { db } from '@/db';
 import { degree_level_configs, majors, student_cards, students, universities, users } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
-import { getPublicBaseUrl, getSetting } from '@/lib/settings';
+import { getPublicBaseUrl, getSetting, getSettings } from '@/lib/settings';
 import { qrSvg } from '@/lib/qr';
-import PersonPhoto from '@/app/admin/students/components/PersonPhoto';
+import StudentCardView, { parseCardDesign } from '@/components/StudentCardView';
 import PrintButton from '@/components/PrintButton';
-import QrSvg from '@/components/QrSvg';
 import { verifyEntry, refCodeOf } from '@/lib/verify-url';
 import { toShamsi } from '@/lib/shamsi';
 
 export const dynamic = 'force-dynamic';
-
-const faNum = (v: unknown) =>
-  v === null || v === undefined || v === '' ? '—' : String(v).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 
 /**
  * کارت دانشجویی چاپی — با QR گیت حراست.
@@ -84,6 +80,22 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
   const logo = row.uniLogo || (await getSetting('UNIVERSITY_LOGO').catch(() => '')) || null;
   const validUntil = row.cardExpiresAt ? toShamsi(row.cardExpiresAt.toISOString()) : null;
 
+  // طراحیِ ذخیره‌شده از فرم «طراحی کارت» — تنها منبعِ ظاهرِ کارت
+  const designValues = await getSettings([
+    'STUDENT_CARD_TEMPLATE',
+    'STUDENT_CARD_ACCENT',
+    'STUDENT_CARD_HEADER',
+    'STUDENT_CARD_FOOTER',
+    'STUDENT_CARD_FIELDS',
+    'STUDENT_CARD_SHOW_PHOTO',
+    'STUDENT_CARD_SHOW_QR',
+    'STUDENT_CARD_SHOW_LOGO',
+  ] as const);
+  const design = parseCardDesign(designValues);
+  const verifySuffix = verifyUrl
+    ? ` — سامانه: ${verifyEntry(verifyUrl)} · کد رهگیری: ${refCodeOf(verifyUrl)}`
+    : '';
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4" dir="rtl">
       <div className="flex items-center justify-between print:hidden">
@@ -100,70 +112,27 @@ export default async function StudentCardPrintPage({ params }: { params: Promise
         </div>
       )}
 
-      <div className="print-area overflow-hidden rounded-2xl border-2 border-slate-800 bg-white shadow-xl print:shadow-none">
-        {/* سربرگ */}
-        <div className="flex items-center justify-between gap-3 border-b-2 border-slate-800 bg-slate-50 px-4 py-2">
-          <div className="flex items-center gap-2">
-            {logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logo} alt="آرم دانشگاه" className="h-10 w-10 object-contain" />
-            ) : null}
-            <div>
-              <p className="text-[13px] font-black text-slate-900">{row.uniTitle || uni?.title || ''}</p>
-              <p className="text-3xs text-slate-600">کارت شناسایی دانشجویی</p>
-            </div>
-          </div>
-          <p className="text-3xs font-bold text-slate-600">{faNum(row.studentCode)}</p>
-        </div>
-
-        <div className="flex flex-wrap gap-4 p-4">
-          {/* عکس */}
-          <div className="shrink-0">
-            <PersonPhoto userId={row.userId} hasPhoto={!!row.hasPhoto} className="h-40 w-32 rounded-lg border border-slate-300" label="عکس دانشجو" />
-          </div>
-
-          {/* مشخصات */}
-          <div className="min-w-0 flex-1 space-y-1.5 text-2xs">
-            <Row label="نام و نام خانوادگی" value={`${row.firstName} ${row.lastName}`} strong />
-            <Row label="شمارهٔ دانشجویی" value={faNum(row.studentCode)} mono />
-            <Row label="کد ملی" value={faNum(row.nationalCode)} mono />
-            <Row label="رشته" value={row.majorName ?? '—'} />
-            <Row label="مقطع" value={row.degreeTitle ?? '—'} />
-            <Row label="سال ورود" value={faNum(row.entryYear)} />
-            <Row label="وضعیت کارت" value={row.cardStatus ?? 'PENDING'} />
-            {validUntil && <Row label="اعتبار کارت تا" value={validUntil} />}
-          </div>
-
-          {/* QR گیت حراست */}
-          <div className="shrink-0 text-center">
-            {qr ? (
-              <QrSvg
-                svg={qr}
-                className="h-32 w-32 overflow-hidden rounded border border-slate-300 bg-white p-1 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
-              />
-            ) : (
-              <div className="flex h-32 w-32 items-center justify-center rounded border border-dashed border-slate-300 text-3xs text-slate-400">
-                QR در دسترس نیست
-              </div>
-            )}
-            <p className="mt-1 text-[9px] font-bold text-slate-600">اسکن برای استعلام هویت</p>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-300 bg-slate-50 px-4 py-1.5 text-[9px] leading-4 text-slate-600">
-          این کارت امانت است و در صورت درخواست مأموران باید ارائه شود. استعلام برخط هویت از پایگاه دادهٔ مرکزی دانشگاه انجام می‌شود
-          {verifyUrl ? <> — سامانه: <span className="font-mono" dir="ltr">{verifyEntry(verifyUrl)}</span> · کد رهگیری: <span className="font-mono tracking-widest" dir="ltr">{refCodeOf(verifyUrl)}</span></> : null}.
-        </div>
+      <div className="print-area">
+        <StudentCardView
+          design={{ ...design, footer: `${design.footer}${verifySuffix}` }}
+          data={{
+            firstName: row.firstName ?? '',
+            lastName: row.lastName ?? '',
+            studentCode: row.studentCode ?? '',
+            nationalCode: row.nationalCode,
+            majorName: row.majorName,
+            degreeTitle: row.degreeTitle,
+            entryYear: row.entryYear,
+            status: row.cardStatus,
+            validUntil,
+            uniTitle: row.uniTitle || uni?.title || '',
+            logoUrl: logo,
+            photoUserId: row.userId,
+            hasPhoto: !!row.hasPhoto,
+            qrSvg: qr,
+          }}
+        />
       </div>
-    </div>
-  );
-}
-
-function Row({ label, value, strong, mono }: { label: string; value: string; strong?: boolean; mono?: boolean }) {
-  return (
-    <div className="flex gap-2">
-      <span className="w-32 shrink-0 font-bold text-slate-500">{label}:</span>
-      <span className={`min-w-0 flex-1 ${strong ? 'font-black' : 'font-bold'} text-slate-800 ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }
