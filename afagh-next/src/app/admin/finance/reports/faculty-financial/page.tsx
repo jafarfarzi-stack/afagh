@@ -135,7 +135,7 @@ export default async function FacultyFinancialReportPage(props: {
       COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—') AS code,
       COALESCE(fc.name, '—') AS faculty,
       (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::int AS "entryCode",
-      COALESCE(MAX(lc."studentCount"),
+      COALESCE(MAX(lpdf."studentCount"), MAX(lc."studentCount"),
         COUNT(DISTINCT s.id) FILTER (WHERE ${inTypes(CHARGE_TYPES)}))::int AS students,
       ${sumOf(VARIABLE)} AS variable,
       ${sumOf(FIXED)} AS fixed,
@@ -157,6 +157,10 @@ export default async function FacultyFinancialReportPage(props: {
       ON lc."termCode" = ${term}
      AND lc."facultyCode" = COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text)
      AND lc."cohort" = (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::text
+    LEFT JOIN legacy_pdf_student_counts lpdf
+      ON lpdf."termCode" = ${term}
+     AND lpdf."facultyCode" = COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text)
+     AND lpdf."cohort" = (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::text
     ${joinAnd(conds)}
     GROUP BY fc."facultyCode", fc.id, fc.name, s."entryYear", s."entryTerm"
     ORDER BY COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—'), "entryCode"
