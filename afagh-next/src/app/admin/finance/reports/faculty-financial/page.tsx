@@ -144,7 +144,7 @@ export default async function FacultyFinancialReportPage(props: {
       ${sumOf(DISC_VARIABLE)} AS "discVariable",
       ${sumOf(DISC_FIXED)} AS "discFixed",
       ${sumOf(DISC_AMOUNT)} AS "discAmount",
-      ${sumOf(PAYMENTS)} AS payments,
+      COALESCE(MAX(lpp."payments"), ${sumOf(PAYMENTS)}) AS payments,
       ${sumOf(ADVANCE)} AS advance,
       ${sumOf(TOPIC_ADD)} AS "topicAdd",
       ${sumOf(TOPIC_DEDUCT)} AS "topicDeduct"
@@ -161,6 +161,10 @@ export default async function FacultyFinancialReportPage(props: {
       ON lpdf."termCode" = ${term}
      AND lpdf."facultyCode" = COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text)
      AND lpdf."cohort" = (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::text
+    LEFT JOIN legacy_pdf_payments lpp
+      ON lpp."termCode" = ${term}
+     AND lpp."facultyCode" = COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text)
+     AND lpp."cohort" = (s."entryYear" * 10 + COALESCE(s."entryTerm", 1))::text
     ${joinAnd(conds)}
     GROUP BY fc."facultyCode", fc.id, fc.name, s."entryYear", s."entryTerm"
     ORDER BY COALESCE(NULLIF(fc."facultyCode", ''), fc.id::text, '—'), "entryCode"
