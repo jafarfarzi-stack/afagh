@@ -19,8 +19,12 @@ interface EnrollConfirmData {
     groupNumber: number;
     professorName: string | null;
     status: string;
+    examDate?: string | null;
+    examTime?: string | null;
   }[];
   totalUnits: number;
+  passedUnits?: number;
+  gpa?: number | null;
   checkedAt: string;
 }
 
@@ -107,6 +111,8 @@ export default function EnrollConfirmClient(props: {
               <th scope="col" className="p-2">کد</th>
               <th scope="col" className="p-2 text-center">واحد</th>
               <th scope="col" className="p-2 text-center">گروه</th>
+              <th scope="col" className="p-2">تاریخ امتحان</th>
+              <th scope="col" className="p-2">ساعت امتحان</th>
               <th scope="col" className="p-2">استاد</th>
               <th scope="col" className="p-2">وضعیت</th>
             </tr>
@@ -119,6 +125,8 @@ export default function EnrollConfirmClient(props: {
                 <td className="p-2 font-mono" dir="ltr">{c.courseCode}</td>
                 <td className="p-2 text-center">{faNum(c.units)}</td>
                 <td className="p-2 text-center">{faNum(c.groupNumber)}</td>
+                <td className="p-2 font-mono text-xs" dir="ltr">{faNum(c.examDate ?? '—')}</td>
+                <td className="p-2 font-mono text-xs" dir="ltr">{faNum(c.examTime ?? '—')}</td>
                 <td className="p-2">{c.professorName ?? '—'}</td>
                 <td className="p-2">{ENROLL_STATUS_FA[c.status] ?? c.status}</td>
               </tr>
@@ -126,12 +134,31 @@ export default function EnrollConfirmClient(props: {
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-800 font-black">
-              <td className="p-2" colSpan={3}>جمع</td>
+              <td className="p-2" colSpan={3}>جمع این ترم</td>
               <td className="p-2 text-center">{faNum(data.totalUnits)} واحد</td>
-              <td className="p-2 text-center" colSpan={3}>{faNum(data.courses.length)} درس</td>
+              <td className="p-2 text-center" colSpan={5}>{faNum(data.courses.length)} درس</td>
             </tr>
           </tfoot>
         </table>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <div className="text-3xs font-bold text-slate-500">واحدهای این ترم</div>
+            <div className="mt-0.5 text-sm font-black text-slate-900">{faNum(data.totalUnits)}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <div className="text-3xs font-bold text-slate-500">تعداد درس</div>
+            <div className="mt-0.5 text-sm font-black text-slate-900">{faNum(data.courses.length)}</div>
+          </div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+            <div className="text-3xs font-bold text-emerald-700">کل واحد گذرانده</div>
+            <div className="mt-0.5 text-sm font-black text-emerald-900">{faNum(data.passedUnits ?? 0)}</div>
+          </div>
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-2">
+            <div className="text-3xs font-bold text-sky-700">معدل کل</div>
+            <div className="mt-0.5 text-sm font-black text-sky-900">{data.gpa == null ? '—' : faNum(Number(data.gpa).toFixed(2))}</div>
+          </div>
+        </div>
 
         <div className="mt-3 flex items-end justify-between gap-3 text-3xs text-slate-500">
           <div>

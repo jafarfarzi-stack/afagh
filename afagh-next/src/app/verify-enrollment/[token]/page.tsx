@@ -131,6 +131,8 @@ export default async function VerifyEnrollmentPage({ params }: { params: Promise
                   <th scope="col" className="p-2">کد</th>
                   <th scope="col" className="p-2 text-center">واحد</th>
                   <th scope="col" className="p-2 text-center">گروه</th>
+                  <th scope="col" className="p-2">تاریخ امتحان</th>
+                  <th scope="col" className="p-2">ساعت امتحان</th>
                   <th scope="col" className="p-2">استاد</th>
                   <th scope="col" className="p-2">وضعیت</th>
                 </tr>
@@ -143,12 +145,33 @@ export default async function VerifyEnrollmentPage({ params }: { params: Promise
                     <td className="p-2 font-mono text-slate-300" dir="ltr">{c.courseCode}</td>
                     <td className="p-2 text-center">{faNum(c.units)}</td>
                     <td className="p-2 text-center">{faNum(c.groupNumber)}</td>
+                    <td className="p-2 font-mono text-slate-300" dir="ltr">{faNum(c.examDate ?? '—')}</td>
+                    <td className="p-2 font-mono text-slate-300" dir="ltr">{faNum(c.examTime ?? '—')}</td>
                     <td className="p-2 text-slate-300">{c.professorName ?? '—'}</td>
                     <td className="p-2 text-emerald-300">{ENROLL_STATUS_FA[c.status] ?? c.status}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-3">
+            <p className="text-3xs font-bold text-slate-400">واحدهای این ترم</p>
+            <p className="mt-1 text-base font-black text-white">{faNum(res.totalUnits)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-3">
+            <p className="text-3xs font-bold text-slate-400">تعداد درس</p>
+            <p className="mt-1 text-base font-black text-white">{faNum(res.courses.length)}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-900/60 bg-slate-950 px-3 py-3">
+            <p className="text-3xs font-bold text-emerald-300">کل واحد گذرانده</p>
+            <p className="mt-1 text-base font-black text-emerald-200">{faNum(res.passedUnits)}</p>
+          </div>
+          <div className="rounded-xl border border-sky-900/60 bg-slate-950 px-3 py-3">
+            <p className="text-3xs font-bold text-sky-300">معدل کل</p>
+            <p className="mt-1 text-base font-black text-sky-200">{res.gpa === null ? '—' : faNum(res.gpa.toFixed(2))}</p>
           </div>
         </div>
 

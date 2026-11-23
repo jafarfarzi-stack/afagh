@@ -596,8 +596,12 @@ export type EnrollConfirmVerification =
         groupNumber: number;
         professorName: string | null;
         status: string;
+        examDate: string | null;
+        examTime: string | null;
       }[];
       totalUnits: number;
+      passedUnits: number;
+      gpa: number | null;
       checkedAt: string;
     };
 
@@ -665,12 +669,23 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
            coalesce(c.units, 0)::int as "units",
            o."groupNumber" as "groupNumber",
            (pu."firstName" || ' ' || pu."lastName") as "professorName",
-           en.status as "status"
+           en.status as "status",
+           ex."examDate" as "examDate",
+           case when ex."startTime" is not null and ex."startTime" <> ''
+                then ex."startTime" || case when ex."endTime" is not null and ex."endTime" <> '' then ' – ' || ex."endTime" else '' end
+                else null end as "examTime"
       from enrollments en
       join course_offerings o on o.id = en."offeringId"
       join courses c on c.id = o."courseId"
       left join staff st on st.id = o."professorId"
       left join users pu on pu.id = st."userId"
+      left join lateral (
+        select sc."examDate"::text as "examDate", sc."startTime"::text as "startTime", sc."endTime"::text as "endTime"
+          from schedules sc
+         where sc."offeringId" = o.id and sc."scheduleType" = 'EXAM' and sc."examDate" is not null
+         order by sc."examDate", sc."startTime"
+         limit 1
+      ) ex on true
      where en."studentId" = ${stu.studentId}
        and o."termId" = ${term.id}
        and en.status <> 'DROPPED'
@@ -678,6 +693,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   `)).rows ?? []) as unknown as {
     courseTitle: string; courseCode: string; units: number;
     groupNumber: number; professorName: string | null; status: string;
+    examDate: string | null; examTime: string | null;
   }[];
 
   // اگر پروندهٔ توکن ثبت‌نام ندارد (مثلاً تکرار هویت سنجش NO_SHOW)،
@@ -718,12 +734,23 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
                    coalesce(c.units, 0)::int as "units",
                    o."groupNumber" as "groupNumber",
                    (pu."firstName" || ' ' || pu."lastName") as "professorName",
-                   en.status as "status"
+                   en.status as "status",
+                   ex."examDate" as "examDate",
+                   case when ex."startTime" is not null and ex."startTime" <> ''
+                        then ex."startTime" || case when ex."endTime" is not null and ex."endTime" <> '' then ' – ' || ex."endTime" else '' end
+                        else null end as "examTime"
               from enrollments en
               join course_offerings o on o.id = en."offeringId"
               join courses c on c.id = o."courseId"
               left join staff st on st.id = o."professorId"
               left join users pu on pu.id = st."userId"
+              left join lateral (
+                select sc."examDate"::text as "examDate", sc."startTime"::text as "startTime", sc."endTime"::text as "endTime"
+                  from schedules sc
+                 where sc."offeringId" = o.id and sc."scheduleType" = 'EXAM' and sc."examDate" is not null
+                 order by sc."examDate", sc."startTime"
+                 limit 1
+              ) ex on true
              where en."studentId" = ${stu.studentId}
                and o."termId" = ${term.id}
                and en.status <> 'DROPPED'
@@ -737,6 +764,8 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   if (!courses.length) {
     return { ok: false, reason: 'EMPTY', message: 'برای این دانشجو در این نیمسال ثبت‌نامی (به‌جز حذف‌شده) وجود ندارد.' };
   }
+
+  const gpaData = await calculateOfficialGpaBreakdown(stu.studentId).catch(() => null);
 
   return {
     ok: true,
@@ -752,6 +781,8 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     termTitle: term.title,
     courses,
     totalUnits: courses.reduce((s, c) => s + (Number(c.units) || 0), 0),
+    passedUnits: gpaData?.passedUnits ?? 0,
+    gpa: gpaData?.gpa ?? null,
     checkedAt: new Date().toISOString(),
   };
 }
