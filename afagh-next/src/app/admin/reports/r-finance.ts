@@ -691,6 +691,17 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
       ORDER BY id DESC LIMIT 1)`;
 
     /**
+     * ترمهای «قبل» را بر اساس **کد ترم** میگیریم نه شناسهٔ ردیف: شناسهها
+     * ترتیب تقویمی ندارند (مثلاً ۱۴۰۲۱ با id=۱۱۳ بعد از ۱۴۰۵۱ با id=۱۱۱
+     * درج شده است). مقایسهٔ `termId < termId` آن ترمها را از «نقل از ترم
+     * قبل» حذف میکرد ⇒ اختلاف چند میلیاردی با فرم سام.
+     */
+    const priorTermIds = sql`(SELECT id FROM academic_terms
+      WHERE "universityId" = ${f.universityId}
+        AND "termCode" ~ '^[0-9]+$'
+        AND "termCode"::int < ${Number(f.term)})`;
+
+    /**
      * تجمیعِ دفتر **یک‌بار** در سطح (دانشجو × ترم) و بعد چرخش به یک ردیف برای
      * هر دانشجو. نسخهٔ اولِ این گزارش با `JOIN LATERAL` نوشته شده بود و روی
      * ۴۰ هزار دانشجو ۲ دقیقه طول می‌کشید (هر دانشجو یک اسکن جدا). این شکل،
@@ -704,7 +715,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
         COALESCE(SUM(per."discount") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "discount",
         COALESCE(SUM(per."charge") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "termCharge",
         COALESCE(SUM(per."paid") FILTER (WHERE per."termId" = ${termId}), 0)::bigint AS "paid",
-        COALESCE(SUM(per."charge" - per."credit") FILTER (WHERE per."termId" < ${termId}), 0)::bigint AS "opening"
+        COALESCE(SUM(per."charge" - per."credit") FILTER (WHERE per."termId" IN ${priorTermIds}), 0)::bigint AS "opening"
       FROM (
         SELECT sl2."studentId", sl2."termId",
           COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', DEBT_LEDGER_TYPES)}), 0) AS "charge",
@@ -715,7 +726,6 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
           COALESCE(SUM(sl2.amount) FILTER (WHERE ${typesIn('sl2', PAID_LEDGER_TYPES)}), 0) AS "paid"
         FROM student_ledger sl2
         WHERE sl2."universityId" = ${f.universityId}
-          AND sl2."termId" <= ${termId}
         GROUP BY sl2."studentId", sl2."termId"
       ) per
       GROUP BY per."studentId"
