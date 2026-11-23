@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth';
-import { groupedModules, FINANCE_SUBGROUPS, canSeeModule, ADMIN_MODULES } from '@/lib/admin-modules';
+import { groupedModules, FINANCE_SUBGROUPS, EDU_SUBGROUPS, canSeeModule, ADMIN_MODULES } from '@/lib/admin-modules';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -101,9 +101,29 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
           : [];
 
         if (g.group.key !== 'fin') {
+          const mainModules = g.group.key === 'edu'
+            ? g.modules.filter((m) => !m.subgroup)
+            : g.modules;
           return (
             <div className="space-y-5">
-              <div className={gridCls}>{g.modules.map(renderCard)}</div>
+              <div className={gridCls}>{mainModules.map(renderCard)}</div>
+              {g.group.key === 'edu' && EDU_SUBGROUPS.map((sg) => {
+                const mods = g.modules.filter((m) => m.subgroup === sg.key);
+                if (mods.length === 0) return null;
+                return (
+                  <section key={sg.key} className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span aria-hidden className="text-base leading-none">{sg.icon}</span>
+                        <h2 className="text-xs font-black text-slate-800 sm:text-sm">{sg.title}</h2>
+                        <span className="hidden truncate text-2xs font-bold text-slate-400 sm:inline">{sg.desc}</span>
+                      </div>
+                      <span className="ui-chip shrink-0">{mods.length}</span>
+                    </div>
+                    <div className={gridCls}>{mods.map(renderCard)}</div>
+                  </section>
+                );
+              })}
               {shortcuts.length > 0 && (
                 <section className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">

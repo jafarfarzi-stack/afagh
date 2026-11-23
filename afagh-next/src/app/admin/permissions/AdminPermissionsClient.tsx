@@ -453,9 +453,9 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
                   return (
                     <th scope="col" key={r.id} className={`sticky top-0 z-30 p-3 text-center min-w-[120px] ${changed ? 'bg-amber-700' : 'bg-slate-900'}`}>
                       <div className="font-black">{r.title}</div>
-                      <div className="text-3xs text-indigo-200 mt-0.5">
+                      <div className="text-3xs text-slate-200 mt-0.5">
                         👤 {faNum(r.userCount)} کاربر
-                        {r.isSystem ? <span className="ms-1 text-amber-300">· سیستمی</span> : null}
+                        {r.isSystem ? <span className="ms-1 text-amber-200">· سیستمی</span> : null}
                       </div>
                       {/*
                         ⚠ این دو دکمه شبیه هم‌اند ولی یکی نیستند — و وقتی
@@ -470,7 +470,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
                         <button
                           onClick={() => toggleColumn(r.id, r.code, !allOn)}
                           title={`فقط مجوزهای فیلترِ «${selectedCategory}» — نه کل ماتریس`}
-                          className="mt-1 block w-full text-3xs underline text-indigo-200 hover:text-white"
+                          className="mt-1 block w-full text-3xs underline text-slate-200 hover:text-white"
                         >
                           {allOn ? 'برداشتن' : 'انتخاب'} {faNum(filteredPermissions.length)} مجوزِ «{selectedCategory}»
                         </button>

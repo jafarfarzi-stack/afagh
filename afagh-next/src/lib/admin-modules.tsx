@@ -19,6 +19,8 @@ export type ModuleGroupKey =
 
 /** زیردستهٔ ماژولهای مالی — ترتیب نمایش کاشیها در `/admin/c/fin` */
 export type FinanceSubgroup = 'worklist' | 'rules' | 'tools';
+/** زیردستهٔ ماژولهای آموزش — ترتیب نمایش کاشیها در `/admin/c/edu` */
+export type EduSubgroup = 'student-affairs';
 
 /** عنوان و توضیح زیردستههای مالی — تنها منبع نامگذاری آنها */
 export const FINANCE_SUBGROUPS: {
@@ -28,8 +30,18 @@ export const FINANCE_SUBGROUPS: {
   desc: string;
 }[] = [
   { key: 'worklist', title: 'کارتابل و بررسیها', icon: <Icon emoji="🗂️" />, desc: 'دفتر مالی، کارتابل کارشناس و حقوق و دستمزد' },
-  { key: 'rules', title: 'قواعد و تنظیمات', icon: <Icon emoji="⚙️" />, desc: 'موتور شهریه، نوع درس مالی، پوشش فرمولها و دادهٔ پایه' },
   { key: 'tools', title: 'ابزارها و گزارشها', icon: <Icon emoji="🧰" />, desc: 'POS، مرکز گزارشهای مالی و صورت حساب دانشجو' },
+  { key: 'rules', title: 'قواعد و تنظیمات', icon: <Icon emoji="⚙️" />, desc: 'موتور شهریه، نوع درس مالی، پوشش فرمولها و دادهٔ پایه' },
+];
+
+/** عنوان و توضیح زیردستههای آموزش */
+export const EDU_SUBGROUPS: {
+  key: EduSubgroup;
+  title: string;
+  icon: React.ReactNode;
+  desc: string;
+}[] = [
+  { key: 'student-affairs', title: 'امور دانشجویی', icon: <Icon emoji="🎒" />, desc: 'کمیته انضباطی، شوراهای آموزشی، کارت سکونت و کارت دانشجویی' },
 ];
 
 /** دسته‌های کلی فرانت‌اند — ترتیب نمایش در داشبورد */
@@ -59,8 +71,8 @@ export interface AdminModule {
   iconBg: string;
   /** آیکون — React element (جایگزین اموجی) */
   icon: React.ReactNode;
-  /** زیردستهٔ اختیاری — فعلاً فقط ماژولهای مالی را مرتب میکند */
-  subgroup?: FinanceSubgroup;
+  /** زیردستهٔ اختیاری — ماژولهای مالی و آموزش */
+  subgroup?: FinanceSubgroup | EduSubgroup;
   /** آیا در منوی افقی بالای صفحه هم نمایش داده شود؟ */
   inNav?: boolean;
   /** آیا به‌صورت کارت در شبکهٔ داشبورد نمایش داده شود؟ */
@@ -223,6 +235,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'کمیته انضباطی',
     desc: 'پرونده‌سازی تخلفات، تصمیم کمیته و اسناد مرتبط',
     group: 'edu',
+    subgroup: 'student-affairs',
     roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-rose-950 to-red-950 border-rose-700/50',
     iconBg: 'bg-rose-700/80 border-rose-500/50',
@@ -235,6 +248,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'شورای آموزشی',
     desc: 'جلسات شورا، صورت‌جلسه و مصوبات با پیگیری اجرا',
     group: 'edu',
+    subgroup: 'student-affairs',
     roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-violet-950 to-indigo-950 border-violet-700/50',
     iconBg: 'bg-violet-700/80 border-violet-500/50',
@@ -295,6 +309,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'کارت سکونت خوابگاه',
     desc: 'ثبت سکونت دوره‌ای و صدور کارت سکونت قابل چاپ',
     group: 'edu',
+    subgroup: 'student-affairs',
     roles: ['ADMIN', 'EDU_EXPERT', 'VICE_EDU'],
     accent: 'from-orange-950 to-amber-950 border-orange-700/50',
     iconBg: 'bg-orange-700/80 border-orange-500/50',
@@ -683,20 +698,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
-    href: '/admin/finance/pos',
-    icon: <Icon emoji="🏧" />,
-    title: 'ترمینالهای POS (پرداخت حضوری)',
-    desc: 'ثبت پرداخت کارتخوان فیزیکی، ویدی، گزارش روزانه صندوق',
-    group: 'fin',
-    subgroup: 'tools',
-    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
-    permissions: ['finance:view_ledger'],
-    accent: 'from-orange-900 to-amber-950 border-orange-600/50',
-    iconBg: 'bg-orange-700/80 border-orange-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-  {
     href: '/admin/finance/reports',
     icon: <Icon emoji="📊" />,
     title: 'مرکز گزارشهای مالی',
@@ -707,6 +708,20 @@ export const ADMIN_MODULES: AdminModule[] = [
     permissions: ['reports:finance'],
     accent: 'from-emerald-900 to-teal-950 border-emerald-600/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+  {
+    href: '/admin/finance/pos',
+    icon: <Icon emoji="🏧" />,
+    title: 'ترمینالهای POS (پرداخت حضوری)',
+    desc: 'ثبت پرداخت کارتخوان فیزیکی، ویدی، گزارش روزانه صندوق',
+    group: 'fin',
+    subgroup: 'tools',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER'],
+    permissions: ['finance:view_ledger'],
+    accent: 'from-orange-900 to-amber-950 border-orange-600/50',
+    iconBg: 'bg-orange-700/80 border-orange-500/50',
     inNav: true,
     inGrid: true,
   },
@@ -729,6 +744,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     title: 'کارت دانشجویی',
     desc: 'صدور، چاپ و استعلام کارت',
     group: 'edu',
+    subgroup: 'student-affairs',
     roles: EDU,
     accent: 'from-fuchsia-950 to-purple-950 border-fuchsia-700/50',
     iconBg: 'bg-fuchsia-700/80 border-fuchsia-500/50',
@@ -989,8 +1005,8 @@ export function gridModules(roles: string[], permissions?: ReadonlySet<string> |
 export function financeModulesBySubgroup(modules: AdminModule[]): AdminModule[] {
   const rank = new Map<FinanceSubgroup, number>(FINANCE_SUBGROUPS.map((s, i) => [s.key, i]));
   return [...modules].sort((a, b) => {
-    const ra = a.subgroup ? (rank.get(a.subgroup) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-    const rb = b.subgroup ? (rank.get(b.subgroup) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+    const ra = a.subgroup && rank.has(a.subgroup as FinanceSubgroup) ? rank.get(a.subgroup as FinanceSubgroup)! : Number.MAX_SAFE_INTEGER;
+    const rb = b.subgroup && rank.has(b.subgroup as FinanceSubgroup) ? rank.get(b.subgroup as FinanceSubgroup)! : Number.MAX_SAFE_INTEGER;
     return ra - rb;
   });
 }
