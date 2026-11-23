@@ -54,8 +54,8 @@ const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'council', label: '🏛️ شورا و مکاتبات' },
   { key: 'research', label: '🔬 پژوهش و آزمون جامع' },
   { key: 'finance', label: '💰 پرداخت و حسابداری' },
-  { key: 'finance-tuition', label: '?? ????? ??????' },
-  { key: 'finance-teaching', label: '????? ?????????? ? ???????? ??????' },
+  { key: 'finance-tuition', label: '🎓 شهریهٔ دانشجو' },
+  { key: 'finance-teaching', label: '👨‍🏫 حق‌التدریس و شاخص‌های اساتید' },
   { key: 'finance-ops', label: '📦 انبار، قراردادها و پیمانکاران' },
 ];
 
