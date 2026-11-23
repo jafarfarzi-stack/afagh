@@ -85,7 +85,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
 
         const gridCls = g.group.key === 'fin'
           ? 'grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3.5'
-          : 'grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3.5 lg:grid-cols-5';
+          : 'grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3.5';
 
         // میان‌برها همیشه از رجیستری و با همان گاردِ نقش/مجوز فیلتر می‌شوند؛
         // ماژول‌های همین دسته (و تکراری‌ها) کنار گذاشته می‌شوند تا هیچ مقصدی
