@@ -368,10 +368,10 @@ export default function AdminWorkflowsClient({
       <div className="bg-gradient-to-l from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl p-6 shadow-xl border border-indigo-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-            موتور گردش کار و مدیریت فرآیندهای کسب‌وکار (BPM Engine)
+            موتور گردش کار و مدیریت فرآیندها
           </span>
           <h1 className="text-xl sm:text-2xl font-black mt-2">
-            کارتابل جامع گردش کار، طراح فرآیند و ارزیابی SLA
+            کارتابل جامع گردش کار، طراح فرآیند و ارزیابی سطح خدمت
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
             تعریف پویای فرم‌ها، سطوح دسترسی ریزدانه، کنترل زمان‌بندی و پایش گلوگاه‌های اداری
@@ -379,12 +379,12 @@ export default function AdminWorkflowsClient({
         </div>
 
         {/* دکمه‌های ناوبری تب‌ها */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
           <button
             onClick={() => setActiveTab('INBOX')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
+            className={`inline-flex min-h-11 items-center justify-center px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
               activeTab === 'INBOX'
-                ? 'bg-white text-indigo-950 scale-105'
+                ? 'bg-white text-indigo-950'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
             }`}
           >
@@ -392,23 +392,23 @@ export default function AdminWorkflowsClient({
           </button>
           <button
             onClick={() => setActiveTab('DESIGNER')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
+            className={`inline-flex min-h-11 items-center justify-center px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
               activeTab === 'DESIGNER'
-                ? 'bg-amber-400 text-slate-950 scale-105'
+                ? 'bg-amber-400 text-slate-950'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
             }`}
           >
-            ⚙️ طراح فرآیندها و SLA
+            ⚙️ طراح فرآیندها و سطح خدمت
           </button>
           <button
             onClick={() => setActiveTab('ANALYTICS')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
+            className={`inline-flex min-h-11 items-center justify-center px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
               activeTab === 'ANALYTICS'
-                ? 'bg-emerald-400 text-slate-950 scale-105'
+                ? 'bg-emerald-400 text-slate-950'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
             }`}
           >
-            📊 تحلیل گلوگاه‌ها و KPI پرسنل
+            📊 تحلیل گلوگاه‌ها و شاخص پرسنل
           </button>
         </div>
       </div>
@@ -473,7 +473,7 @@ export default function AdminWorkflowsClient({
               className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-extrabold text-xs shadow flex items-center gap-1.5 transition disabled:opacity-50"
             >
               <span>⏱️</span>
-              <span>اجرای موتور ارزیابی خودکار ضرب‌الاجل (SLA Engine)</span>
+              <span>اجرای ارزیابی خودکار ضرب‌الاجل</span>
             </button>
           </div>
 

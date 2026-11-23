@@ -84,7 +84,7 @@ export const ADMIN_MODULES: AdminModule[] = [
   {
     href: '/admin/students',
     icon: <Icon emoji="🎓" />,
-    title: 'پرونده جامع دانشجویان و پرسنل',
+    title: 'پرونده دانشجویان، اساتید و پرسنل',
     desc: 'پرونده، مدارک، KYC و سوابق',
     group: 'edu',
     roles: ['ADMIN', 'EDU_EXPERT', 'ARCHIVE_EXPERT', 'MILITARY_OFFICER'],
@@ -114,7 +114,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: <Icon emoji="🗂️" />,
     title: 'تبدیل اطلاعات سازمان سنجش',
     desc: 'فایل‌ها، تطبیق فیلدها، براورد، تطبیق و صف پذیرش',
-    group: 'edu',
+    group: 'settings',
     roles: EDU,
     accent: 'from-teal-950 to-cyan-950 border-teal-700/50',
     iconBg: 'bg-teal-700/80 border-teal-500/50',
@@ -150,7 +150,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: <Icon emoji="📚" />,
     title: 'کاتالوگ و سرفصل رشته‌ها',
     desc: 'طرح‌های آموزشی و سرفصل دروس',
-    group: 'edu',
+    group: 'plan',
     roles: EDU,
     accent: 'from-emerald-950 to-teal-950 border-emerald-700/50',
     iconBg: 'bg-emerald-700/80 border-emerald-500/50',
@@ -198,7 +198,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: <Icon emoji="⚖️" />,
     title: 'مرکز مدیریت آیین‌نامه‌ها',
     desc: 'تدوین و نسخه‌بندی آیین‌نامه‌های آموزشی',
-    group: 'edu',
+    group: 'settings',
     roles: EDU,
     accent: 'from-stone-900 to-amber-950 border-stone-600/50',
     iconBg: 'bg-stone-700/80 border-stone-500/50',
@@ -528,7 +528,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: <Icon emoji="⏱️" />,
     title: 'کنترل حضور و غیاب کلاس‌ها',
     desc: 'ثبتِ تشکیلِ کلاس‌های امروز در اتاق‌های تحت مسئولیت — به‌نامِ استاد هر درس',
-    group: 'edu',
+    group: 'plan',
     roles: ['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER'],
     // RBAC: هر نقشی که در ماتریس دسترسی، «ثبت حضور و غیاب کلاس‌ها» را بگیرد
     // هم کاشی و هم صفحه را می‌بیند (نقش‌های بالا برای سازگاریِ قبلی می‌مانند).
@@ -637,6 +637,23 @@ export const ADMIN_MODULES: AdminModule[] = [
     inGrid: true,
   },
   {
+    // شهریهٔ ویژهٔ یک درس برای یک دانشجوی خاص — سندِ سما: «شهریهٔ متغیر ویژه
+    // برای یک دانشجو خاص برای درس‌های مورد نظر».
+    href: '/admin/finance/course-tuition',
+    icon: <Icon emoji="🎯" />,
+    title: 'شهریهٔ ویژهٔ درس',
+    desc: 'نرخ هر واحد یک درس برای یک دانشجوی خاص (اولویت بر تعرفهٔ عمومی)',
+    group: 'fin',
+    subgroup: 'rules',
+    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
+    accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
+    iconBg: 'bg-teal-700/80 border-teal-500/50',
+    inNav: true,
+    inGrid: true,
+  },
+
+  /* ── زیردستهٔ ۳: ابزارها و گزارشها ── */
+  {
     href: '/admin/finance/base-data',
     icon: <Icon emoji="🗂️" />,
     title: 'دادهٔ پایهٔ مالی',
@@ -665,23 +682,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     inNav: true,
     inGrid: true,
   },
-  {
-    // شهریهٔ ویژهٔ یک درس برای یک دانشجوی خاص — سندِ سما: «شهریهٔ متغیر ویژه
-    // برای یک دانشجو خاص برای درس‌های مورد نظر».
-    href: '/admin/finance/course-tuition',
-    icon: <Icon emoji="🎯" />,
-    title: 'شهریهٔ ویژهٔ درس',
-    desc: 'نرخ هر واحد یک درس برای یک دانشجوی خاص (اولویت بر تعرفهٔ عمومی)',
-    group: 'fin',
-    subgroup: 'rules',
-    roles: ['ADMIN', 'FINANCE_EXPERT', 'FINANCE'],
-    accent: 'from-teal-900 to-emerald-950 border-teal-600/50',
-    iconBg: 'bg-teal-700/80 border-teal-500/50',
-    inNav: true,
-    inGrid: true,
-  },
-
-  /* ── زیردستهٔ ۳: ابزارها و گزارشها ── */
   {
     href: '/admin/finance/pos',
     icon: <Icon emoji="🏧" />,
@@ -762,7 +762,7 @@ export const ADMIN_MODULES: AdminModule[] = [
   {
     href: '/admin/workflows',
     icon: <Icon emoji="🔀" />,
-    title: 'فرآیندها، SLA و کارتابل (BPM)',
+    title: 'فرآیندها، سطح خدمت و کارتابل',
     desc: 'موتور فرآیندها و پایش گلوگاه‌ها',
     group: 'archive',
     // کارشناس مالی هم باید درخواست‌های تأیید کارنامهٔ مالی (FINANCE_STATEMENT) را تأیید کند

@@ -16,6 +16,8 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectionText, setRejectionText] = useState('');
   const [busy, setBusy] = useState<number | null>(null);
+  /** کارتابل به‌صورت پیش‌فرض بسته است؛ در صفحهٔ اول فقط یک هشدار کوچک دیده می‌شود. */
+  const [open, setOpen] = useState(false);
 
   const showToast = (kind: 'ok' | 'err', text: string) => {
     setToast({ kind, text });
@@ -63,6 +65,36 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
 
   const pendingCount = rows.filter(r => r.status === 'PROPOSED').length;
 
+  // بدون درخواست، هیچ کارتی در صفحهٔ اول اشغال نمی‌شود.
+  if (rows.length === 0) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-right shadow-sm transition hover:shadow-md ${
+          pendingCount > 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'
+        }`}
+      >
+        <span className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-bold text-slate-700">
+          <span className="text-base" aria-hidden>🏛️</span>
+          <span>کلاس جبرانی اساتید</span>
+          {pendingCount > 0 ? (
+            <span className="rounded-full bg-rose-500 px-2 py-0.5 text-2xs font-black text-white">
+              {pendingCount.toLocaleString('fa-IR')} در انتظار تخصیص سالن
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-600">
+              {rows.length.toLocaleString('fa-IR')} درخواست
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 text-2xs font-black text-indigo-700">مشاهده ◀</span>
+      </button>
+    );
+  }
+
   return (
     <div className="card space-y-4 border-l-4 border-l-indigo-600 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -87,7 +119,8 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
           <button onClick={() => setFilter('ALL')} className={`px-3 py-1.5 rounded-lg transition ${filter === 'ALL' ? 'bg-white text-indigo-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}>
             همه ({rows.length})
           </button>
@@ -100,6 +133,15 @@ export default function MakeupInboxClient({ initialRows, rooms }: Props) {
           </button>
           <button onClick={() => setFilter('REJECTED')} className={`px-3 py-1.5 rounded-lg transition ${filter === 'REJECTED' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-800 hover:bg-rose-100/60'}`}>
             ✕ ردشده ({rows.filter(r => r.status === 'REJECTED').length})
+          </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            title="بستن کارتابل"
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-2xs font-bold text-slate-600 hover:bg-slate-50"
+          >
+            بستن ✕
           </button>
         </div>
       </div>

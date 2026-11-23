@@ -235,7 +235,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-2xs font-black bg-amber-400 text-slate-950">
-              امنیت و کنترل دسترسی (Dynamic RBAC)
+              امنیت و کنترل دسترسی
             </span>
             <span className="text-xs text-indigo-300">
               {faNum(roles.length)} نقش واقعی · {faNum(permissions.length)} مجوز · {faNum(totalGrants)} تخصیص
@@ -245,7 +245,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
             🛡️ ماتریس پویا و مدیریت سطوح دسترسی کاربران و کارشناسان
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
-            داده‌ها از جدول‌های واقعی <span className="font-mono" dir="ltr">roles / permissions / role_permissions</span> خوانده می‌شود؛
+            داده‌ها از جدول‌های واقعی سامانه خوانده می‌شود؛
             هر تغییر پس از تأیید در زنجیرهٔ ممیزی ثبت می‌گردد.
           </p>
         </div>
@@ -305,7 +305,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
               title="بازگردانی آخرین ذخیره — دسترسی نقش‌های همان ذخیره به حالت قبل برمی‌گردد"
               className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow disabled:opacity-40"
             >
-              ↩️ بازگردانی (Undo)
+              ↩️ بازگردانی
             </button>
           )}
           <button
@@ -330,7 +330,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
         <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-1">
           <div className="flex items-center gap-2 text-indigo-900 font-black">
             <span>🎓</span>
-            <span>تفکیک وظایف (Segregation of Duties):</span>
+            <span>تفکیک وظایف:</span>
           </div>
           <p className="text-slate-600 leading-5">
             نقش‌های آموزشی و مالی نباید هم‌پوشانی داشته باشند؛ ستون‌های ماتریس را طوری تنظیم کنید که هیچ نقشی هم‌زمان
@@ -344,7 +344,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
             <span>ردپای ممیزی:</span>
           </div>
           <p className="text-slate-600 leading-5">
-            هر بار «تأیید تغییر دسترسی» یک رکورد زنجیره‌ای در <span className="font-mono" dir="ltr">audit_logs</span> می‌سازد
+            هر بار «تأیید تغییر دسترسی» یک رکورد زنجیره‌ای در سیاههٔ ممیزی می‌سازد
             که وضعیت قبل و بعد را نگه می‌دارد.
           </p>
         </div>
@@ -453,9 +453,6 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
                   return (
                     <th scope="col" key={r.id} className={`sticky top-0 z-30 p-3 text-center min-w-[120px] ${changed ? 'bg-amber-700' : 'bg-slate-900'}`}>
                       <div className="font-black">{r.title}</div>
-                      <div className="text-3xs text-indigo-300 font-mono" dir="ltr">
-                        {r.code}
-                      </div>
                       <div className="text-3xs text-indigo-200 mt-0.5">
                         👤 {faNum(r.userCount)} کاربر
                         {r.isSystem ? <span className="ms-1 text-amber-300">· سیستمی</span> : null}
@@ -508,9 +505,6 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
                   <td className="sticky right-0 z-20 bg-inherit p-3 shadow-[-2px_0_0_0_#e2e8f0]">
                     <div className="font-black text-slate-900">{perm.title}</div>
                     <div className="text-slate-500 leading-4">{perm.description}</div>
-                    <div className="font-mono text-3xs text-slate-400" dir="ltr">
-                      {perm.code}
-                    </div>
                   </td>
 
                   <td className="p-3">

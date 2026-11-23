@@ -164,41 +164,6 @@ export default async function AdminBiPage() {
           </div>
         )}
       </section>
-
-      {/* وضعیت کش */}
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-        <h2 className="mb-2 font-bold text-white">🗃️ کش گزارش‌ها</h2>
-        <p className="mb-3 text-xs text-slate-400">
-          داشبورد از این کش می‌خواند تا محاسبهٔ سنگین در زمان درخواست کاربر اجرا نشود. job زمان‌بندی‌شدهٔ
-          <code className="mx-1 rounded bg-slate-800 px-1">/api/cron/bi-refresh</code> آن را شبانه تازه می‌کند.
-        </p>
-        {cache.length === 0 ? (
-          <p className="text-sm text-slate-400">هنوز گزارشی کش نشده است.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs rt">
-              <thead className="text-slate-400">
-                <tr className="border-b border-slate-700">
-                  <th scope="col" className="p-1.5">کلید</th><th scope="col" className="p-1.5">نوع</th><th scope="col" className="p-1.5">ردیف</th>
-                  <th scope="col" className="p-1.5">زمان محاسبه</th><th scope="col" className="p-1.5">عمر</th><th scope="col" className="p-1.5">وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cache.map(c => (
-                  <tr key={c.key} className="border-b border-slate-800">
-                    <td className="p-1.5 font-mono text-slate-300">{c.key}</td>
-                    <td className="p-1.5 text-slate-400">{c.type}</td>
-                    <td className="p-1.5 text-slate-400">{c.rows ?? '—'}</td>
-                    <td className="p-1.5 text-slate-400">{c.durationMs} ms</td>
-                    <td className="p-1.5 text-slate-400">{fmtAge(c.ageSeconds)}</td>
-                    <td className="p-1.5">{c.fresh ? <span className="text-emerald-400">تازه</span> : <span className="text-amber-400">منقضی</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

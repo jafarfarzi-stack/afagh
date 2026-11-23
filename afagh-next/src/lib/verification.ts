@@ -641,7 +641,7 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
   const target = await resolveTargetStudentId(sig.payload);
   if (!target) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
 
-  const [stu] = await db
+  const [stuRow] = await db
     .select({
       studentId: students.id, userId: students.userId, studentCode: students.studentCode,
       firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
@@ -652,14 +652,15 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     .leftJoin(majors, eq(majors.id, students.majorId))
     .where(eq(students.id, target.id))
     .limit(1);
-  if (!stu) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+  if (!stuRow) return { ok: false, reason: 'NOT_FOUND', message: 'دانشجویی با این توکن یافت نشد.' };
+  let stu = stuRow;
 
   const [term] = await db.select({ id: academic_terms.id, title: academic_terms.title })
     .from(academic_terms).where(eq(academic_terms.id, sig.payload.term)).limit(1);
   if (!term) return { ok: false, reason: 'NOT_FOUND', message: 'نیمسال این تأییدیه در سامانه یافت نشد.' };
 
   // لیست زندهٔ دروس ثبت‌شدهٔ همان نیمسال (به‌جز حذف‌شده‌ها) — استعلام برخط، بدون اسنپ‌شات جدا
-  const courses = ((await db.execute(sql`
+  let courses = ((await db.execute(sql`
     select c.title as "courseTitle", c.code as "courseCode",
            coalesce(c.units, 0)::int as "units",
            o."groupNumber" as "groupNumber",
@@ -678,6 +679,60 @@ export async function verifyEnrollConfirm(rawToken: string): Promise<EnrollConfi
     courseTitle: string; courseCode: string; units: number;
     groupNumber: number; professorName: string | null; status: string;
   }[];
+
+  // اگر پروندهٔ توکن ثبت‌نام ندارد (مثلاً تکرار هویت سنجش NO_SHOW)،
+  // همان کد ملی در پروندهٔ فعالِ دیگری ممکن است ثبت‌نام داشته باشد.
+  // فقط وقتی دقیقاً یک کاندیدا وجود دارد سوئیچ می‌کنیم.
+  if (!courses.length) {
+    const nc = String(stu.nationalCode || '').trim();
+    if (/^\d{10}$/.test(nc) && !/^0+$/.test(nc)) {
+      const candidates = ((await db.execute(sql`
+        select en."studentId" as "studentId", count(*)::int as cnt
+          from enrollments en
+          join course_offerings o on o.id = en."offeringId"
+          join students s on s.id = en."studentId"
+          join users u on u.id = s."userId"
+         where u."nationalCode" = ${nc}
+           and o."termId" = ${term.id}
+           and en.status <> 'DROPPED'
+         group by en."studentId"
+         order by cnt desc
+         limit 2
+      `)).rows ?? []) as { studentId: number; cnt: number }[];
+      if (candidates.length === 1 && Number(candidates[0].studentId) !== stu.studentId) {
+        const [alt] = await db
+          .select({
+            studentId: students.id, userId: students.userId, studentCode: students.studentCode,
+            firstName: users.firstName, lastName: users.lastName, nationalCode: users.nationalCode,
+            majorName: majors.name, universityId: students.universityId,
+          })
+          .from(students)
+          .innerJoin(users, eq(users.id, students.userId))
+          .leftJoin(majors, eq(majors.id, students.majorId))
+          .where(eq(students.id, Number(candidates[0].studentId)))
+          .limit(1);
+        if (alt) {
+          stu = alt;
+          courses = ((await db.execute(sql`
+            select c.title as "courseTitle", c.code as "courseCode",
+                   coalesce(c.units, 0)::int as "units",
+                   o."groupNumber" as "groupNumber",
+                   (pu."firstName" || ' ' || pu."lastName") as "professorName",
+                   en.status as "status"
+              from enrollments en
+              join course_offerings o on o.id = en."offeringId"
+              join courses c on c.id = o."courseId"
+              left join staff st on st.id = o."professorId"
+              left join users pu on pu.id = st."userId"
+             where en."studentId" = ${stu.studentId}
+               and o."termId" = ${term.id}
+               and en.status <> 'DROPPED'
+             order by c.title
+          `)).rows ?? []) as typeof courses;
+        }
+      }
+    }
+  }
 
   if (!courses.length) {
     return { ok: false, reason: 'EMPTY', message: 'برای این دانشجو در این نیمسال ثبت‌نامی (به‌جز حذف‌شده) وجود ندارد.' };

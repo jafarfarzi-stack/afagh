@@ -441,12 +441,9 @@ export default function SettingsClient({ settings, groups, baseData }: Props) {
                     <span className={`text-2xs px-2 py-0.5 rounded-full border ${badge.cls}`}>{badge.text}</span>
                     {s.envOnly && (
                       <span className="text-2xs px-2 py-0.5 rounded-full border bg-amber-100 text-amber-800 border-amber-300">
-                        فقط ENV
+                        فقط از تنظیمات سرور
                       </span>
                     )}
-                  </div>
-                  <div className="text-2xs text-slate-500 font-mono mt-1 ltr:text-left" dir="ltr">
-                    {s.key} · ENV: {s.env}
                   </div>
                   {s.help && <p className="text-xs text-slate-500 mt-1 leading-6">{s.help}</p>}
                 </div>
@@ -481,7 +478,7 @@ export default function SettingsClient({ settings, groups, baseData }: Props) {
                       dir="rtl"
                       disabled={s.envOnly || pending}
                       value={values[s.key] ?? ''}
-                      placeholder={s.envOnly ? 'در فایل .env تنظیم می‌شود' : 'خالی = استفاده از ENV/پیش‌فرض'}
+                      placeholder={s.envOnly ? 'از تنظیمات سرور خوانده می‌شود' : 'خالی = استفاده از مقدار پیش‌فرض'}
                       onChange={e => setValue(s.key, e.target.value)}
                       rows={3}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 leading-7"
@@ -492,7 +489,7 @@ export default function SettingsClient({ settings, groups, baseData }: Props) {
                       type={s.type === 'secret' ? 'password' : s.type === 'number' ? 'number' : 'text'}
                       disabled={s.envOnly || pending}
                       value={values[s.key] ?? ''}
-                      placeholder={s.envOnly ? 'در فایل .env تنظیم می‌شود' : 'خالی = استفاده از ENV/پیش‌فرض'}
+                      placeholder={s.envOnly ? 'از تنظیمات سرور خوانده می‌شود' : 'خالی = استفاده از مقدار پیش‌فرض'}
                       onChange={e => setValue(s.key, e.target.value)}
                       onFocus={e => {
                         if (s.type === 'secret' && e.target.value === SECRET_MASK) setValue(s.key, '');

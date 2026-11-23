@@ -221,11 +221,6 @@ export default async function AdminHome({
           <Suspense fallback={<CardSkeleton lines={1} />}>
             <RedisSection />
           </Suspense>
-
-          {/* جدول کارتابل گردش کار و اقدامات دانشجویی */}
-          <Suspense fallback={<TableSkeleton />}>
-            <InboxSection sortKey={sortKey} sortDir={sortDir} sortHref={sortHref} />
-          </Suspense>
         </>
       )}
     </div>
