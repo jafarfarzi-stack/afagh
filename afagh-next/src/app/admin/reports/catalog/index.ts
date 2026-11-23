@@ -9,9 +9,11 @@
 
 import type { ReportSource, SourceMeta } from './types';
 import { FINANCE_SOURCES } from './finance';
+import { EDU_SOURCES } from './education';
 
 const ALL_SOURCES: ReportSource[] = [
   ...FINANCE_SOURCES,
+  ...EDU_SOURCES,
 ];
 
 const BY_KEY = new Map<string, ReportSource>(ALL_SOURCES.map(s => [s.key, s]));
