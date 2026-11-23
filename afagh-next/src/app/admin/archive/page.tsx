@@ -42,9 +42,9 @@ export default async function ArchivePage() {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h2 className="font-bold">بایگانی الکترونیک مدارک — Object Storage (§۲۴۳۸)</h2>
+        <h2 className="font-bold">بایگانی الکترونیک مدارک</h2>
         <p className="mt-1 text-xs text-slate-500">
-          فایل‌ها در MinIO (باکت afagh-archive) نگهداری می‌شوند؛ دیتابیس فقط URL و هش دارد. مشاهده = لینک امضاشدهٔ ۵ دقیقه‌ای.
+          فایل‌ها در فضای ذخیره‌سازی امن سامانه نگهداری می‌شوند؛ در دیتابیس فقط نشانی و اثر انگشت فایل ثبت می‌شود. مشاهدهٔ فایل با پیوند موقت و زمان‌دار انجام می‌شود.
         </p>
       </div>
       <ArchiveClient

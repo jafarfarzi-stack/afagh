@@ -227,15 +227,10 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
       <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-lg border border-indigo-700/50 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-400 text-slate-950">
-                کارتابل اعضای هیئت علمی و اساتید
-              </span>
-              <span className="text-xs text-indigo-200">فرم اعلام آمادگی تدریس</span>
-            </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-              🗓️ فرم اعلام ساعات حضور، اولویت‌ها و زمان‌بندی تدریس
+              🗓️ فرم اعلام ساعات حضور و اولویت‌های تدریس
             </h1>
+            <p className="mt-1 text-xs text-indigo-200">ساعات حضور خود را برای نیمسال انتخاب‌شده ثبت کنید تا در برنامه‌ریزی دروس لحاظ شود.</p>
           </div>
 
           <div className="flex items-center gap-2">

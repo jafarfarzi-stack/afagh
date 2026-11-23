@@ -61,7 +61,7 @@ export default function ArchiveClient(props: {
           {props.types.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
         </select>
         <input ref={fileRef} name="file" type="file" className="input" required />
-        <button className="btn-primary" disabled={busy}>بارگذاری به MinIO</button>
+        <button className="btn-primary" disabled={busy}>بارگذاری فایل</button>
         {msg && <p className="md:col-span-5 text-xs text-slate-600">{msg}</p>}
       </form>
 

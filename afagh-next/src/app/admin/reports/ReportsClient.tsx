@@ -14,12 +14,12 @@ import ReportPrint from '@/components/ui/ReportPrint';
 import CardTile from '@/components/ui/CardTile';
 
 /** دستهبندی کارتهای گزارش: مالی به سه گروه منطقی تقسیم شده است */
-type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-academic' | 'finance-ops' | 'graduates' | 'council' | 'research';
+type ReportCat = 'students' | 'probation' | 'program' | 'exams' | 'classes' | 'finance' | 'finance-tuition' | 'finance-teaching' | 'finance-ops' | 'graduates' | 'council' | 'research';
 
 type Card = { kind: string; icon: string; title: string; cat: ReportCat; needsTerm?: boolean; soon?: boolean; desc?: string; customs?: { key: string; title: string }[] };
 
 /** تمام دستههای مالی — هم در فیلتر Scope و هم در فیلتر تبها استفاده میشود */
-const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-academic', 'finance-ops']);
+const FINANCE_CATS = new Set<ReportCat>(['finance', 'finance-tuition', 'finance-teaching', 'finance-ops']);
 
 /**
  * ستونهایی که در جدول دیده میشوند. در فرمهای رسمی (fqSumTa) هر ستون دو عددِ
@@ -54,7 +54,8 @@ const CATEGORIES: { key: ReportCat; label: string }[] = [
   { key: 'council', label: '🏛️ شورا و مکاتبات' },
   { key: 'research', label: '🔬 پژوهش و آزمون جامع' },
   { key: 'finance', label: '💰 پرداخت و حسابداری' },
-  { key: 'finance-academic', label: '🎓 شهریه و مالی تحصیلی' },
+  { key: 'finance-tuition', label: '?? ????? ??????' },
+  { key: 'finance-teaching', label: '????? ?????????? ? ???????? ??????' },
   { key: 'finance-ops', label: '📦 انبار، قراردادها و پیمانکاران' },
 ];
 
@@ -172,7 +173,7 @@ const CARDS: Card[] = [
   { kind: 'entries', cat: 'students', icon: '📥', title: 'ورودی‌های جدید' },
   { kind: 'noshow', cat: 'students', icon: '🚫', title: 'عدم مراجعه‌ها' },
   { kind: 'transfers', cat: 'students', icon: '🔀', title: 'میهمان / انتقالی' },
-  { kind: 'tuition', cat: 'finance-academic', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
+  { kind: 'tuition', cat: 'finance-tuition', icon: '💰', title: 'گزارش شهریه / تراکنش مالی', needsTerm: true },
   { kind: 'payesh', cat: 'research', icon: '🗂️', title: 'گزارش پاسخ‌های طرح پایش' },
   { kind: 'jame', cat: 'research', icon: '🧮', title: 'دانشجویان واجد شرایط آزمون جامع' },
   { kind: 'docs', cat: 'graduates', icon: '📎', title: 'مدارک دانشجویان' },
@@ -224,21 +225,21 @@ const CARDS: Card[] = [
   { kind: 'prof-sessions-unformed', cat: 'classes', icon: '⏳', title: 'جلسات تشکیل‌نشده', needsTerm: true, customs: [{ key: 'dateFrom', title: 'از تاریخ' }, { key: 'dateTo', title: 'تا تاریخ' }] },
   { kind: 'attendance-list', cat: 'classes', icon: '📝', title: 'حضور و غیاب', needsTerm: true },
   // مالی
-  { kind: 'tuition-tariff', cat: 'finance-academic', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
-  { kind: 'tuition-statement', cat: 'finance-academic', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
+  { kind: 'tuition-tariff', cat: 'finance-tuition', icon: '💰', title: 'تعرفه تحصیلی', needsTerm: true },
+  { kind: 'tuition-statement', cat: 'finance-tuition', icon: '🧾', title: 'صورت‌حساب شهریه', needsTerm: true },
   // ── گزارش‌های پرداختی (هم‌ریخت با اسناد رسمی سما) ──
   { kind: 'total-payments', cat: 'finance', icon: '📊', title: 'گزارش کل پرداختی دانشجویان', needsTerm: true },
   { kind: 'student-payments', cat: 'finance', icon: '🧾', title: 'گزارش پرداختی دانشجویان (تفصیلی)', needsTerm: true },
   { kind: 'term-payments', cat: 'finance', icon: '💳', title: 'گزارش مبلغ پرداختی نیمسال', needsTerm: true },
   { kind: 'accounting-voucher', cat: 'finance', icon: '📑', title: 'سند حسابداری (دفتر روزنامه)', needsTerm: true, customs: [{ key: 'voucherNo', title: 'شماره سند' }] },
-  { kind: 'term-financial', cat: 'finance-academic', icon: '📈', title: 'گزارش مالی نیمسال (تجمیعی)', needsTerm: true },
-  { kind: 'tuition-overview', cat: 'finance-academic', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
-  { kind: 'tuition-faculty-detail', cat: 'finance-academic', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
+  { kind: 'term-financial', cat: 'finance-tuition', icon: '📈', title: 'گزارش مالی نیمسال (تجمیعی)', needsTerm: true },
+  { kind: 'tuition-overview', cat: 'finance-tuition', icon: '🧮', title: 'مدیریت کلان وضعیت شهریه (هر دانشجو)', needsTerm: true },
+  { kind: 'tuition-faculty-detail', cat: 'finance-tuition', icon: '🏛️', title: 'تفصیلی مالی (دانشکده × مقطع)', needsTerm: true },
   // فرمِ رسمیِ سیستم قدیم (fqTrDaTe2) — دقیقاً همان ۱۴ ستون
-  { kind: 'semester-detail', cat: 'finance-academic', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
-  { kind: 'semester-major-detail', cat: 'finance-academic', icon: '📐', title: 'گزارش مالی نیمسال (رشته × نیمسال ورود)', needsTerm: true },
-  { kind: 'faculty-financial', cat: 'finance-academic', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
-  { kind: 'major-financial', cat: 'finance-academic', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
+  { kind: 'semester-detail', cat: 'finance-tuition', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
+  { kind: 'semester-major-detail', cat: 'finance-tuition', icon: '📐', title: 'گزارش مالی نیمسال (رشته × نیمسال ورود)', needsTerm: true },
+  { kind: 'faculty-financial', cat: 'finance-tuition', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
+  { kind: 'major-financial', cat: 'finance-tuition', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
   // دسته‌هایی که در سیستم قدیم بود و در آفاق نبود: فروش، سود و زیان، ترازنامه،
   // نقدینگی، پیمانکاری، بیمه/حقوقی/VAT، دفتر روزنامه، کالا، هزینه، تخصیص، درآمد.
@@ -285,9 +286,9 @@ const CARDS: Card[] = [
   { kind: 'grad-cert', cat: 'graduates', icon: '🎓', title: 'گواهی پایان تحصیلات' },
   { kind: 'military-defer', cat: 'graduates', icon: '🎖', title: 'معافیت تحصیلی' },
   { kind: 'finance-worklist', cat: 'finance', icon: '🗂️', title: 'کارتابل مالی (مانده دانشجویان)', customs: [{ key: 'onlyDebtors', title: 'فقط بدهکار (1)' }] },
-  { kind: 'payroll-overview', cat: 'finance-academic', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
-  { kind: 'bi-teaching-quality', cat: 'finance-academic', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
-  { kind: 'bi-facilities', cat: 'finance-academic', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
+  { kind: 'payroll-overview', cat: 'finance-teaching', icon: '💵', title: 'حق‌التدریس اساتید', needsTerm: true },
+  { kind: 'bi-teaching-quality', cat: 'finance-teaching', icon: '🎯', title: 'کیفیت تدریس اساتید (BI)' },
+  { kind: 'bi-facilities', cat: 'finance-teaching', icon: '🏫', title: 'امکانات کلاس‌ها (BI)' },
   { kind: 'graduation-dossiers', cat: 'graduates', icon: '🎓', title: 'پرونده‌های فراغت‌التحصیل', customs: [{ key: 'dossierStatus', title: 'وضعیت (کد)' }] },
   { kind: 'grade-audit-log', cat: 'program', icon: '📜', title: 'لاگ تغییرات نمرات', needsTerm: true },
   { kind: 'third-attempt', cat: 'probation', icon: '🔁', title: 'دروس بار سوم (مردودی دو بار)', needsTerm: true },

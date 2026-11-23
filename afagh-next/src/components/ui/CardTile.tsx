@@ -20,7 +20,8 @@ export type ReportTone =
   | 'council'
   | 'research'
   | 'finance'
-  | 'finance-academic'
+  | 'finance-tuition'
+  | 'finance-teaching'
   | 'finance-ops';
 
 export const ACCENT: Record<ReportTone, { bar: string; tile: string; sel: string }> = {
@@ -69,10 +70,15 @@ export const ACCENT: Record<ReportTone, { bar: string; tile: string; sel: string
     tile: 'from-cyan-500/15 to-cyan-500/0 text-cyan-700 ring-cyan-500/20',
     sel: 'border-cyan-400 bg-cyan-50 ring-cyan-400/30',
   },
-  'finance-academic': {
+  'finance-tuition': {
     bar: 'bg-blue-500',
     tile: 'from-blue-500/15 to-blue-500/0 text-blue-700 ring-blue-500/20',
     sel: 'border-blue-400 bg-blue-50 ring-blue-400/30',
+  },
+  'finance-teaching': {
+    bar: 'bg-violet-500',
+    tile: 'from-violet-500/15 to-violet-500/0 text-violet-700 ring-violet-500/20',
+    sel: 'border-violet-400 bg-violet-50 ring-violet-400/30',
   },
   'finance-ops': {
     bar: 'bg-fuchsia-500',

@@ -328,7 +328,7 @@ async function GradeLiveSection({ roles }: { roles: string[] }) {
   );
 }
 
-/** وضعیت موتور صف Redis — با محافظِ زمانی در `waitingRoomStats` تا Redisِ خاموش صفحه را نخواباند. */
+/** وضعیت صف انتخاب واحد — نمایش ساده و بدون اصطلاح فنی. */
 async function RedisSection() {
   ensureWorker();
   const wr = await waitingRoomStats();
@@ -341,16 +341,16 @@ async function RedisSection() {
           style={wr.up ? { boxShadow: '0 0 0 4px rgba(16,185,129,.15)' } : { boxShadow: '0 0 0 4px rgba(239,68,68,.15)' }}
         />
         <div className="min-w-0">
-          <h2 className="text-sm font-extrabold text-slate-900">اتاق انتظار Redis (§۶۹۰۶)</h2>
+          <h2 className="text-sm font-extrabold text-slate-900">وضعیت صف انتخاب واحد</h2>
           <p className="mt-0.5 text-2xs font-bold text-slate-500">
             {wr.up
-              ? `فعال — ${wr.warmedOfferings} کلاس گرم‌شده · صف ثبت نهایی: ${wr.queueLength} درخواست`
-              : 'Redis در دسترس نیست — موتور به شمارش SQL برمی‌گردد (حالت تداوم)'}
+              ? `فعال — ظرفیت ${wr.warmedOfferings.toLocaleString('fa-IR')} کلاس آماده است · ${wr.queueLength.toLocaleString('fa-IR')} درخواست در صف ثبت نهایی`
+              : 'سرویس صف موقت در دسترس نیست؛ سامانه به‌صورت خودکار با روش پشتیبان ادامه می‌دهد.'}
           </p>
         </div>
       </div>
       <form action={warmupAction}>
-        <button className="btn-primary !py-1.5 text-xs">گرم‌کردن مجدد ظرفیت‌ها (شب قبل §۱۰۰۶)</button>
+        <button className="btn-primary !py-1.5 text-xs">به‌روزرسانی ظرفیت کلاس‌ها</button>
       </form>
     </div>
   );
