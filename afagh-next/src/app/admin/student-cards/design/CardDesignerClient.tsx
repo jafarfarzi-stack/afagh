@@ -82,7 +82,7 @@ function NumberField({
           }}
           className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 font-mono text-xs"
         />
-        {suffix && <span className="text-[10px] font-bold text-slate-400">{suffix}</span>}
+        {suffix && <span className="text-3xs font-bold text-slate-400">{suffix}</span>}
       </span>
     </label>
   );
@@ -173,7 +173,7 @@ function AssetPicker({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={label} className="mt-2 max-h-20 rounded border border-slate-200 object-contain" />
       ) : (
-        <p className="mt-1 text-[10px] text-slate-400">تصویری انتخاب نشده — PNG/JPG/WebP تا ۵ مگابایت</p>
+        <p className="mt-1 text-3xs text-slate-400">تصویری انتخاب نشده — PNG/JPG/WebP تا ۵ مگابایت</p>
       )}
     </div>
   );
@@ -384,7 +384,7 @@ export default function CardDesignerClient({
               </button>
             )}
             {defaultId === draft.id && (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">پیش‌فرض فعلی</span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-3xs font-bold text-emerald-800">پیش‌فرض فعلی</span>
             )}
           </div>
         </Section>
@@ -426,7 +426,7 @@ export default function CardDesignerClient({
                     >
                       <span className={`block h-12 rounded-lg border bg-gradient-to-br ${t.swatch}`} />
                       <span className="mt-1.5 block text-xs font-extrabold text-slate-800">{t.title}</span>
-                      <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{t.desc}</span>
+                      <span className="mt-0.5 block text-3xs leading-4 text-slate-500">{t.desc}</span>
                     </button>
                   );
                 })}
@@ -479,7 +479,7 @@ export default function CardDesignerClient({
                 <NumberField label="عرض" value={draft.front.widthMm} onChange={v => setFront('widthMm', v)} min={50} max={120} suffix="mm" />
                 <NumberField label="ارتفاع" value={draft.front.heightMm} onChange={v => setFront('heightMm', v)} min={30} max={100} suffix="mm" />
               </div>
-              <p className="text-[10px] text-slate-500">استاندارد ID-1 (کارت بانکی): ۸۵٫۶ × ۵۳٫۹۸ میلی‌متر. برای کارت عمودی، عرض و ارتفاع را جابه‌جا کنید.</p>
+              <p className="text-3xs text-slate-500">استاندارد ID-1 (کارت بانکی): ۸۵٫۶ × ۵۳٫۹۸ میلی‌متر. برای کارت عمودی، عرض و ارتفاع را جابه‌جا کنید.</p>
             </Section>
 
             <Section title="۴) فیلدهای چاپی">
@@ -508,7 +508,7 @@ export default function CardDesignerClient({
                   );
                 })}
               </div>
-              <p className="text-[10px] text-slate-500">«نام و نام خانوادگی» همیشه چاپ می‌شود. نام رشته در صورت بلندبودن می‌پیچد و کامل نمایش داده می‌شود.</p>
+              <p className="text-3xs text-slate-500">«نام و نام خانوادگی» همیشه چاپ می‌شود. نام رشته در صورت بلندبودن می‌پیچد و کامل نمایش داده می‌شود.</p>
             </Section>
 
             <Section title="۵) اجزای تصویری و آرم">
@@ -530,7 +530,7 @@ export default function CardDesignerClient({
                 </label>
               </div>
               <NumberField label="اندازهٔ آرم" value={draft.front.logoMm} onChange={v => setFront('logoMm', v)} min={6} max={18} suffix="mm" />
-              <p className="text-[10px] text-slate-500">آرم از «آرم دانشگاه» (تنظیمات/دانشگاه) خوانده می‌شود؛ اگر خالی باشد نمایش داده نمی‌شود.</p>
+              <p className="text-3xs text-slate-500">آرم از «آرم دانشگاه» (تنظیمات/دانشگاه) خوانده می‌شود؛ اگر خالی باشد نمایش داده نمی‌شود.</p>
             </Section>
 
             <Section title="۶) تصویر پس‌زمینه">
@@ -553,7 +553,7 @@ export default function CardDesignerClient({
                   className="mt-1 w-full accent-indigo-600"
                 />
               </label>
-              <p className="text-[10px] text-slate-500">۰٪ = تصویر کاملاً واضح؛ ۱۰۰٪ = کاملاً سفید. برای خوانایی متن ۵۰ تا ۷۵ مناسب است.</p>
+              <p className="text-3xs text-slate-500">۰٪ = تصویر کاملاً واضح؛ ۱۰۰٪ = کاملاً سفید. برای خوانایی متن ۵۰ تا ۷۵ مناسب است.</p>
             </Section>
 
             <Section title="۷) جای امضا / مهر (روی کارت)">
@@ -670,14 +670,14 @@ export default function CardDesignerClient({
             {pending ? 'در حال ذخیره…' : '💾 ذخیرهٔ طراحی'}
           </button>
           {saved && defaultId !== draft.id && (
-            <label className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+            <label className="flex items-center gap-1 text-3xs font-bold text-slate-600">
               <input type="checkbox" checked={makeDefault} onChange={e => setMakeDefault(e.target.checked)} className="h-3.5 w-3.5 accent-indigo-600" />
               پیش‌فرض صدور شود
             </label>
           )}
-          {dirty && !pending && <span className="text-[10px] font-bold text-amber-700">تغییرات ذخیره نشده است</span>}
+          {dirty && !pending && <span className="text-3xs font-bold text-amber-700">تغییرات ذخیره نشده است</span>}
           {msg && (
-            <span className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${msg.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
+            <span className={`rounded-lg border px-2.5 py-1.5 text-3xs font-bold ${msg.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
               {msg.text}
             </span>
           )}
@@ -693,14 +693,14 @@ export default function CardDesignerClient({
               <button
                 type="button"
                 onClick={() => setSide('front')}
-                className={`rounded-lg px-2 py-1 text-[10px] font-bold ${side === 'front' ? 'bg-indigo-700 text-white' : 'border border-slate-300 bg-white text-slate-600'}`}
+                className={`rounded-lg px-2 py-1 text-3xs font-bold ${side === 'front' ? 'bg-indigo-700 text-white' : 'border border-slate-300 bg-white text-slate-600'}`}
               >
                 رو
               </button>
               <button
                 type="button"
                 onClick={() => setSide('back')}
-                className={`rounded-lg px-2 py-1 text-[10px] font-bold ${side === 'back' ? 'bg-indigo-700 text-white' : 'border border-slate-300 bg-white text-slate-600'}`}
+                className={`rounded-lg px-2 py-1 text-3xs font-bold ${side === 'back' ? 'bg-indigo-700 text-white' : 'border border-slate-300 bg-white text-slate-600'}`}
               >
                 پشت
               </button>
@@ -709,7 +709,7 @@ export default function CardDesignerClient({
           <div className="mx-auto max-w-xl overflow-x-auto">
             {preview}
           </div>
-          <p className="mt-3 text-[10px] leading-5 text-slate-500">
+          <p className="mt-3 text-3xs leading-5 text-slate-500">
             ابعاد واقعی کارت با میلی‌متر تنظیم می‌شود؛ چاپ در همان اندازه انجام می‌شود. اگر پشت کارت فعال باشد، صفحهٔ چاپ دو طرف را (با شکست صفحه) چاپ می‌کند.
           </p>
         </div>

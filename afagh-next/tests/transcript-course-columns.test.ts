@@ -56,7 +56,19 @@ ok(labels.length === 11, `نوع الف: دقیقاً ۱۱ سرستون (یاف�
 ok(JSON.stringify(labels) === JSON.stringify(A_HEADERS), 'نوع الف: ترتیب راستبهچپ ستونها عیناً تأییدشده است');
 ok(!labels.includes('ردیف') && !/>\s*ردیف\s*<\/th>/.test(A), 'نوع الف: ستون «ردیف» حذف شد');
 ok(!A.includes('{fa(i + 1)}'), 'نوع الف: شمارهٔ ردیف در سلولها چاپ نمیشود');
-ok(A.includes('colSpan={10}'), 'نوع الف: ردیف «جمع متغیر دروس» با ۱۱ ستون هماهنگ شد');
+/* ردیف «جمع متغیر دروس» باید با ۱۱ ستون هماهنگ بماند. چیدمان فعلی (کامیت
+   5ac35010) آگاهانه از ردیف «span کامل» به ردیف اطلاعاتی تغییر کرد:
+   عنوان (۲) + جمع نظری (۱) + جمع عملی (۱) + خالی (۶) + جمع شهریه (۱) = ۱۱.
+   گارد باید مجموعِ colSpanهای ردیف را بشمارد، نه شکلِ ثابتِ قدیمی را —
+   تا هر بازچینشِ آینده هم یا ۱۱ بماند یا اینجا شکست بخورد. */
+const summaryRow = (A.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) ?? [])
+  .find((block) => block.includes('جمع متغیر دروس')) ?? '';
+const summarySpans = [...summaryRow.matchAll(/<td([^>]*)>/g)].map((m) => {
+  const c = /colSpan=\{(\d+)\}/.exec(m[1]);
+  return c ? Number(c[1]) : 1;
+});
+ok(summarySpans.length > 0 && summarySpans.reduce((a, b) => a + b, 0) === 11,
+  `نوع الف: ردیف «جمع متغیر دروس» با ۱۱ ستون هماهنگ شد (${summarySpans.length ? summarySpans.join('+') : 'ردیف پیدا نشد'})`);
 ok((A.match(/<col /g) ?? []).length >= 11, 'نوع الف: colgroup به اندازهٔ ۱۱ ستون');
 
 console.log('\n── نوع الف: محتوای ستونها از دیتابیس ──');

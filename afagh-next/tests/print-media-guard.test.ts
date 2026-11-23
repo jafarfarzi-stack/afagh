@@ -111,14 +111,20 @@ ok(
   !/\.tr-fin-root \.tr-fin-row \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\) !important;/.test(globalsCssNoComments),
   'globals.css: قاعدهٔ ۲ستونهٔ قدیمیِ گریدِ ترم‌ها حذف شده است'
 );
+/* سیاست شکستن کارت ترم (term-block) در چاپ:
+   قدیم = avoid (کارت هرگز نصف نمیشد، ولی کارتِ بلند پایینِ صفحه را خالی میگذاشت
+   — شکایت کاربر: «زیرش خالیه»). جدید (کامنتِ خودِ globals.css) = کارت آزاد
+   میشکند، ردیفهای داخلی (tr-doc-row) avoid میمانند و سربرگِ کارت با
+   break-after: avoid از بدنه جدا نمیشود. گارد سیاستِ جدید را قفل میکند. */
 ok(
-  /\.tr-fin-root \.term-block \{ break-inside: avoid !important; page-break-inside: avoid !important; \}/.test(globalsCss),
-  'globals.css: کارتِ ترم (term-block) در چاپ avoid است تا نصف نشود'
+  /\.tr-fin-root \.term-block \{ break-inside: auto !important; page-break-inside: auto !important; \}/.test(globalsCss),
+  'globals.css: کارتِ ترم (term-block) در چاپ آزاد میشکند (سیاست جدید — «زیرش خالیه»)'
 );
 ok(
-  /\.tr-fin-root \.term-block \{ break-inside: avoid !important/.test(globalsCss)
-    && /\.tr-fin-root table\.tr-doc > tbody > tr\.tr-doc-row \{ break-inside: auto !important/.test(globalsCss),
-  'globals.css: ردیفِ بیرونی auto است تا کارت‌ها در صفحه جریان بگیرند'
+  /\.tr-fin-root \.tr-fin-row \{[^}]*break-inside: auto !important/.test(globalsCss)
+    && /\.tr-fin-root table\.tr-doc > tbody > tr\.tr-doc-row \{ break-inside: auto !important/.test(globalsCss)
+    && /\.tr-fin-root \.term-block > div:first-child \{ break-after: avoid !important/.test(globalsCss),
+  'globals.css: ردیفِ بیرونی auto + ردیفهای داخلی و سربرگِ کارت از جدا شدن محافظت میشوند'
 );
 
 // ── ۶) آرمِ دانشگاه در مدل تخت (FinancialTranscriptFlat) باید در سربرگ باشد ──

@@ -340,7 +340,7 @@ export default function StudentCardView({ design, data }: { design: CardDesign; 
         </div>
       )}
       <div className="min-w-0 flex-1 self-stretch overflow-hidden">
-        <p className={`mb-[1mm] truncate ${dense ? 'text-[10px]' : 'text-[11px]'} font-black leading-tight text-slate-900`}>{fullName}</p>
+        <p className={`mb-[1mm] truncate ${dense ? 'text-3xs' : 'text-3xs'} font-black leading-tight text-slate-900`}>{fullName}</p>
         <div className={`space-y-[0.5mm] ${dense ? 'text-[7px]' : 'text-[8px]'} leading-tight`}>
           {rows.map(r => (
             <FieldRow key={r.key} label={r.label} value={r.value(data)} mono={r.mono} strong={r.strong} />
@@ -367,7 +367,7 @@ export default function StudentCardView({ design, data }: { design: CardDesign; 
           >
             {design.logoPos === 'start' && logo}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[10px] font-black leading-tight">{uni}</p>
+              <p className="truncate text-3xs font-black leading-tight">{uni}</p>
               <p className="truncate text-[7px] leading-tight opacity-80">{design.header}</p>
             </div>
             {design.logoPos === 'center' && logo}
@@ -386,7 +386,7 @@ export default function StudentCardView({ design, data }: { design: CardDesign; 
           <div className="flex items-center gap-[2mm] px-[3mm] py-[2mm]" style={{ borderBottom: `1.5px solid ${accent}` }}>
             {design.logoPos === 'start' && logo}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[10px] font-black leading-tight" style={{ color: accent }}>{uni}</p>
+              <p className="truncate text-3xs font-black leading-tight" style={{ color: accent }}>{uni}</p>
               <p className="truncate text-[7px] leading-tight text-slate-500">{design.header}</p>
             </div>
             {design.logoPos === 'center' && logo}
@@ -403,7 +403,7 @@ export default function StudentCardView({ design, data }: { design: CardDesign; 
           <div className="flex items-center gap-[2mm] border-b-2 border-slate-800 bg-slate-50 px-[3mm] py-[2mm]">
             {design.logoPos === 'start' && logo}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[10px] font-black leading-tight text-slate-900">{uni}</p>
+              <p className="truncate text-3xs font-black leading-tight text-slate-900">{uni}</p>
               <p className="truncate text-[7px] leading-tight text-slate-600">{design.header}</p>
             </div>
             {design.logoPos === 'center' && logo}
@@ -455,7 +455,7 @@ export function StudentCardBackView({
               <img src={data.logoUrl} alt="آرم دانشگاه" className="h-[8mm] w-[8mm] shrink-0 object-contain" />
             )}
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-black leading-tight">{uni}</p>
+              <p className="truncate text-3xs font-black leading-tight">{uni}</p>
               <p className="truncate text-[7px] leading-tight opacity-80">{design.header}</p>
             </div>
           </div>

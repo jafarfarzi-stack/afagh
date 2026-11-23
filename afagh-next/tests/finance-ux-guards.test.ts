@@ -207,11 +207,13 @@ for (const p of [CLIENT, ...REPORT_PAGES, MODULES, WORKLIST_PAGE]) {
 console.log('\n— ۵) کارتابل مالی: CTA واحد سربرگ + چاپ بالای جدول —');
 
 // (تابع linkTags در بخش ۴ بهصورت function declaration تعریف شده و hoist میشود)
-// نشانههای پایدار (بهگفتهٔ team-lead): تیترِ سربرگ و آغازِ فرمِ فیلتر.
+// نشانههای پایدار (بهگفتهٔ team-lead): تیترِ سربرگ و آغازِ ردیف «دسترسی سریع».
 // از «سربرگ premium»/«نوار KPI» استفاده نمیکنیم چون در ویرایشهای مختلف
-// جابهجا/حذف میشوند.
+// جابهجا/حذف میشوند. ⚠ پنجرهٔ سربرگ با «<form» تمام نمیشود: ردیف «دسترسی
+// سریع مالی» (۱۰ لینک، کامیت db8911bd) بینِ سربرگ و فرمِ فیلتر نشسته و اگر
+// پنجره تا فرم ادامه یابد، لینکهای آن بهاشتباه CTA سربرگ شمرده میشوند.
 const wlHeaderStart = worklist.indexOf('<h1');
-const wlHeaderEnd = worklist.indexOf('<form method="get"');
+const wlHeaderEnd = worklist.indexOf('{/* ── ابزارهای سریع مالی');
 ok(wlHeaderStart >= 0 && wlHeaderEnd > wlHeaderStart, 'بازهٔ سربرگِ کارتابل مالی پیدا شد');
 const wlHeader = wlHeaderStart >= 0 && wlHeaderEnd > wlHeaderStart
   ? worklist.slice(wlHeaderStart, wlHeaderEnd)

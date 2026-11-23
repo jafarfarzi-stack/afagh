@@ -1,4 +1,5 @@
 "use client";
+import { notify } from "@/lib/ui-feedback";
 
 /**
  * خروجی Word از یک ناحیهٔ چاپیِ صفحه (بدون هیچ کتابخانهٔ اضافه).
@@ -25,7 +26,7 @@ export default function ExportWordButton({
   const onExport = () => {
     const el = document.querySelector(targetSelector);
     if (!el) {
-      alert('ناحیهٔ قابل‌چاپ پیدا نشد.');
+      notify('ناحیهٔ قابل‌چاپ پیدا نشد.', 'error');
       return;
     }
 
