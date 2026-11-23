@@ -65,6 +65,36 @@ export default async function AdminFinanceReportsPage(props: {
         </div>
       </div>
 
+      {/* ── چهار گزارش همسان با سام — کنارهم، دسترسی مستقیم ── */}
+      <div className="rounded-2xl border border-emerald-300/70 bg-gradient-to-l from-emerald-50 to-white p-3 shadow-sm">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-sm">🎯</span>
+          <h2 className="text-xs font-black text-emerald-900">گزارشهای همسان با سام (زنده)</h2>
+          <span className="text-3xs font-bold text-emerald-700">چاپ و اعداد مطابق فرمهای رسمی سام</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {[
+            { href: '/admin/finance/reports/faculty-financial', icon: '🏢', title: 'مالی دانشکدهها', code: 'SumDaneshkadehReport' },
+            { href: '/admin/finance/reports?kind=semester-detail', icon: '🧾', title: 'تفصیلی نیمسال', code: 'fqTrDaTe2' },
+            { href: '/admin/finance/reports?kind=daily-journal', icon: '📅', title: 'دفتر روزنامه', code: 'daily-journal' },
+            { href: '/admin/finance/reports?kind=cash-flow', icon: '💧', title: 'جریان نقدی', code: 'cash-flow' },
+          ].map((b) => (
+            <Link
+              prefetch={false}
+              key={b.href}
+              href={b.href}
+              className="group flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-500 hover:shadow-md"
+            >
+              <span className="text-lg">{b.icon}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-black text-slate-800 group-hover:text-emerald-800">{b.title}</span>
+                <span className="block truncate text-3xs font-bold text-slate-500" dir="ltr">{b.code}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {/* ── کاشی‌های دسترسی سریع به میزهای تخصصی ── */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {DOCKS.map((d) => (

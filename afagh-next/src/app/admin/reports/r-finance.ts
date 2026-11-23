@@ -141,6 +141,170 @@ const TXN_FA: Record<string, string> = {
 };
 
 
+
+/**
+ * فرم رسمی سام `qSumTa` — «گزارش وضعیت مالی دانشکده و رشته تحصیلی در نیمسال».
+ *
+ * دانشگاهی که دانشجو را «در همان نیمسال» دارد، جدول `legacy_moshgel_enrollments`
+ * است (معادل `dbo.moshgel` در UEMS) — نه صرفاً دفتر مالی. بههمین دلیل شمارش
+ * دانشجو و مبالغ دقیقاً همان چیزی است که Procedure `SumTermAms_PerDanReshte`
+ * چاپ میکند. تمام مبالغ بهصورت زنده از `student_ledger` جمع میشوند؛ جدول
+ * moshgel فقط «عضویت دانشجو در نیمسال» را میدهد (دادهٔ ثبتنام، نه مبلغ ثابت).
+ */
+async function runQSumTa(f: ReportFilters, detailed: boolean): Promise<ReportResult> {
+  const columns = [
+    { key: 'code', title: 'کد' },
+    { key: 'major', title: 'رشته' },
+    { key: 'entry', title: 'ورودی', format: 'YEAR' as const },
+    { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' as const },
+    { key: 'variable', title: 'شهریه متغیر', format: 'AMOUNT' as const, pair: 'p1', line: 'top' as const },
+    { key: 'fixed', title: 'شهریه ثابت', format: 'AMOUNT' as const, pair: 'p1', line: 'bottom' as const },
+    { key: 'discVar', title: 'تخفیفات متغیر', format: 'AMOUNT' as const, pair: 'p2', line: 'top' as const },
+    { key: 'discFixed', title: 'تخفیفات ثابت', format: 'AMOUNT' as const, pair: 'p2', line: 'bottom' as const },
+    { key: 'discAmount', title: 'تخفیفات مبلغی', format: 'AMOUNT' as const, pair: 'p3', line: 'top' as const },
+    { key: 'paid', title: 'پرداختیها', format: 'AMOUNT' as const, pair: 'p3', line: 'bottom' as const },
+    { key: 'loan', title: 'مساعده', format: 'AMOUNT' as const, pair: 'p4', line: 'top' as const },
+    { key: 'subject', title: 'مبالغ موضوعی', format: 'AMOUNT' as const, pair: 'p4', line: 'bottom' as const },
+    { key: 'debit', title: 'جمع بدهکار', format: 'AMOUNT' as const, pair: 'p5', line: 'top' as const },
+    { key: 'credit', title: 'جمع بستانکار', format: 'AMOUNT' as const, pair: 'p5', line: 'bottom' as const },
+    { key: 'debtBalance', title: 'مانده بدهکار', format: 'AMOUNT' as const },
+    { key: 'creditBalance', title: 'مانده بستانکار', format: 'AMOUNT' as const },
+  ];
+  if (!f.term || !f.universityId) {
+    return {
+      columns, rows: [], total: 0, page: 1, per: PER, totalPages: 1,
+      summary: !f.universityId
+        ? 'دانشگاه فعال مشخص نیست؛ ابتدا دانشگاه خود را انتخاب کنید.'
+        : 'برای اینreports ابتدا یک نیمسال را در فیلترها انتخاب کنید.',
+    };
+  }
+
+  const res = await db.execute<{
+    facultyCode: number; faculty: string; majorCode: number; major: string; entry: string;
+    students: number; variable: string | number; fixed: string | number;
+    discVar: string | number; discFixed: string | number; discAmount: string | number;
+    paid: string | number; loan: string | number; subject: string | number;
+  }>(sql`
+    WITH me AS (
+      SELECT "facultyCode", "majorCode", "entryCode", stno
+      FROM legacy_moshgel_enrollments
+      WHERE "termCode" = ${String(f.term)}
+    ), fin AS (
+      SELECT s."studentCode" AS stno,
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" = 'TUITION_VARIABLE'), 0) AS variable,
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('TUITION_FIXED', 'TUITION_CHARGE')), 0) AS fixed,
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('DISCOUNT_VARIABLE', 'TUITION_BATES_VARIABLE')), 0) AS "discVar",
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('DISCOUNT_FIXED', 'TUITION_BATES_FIXED')), 0) AS "discFixed",
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('TUITION_BATES', 'TUITION_BATES_AMOUNT', 'TUITION_ADJUST_INC')), 0) AS "discAmount",
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('PAYMENT', 'POS_PAYMENT', 'SPONSORSHIP', 'CREDIT')), 0) AS paid,
+        COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" = 'LOAN'), 0) AS loan,
+        (
+          COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('TUITION_ADJUST_INC', 'SUBJECT_ADDITIVE')), 0)
+          - COALESCE(SUM(sl.amount) FILTER (WHERE sl."transactionType" IN ('TUITION_ADJUST_DEC', 'SUBJECT_DEDUCTIVE')), 0)
+        ) AS subject
+      FROM student_ledger sl
+      JOIN students s ON s.id = sl."studentId" AND s."universityId" = ${f.universityId}
+      WHERE sl."universityId" = ${f.universityId}
+        AND sl."termId" = (SELECT id FROM academic_terms
+          WHERE "termCode" = ${String(f.term)} AND "universityId" = ${f.universityId}
+          ORDER BY id DESC LIMIT 1)
+      GROUP BY s."studentCode"
+    )
+    SELECT me."facultyCode", COALESCE(fc.title, 'نامشخص') AS faculty,
+      me."majorCode", COALESCE(mj.title, 'نامشخص') AS major,
+      me."entryCode" AS entry, COUNT(*)::int AS students,
+      COALESCE(SUM(fin.variable), 0)::bigint AS variable,
+      COALESCE(SUM(fin.fixed), 0)::bigint AS fixed,
+      COALESCE(SUM(fin."discVar"), 0)::bigint AS "discVar",
+      COALESCE(SUM(fin."discFixed"), 0)::bigint AS "discFixed",
+      COALESCE(SUM(fin."discAmount"), 0)::bigint AS "discAmount",
+      COALESCE(SUM(fin.paid), 0)::bigint AS paid,
+      COALESCE(SUM(fin.loan), 0)::bigint AS loan,
+      COALESCE(SUM(fin.subject), 0)::bigint AS subject
+    FROM me
+    LEFT JOIN fin ON fin.stno = me.stno
+    LEFT JOIN legacy_sama_faculties fc ON fc.code = me."facultyCode"
+    LEFT JOIN legacy_sama_majors mj ON mj.code = me."majorCode"
+    GROUP BY me."facultyCode", fc.title, me."majorCode", mj.title, me."entryCode"
+    ORDER BY me."facultyCode", me."majorCode", me."entryCode"
+  `);
+
+  const num = (v: unknown): number => Number(v ?? 0) || 0;
+  const groups = res.rows.map((g) => {
+    const variable = num(g.variable), fixed = num(g.fixed);
+    const discVar = num(g.discVar), discFixed = num(g.discFixed), discAmount = num(g.discAmount);
+    const paid = num(g.paid), loan = num(g.loan), subject = num(g.subject);
+    const debit = fixed + variable;
+    const credit = discVar + discFixed + discAmount + paid + loan;
+    return {
+      facultyCode: num(g.facultyCode), faculty: String(g.faculty ?? 'نامشخص'),
+      majorCode: num(g.majorCode), major: String(g.major ?? 'نامشخص'),
+      entry: String(g.entry ?? ''), students: num(g.students),
+      variable, fixed, discVar, discFixed, discAmount, paid, loan, subject, debit, credit,
+      debtBalance: Math.max(debit - credit - subject, 0),
+      creditBalance: Math.max(credit + subject - debit, 0),
+    };
+  });
+
+  const total = {
+    students: 0, variable: 0, fixed: 0, discVar: 0, discFixed: 0, discAmount: 0,
+    paid: 0, loan: 0, subject: 0, debit: 0, credit: 0, debtBalance: 0, creditBalance: 0,
+  };
+  for (const g of groups) {
+    for (const k of Object.keys(total) as (keyof typeof total)[]) {
+      (total[k] as number) += g[k] as number;
+    }
+  }
+  total.debtBalance = Math.max(total.debit - total.credit - total.subject, 0);
+  total.creditBalance = Math.max(total.credit + total.subject - total.debit, 0);
+
+  const rows: ReportRow[] = [];
+  if (!detailed) {
+    for (const g of groups) {
+      rows.push({
+        code: String(g.majorCode), major: g.major, entry: g.entry, students: g.students,
+        variable: g.variable, fixed: g.fixed, discVar: g.discVar, discFixed: g.discFixed,
+        discAmount: g.discAmount, paid: g.paid, loan: g.loan, subject: g.subject,
+        debit: g.debit, credit: g.credit, debtBalance: g.debtBalance, creditBalance: g.creditBalance,
+      });
+    }
+  } else {
+    const sub = { ...total };
+    let curFaculty = -1;
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (g.facultyCode !== curFaculty) {
+        rows.push({ __kind: 'band', __label: `دانشکده\n${g.faculty}` });
+        curFaculty = g.facultyCode;
+      }
+      for (const k of Object.keys(sub) as (keyof typeof sub)[]) sub[k] = g[k] as number;
+      sub.debtBalance = Math.max(sub.debit - sub.credit - sub.subject, 0);
+      sub.creditBalance = Math.max(sub.credit + sub.subject - sub.debit, 0);
+      rows.push({
+        code: String(g.majorCode), major: g.major, entry: g.entry, students: g.students,
+        variable: g.variable, fixed: g.fixed, discVar: g.discVar, discFixed: g.discFixed,
+        discAmount: g.discAmount, paid: g.paid, loan: g.loan, subject: g.subject,
+        debit: g.debit, credit: g.credit, debtBalance: g.debtBalance, creditBalance: g.creditBalance,
+      });
+      if (i === groups.length - 1 || groups[i + 1].majorCode !== g.majorCode || groups[i + 1].facultyCode !== g.facultyCode) {
+        rows.push({ __kind: 'subtotal', __label: 'جمع رشته', __labelCol: 'major', ...sub });
+      }
+    }
+  }
+
+  return {
+    columns, rows, total: groups.length, page: 1, per: rows.length || 1, totalPages: 1,
+    totals: { code: '', major: `جمع نیمسال ${faNum(String(f.term))}`, entry: '', ...total },
+    summary: `${faAmount(groups.length)} ردیف (دانشکده × رشته × نیمسال ورود) — نیمسال ${faNum(String(f.term))}`
+      + ` · تعداد دانشجو ${faAmount(total.students)}`
+      + ` · جمع بدهکار ${faAmount(total.debit)}`
+      + ` · جمع بستانکار ${faAmount(total.credit)}`
+      + ` · مانده بدهکار ${faAmount(total.debtBalance)}`
+      + ` · مانده بستانکار ${faAmount(total.creditBalance)}`
+      + pagedNote({ columns, rows, total: groups.length, page: 1, per: rows.length || 1, totalPages: 1 }),
+  };
+}
+
 export async function run(kind: string, f: ReportFilters): Promise<ReportResult | null> {
   await requireRole(ROLES);
 
@@ -615,33 +779,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   }
 
   // ── ۹) گزارش مالی نیمسال به تفکیک مقطع و رشته (و ورودی) ──
-  if (kind === 'major-financial') {
-    const f9 = finBody();
-    const from = sql`FROM students s
-      JOIN users u ON u.id = s."userId"
-      LEFT JOIN majors m ON m.id = s."majorId"
-      LEFT JOIN faculties fc ON fc.id = m."facultyId"
-      LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-      LEFT JOIN student_ledger sl ON sl."studentId" = s.id
-      ${f.term ? sql`AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${f.term} LIMIT 1)` : sql``}`;
-    const cols = sql`COALESCE(d.title, '—') AS degree, COALESCE(fc.name, '—') AS faculty,
-      COALESCE(m.name, '—') AS major, s."entryYear" AS y,
-      COUNT(DISTINCT s.id)::int AS students, ${f9.cols}`;
-    const r = await paged(
-      finCols([
-        { key: 'degree', title: 'مقطع' },
-        { key: 'faculty', title: 'دانشکده' },
-        { key: 'major', title: 'رشته' },
-        { key: 'y', title: 'سال ورودی', format: 'YEAR' },
-        { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' },
-      ]),
-      from, [...studentWhere(f), uniCond], cols,
-      sql`ORDER BY COALESCE(d.title, '—'), COALESCE(fc.name, '—'), COALESCE(m.name, '—'), s."entryYear"`, f,
-      sql`d.title, fc.name, m.name, s."entryYear"`,
-    );
-    r.summary = `${faAmount(r.total)} ردیف (مقطع × رشته × ورودی)${f.term ? ` — نیمسال ${f.term}` : ''}` + pagedNote(r);
-    return r;
-  }
+  if (kind === 'major-financial') return runQSumTa(f, false);
 
   // ══════════════════════════════════════════════════════════════════
   //  ۱۰) «گزارش تفصیلی مالی دانشجویان در نیمسال» — فرم رسمی fqTrDaTe2
@@ -870,228 +1008,7 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   //  پایین = عنوانِ خطِ دوم) و همان گروه همان دو مقدار را نشان میدهد.
   //  همهٔ جمعها ترازند: جمع بدهکار − جمع بستانکار = ماندهِ هر گروه.
   // ══════════════════════════════════════════════════════════════════════
-  if (kind === 'semester-major-detail') {
-    if (!f.term || !f.universityId) {
-      return {
-        columns: [],
-        rows: [],
-        total: 0,
-        page: 1,
-        per: PER,
-        totalPages: 1,
-        summary: !f.universityId
-          ? 'دانشگاه فعال مشخص نیست؛ ابتدا دانشگاه خود را انتخاب کنید.'
-          : 'برای این گزارش ابتدا یک نیمسال را در فیلترها انتخاب کنید.',
-      };
-    }
-
-    const columns = [
-      { key: 'code', title: 'کد' },
-      { key: 'major', title: 'رشته' },
-      { key: 'entry', title: 'ورودی', format: 'YEAR' as const },
-      { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' as const },
-      { key: 'variable', title: 'شهریه متغیر', format: 'AMOUNT' as const, pair: 'p1', line: 'top' as const },
-      { key: 'fixed', title: 'شهریه ثابت', format: 'AMOUNT' as const, pair: 'p1', line: 'bottom' as const },
-      { key: 'discVar', title: 'تخفیفات متغیر', format: 'AMOUNT' as const, pair: 'p2', line: 'top' as const },
-      { key: 'discFixed', title: 'تخفیفات ثابت', format: 'AMOUNT' as const, pair: 'p2', line: 'bottom' as const },
-      { key: 'discAmount', title: 'تخفیفات مبلغی', format: 'AMOUNT' as const, pair: 'p3', line: 'top' as const },
-      { key: 'paid', title: 'پرداختیها', format: 'AMOUNT' as const, pair: 'p3', line: 'bottom' as const },
-      { key: 'loan', title: 'مساعده', format: 'AMOUNT' as const, pair: 'p4', line: 'top' as const },
-      { key: 'subject', title: 'مبالغ موضوعی', format: 'AMOUNT' as const, pair: 'p4', line: 'bottom' as const },
-      { key: 'debit', title: 'جمع بدهکار', format: 'AMOUNT' as const, pair: 'p5', line: 'top' as const },
-      { key: 'credit', title: 'جمع بستانکار', format: 'AMOUNT' as const, pair: 'p5', line: 'bottom' as const },
-      { key: 'debtBalance', title: 'مانده بدهکار', format: 'AMOUNT' as const },
-      { key: 'creditBalance', title: 'مانده بستانکار', format: 'AMOUNT' as const },
-    ];
-
-    const groupRows = await db.execute<{
-      facultyId: string | number;
-      faculty: string;
-      majorId: string | number;
-      major: string;
-      entryYear: string | number;
-      students: string | number;
-      fixed: string | number;
-      variable: string | number;
-      discVar: string | number;
-      discFixed: string | number;
-      discAmount: string | number;
-      paid: string | number;
-      loan: string | number;
-      subjectAdd: string | number;
-      subjectDec: string | number;
-      debit: string | number;
-      credit: string | number;
-    }>(sql`
-      SELECT
-        COALESCE(fc.id, 0) AS "facultyId",
-        COALESCE(fc.name, 'نامشخص') AS "faculty",
-        COALESCE(m.id, 0) AS "majorId",
-        COALESCE(m.name, 'نامشخص') AS "major",
-        COALESCE(s."entryYear", 0)::int AS "entryYear",
-        COUNT(DISTINCT s.id)::int AS "students",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['TUITION_FIXED', 'TUITION_CHARGE'])}), 0)::bigint AS "fixed",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['TUITION_VARIABLE'])}), 0)::bigint AS "variable",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['DISCOUNT_VARIABLE', 'TUITION_BATES_VARIABLE'])}), 0)::bigint AS "discVar",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['DISCOUNT_FIXED', 'TUITION_BATES_FIXED'])}), 0)::bigint AS "discFixed",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['TUITION_BATES', 'TUITION_BATES_AMOUNT', 'TUITION_ADJUST_INC'])}), 0)::bigint AS "discAmount",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${inTypes(PAID_LEDGER_TYPES)}), 0)::bigint AS "paid",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['LOAN'])}), 0)::bigint AS "loan",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['SUBJECT_ADDITIVE'])}), 0)::bigint AS "subjectAdd",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${typesIn('sl', ['SUBJECT_DEDUCTIVE'])}), 0)::bigint AS "subjectDec",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${CHARGE}), 0)::bigint AS "debit",
-        COALESCE(SUM(sl.amount) FILTER (WHERE ${CREDIT}), 0)::bigint AS "credit"
-      FROM students s
-      JOIN users u ON u.id = s."userId"
-      LEFT JOIN majors m ON m.id = s."majorId"
-      LEFT JOIN faculties fc ON fc.id = m."facultyId"
-      JOIN student_ledger sl
-        ON sl."studentId" = s.id
-       AND sl."universityId" = ${f.universityId}
-       AND sl."termId" = (SELECT id FROM academic_terms WHERE "termCode" = ${String(f.term)} AND "universityId" = ${f.universityId} ORDER BY id DESC LIMIT 1)
-      WHERE ${joinAnd([...studentWhere(f)])}
-      GROUP BY 1, 2, 3, 4, 5
-      ORDER BY 1, 3, 5
-    `);
-
-    const num = (v: unknown): number => Number(v ?? 0) || 0;
-    const gRows = (groupRows?.rows ?? []).map(g => ({
-      facultyId: num(g.facultyId),
-      faculty: String(g.faculty ?? ''),
-      majorId: num(g.majorId),
-      major: String(g.major ?? ''),
-      entryYear: num(g.entryYear),
-      students: num(g.students),
-      fixed: num(g.fixed),
-      variable: num(g.variable),
-      discVar: num(g.discVar),
-      discFixed: num(g.discFixed),
-      discAmount: num(g.discAmount),
-      paid: num(g.paid),
-      loan: num(g.loan),
-      subject: num(g.subjectAdd) - num(g.subjectDec),
-      debit: num(g.debit),
-      credit: num(g.credit),
-    }));
-    gRows.sort((a, b) => a.facultyId - b.facultyId || a.majorId - b.majorId || a.entryYear - b.entryYear);
-
-    const rows: ReportRow[] = [];
-    const grand = {
-      code: '',
-      major: 'جمع کل',
-      entry: '',
-      students: 0,
-      variable: 0,
-      fixed: 0,
-      discVar: 0,
-      discFixed: 0,
-      discAmount: 0,
-      paid: 0,
-      loan: 0,
-      subject: 0,
-      debit: 0,
-      credit: 0,
-      debtBalance: 0,
-      creditBalance: 0,
-    };
-    let curFacultyId = -1;
-    let curFaculty = '';
-    let curMajorId = -1;
-    let curMajor = '';
-    let sub: Record<string, unknown> = { ...grand };
-
-    for (let gi = 0; gi < gRows.length; gi++) {
-      const g = gRows[gi];
-      if (g.facultyId !== curFacultyId || g.faculty !== curFaculty) {
-        rows.push({ __kind: 'band', __label: `دانشکده\n${g.faculty}` });
-        curFacultyId = g.facultyId;
-        curFaculty = g.faculty;
-      }
-      if (g.majorId !== curMajorId) {
-        curMajorId = g.majorId;
-        curMajor = g.major;
-        sub = { ...grand };
-      }
-      const debtBalance = Math.max(g.debit - g.credit, 0);
-      const creditBalance = Math.max(g.credit - g.debit, 0);
-      rows.push({
-        code: String(g.majorId),
-        major: String(g.major),
-        entry: String(g.entryYear),
-        students: g.students,
-        variable: g.variable,
-        fixed: g.fixed,
-        discVar: g.discVar,
-        discFixed: g.discFixed,
-        discAmount: g.discAmount,
-        paid: g.paid,
-        loan: g.loan,
-        subject: g.subject,
-        debit: g.debit,
-        credit: g.credit,
-        debtBalance,
-        creditBalance,
-      });
-
-      // «جمع رشته» — بعد از همهٔ نیمسالهای ورودیِ یک رشته (دانشگاهِ یک رشته،
-      // یک دانشجو فقط یک ورودی دارد؛ پس جمع = مجموع گروههای همان رشته).
-      // ⚠ چون ورودی برای هر دانشجو یکتاست، گروهای با همسایه همان رشته را
-      //  با «جمع رشته» جمع میکنیم.
-
-      sub.students = (Number(sub.students) || 0) + g.students;
-      sub.variable = (Number(sub.variable) || 0) + g.variable;
-      sub.fixed = (Number(sub.fixed) || 0) + g.fixed;
-      sub.discVar = (Number(sub.discVar) || 0) + g.discVar;
-      sub.discFixed = (Number(sub.discFixed) || 0) + g.discFixed;
-      sub.discAmount = (Number(sub.discAmount) || 0) + g.discAmount;
-      sub.paid = (Number(sub.paid) || 0) + g.paid;
-      sub.loan = (Number(sub.loan) || 0) + g.loan;
-      sub.subject = (Number(sub.subject) || 0) + g.subject;
-      sub.debit = (Number(sub.debit) || 0) + g.debit;
-      sub.credit = (Number(sub.credit) || 0) + g.credit;
-      sub.debtBalance = Math.max((Number(sub.debit) || 0) - (Number(sub.credit) || 0), 0);
-      sub.creditBalance = Math.max((Number(sub.credit) || 0) - (Number(sub.debit) || 0), 0);
-
-      if (gi === gRows.length - 1 || gRows[gi + 1].majorId !== g.majorId) {
-        rows.push({ __kind: 'subtotal', __label: 'جمع رشته', __labelCol: 'major', ...sub });
-      }
-    }
-
-    // جمع کل (ردیف tfoot) — همهٔ گروهها؛ ماندهها هم از جمعِ کلِ بدهکار/بستانکار
-    const t: Record<string, unknown> = { ...grand };
-    for (const g of gRows) {
-      t.students = (Number(t.students) || 0) + g.students;
-      t.variable = (Number(t.variable) || 0) + g.variable;
-      t.fixed = (Number(t.fixed) || 0) + g.fixed;
-      t.discVar = (Number(t.discVar) || 0) + g.discVar;
-      t.discFixed = (Number(t.discFixed) || 0) + g.discFixed;
-      t.discAmount = (Number(t.discAmount) || 0) + g.discAmount;
-      t.paid = (Number(t.paid) || 0) + g.paid;
-      t.loan = (Number(t.loan) || 0) + g.loan;
-      t.subject = (Number(t.subject) || 0) + g.subject;
-      t.debit = (Number(t.debit) || 0) + g.debit;
-      t.credit = (Number(t.credit) || 0) + g.credit;
-    }
-    t.debtBalance = Math.max((Number(t.debit) || 0) - (Number(t.credit) || 0), 0);
-    t.creditBalance = Math.max((Number(t.credit) || 0) - (Number(t.debit) || 0), 0);
-
-    const r2: ReportResult = {
-      columns,
-      rows,
-      total: gRows.length,
-      page: 1,
-      per: rows.length,
-      totalPages: 1,
-      totals: { ...t },
-      summary: '',
-    };
-    r2.summary = `${faAmount(gRows.length)} گروه (دانشکده × رشته × نیمسال ورود) — نیمسال ${faNum(String(f.term))}`
-      + ` · تعداد دانشجو ${faAmount(Number(t.students) || 0)}`
-      + ` · جمع بدهکار ${faAmount(Number(t.debit) || 0)}`
-      + ` · جمع بستانکار ${faAmount(Number(t.credit) || 0)}`
-      + pagedNote(r2);
-    return r2;
-  }
+  if (kind === 'semester-major-detail') return runQSumTa(f, true);
 
   return null;
 }
