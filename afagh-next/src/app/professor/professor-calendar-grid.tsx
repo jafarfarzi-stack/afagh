@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import Link from 'next/link';
 import { PROFESSOR_GRID_DAYS } from '@/lib/professor-week-grid';
 import {
   layoutProfessorCalendarDay,
@@ -111,9 +112,11 @@ function ProfessorCalendarCard({
     : (e.roomName ? `${e.roomName}${e.buildingName ? ` · ${e.buildingName}` : ''}` : 'سالن ثبت نشده');
   const hideProfessorPill = placeMode === 'professor';
   return (
-    <div
-      title={title}
-      className={`prof-week-card h-full overflow-hidden p-1.5 rounded-lg border text-right shadow-xs leading-4 ${
+    <Link
+      href={`/professor/attendance?offeringId=${e.id}`}
+      prefetch={false}
+      title={`${title} — ورود به حضور و غیاب و امور کلاس`}
+      className={`prof-week-card block h-full overflow-hidden p-1.5 rounded-lg border text-right shadow-xs leading-4 transition hover:brightness-[0.98] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         e.courseType === 'عملی'
           ? 'bg-amber-50 border-amber-300 text-amber-950'
           : 'bg-indigo-50 border-indigo-200 text-indigo-950'
@@ -184,7 +187,7 @@ function ProfessorCalendarCard({
           </span>
           <WeekBadge weekType={e.weekType} />
         </div>
-    </div>
+    </Link>
   );
 }
 

@@ -535,7 +535,7 @@ export default async function ProfessorHome() {
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">نوع قرارداد:</span>
-                <span className="font-bold text-slate-900">{contract.contractType ?? '—'}</span>
+                <span className="font-bold text-slate-900">{({ HOUR_RATE: 'ساعتی / حق‌التدریس', FIXED: 'ثابت', FULL_TIME: 'تمام‌وقت', PART_TIME: 'پاره‌وقت' } as Record<string,string>)[String(contract.contractType ?? '')] ?? (contract.contractType ? String(contract.contractType) : '—')}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">وضعیت سند:</span>
