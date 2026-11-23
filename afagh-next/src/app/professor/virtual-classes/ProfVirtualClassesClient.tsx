@@ -7,6 +7,7 @@ import {
   syncVirtualClassStatusAction,
   type ProfOfferingRow,
 } from './actions';
+import { joinVirtualClassAction } from '@/lib/moodle-bbb-actions';
 import { askConfirm } from '@/lib/ui-feedback';
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString('fa-IR') : '—');
@@ -43,6 +44,14 @@ export default function ProfVirtualClassesClient({ rows: initial }: { rows: Prof
       const r = await syncVirtualClassStatusAction(id);
       if (r.ok) { setMsg(`✓ وضعیت به‌روز شد (${faNum(r.updated ?? 0)}).`); refresh(); }
       else setMsg(`✗ ${r.error}`);
+    });
+  };
+
+  const join = (meetingId: string) => {
+    startTransition(async () => {
+      const r = await joinVirtualClassAction({ meetingId });
+      if (r.ok && r.url) window.open(r.url, '_blank', 'noopener,noreferrer');
+      else setMsg(`✗ ${r.error || 'ورود به کلاس ناموفق بود.'}`);
     });
   };
 
@@ -115,6 +124,9 @@ export default function ProfVirtualClassesClient({ rows: initial }: { rows: Prof
                         </button>
                         {r.classroom && (
                           <>
+                            <button disabled={pending} onClick={() => join(r.classroom!.meetingId)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-extrabold text-2xs disabled:opacity-50">
+                              {pending ? '…' : '🎥 ورود / شروع جلسه'}
+                            </button>
                             <button disabled={pending} onClick={() => syncOne(r.classroom!.id)} className="px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-extrabold text-2xs disabled:opacity-50" title="خواندن وضعیت از سرور BBB">
                               🔄 همگام‌سازی
                             </button>
