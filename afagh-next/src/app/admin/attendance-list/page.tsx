@@ -310,8 +310,8 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
             table.attl tr { break-inside: avoid; page-break-inside: avoid; }
             table.attl th { background: #f1f5f9; font-weight: 900; font-size: 7pt; line-height: 1.4; }
             table.attl th.attl-headcell { background: #ffffff; border: 0; padding: 0 0 3px; }
-            .attl-name { text-align: right !important; font-weight: 700; overflow-wrap: break-word; word-break: break-word; }
-            .attl-code { direction: ltr; white-space: nowrap; overflow: hidden; }
+            .attl-name { text-align: right !important; font-weight: 700; white-space: nowrap; overflow: hidden; }
+            .attl-code { direction: ltr; white-space: nowrap; overflow: hidden; font-size: 8.5pt; }
             .attl-photo { width: 9mm; height: 12mm; }
             .attl-photo > div, .attl-photo > img { width: 9mm !important; height: 12mm !important; }
             .attl-sig { width: 20mm; }
@@ -333,8 +333,8 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
               <tr>
                 <th style={{ width: '7mm' }}>#</th>
                 {photos && <th style={{ width: '12mm' }}>عکس</th>}
-                <th style={{ width: '34mm' }}>نام و نام خانوادگی</th>
-                <th style={{ width: '20mm' }}>شماره دانشجویی</th>
+                <th>نام و نام خانوادگی</th>
+                <th style={{ width: '22mm' }}>شماره دانشجویی</th>
                 {shownCols.map((c, i) => (
                   <th key={c.key} style={{ width: '8mm' }}>
                     {photos ? faDigits(String(c.sessionNo ?? i + 1)) : `ج${faDigits(String(c.sessionNo ?? i + 1))}`}

@@ -43,8 +43,11 @@ ok(pickBody.length > 0, 'تابع pick وجود دارد');
 ok(!/run\(/.test(pickBody), 'pick هیچ اجرای گزارشهای را فراخوانی نمیکند');
 ok(!/void run\(1, k\)/.test(clientCode), 'کلیک روی کارت دیگر void run(1, k) ندارد');
 ok(!/autoRan/.test(clientCode), 'اجرای خودکار (autoRan) حذف شده است');
-ok(!/void run\(1, initialKind\)/.test(clientCode), 'اجرای خودکار با ?kind= حذف شده است');
-ok(!/useRef/.test(clientCode), 'useRef بلااستفاده از ایمپورتها حذف شده است');
+// قرارداد تازه (کامیت 6df87b86): اجرای خودکار فقط با ?auto=1 و گارد تک‌اجرایی useRef
+ok(/if \(!initialAuto \|\| !initialKind \|\| autoStarted\.current\) return;/.test(clientCode), 'اجرای خودکار فقط با ?auto=1 گارد شده است');
+ok(/autoStarted\.current = true;/.test(clientCode), 'اجرای خودکار با گارد useRef تک‌بار است و تغییر فیلتر دوباره اجرا نمیکند');
+ok(/void run\(1, initialKind\)/.test(clientCode), 'مسیر ?auto=1 گزارش را مستقیم اجرا میکند');
+ok(!/void run\(1, initialKind\)/.test(clientCode.replace(/if \(!initialAuto \|\| !initialKind \|\| autoStarted\.current\) return;[\s\S]*?void run\(1, initialKind\);/, '')), 'خارج از گارد ?auto=1 هیچ اجرای خودکاری نیست');
 ok(/onClick=\{\(\) => run\(1\)\}/.test(client), 'دکمهٔ صریح «اجرای گزارش» همچنان هست');
 ok(/فیلترهای بالا/.test(client), 'راهنمای «اول فیلترها، بعد اجرا» در حالت خالی دیده میشود');
 
