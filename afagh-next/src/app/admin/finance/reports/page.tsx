@@ -26,11 +26,12 @@ const DOCKS: { href: string; icon: string; title: string; desc: string; tone: st
 ];
 
 export default async function AdminFinanceReportsPage(props: {
-  searchParams: Promise<{ kind?: string; term?: string }>;
+  searchParams: Promise<{ kind?: string; term?: string; auto?: string }>;
 }) {
   await requireRole(['ADMIN', 'FINANCE_EXPERT', 'FINANCE', 'CASHIER']);
   const sp = await props.searchParams;
   const initialKind = sp?.kind && ALL_REPORT_KINDS.includes(sp.kind) ? sp.kind : undefined;
+  const initialAuto = sp?.auto === '1';
 
   const currentUniversity = await getCurrentUniversity();
   const currentUniversityId = currentUniversity?.id ?? null;
@@ -75,9 +76,9 @@ export default async function AdminFinanceReportsPage(props: {
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {[
             { href: '/admin/finance/reports/faculty-financial', icon: '🏢', title: 'مالی دانشکدهها', code: 'SumDaneshkadehReport' },
-            { href: '/admin/finance/reports?kind=semester-detail', icon: '🧾', title: 'تفصیلی نیمسال', code: 'fqTrDaTe2' },
-            { href: '/admin/finance/reports?kind=daily-journal', icon: '📅', title: 'دفتر روزنامه', code: 'daily-journal' },
-            { href: '/admin/finance/reports?kind=cash-flow', icon: '💧', title: 'جریان نقدی', code: 'cash-flow' },
+            { href: '/admin/finance/reports?kind=semester-detail&auto=1', icon: '🧾', title: 'تفصیلی نیمسال', code: 'fqTrDaTe2' },
+            { href: '/admin/finance/reports?kind=daily-journal&auto=1', icon: '📅', title: 'دفتر روزنامه', code: 'daily-journal' },
+            { href: '/admin/finance/reports?kind=cash-flow&auto=1', icon: '💧', title: 'جریان نقدی', code: 'cash-flow' },
           ].map((b) => (
             <Link
               prefetch={false}
@@ -119,6 +120,7 @@ export default async function AdminFinanceReportsPage(props: {
         allowedKinds={allowed}
         scope="finance"
         initialKind={initialKind}
+        initialAuto={initialAuto}
         initialTerm={sp?.term}
       />
     </div>

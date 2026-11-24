@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { exportReport, fetchReportForPrint, runReport, type FilterOptions, type ReportResult } from './actions';
@@ -296,7 +296,7 @@ const CARDS: Card[] = [
 
 const NEW_KINDS = new Set(['finance-worklist', 'payroll-overview', 'bi-teaching-quality', 'bi-facilities', 'graduation-dossiers', 'grade-audit-log', 'probation-violations', 'probation-chains', 'unit-cap-violations', 'repeated-courses', 'student-weekly-conflicts', 'student-exam-conflicts', 'prereq-violations', 'course-grade-status', 'enrollment-pick', 'offered-course-roster', 'top-students', 'no-photo', 'graduates-info', 'status-report', 'major-change-report', 'status-change-report', 'gpa-refresh-preview', 'profile-refresh', 'portal-export', 'exam-session-sheet', 'seat-numbers', 'final-exam-schedule', 'grade-entry-report', 'grade-deadline', 'empty-rooms', 'weekly-timetable', 'room-conflicts', 'low-enrollment', 'makeup-courses', 'staff-list', 'staff-courses', 'staff-timetable', 'attendance-list', 'tuition-tariff', 'tuition-statement', 'pending-requests', 'defenses', 'proposals', 'council-edu', 'letter-templates', 'transcript-card', 'exam-entry-card', 'student-card', 'study-cert', 'edu-confirm', 'grad-cert', 'military-defer']);
 
-export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra, singleReport = false }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string>; singleReport?: boolean }) {
+export default function ReportsClient({ opts, initialUniversityId, allowedKinds, scope = 'all', initialKind, initialTerm, initialExtra, singleReport = false, initialAuto = false }: { opts: FilterOptions; initialUniversityId?: number; allowedKinds?: string[] | null; scope?: 'all' | 'edu' | 'finance'; initialKind?: string; initialTerm?: string; initialExtra?: Record<string, string>; singleReport?: boolean; initialAuto?: boolean }) {
   const router = useRouter();
   const [kind, setKind] = useState<string>(initialKind ?? 'active-term');
   const [cat, setCat] = useState<string | undefined>(undefined);
@@ -486,6 +486,21 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
    * بود. اجرا فقط با دکمهٔ صریح «اجرای گزارش ◀» (یا Enter در جست‌وجو)
    * انجام می‌شود.
    */
+  /**
+   * لینکهای «دسترسی سریع» (کارت چهارگانهٔ سام) با `?auto=1` میآیند تا همان
+   * کلیک، گزارش را هم اجرا کند. بقیهٔ مسیرها بدون auto دقیقاً like قبل عمل
+   * میکنند (انتخاب کارت فقط انتخاب است و اجرا با دکمهٔ صریح است).
+   * تک اجرا با useRef گارد میشود تا تغییر فیلترها دوباره اجرا نکند.
+   */
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!initialAuto || !initialKind || autoStarted.current) return;
+    if (!term || !universityId) return;
+    autoStarted.current = true;
+    void run(1, initialKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAuto, initialKind, term, universityId]);
+
   const pick = (k: string) => {
     setKind(k);
     setRes(null);
