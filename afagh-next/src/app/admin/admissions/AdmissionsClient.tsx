@@ -715,11 +715,11 @@ export default function AdmissionsClient({
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
             ماژول هسته هویتی و پذیرش (Core Admissions & Staging)
           </span>
-          <h1 className="text-xl sm:text-2xl font-black mt-2">
-            سامانه پذیرش سنجش، نگاشت کدها، فرمول‌ساز و وب‌سرویس‌ها
+          <h1 className="text-xl font-black mt-2">
+            پذیرش و نگاشت سنجش
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
-            پردازش فایل متنی سازمان سنجش، ثبت‌نام دستی، فرمول شماره دانشجویی و استعلام همانندجویی ایرانداک
+            ورود فایل سنجش، ثبت‌نام دستی و نگاشت کدها
           </p>
         </div>
 

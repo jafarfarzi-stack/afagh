@@ -370,11 +370,11 @@ export default function AdminWorkflowsClient({
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
             موتور گردش کار و مدیریت فرآیندها
           </span>
-          <h1 className="text-xl sm:text-2xl font-black mt-2">
-            کارتابل جامع گردش کار، طراح فرآیند و ارزیابی سطح خدمت
+          <h1 className="text-xl font-black mt-2">
+            گردش کار و فرآیندها
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
-            تعریف پویای فرم‌ها، سطوح دسترسی ریزدانه، کنترل زمان‌بندی و پایش گلوگاه‌های اداری
+            طراحی فرآیند، پیگیری درخواست‌ها و ارزیابی خدمت
           </p>
         </div>
 

@@ -269,14 +269,12 @@ export default function RegulationsClient(props: {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-2xl">⚖️</span>
-              <h1 className="text-xl sm:text-2xl font-black">
-                مرکز مدیریت و کنترل آیین‌نامه‌های آموزشی (Regulation Engine)
+              <h1 className="text-xl font-black">
+                آیین‌نامه‌های آموزشی
               </h1>
             </div>
-            <p className="text-xs sm:text-sm text-indigo-200 leading-relaxed max-w-3xl">
-              تنظیم و نسخه‌بندی بدون کد (No-Code) قوانین آموزشی، سقف واحدها، مشروطی، ترم تابستان،
-              سهمیه‌های شاهد و سیاست حذف نمرات ردی پس از قبولی با اعمال بلادرنگ در انتخاب واحد و
-              کارنامه.
+            <p className="text-xs text-indigo-200 mt-1 max-w-3xl">
+              نسخه‌بندی قوانین آموزشی و اعمال در انتخاب واحد و کارنامه
             </p>
           </div>
           <div className="flex items-center gap-2">

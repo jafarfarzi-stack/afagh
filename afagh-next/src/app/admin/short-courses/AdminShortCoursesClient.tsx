@@ -267,11 +267,11 @@ export default function AdminShortCoursesClient({
             </span>
             <span className="text-xs text-indigo-300">مدیریت دوره‌های تخصصی و گواهینامه‌ها</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black">
-            🏆 پنل مدیریت دوره‌های کوتاه‌مدت و صدور مدارک رسمی
+          <h1 className="text-xl font-black">
+            دوره‌های کوتاه‌مدت
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
-            مرکز درآمدزایی و مهارت‌آموزی آزاد دانشگاه آفاق · اتصال مستقیم به درگاه پرداخت و استعلام QR
+            مدیریت دوره‌ها، ثبت‌نام و صدور گواهی
           </p>
         </div>
 

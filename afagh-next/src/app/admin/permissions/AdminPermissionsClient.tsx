@@ -241,12 +241,11 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
               {faNum(roles.length)} نقش واقعی · {faNum(permissions.length)} مجوز · {faNum(totalGrants)} تخصیص
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black">
-            🛡️ ماتریس پویا و مدیریت سطوح دسترسی کاربران و کارشناسان
+          <h1 className="text-xl font-black">
+            دسترسی‌ها و نقش‌ها
           </h1>
           <p className="text-xs text-indigo-200 mt-1">
-            داده‌ها از جدول‌های واقعی سامانه خوانده می‌شود؛
-            هر تغییر پس از تأیید در زنجیرهٔ ممیزی ثبت می‌گردد.
+            مدیریت نقش‌ها، مجوزها و تخصیص دسترسی
           </p>
         </div>
 
