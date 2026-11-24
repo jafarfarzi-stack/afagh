@@ -48,7 +48,7 @@ function Stack({ top, bottom }: { top: string; bottom: string }) {
 }
 
 export default async function FacultyFinancialReportPage(props: {
-  searchParams: Promise<{ term?: string; facultyCode?: string }>;
+  searchParams: Promise<{ term?: string; facultyCode?: string; run?: string }>;
 }) {
   await requireRole(ROLES);
   const sp = await props.searchParams;
@@ -71,8 +71,9 @@ export default async function FacultyFinancialReportPage(props: {
   const termCodes = termRows.rows.map((r) => String(r.code)).filter(Boolean);
   const term = sp.term && termCodes.includes(sp.term) ? sp.term : (termCodes[0] ?? '');
   const facultyCode = sp.facultyCode ? String(sp.facultyCode) : '';
+  const shouldLoad = sp.run === '1' && !!term;
 
-  const { rows: raw, fromMoshgel } = term
+  const { rows: raw, fromMoshgel } = shouldLoad
     ? await loadLegacyFinancial({ termCode: term, universityId: uid ?? 0, facultyCode: facultyCode || null })
     : { rows: [], fromMoshgel: false };
 
@@ -177,6 +178,7 @@ export default async function FacultyFinancialReportPage(props: {
       </div>
 
       <form method="get" className="ff-no-print mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-300 bg-white p-3 text-xs shadow-sm">
+        <input type="hidden" name="run" value="1" />
         <label className="flex flex-col gap-1 font-bold text-slate-600">
           نیمسال
           <select name="term" defaultValue={term} className="rounded border border-slate-300 bg-white px-2 py-1.5">
@@ -190,8 +192,8 @@ export default async function FacultyFinancialReportPage(props: {
             {facultyRows.rows.map((f) => <option key={String(f.code)} value={String(f.code)}>{String(f.name)}</option>)}
           </select>
         </label>
-        <button type="submit" className="rounded-lg bg-indigo-700 px-4 py-1.5 font-bold text-white">اعمال فیلتر</button>
-        <span className="mr-auto text-slate-500">{faNum(groups.length)} ردیف</span>
+        <button type="submit" className="rounded-lg bg-indigo-700 px-4 py-1.5 font-bold text-white">نمایش گزارش</button>
+        <span className="mr-auto text-slate-500">{shouldLoad ? `${faNum(groups.length)} ردیف` : 'برای مشاهده، فیلتر را انتخاب و «نمایش گزارش» را بزنید.'}</span>
       </form>
 
       <div className="ff-doc">
@@ -276,7 +278,7 @@ export default async function FacultyFinancialReportPage(props: {
               );
             })}
             {groups.length === 0 && (
-              <tr><td colSpan={12} className="p-6 text-center">رکوردی با این فیلترها یافت نشد.</td></tr>
+              <tr><td colSpan={12} className="p-6 text-center">{shouldLoad ? 'رکوردی با این فیلترها یافت نشد.' : 'فیلتر را انتخاب کنید و «نمایش گزارش» را بزنید تا داده بارگذاری شود.'}</td></tr>
             )}
           </tbody>
         </table>

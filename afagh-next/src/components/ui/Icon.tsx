@@ -25,7 +25,7 @@ const EMOJI_TO_NAME: Record<string, string> = {
   '👤': 'user',
   '💼': 'briefcase',
   '📄': 'file', '📑': 'file', '🗂️': 'file', '🗄️': 'file', '📕': 'file',
-  '📊': 'chart',
+  '📊': 'chart', '📈': 'chart', '📉': 'chart',
   '📋': 'clipboard', '📝': 'clipboard',
   '📚': 'book', '📖': 'book',
   '📡': 'signal',
@@ -33,6 +33,9 @@ const EMOJI_TO_NAME: Record<string, string> = {
   '📤': 'upload',
   '📥': 'download',
   '📨': 'mail',
+  '📅': 'calendar', '📆': 'calendar',
+  '🧾': 'file', '🏢': 'bank', '🏫': 'bank',
+  '🎯': 'target', '🤝': 'handshake', '💧': 'drop', '🧯': 'alert', '📐': 'ruler',
   '🔀': 'shuffle',
   '🔁': 'refresh', '🔄': 'refresh',
   '🔍': 'search',
@@ -272,6 +275,16 @@ function Shape({ name }: { name: string }) {
       return <path d="M6 6l12 12M18 6L6 18" />;
     case 'scale':
       return <path d="M12 4v16M6 20h12M4 9h5l-2.5 4.5A2.5 2.5 0 0 0 11.5 13L9 9M15 9h5l-2.5 4.5A2.5 2.5 0 0 0 22.5 13L20 9" />;
+    case 'target':
+      return (<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1.5" /></>);
+    case 'handshake':
+      return <path d="M8 11l2 2a2 2 0 0 0 3 0l3-3 2 2-4 4a4 4 0 0 1-6 0l-1-1-2 2-2-2 3-4zM4 7l3 3M20 7l-3 3" />;
+    case 'drop':
+      return <path d="M12 3.5S6 10 6 14a6 6 0 0 0 12 0c0-4-6-10.5-6-10.5z" />;
+    case 'alert':
+      return (<><path d="M12 3L2.5 19h19L12 3z" /><path d="M12 9v4M12 16h.01" /></>);
+    case 'ruler':
+      return (<><rect x="3" y="6" width="18" height="12" rx="1.5" /><path d="M7 6v3M10 6v2M13 6v3M16 6v2" /></>);
     default:
       return null;
   }
@@ -291,11 +304,11 @@ export default function Icon({
   const known = name !== emoji || Object.values(EMOJI_TO_NAME).includes(emoji);
 
   if (!known) {
-    // آیکون ناشناخته: همان اموجی، اما با اندازه/هم‌ترازیِ ثابت
+    // آیکون ناشناخته: نشانگر خنثی و حرفه‌ای (به‌جای اموجی خام)
     return (
-      <span aria-hidden className="inline-flex w-4 justify-center leading-none">
-        {emoji}
-      </span>
+      <svg aria-hidden viewBox="0 0 24 24" className={`${className} shrink-0`} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4" />
+      </svg>
     );
   }
 

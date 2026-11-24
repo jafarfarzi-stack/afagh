@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Icon from '@/components/ui/Icon';
 
 /**
  * کاشیِ گزارش — کارتِ قابل‌لمس برای فهرست گزارش‌ها.
@@ -173,7 +174,7 @@ export default function CardTile({
               accent.tile,
             )}
           >
-            {icon}
+            {typeof icon === 'string' ? <Icon emoji={icon} className="h-5 w-5" /> : icon}
           </span>
         )}
         <span className="line-clamp-2 min-h-[2.6em] min-w-0 text-[13px] font-extrabold leading-snug text-slate-800 group-data-[soon=true]:text-slate-500">
