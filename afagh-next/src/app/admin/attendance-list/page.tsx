@@ -314,7 +314,6 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
             .attl-code { direction: ltr; white-space: nowrap; overflow: hidden; font-size: 8.5pt; }
             .attl-photo { width: 9mm; height: 12mm; }
             .attl-photo > div, .attl-photo > img { width: 9mm !important; height: 12mm !important; }
-            .attl-sig { width: 20mm; }
             .attl-head { border: 1.5px solid #334155; border-radius: 6px; padding: 6px 10px; text-align: center; }
             .attl-logo { height: 14mm; width: 14mm; object-fit: contain; }
             .attl-logo-ph { display: inline-block; height: 12mm; width: 12mm; border: 1.5px dashed #94a3b8; border-radius: 4px; line-height: 12mm; font-size: 6.5pt; font-weight: 700; color: #94a3b8; }
@@ -328,22 +327,34 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
             .attl-note { margin-top: 4px; font-size: 7.5pt; font-weight: 700; color: #475569; text-align: right; }
           `}</style>
           <table className="attl">
+            {/* colgroup عرضها را صریح میدهد — چون ردیف اول thead یک colSpan است، بدون آن fixed layout
+                همهٔ ستونها را مساوی میکند و نام/کد به اندازهٔ ستون جلسه له میشود.
+                ستون جلسه shrink (=7mm) و نام بدون عرض ثابت = بقیهٔ فضای صفحه. */}
+            <colgroup>
+              <col style={{ width: '7mm' }} />
+              {photos && <col style={{ width: '12mm' }} />}
+              <col />
+              <col style={{ width: '26mm' }} />
+              {shownCols.map(c => <col key={c.key} style={{ width: '7mm' }} />)}
+              {extraCols > 0 && <col style={{ width: '7mm' }} />}
+              {photos && <col style={{ width: '18mm' }} />}
+            </colgroup>
             <thead>
               <tr><th colSpan={photos ? 4 + shownCols.length + (extraCols > 0 ? 1 : 0) + 1 : 3 + shownCols.length + (extraCols > 0 ? 1 : 0)} className="attl-headcell">{headerBox}</th></tr>
               <tr>
-                <th style={{ width: '7mm' }}>#</th>
-                {photos && <th style={{ width: '12mm' }}>عکس</th>}
+                <th>#</th>
+                {photos && <th>عکس</th>}
                 <th>نام و نام خانوادگی</th>
-                <th style={{ width: '22mm' }}>شماره دانشجویی</th>
+                <th>شماره دانشجویی</th>
                 {shownCols.map((c, i) => (
-                  <th key={c.key} style={{ width: '8mm' }}>
+                  <th key={c.key}>
                     {photos ? faDigits(String(c.sessionNo ?? i + 1)) : `ج${faDigits(String(c.sessionNo ?? i + 1))}`}
                     <br />
                     <span style={{ fontWeight: 700, fontSize: '6pt' }}>{faDigits(jalaliShort(c.sessionDate))}{c.isMakeUp ? '*' : ''}</span>
                   </th>
                 ))}
-                {extraCols > 0 && <th style={{ width: '8mm' }}>…</th>}
-                {photos && <th className="attl-sig">امضا</th>}
+                {extraCols > 0 && <th>…</th>}
+                {photos && <th>امضا</th>}
               </tr>
             </thead>
             <tbody>

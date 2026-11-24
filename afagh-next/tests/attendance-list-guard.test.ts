@@ -41,9 +41,10 @@ async function main(): Promise<void> {
   ok(/sp\.sort === 'code' \? 'code' : sp\.sort === 'row' \? 'row' : 'name'/.test(page), 'مرتب‌سازی نام خانوادگی/شماره دانشجویی/ثبت‌نام سمت سرور است');
   ok(/مرتب‌سازی/.test(controls) && /ترتیب ثبت‌نام/.test(controls), 'انتخابگر مرتب‌سازی در نوار کنترل است');
 
-  // ── متن نام/کد نشکند ──
-  ok(/\.attl-name \{[^}]*white-space: nowrap; overflow: hidden; \}/.test(page) && !/word-break/.test(page), 'ستون نام nowrap است و word-break ندارد');
-  ok(!/width: '34mm'/.test(page) && /width: '22mm'/.test(page), 'کد دانشجویی ۲۲mm و نام بدون عرض ثابت (فضای باقی‌مانده)');
+  // ── متن نام/کد نشکند ──  ok(/\.attl-name \{[^}]*white-space: nowrap; overflow: hidden; \}/.test(page) && !/word-break/.test(page), 'ستون نام nowrap است و word-break ندارد');
+  ok(/<colgroup>[\s\S]*?<col \/>/.test(page) && /width: '26mm'/.test(page), 'colgroup عرض صریح میدهد: نام بدون عرض ثابت (بقیهٔ فضا)، کد ۲۶mm');
+  ok(/shownCols\.map\(c => <col key=\{c\.key\} style=\{\{ width: '7mm' \}\} \/>\)/.test(page), 'ستون جلسه shrink به ۷mm شد تا نام/کد جا بگیرند');
+  ok(!/width: '22mm'/.test(page) && !/width: '8mm'/.test(page), 'عرضهای قدیمی ۲۲/۸mm حذف شدند');
 
   // ── ریست جستجو بعد از انتخاب ──
   ok(/setQ\(''\); setProf\(''\); setFaculty\(''\); setDept\(''\)/.test(controls), 'جستجو/فیلتر بعد از هر پیمایش ریست می‌شود');
