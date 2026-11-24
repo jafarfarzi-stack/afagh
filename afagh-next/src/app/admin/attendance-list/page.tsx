@@ -187,8 +187,8 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
           <input type="hidden" name="format" value={format} />
           <button type="submit" className="rounded-xl bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 transition">نمایش</button>
           <span className="flex overflow-hidden rounded-xl border border-slate-300 text-xs font-bold">
-            <Link href={buildHref('matrix')} className={`px-3 py-2 transition ${format === 'matrix' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}>قالب ماتریس جلسات</Link>
-            <Link href={buildHref('photos')} className={`px-3 py-2 transition ${format === 'photos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}>قالب همراه عکس</Link>
+            <Link href={buildHref('matrix')} prefetch={false} className={`px-3 py-2 transition ${format === 'matrix' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}>قالب ماتریس جلسات</Link>
+            <Link href={buildHref('photos')} prefetch={false} className={`px-3 py-2 transition ${format === 'photos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}>قالب همراه عکس</Link>
           </span>
         </form>
       </div>
