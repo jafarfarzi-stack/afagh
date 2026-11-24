@@ -65,8 +65,9 @@ export default function AttendanceControls({
     if (cid) params.set('cid', String(cid));
     if (newPhotos) params.set('photos', '1');
     if (newSort && newSort !== 'name') params.set('sort', newSort);
-    // جستجو/فیلتر بعد از هر پیمایش ریست می‌شود تا «لیست قبلی» باقی نماند
-    setQ(''); setProf(''); setFaculty(''); setDept('');
+    // فقط جستجوی کد/عنوان درس پاک میشود؛ فیلتر استاد/دانشکده/گروه میماند تا
+    // کاربر بتواند درس دیگری از همان استاد را هم انتخاب کند
+    setQ('');
     router.push(`/admin/attendance-list?${params.toString()}`);
   };
 

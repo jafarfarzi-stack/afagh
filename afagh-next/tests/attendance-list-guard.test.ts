@@ -47,7 +47,8 @@ async function main(): Promise<void> {
   ok(!/width: '22mm'/.test(page) && !/width: '8mm'/.test(page), 'عرضهای قدیمی ۲۲/۸mm حذف شدند');
 
   // ── ریست جستجو بعد از انتخاب ──
-  ok(/setQ\(''\); setProf\(''\); setFaculty\(''\); setDept\(''\)/.test(controls), 'جستجو/فیلتر بعد از هر پیمایش ریست می‌شود');
+  const goBody = /const go = \([^)]*\) => \{([\s\S]*?)\n  \};/.exec(controls)?.[1] ?? '';
+  ok(/setQ\(''\)/.test(goBody) && !/setProf\(''\)/.test(goBody) && !/setFaculty\(''\)/.test(goBody), 'انتخاب درس فقط جستجوی کد درس پاک میکند و فیلتر استاد/دانشکده/گروه باقی میماند');
 
   // ── اینتر = اولین نتیجه ──
   ok(/onKeyDown=.*Enter.*filtered\[0\]/s.test(controls.replace(/\n/g, ' ')) || (/onKeyDown/.test(controls) && /filtered\[0\]\.id/.test(controls)), 'اینتر در کادر جستجو اولین نتیجه را مستقیم باز می‌کند');
