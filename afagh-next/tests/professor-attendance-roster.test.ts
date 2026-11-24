@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-type RosterStudent = { id: number; studentCode: string; fullName: string };
+type RosterStudent = { id: number; studentCode: string; fullName: string; lastName?: string };
 type RosterAttendance = { status: 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE'; lateMinutes?: number; note?: string };
 type RosterStatusMap = { [studentId: number]: RosterAttendance };
 type RosterLogic = {
@@ -37,10 +37,10 @@ async function main(): Promise<void> {
   console.log('— pure roster logic loaded from ProfessorAttendanceClient source slice —');
 
   const students: RosterStudent[] = [
-    { id: 1, studentCode: '40123456', fullName: 'علی رضایی' },
-    { id: 2, studentCode: '40123457', fullName: 'مریم كریمی' },
-    { id: 3, studentCode: '40123460', fullName: 'حسین موسوی' },
-    { id: 4, studentCode: '40123410', fullName: 'زهرا احمدی' },
+    { id: 1, studentCode: '40123456', fullName: 'علی رضایی', lastName: 'رضایی' },
+    { id: 2, studentCode: '40123457', fullName: 'مریم كریمی', lastName: 'كریمی' },
+    { id: 3, studentCode: '40123460', fullName: 'حسین موسوی', lastName: 'موسوی' },
+    { id: 4, studentCode: '40123410', fullName: 'زهرا احمدی', lastName: 'احمدی' },
   ];
   const statuses: RosterStatusMap = {
     1: { status: 'PRESENT' },
@@ -80,8 +80,8 @@ async function main(): Promise<void> {
 
   console.log('— sortRoster —');
   const baseOrder = new Map(students.map((s, i): [number, number] => [s.id, i]));
-  assert.deepEqual(logic.sortRoster(students, statuses, 'NAME', 'ASC', baseOrder).map(s => s.id), [3, 4, 1, 2], 'مرتب‌سازی نام صعودی');
-  assert.deepEqual(logic.sortRoster(students, statuses, 'NAME', 'DESC', baseOrder).map(s => s.id), [2, 1, 4, 3], 'مرتب‌سازی نام نزولی');
+  assert.deepEqual(logic.sortRoster(students, statuses, 'NAME', 'ASC', baseOrder).map(s => s.id), [4, 1, 2, 3], 'مرتب‌سازی نام خانوادگی صعودی (احمدی، رضایی، كریمی، موسوی — ر قبل از ک)');
+  assert.deepEqual(logic.sortRoster(students, statuses, 'NAME', 'DESC', baseOrder).map(s => s.id), [3, 2, 1, 4], 'مرتب‌سازی نام خانوادگی نزولی');
   assert.deepEqual(logic.sortRoster(students, statuses, 'CODE', 'ASC', baseOrder).map(s => s.id), [4, 1, 2, 3], 'مرتب‌سازی کد به صورت عددی');
   assert.deepEqual(logic.sortRoster(students, statuses, 'CODE', 'DESC', baseOrder).map(s => s.id), [3, 2, 1, 4], 'مرتب‌سازی کد نزولی');
   assert.deepEqual(logic.sortRoster(students, statuses, 'STATUS', 'ASC', baseOrder).map(s => s.id), [1, 4, 2, 3], 'مرتب‌سازی وضعیت صعودی');

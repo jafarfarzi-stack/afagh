@@ -24,6 +24,8 @@ export interface StudentInfo {
   id: number;
   studentCode: string;
   fullName: string;
+  /** نام خانوادگی — کلید مرتب‌سازی «نام خانوادگی»؛ نبودش از واژهٔ دوم fullName گرفته می‌شود */
+  lastName?: string;
 }
 
 export interface StudentSessionAttendance {
@@ -169,7 +171,17 @@ export function sortRoster(
   };
   return [...students].sort((a, b) => {
     let c = 0;
-    if (sortKey === 'NAME') c = normalizeRosterText(a.fullName).localeCompare(normalizeRosterText(b.fullName), 'fa');
+    if (sortKey === 'NAME') {
+      // مرتب‌سازی بر اساس نام خانوادگی؛ در تساوی، نام کامل ملاک است
+      const lastNameOf = (s: StudentInfo) => {
+        const explicit = s.lastName?.trim();
+        if (explicit) return normalizeRosterText(explicit);
+        const tail = s.fullName.trim().replace(/^\S+\s*/, '');
+        return tail ? normalizeRosterText(tail) : normalizeRosterText(s.fullName);
+      };
+      c = lastNameOf(a).localeCompare(lastNameOf(b), 'fa')
+        || normalizeRosterText(a.fullName).localeCompare(normalizeRosterText(b.fullName), 'fa');
+    }
     else if (sortKey === 'CODE') c = normalizeRosterText(a.studentCode).localeCompare(normalizeRosterText(b.studentCode), 'fa', { numeric: true });
     else if (sortKey === 'STATUS') c = ranked(a.id) - ranked(b.id);
     else c = (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
@@ -1289,7 +1301,7 @@ export default function ProfessorAttendanceClient({
             className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
           >
             <option value="ROW">مرتب‌سازی: ردیف</option>
-            <option value="NAME">مرتب‌سازی: نام</option>
+            <option value="NAME">مرتب‌سازی: نام خانوادگی</option>
             <option value="CODE">مرتب‌سازی: شماره دانشجویی</option>
             <option value="STATUS">مرتب‌سازی: وضعیت</option>
           </select>

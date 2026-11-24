@@ -428,7 +428,7 @@ export function demoAttendanceOfferings(): AttendanceCourseOffering[] {
     { sessionNo: 3, sessionDate: '۱۴۰۵/۰۸/۰۹', startTime: '۰۸:۰۰', endTime: '۱۰:۰۰', roomName: 'کلاس ۳۰۲ (ویدیو پروژکتور)', topic: 'جلسهٔ ۳ — ساختمان داده‌ها و الگوریتم‌ها: درخت‌های AVL', isHeld: true, isMakeUp: false },
   ];
 
-  const studentInfo = DEMO_GRADE_STUDENTS.map(s => ({ id: s.studentId, studentCode: s.studentCode, fullName: s.fullName }));
+  const studentInfo = DEMO_GRADE_STUDENTS.map(s => ({ id: s.studentId, studentCode: s.studentCode, fullName: s.fullName, lastName: s.fullName.split(' ').slice(1).join(' ') }));
 
   const pick = (ids: number[]) =>
     ids.map(id => studentInfo.find(s => s.id === id)).filter((s): s is (typeof studentInfo)[number] => !!s);

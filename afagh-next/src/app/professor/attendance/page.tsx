@@ -228,7 +228,7 @@ export default async function ProfessorAttendancePage({ searchParams }: { search
       for (const e of enrollByOffering.get(m.offering.id) ?? []) {
         if (seenStudents.has(e.studentId)) continue;
         seenStudents.add(e.studentId);
-        studentsList.push({ id: e.studentId, studentCode: e.studentCode, fullName: `${e.firstName} ${e.lastName}`.trim() });
+        studentsList.push({ id: e.studentId, studentCode: e.studentCode, fullName: `${e.firstName} ${e.lastName}`.trim(), lastName: e.lastName });
       }
     }
 
