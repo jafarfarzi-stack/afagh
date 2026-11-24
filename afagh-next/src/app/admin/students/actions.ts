@@ -745,7 +745,7 @@ export async function createStaffExpertAction(input: {
   nationalCode: string; firstName: string; lastName: string;
   fatherName?: string; birthCertNo?: string; gender?: string; mobile?: string;
   email?: string; staffCode?: string; staffType?: string;
-}): Promise<{ ok: boolean; error?: string; userId?: number }> {
+}): Promise<{ ok: boolean; error?: string; userId?: number; reused?: boolean }> {
   try {
     await requireRole(['ADMIN']);
   } catch {
@@ -760,39 +760,66 @@ export async function createStaffExpertAction(input: {
   const uni = await getCurrentUniversity().catch(() => null);
   if (!uni) return { ok: false, error: 'دانشگاه فعال نامشخص است.' };
   try {
-    const dupNc = await db.select({ id: users.id }).from(users).where(and(eq(users.nationalCode, nc), or(eq(users.universityId, uni.id), isNull(users.universityId)))).limit(1);
-    if (dupNc.length) return { ok: false, error: 'کاربری با این کد ملی از قبل وجود دارد.' };
-    const dupSc = await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), or(eq(staff.universityId, uni.id), isNull(staff.universityId)))).limit(1);
-    if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
-    const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
-            const passwordHash = await hashPassword(tempPassword);
-    const [u] = await db.insert(users).values({
-      universityId: uni.id,
-      nationalCode: nc, firstName: fn, lastName: ln,
-      fatherName: String(input.fatherName || '').trim() || null,
-      birthCertNo: String(input.birthCertNo || '').trim() || null,
-      gender: String(input.gender || '').trim() || null,
-      mobile: String(input.mobile || '').trim() || null,
-      email: String(input.email || '').trim() || null,
-      passwordHash, isActive: 1, mustChangePassword: 1,
-    }).returning({ id: users.id });
-    await db.insert(staff).values({
-      universityId: uni.id,
-      userId: u.id, staffCode: sc,
-      staffType: String(input.staffType || '').trim() || 'اداری',
-    }).onConflictDoNothing();
+    const existingUser = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.nationalCode, nc), or(eq(users.universityId, uni.id), isNull(users.universityId))))
+      .limit(1);
+
+    let userId: number;
+    let reused = false;
+    if (existingUser.length) {
+      userId = existingUser[0].id;
+      reused = true;
+      // اگر قبلاً رکورد staff با همین کد پرسنلی برای شخص دیگری هست، خطا بده
+      const dupScOther = await db.select({ id: staff.id, userId: staff.userId }).from(staff)
+        .where(and(eq(staff.staffCode, sc), or(eq(staff.universityId, uni.id), isNull(staff.universityId))))
+        .limit(1);
+      if (dupScOther.length && dupScOther[0].userId !== userId) {
+        return { ok: false, error: 'کد پرسنلی تکراری است.' };
+      }
+      const existingStaff = await db.select({ id: staff.id }).from(staff)
+        .where(and(eq(staff.userId, userId), or(eq(staff.universityId, uni.id), isNull(staff.universityId))))
+        .limit(1);
+      if (!existingStaff.length) {
+        await db.insert(staff).values({
+          universityId: uni.id,
+          userId, staffCode: sc,
+          staffType: String(input.staffType || '').trim() || 'اداری',
+        }).onConflictDoNothing();
+      }
+    } else {
+      const dupSc = await db.select({ id: staff.id }).from(staff).where(and(eq(staff.staffCode, sc), or(eq(staff.universityId, uni.id), isNull(staff.universityId)))).limit(1);
+      if (dupSc.length) return { ok: false, error: 'کد پرسنلی تکراری است.' };
+      const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
+      const passwordHash = await hashPassword(tempPassword);
+      const [u] = await db.insert(users).values({
+        universityId: uni.id,
+        nationalCode: nc, firstName: fn, lastName: ln,
+        fatherName: String(input.fatherName || '').trim() || null,
+        birthCertNo: String(input.birthCertNo || '').trim() || null,
+        gender: String(input.gender || '').trim() || null,
+        mobile: String(input.mobile || '').trim() || null,
+        email: String(input.email || '').trim() || null,
+        passwordHash, isActive: 1, mustChangePassword: 1,
+      }).returning({ id: users.id });
+      userId = u.id;
+      await db.insert(staff).values({
+        universityId: uni.id,
+        userId, staffCode: sc,
+        staffType: String(input.staffType || '').trim() || 'اداری',
+      }).onConflictDoNothing();
+    }
     // اگر نوع سمت آموزشی است، همین‌جا نقش «استاد» را می‌دهیم تا بدون نقش نماند
     const stType = String(input.staffType || '').trim();
     if (stType.includes('هیئت') || stType.includes('مربی') || stType.includes('استاد')) {
       const [prof] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, 'PROFESSOR')).limit(1);
       if (prof) {
-        await db.insert(user_roles).values({ userId: u.id, roleId: prof.id }).onConflictDoNothing();
+        await db.insert(user_roles).values({ userId, roleId: prof.id }).onConflictDoNothing();
         clearPermissionCache();
       }
     }
     revalidatePath('/admin/students');
     revalidatePath('/admin/staff');
-    return { ok: true, userId: u.id };
+    return { ok: true, userId, reused };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : 'ثبت نشد.' };
   }

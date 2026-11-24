@@ -347,7 +347,9 @@ export default function StudentsManagerClient(props: {
         mobile: csf.mobile, email: csf.email, staffCode: csf.code, staffType: csf.type,
       });
       if (!r.ok) { setCreateStaffMsg(`⚠ ${r.error || 'ثبت نشد.'}`); return; }
-      setCreateStaffMsg('✅ حساب ساخته شد؛ نقش‌های کارشناس را می‌توانید از ستون «نقش‌ها» بدهید.');
+      setCreateStaffMsg(r.reused
+        ? '✅ این کد ملی از قبل در سامانه بود؛ رکورد استادی/کارمندی به همان کاربر متصل شد. نقش‌ها را از ستون «نقش‌ها» تنظیم کنید.'
+        : '✅ حساب ساخته شد؛ نقش‌های کارشناس را می‌توانید از ستون «نقش‌ها» بدهید.');
       setCsf({ nc: '', fn: '', ln: '', father: '', bcn: '', gender: '', mobile: '', email: '', code: '', type: '' });
       setCreateStaffOpen(false);
       router.refresh();

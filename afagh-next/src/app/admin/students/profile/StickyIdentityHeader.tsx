@@ -66,8 +66,8 @@ export default function StickyIdentityHeader({
   extraActions?: ReactNode;
 }) {
   return (
-    <div className="sticky top-[6.5rem] lg:top-[4.25rem] z-30 bg-white/95 backdrop-blur border-b print:hidden">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-slate-100/90 p-2 sm:p-3 rounded-t-lg">
+    <div className="sticky top-[6.5rem] lg:top-[4.25rem] z-30 bg-white/95 backdrop-blur border-b border-slate-200 dark:bg-slate-900/95 dark:border-slate-700 print:hidden">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-slate-100/90 p-2 sm:p-3 rounded-t-lg dark:bg-slate-800/90">
         <PersonPhoto
           userId={userId}
           hasPhoto={hasPhoto}
@@ -78,11 +78,11 @@ export default function StickyIdentityHeader({
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <b className="text-sm font-extrabold text-slate-900">{title || '—'}</b>
-            <span className="text-2xs font-bold text-slate-500">{codeLabel}:</span>
+            <b className="text-sm font-extrabold text-slate-900 dark:text-slate-100">{title || '—'}</b>
+            <span className="text-2xs font-bold text-slate-500 dark:text-slate-400">{codeLabel}:</span>
             <span
               dir="ltr"
-              className="rounded border border-slate-400 bg-yellow-200 px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-slate-950"
+              className="rounded border border-slate-400 bg-yellow-200 px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-slate-950 dark:border-amber-500/60 dark:bg-amber-300 dark:text-slate-950"
             >
               {faDigits(code || '—')}
             </span>
@@ -95,8 +95,8 @@ export default function StickyIdentityHeader({
           </div>
 
           {previousCodes.length > 0 && (
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-slate-600">
-              <span className="font-bold text-slate-700">🔁 شمارهٔ قبلی:</span>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-slate-600 dark:text-slate-300">
+              <span className="font-bold text-slate-700 dark:text-slate-200">شمارهٔ قبلی:</span>
               {previousCodes.map(p => (
                 <span key={`${p.code}-${p.entryYear}`} className="font-semibold">
                   <b dir="ltr" className="font-mono">{faDigits(p.code)}</b>
@@ -109,13 +109,13 @@ export default function StickyIdentityHeader({
         </div>
 
         <div className="mr-auto flex flex-wrap items-center gap-1.5">
-          {positionLabel && <span className="text-3xs font-bold text-slate-500">{positionLabel}</span>}
+          {positionLabel && <span className="text-3xs font-bold text-slate-500 dark:text-slate-400">{positionLabel}</span>}
           {onPrev && (
             <button
               type="button"
               onClick={onPrev}
               disabled={!canPrev}
-              className="rounded border border-slate-400 bg-white px-2 py-1 text-2xs font-bold hover:bg-slate-50 disabled:opacity-40"
+              className="rounded border border-slate-400 bg-white px-2 py-1 text-2xs font-bold hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               title="پروندهٔ قبلی"
             >
               قبلی ▶
@@ -126,7 +126,7 @@ export default function StickyIdentityHeader({
               type="button"
               onClick={onNext}
               disabled={!canNext}
-              className="rounded border border-slate-400 bg-white px-2 py-1 text-2xs font-bold hover:bg-slate-50 disabled:opacity-40"
+              className="rounded border border-slate-400 bg-white px-2 py-1 text-2xs font-bold hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               title="پروندهٔ بعدی"
             >
               ◀ بعدی
@@ -161,7 +161,7 @@ export default function StickyIdentityHeader({
                     type="button"
                     onClick={onCancel}
                     disabled={saving}
-                    className="rounded border border-slate-400 bg-white px-3 py-1.5 text-2xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="rounded border border-slate-400 bg-white px-3 py-1.5 text-2xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                     title="انصراف و بازگشت به مقادیر ذخیره‌شده"
                   >
                     ↩ انصراف
