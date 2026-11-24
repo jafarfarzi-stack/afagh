@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * نگهبان صفحهٔ «صدور لیست حضور و غیاب» (/admin/attendance-list):
- * گارد نقش/مجوز، چک‌باکس «عکسدار» (نه دو لینک قالب)، جستجوی درس/استاد + فیلتر دانشکده/گروه،
- * ادغام کلاس‌های ادغامی در یک لیست، ارم دانشگاه در سربرگ، عکس از مسیر امن PersonPhoto
- * و ثبت ماژول در رجیستری کارتابل ادمین.
+ * گارد نقش/مجوز، چک‌باکس «عکسدار»، برگهٔ خالی برای تک دستی (بدون تیک استاد)،
+ * سربرگ تکرارشو در همهٔ صفحات چاپ (thead)، جدول در عرض صفحه (بدون بریدگی از چپ)،
+ * مرتب‌سازی فهرست، ادغامی یک لیست، ارم دانشگاه، عکس امن، ثبت در رجیستری ادمین.
  */
 async function main(): Promise<void> {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,19 +24,33 @@ async function main(): Promise<void> {
 
   // ── چک‌باکس «عکسدار» — نه دو لینک قالب ──
   ok(/type="checkbox"/.test(controls) && /عکسدار/.test(controls), 'چک‌باکس عکسدار در نوار کنترل است');
-  ok(!/قالب ماتریس جلسات<\/Link>/.test(page) && !/<Link href=\{buildHref/.test(page), 'دو لینک قالب قدیمی حذف شده‌اند');
-  ok(/size: A4 \$\{photos \? 'portrait' : 'landscape'\}/.test(page), 'جهت کاغذ بر اساس تیک عکسدار انتخاب می‌شود');
+  ok(!/<Link href=\{buildHref/.test(page), 'لینک‌های قالب قدیمی حذف شده‌اند');
+
+  // ── برگهٔ خالی: تیک‌های استاد در چاپ ادمین نمی‌آید ──
+  ok(!/MARKS/.test(page) && !/student_class_attendance/.test(page), 'کوئری حضور/نشانه‌ها حذف شده — برگهٔ ادمین خالی است');
+  ok(!/✓|✗/.test(page), 'بدون نشانهٔ تیک/ضربدر در رندر');
+
+  // ── چاپ: A4 عمودی + سربرگ تکرارشو + بدون بریدگی ──
+  ok(/@page \{ size: A4 portrait; margin: 8mm; \}/.test(page), 'چاپ A4 عمودی است');
+  ok(/attl-headcell/.test(page) && /colSpan=\{/.test(page), 'سربرگ داخل thead است و در همهٔ صفحات تکرار می‌شود');
+  ok(/table-layout: fixed/.test(page) && /max-width: 100%/.test(page), 'جدول fixed و حداکثر عرض صفحه است');
+  ok(/MAX_MATRIX_SESSION_COLS = \d+/.test(page) && /MAX_PHOTO_SESSION_COLS = \d+/.test(page), 'سقف ستون جلسه تعریف شده');
+  ok(/extraCols/.test(page) && /با دست بنویسید/.test(page), 'جلسات سرریز با ستون «…» و یادداشت اعلام می‌شود');
+
+  // ── مرتب‌سازی فهرست ──
+  ok(/sp\.sort === 'code' \? 'code' : sp\.sort === 'row' \? 'row' : 'name'/.test(page), 'مرتب‌سازی نام خانوادگی/شماره دانشجویی/ثبت‌نام سمت سرور است');
+  ok(/مرتب‌سازی/.test(controls) && /ترتیب ثبت‌نام/.test(controls), 'انتخابگر مرتب‌سازی در نوار کنترل است');
+
+  // ── ریست جستجو بعد از انتخاب ──
+  ok(/setQ\(''\); setProf\(''\); setFaculty\(''\); setDept\(''\)/.test(controls), 'جستجو/فیلتر بعد از هر پیمایش ریست می‌شود');
 
   // ── جستجو و فیلتر ──
   ok(/normFa/.test(controls) && /جستجوی درس/.test(controls) && /استاد — کد یا نام/.test(controls), 'جستجوی درس و استاد (کد/نام) با نرمال‌سازی فارسی هست');
   ok(/همهٔ دانشکده‌ها/.test(controls) && /همهٔ گروه‌های آموزشی/.test(controls), 'فیلتر دانشکده و گروه آموزشی هست');
-  ok(/profCodes/.test(controls) && /profCodes/.test(page), 'جستجوی استاد با کد استاد هم کار می‌کند');
 
   // ── کلاس‌های ادغامی: یک لیست خروجی ──
   ok(/groupIntoMerged/.test(page) && /mergedGroupKey/.test(page) && /mergedDisplayTitle/.test(page), 'گروه‌بندی ادغامی با همان موتور کارتابل استاد است');
-  ok(/memberIds/.test(page) && /seenStudents/.test(page), 'دانشجویان همهٔ اعضا در یک فهرست ترکیبی می‌آیند');
-  ok(/sessionDedupKey/.test(page) && /keyBySessionId/.test(page), 'جلسات فیزیکی تکراری اعضای ادغامی یک ستون می‌شوند');
-  ok(/ادغامی ×/.test(page), 'نشانِ ادغامی در سربرگ/فهرست هست');
+  ok(/sessionDedupKey/.test(page) && /ادغامی ×/.test(page), 'جلسات تکراری اعضای ادغامی یکی می‌شود و نشان ادغامی هست');
 
   // ── ارم دانشگاه ──
   ok(/getReportPrintBrand/.test(page) && /universityLogoUrl/.test(page) && /attl-logo/.test(page), 'ارم دانشگاه در سربرگ چاپ هست');

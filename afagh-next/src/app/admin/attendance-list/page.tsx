@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   academic_terms, class_sessions, course_offerings, courses, departments, enrollments,
-  faculties, schedules, student_class_attendance, students, users,
+  faculties, schedules, students, users,
 } from '@/db/schema';
 import { requireRoleOrPermission } from '@/lib/permissions-enforcer';
 import { getCurrentUniversity } from '@/lib/university-scope';
@@ -18,10 +18,13 @@ export const dynamic = 'force-dynamic';
 /**
  * صدور لیست حضور و غیاب یک کلاس — از کارتابل مدیریت.
  *
+ *  · برگهٔ «خالی برای تکِ دستی» است — تیک‌های ثبت‌شدهٔ استاد اینجا نمی‌آید؛
+ *    علامت‌گذاری بعد از چاپ با دست انجام می‌شود.
  *  · کلاس‌های ادغامی (sharedScheduleGroupKey / برنامهٔ هفتگی مشترک) یک لیست مشترک می‌گیرند:
  *    یک سربرگ، فهرست ترکیبی دانشجویان همهٔ اعضا و ستون جلسات بدون تکرار.
- *  · دو قالب چاپ: ماتریس جلسات (پیش‌فرض) یا «عکسدار» (چک‌باکس در نوار کنترل).
- *  · جستجوی درس/استاد و فیلتر دانشکده/گروه آموزشی در نوار کنترل (کلاینت).
+ *  · دو قالب چاپ (هر دو A4 عمودی): ماتریس جلسات (پیش‌فرض) یا «عکسدار» (چک‌باکس در نوار کنترل).
+ *  · سربرگ سند داخل thead جدول است تا در همهٔ صفحات چاپ تکرار شود؛ سقف ستون جلسه
+ *    طوری حساب شده که جدول هرگز از عرض صفحه بیرون نزند (بریدگی از چپ = باگ قدیمی).
  *
  * این صفحه فقط می‌خواند؛ ثبتِ حضور همچنان کارِ استاد در کارتابل خودش است.
  * گارد نقش همان «کنترل حضور و غیاب کلاس‌ها» است تا دسترسی جدیدی باز نشود.
@@ -30,9 +33,9 @@ export const dynamic = 'force-dynamic';
 const ATT_ROLES = ['ADMIN', 'EDU_EXPERT', 'ATTENDANCE_CONTROLLER'] as const;
 const ATT_PERMISSION = ['edu:attendance_control'];
 
-/** نشانهٔ وضعیت حضور در چاپ — تک‌نویسه و کاغذدوست (سیاه‌وسفید) */
-const MARKS: { [k: string]: string } = { PRESENT: '✓', ABSENT: '✗', LATE: 'ت', EXCUSED: 'م' };
-const MAX_PHOTO_SESSION_COLS = 12;
+/** سقف ستون جلسه در هر قالب — با عرض ثابت ۸mm تا مجموع ستون‌ها از A4 عمودی بیرون نزند */
+const MAX_MATRIX_SESSION_COLS = 15;
+const MAX_PHOTO_SESSION_COLS = 11;
 
 /** کلید جلسهٔ فیزیکی — جلسات هم‌زمان اعضای کلاس ادغامی یکی می‌شوند */
 const sessionDedupKey = (s: { sessionDate: string; startTime: string; endTime: string; replacedSessionId: number | null; isMakeUpSession: number | null }) =>
@@ -57,11 +60,11 @@ type ClassGroup = {
   profCodes: string;
 };
 
-export default async function AttendanceListPage({ searchParams }: { searchParams?: Promise<{ term?: string; cid?: string; photos?: string }> }) {
+export default async function AttendanceListPage({ searchParams }: { searchParams?: Promise<{ term?: string; cid?: string; photos?: string; sort?: string }> }) {
   await requireRoleOrPermission([...ATT_ROLES], [...ATT_PERMISSION]);
   const uni = await getCurrentUniversity().catch(() => null);
   const universityId = uni?.id ?? null;
-  const sp: { term?: string; cid?: string; photos?: string } = (await searchParams) ?? {};
+  const sp: { term?: string; cid?: string; photos?: string; sort?: string } = (await searchParams) ?? {};
   const photos = sp.photos === '1';
   const brand = await getReportPrintBrand('attendance-list', universityId);
 
@@ -165,7 +168,7 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
     ? groups.find(g => g.primaryId === cidParam) ?? null
     : groups[0] ?? null;
 
-  // ── جلساتِ گروه (بدون تکرارِ جلسهٔ فیزیکی)، ثبت‌نامی‌ها و حضور اعضا ──
+  // ── جلساتِ گروه (بدون تکرارِ جلسهٔ فیزیکی) و ثبت‌نامی‌های اعضا ──
   const memberIds = chosen?.memberIds ?? [];
   const rawSessions = memberIds.length
     ? await db
@@ -183,10 +186,8 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
     || (a.sessionNo ?? 0) - (b.sessionNo ?? 0) || a.id - b.id);
   const seenKeys = new Set<string>();
   const columns: { key: string; sessionNo: number | null; sessionDate: string; isMakeUp: boolean }[] = [];
-  const keyBySessionId = new Map<number, string>();
   for (const s of rawSessions) {
     const k = sessionDedupKey(s);
-    keyBySessionId.set(s.id, k);
     if (seenKeys.has(k)) continue;
     seenKeys.add(k);
     columns.push({ key: k, sessionNo: s.sessionNo, sessionDate: s.sessionDate, isMakeUp: s.isMakeUpSession === 1 });
@@ -211,33 +212,24 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
         ))
     : [];
   const seenStudents = new Set<number>();
-  const roster = rosterRows.filter(r => {
+  const deduped = rosterRows.filter(r => {
     if (seenStudents.has(r.studentId)) return false;
     seenStudents.add(r.studentId);
     return true;
-  }).sort((a, b) =>
-    (a.lastName ?? '').trim().localeCompare((b.lastName ?? '').trim(), 'fa')
-    || `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim().localeCompare(`${b.firstName ?? ''} ${b.lastName ?? ''}`.trim(), 'fa'));
-
-  const sessionIds = [...keyBySessionId.keys()];
-  const attRows = sessionIds.length && roster.length
-    ? await db
-        .select({
-          sessionId: student_class_attendance.sessionId,
-          studentId: enrollments.studentId,
-          status: student_class_attendance.status,
-          lateMinutes: student_class_attendance.lateMinutes,
-        })
-        .from(student_class_attendance)
-        .innerJoin(enrollments, eq(enrollments.id, student_class_attendance.enrollmentId))
-        .where(inArray(student_class_attendance.sessionId, sessionIds))
-    : [];
-  const att = new Map<string, { status: string; lateMinutes: number | null }>();
-  for (const r of attRows) {
-    const k = keyBySessionId.get(r.sessionId);
-    if (!k) continue;
-    att.set(`${k}:${r.studentId}`, { status: r.status, lateMinutes: r.lateMinutes });
-  }
+  });
+  // مرتب‌سازی فهرست — مثل کارتابل استاد: نام خانوادگی (پیش‌فرض)، شماره دانشجویی، ترتیب ثبت‌نام
+  const sortKey: 'name' | 'code' | 'row' = sp.sort === 'code' ? 'code' : sp.sort === 'row' ? 'row' : 'name';
+  const normCode = (s: string) => (s ?? '')
+    .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+  const roster = [...deduped].sort((a, b) => {
+    if (sortKey === 'code') {
+      return normCode(a.studentCode).localeCompare(normCode(b.studentCode), 'fa', { numeric: true });
+    }
+    if (sortKey === 'row') return 0; // ترتیب ثبت‌نام = ترتیب خروجی کوئری (dedupe حفظ می‌کند)
+    return (a.lastName ?? '').trim().localeCompare((b.lastName ?? '').trim(), 'fa')
+      || `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim().localeCompare(`${b.firstName ?? ''} ${b.lastName ?? ''}`.trim(), 'fa');
+  });
 
   const pickerItems: PickerOffering[] = groups.map(g => ({
     id: g.primaryId,
@@ -250,10 +242,12 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
     profCodes: g.profCodes,
     mergedCount: g.memberIds.length,
   }));
-  const photoCols = columns.slice(0, MAX_PHOTO_SESSION_COLS);
+  const shownCols = columns.slice(0, photos ? MAX_PHOTO_SESSION_COLS : MAX_MATRIX_SESSION_COLS);
+  const extraCols = columns.length - shownCols.length;
   const todayJ = jalaliDateOf(new Date());
 
-  const sheetHeader = (
+  // سربرگ سند — داخل thead جدول می‌رود تا در همهٔ صفحات چاپ تکرار شود
+  const headerBox = (
     <div className="attl-head">
       <div className="flex items-center justify-center gap-3">
         {brand.universityLogoUrl ? (
@@ -297,6 +291,7 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
         selectedTerm={selectedTerm ?? null}
         selectedCid={chosen?.primaryId ?? null}
         photos={photos}
+        sortKey={sortKey}
       />
 
       {!selectedTerm || !chosen ? (
@@ -307,9 +302,20 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
         <div className="print-area">
           <style>{`
             @media print {
-              @page { size: A4 ${photos ? 'portrait' : 'landscape'}; margin: 8mm; }
+              @page { size: A4 portrait; margin: 8mm; }
             }
-            .attl-head { border: 1.5px solid #334155; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; text-align: center; }
+            table.attl { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; font-size: ${photos ? '8.5pt' : '8pt'}; }
+            table.attl th, table.attl td { border: 1px solid #64748b; padding: ${photos ? '3px 3px' : '2px 2px'}; text-align: center; vertical-align: middle; overflow: hidden; }
+            table.attl thead { display: table-header-group; }
+            table.attl tr { break-inside: avoid; page-break-inside: avoid; }
+            table.attl th { background: #f1f5f9; font-weight: 900; font-size: 7pt; line-height: 1.4; }
+            table.attl th.attl-headcell { background: #ffffff; border: 0; padding: 0 0 3px; }
+            .attl-name { text-align: right !important; font-weight: 700; overflow-wrap: break-word; word-break: break-word; }
+            .attl-code { direction: ltr; white-space: nowrap; overflow: hidden; }
+            .attl-photo { width: 9mm; height: 12mm; }
+            .attl-photo > div, .attl-photo > img { width: 9mm !important; height: 12mm !important; }
+            .attl-sig { width: 20mm; }
+            .attl-head { border: 1.5px solid #334155; border-radius: 6px; padding: 6px 10px; text-align: center; }
             .attl-logo { height: 14mm; width: 14mm; object-fit: contain; }
             .attl-logo-ph { display: inline-block; height: 12mm; width: 12mm; border: 1.5px dashed #94a3b8; border-radius: 4px; line-height: 12mm; font-size: 6.5pt; font-weight: 700; color: #94a3b8; }
             .attl-uni { font-weight: 900; font-size: 10.5pt; }
@@ -318,120 +324,56 @@ export default async function AttendanceListPage({ searchParams }: { searchParam
             .attl-badge { display: inline-block; margin: 0 3px; padding: 0 4px; border: 1px solid #b45309; border-radius: 3px; color: #b45309; font-size: 7pt; }
             .attl-meta2 { color: #475569; font-size: 8pt; }
             .attl-sep { padding: 0 4px; color: #94a3b8; }
-            table.attl { width: 100%; border-collapse: collapse; font-size: ${photos ? '8.5pt' : '7.5pt'}; }
-            table.attl th, table.attl td { border: 1px solid #64748b; padding: ${photos ? '3px 4px' : '2px 3px'}; text-align: center; vertical-align: middle; }
-            table.attl thead { display: table-header-group; }
-            table.attl tr { break-inside: avoid; page-break-inside: avoid; }
-            table.attl th { background: #f1f5f9; font-weight: 900; font-size: ${photos ? '8pt' : '7pt'}; line-height: 1.4; }
-            .attl-name { text-align: right !important; font-weight: 700; white-space: nowrap; }
-            .attl-code { direction: ltr; white-space: nowrap; }
-            .attl-photo { width: 9mm; height: 12mm; }
-            .attl-photo > div, .attl-photo > img { width: 9mm !important; height: 12mm !important; }
-            .attl-sig { width: 22mm; }
-            .attl-mk { font-size: 9pt; font-weight: 900; }
-            .attl-sign-row td { height: 14mm; border: 0; text-align: right; font-size: 9pt; font-weight: 700; }
-            .attl-legend { margin-top: 4px; font-size: 7.5pt; font-weight: 700; color: #475569; text-align: right; }
+            .attl-sign-row td { height: 14mm; border: 1px solid #64748b; text-align: right; font-size: 9pt; font-weight: 700; padding: 2px 4px; }
+            .attl-note { margin-top: 4px; font-size: 7.5pt; font-weight: 700; color: #475569; text-align: right; }
           `}</style>
-          {sheetHeader}
-
-          {!photos ? (
-            <>
-              <table className="attl">
-                <thead>
-                  <tr>
-                    <th style={{ width: '7mm' }}>#</th>
-                    <th style={{ width: '34mm' }}>نام و نام خانوادگی</th>
-                    <th style={{ width: '20mm' }}>شماره دانشجویی</th>
-                    {columns.map((c, i) => (
-                      <th key={c.key} style={{ minWidth: '11mm' }}>
-                        ج{faDigits(String(c.sessionNo ?? i + 1))}
-                        <br />
-                        <span style={{ fontWeight: 700, fontSize: '6.5pt' }}>{faDigits(jalaliShort(c.sessionDate))}{c.isMakeUp ? ' جبرانی' : ''}</span>
-                      </th>
-                    ))}
-                    <th style={{ width: '9mm' }}>حاضر</th>
-                    <th style={{ width: '9mm' }}>غایب</th>
-                    <th style={{ width: '9mm' }}>تأخیر</th>
-                    <th style={{ width: '9mm' }}>موجه</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((r, i) => {
-                    const counts = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 };
-                    for (const c of columns) {
-                      const cell = att.get(`${c.key}:${r.studentId}`);
-                      if (cell && counts[cell.status as keyof typeof counts] !== undefined) counts[cell.status as keyof typeof counts] += 1;
-                    }
-                    return (
-                      <tr key={r.studentId}>
-                        <td>{faDigits(String(i + 1))}</td>
-                        <td className="attl-name">{`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()}</td>
-                        <td className="attl-code">{r.studentCode}</td>
-                        {columns.map(c => {
-                          const cell = att.get(`${c.key}:${r.studentId}`);
-                          const mk = cell ? MARKS[cell.status] ?? '' : '';
-                          return (
-                            <td key={c.key}>
-                              {mk ? <span className="attl-mk">{mk}{cell?.status === 'LATE' && cell.lateMinutes ? <sup>{faDigits(String(cell.lateMinutes))}</sup> : null}</span> : '—'}
-                            </td>
-                          );
-                        })}
-                        <td>{faDigits(String(counts.PRESENT))}</td>
-                        <td>{faDigits(String(counts.ABSENT))}</td>
-                        <td>{faDigits(String(counts.LATE))}</td>
-                        <td>{faDigits(String(counts.EXCUSED))}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div className="attl-legend">نشانه‌ها: ✓ حاضر — ✗ غایب — ت تأخیر (بالانویس: دقیقه) — م موجه — «—» ثبت نشده{chosen.merged ? ' — لیست مشترک کلاس ادغامی' : ''}</div>
-            </>
-          ) : (
-            <>
-              <table className="attl">
-                <thead>
-                  <tr>
-                    <th style={{ width: '7mm' }}>#</th>
-                    <th style={{ width: '12mm' }}>عکس</th>
-                    <th style={{ width: '38mm' }}>نام و نام خانوادگی</th>
-                    <th style={{ width: '20mm' }}>شماره دانشجویی</th>
-                    {photoCols.map((c, i) => (
-                      <th key={c.key} style={{ minWidth: '9mm' }}>
-                        {faDigits(String(c.sessionNo ?? i + 1))}
-                        <br />
-                        <span style={{ fontWeight: 700, fontSize: '6.5pt' }}>{faDigits(jalaliShort(c.sessionDate))}</span>
-                      </th>
-                    ))}
-                    {columns.length > photoCols.length && (
-                      <th style={{ minWidth: '9mm' }}>… جلسات {faDigits(String(photoCols.length + 1))} به بعد</th>
-                    )}
-                    <th className="attl-sig">امضا</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((r, i) => (
-                    <tr key={r.studentId}>
-                      <td>{faDigits(String(i + 1))}</td>
-                      <td className="attl-photo">
-                        <PersonPhoto userId={r.userId} hasPhoto={!!r.photoKey} className="w-10 h-12" icon="👤" label="عکس" />
-                      </td>
-                      <td className="attl-name">{`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()}</td>
-                      <td className="attl-code">{r.studentCode}</td>
-                      {photoCols.map(c => <td key={c.key} />)}
-                      {columns.length > photoCols.length && <td />}
-                      <td />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {columns.length > photoCols.length && (
-                <div className="attl-legend">ستون‌های جلسه به حداکثر {faDigits(String(MAX_PHOTO_SESSION_COLS))} ستون محدود است؛ جلسات بعدی را از چاپ بدون تیک (ماتریس) بگیرید.</div>
-              )}
-            </>
-          )}
-
           <table className="attl">
+            <thead>
+              <tr><th colSpan={photos ? 4 + shownCols.length + (extraCols > 0 ? 1 : 0) + 1 : 3 + shownCols.length + (extraCols > 0 ? 1 : 0)} className="attl-headcell">{headerBox}</th></tr>
+              <tr>
+                <th style={{ width: '7mm' }}>#</th>
+                {photos && <th style={{ width: '12mm' }}>عکس</th>}
+                <th style={{ width: '34mm' }}>نام و نام خانوادگی</th>
+                <th style={{ width: '20mm' }}>شماره دانشجویی</th>
+                {shownCols.map((c, i) => (
+                  <th key={c.key} style={{ width: '8mm' }}>
+                    {photos ? faDigits(String(c.sessionNo ?? i + 1)) : `ج${faDigits(String(c.sessionNo ?? i + 1))}`}
+                    <br />
+                    <span style={{ fontWeight: 700, fontSize: '6pt' }}>{faDigits(jalaliShort(c.sessionDate))}{c.isMakeUp ? '*' : ''}</span>
+                  </th>
+                ))}
+                {extraCols > 0 && <th style={{ width: '8mm' }}>…</th>}
+                {photos && <th className="attl-sig">امضا</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((r, i) => (
+                <tr key={r.studentId}>
+                  <td>{faDigits(String(i + 1))}</td>
+                  {photos && (
+                    <td className="attl-photo">
+                      <PersonPhoto userId={r.userId} hasPhoto={!!r.photoKey} className="w-10 h-12" icon="👤" label="عکس" />
+                    </td>
+                  )}
+                  <td className="attl-name">{`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim()}</td>
+                  <td className="attl-code">{r.studentCode}</td>
+                  {shownCols.map(c => <td key={c.key} />)}
+                  {extraCols > 0 && <td />}
+                  {photos && <td />}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {extraCols > 0 && (
+            <div className="attl-note">
+              تعداد کل جلسات {faDigits(String(columns.length))} است و {faDigits(String(shownCols.length))} جلسهٔ نخست در جدول آمده؛
+              جلسات {faDigits(String(shownCols.length + 1))} به بعد را در ستون «…» با دست بنویسید{columns.some(c => c.isMakeUp) ? ' — ستارهٔ (*) یعنی جلسهٔ جبرانی' : ''}.
+            </div>
+          )}
+          {columns.some(c => c.isMakeUp) && extraCols <= 0 && (
+            <div className="attl-note">ستارهٔ (*) بالای شمارهٔ جلسه یعنی جلسهٔ جبرانی.</div>
+          )}
+          <table className="attl" style={{ marginTop: '4mm' }}>
             <tbody>
               <tr className="attl-sign-row">
                 <td style={{ width: '50%' }}>امضای استاد درس</td>

@@ -44,12 +44,14 @@ export default function AttendanceControls({
   selectedTerm,
   selectedCid,
   photos,
+  sortKey,
 }: {
   terms: PickerTerm[];
   offerings: PickerOffering[];
   selectedTerm: number | null;
   selectedCid: number | null;
   photos: boolean;
+  sortKey: 'name' | 'code' | 'row';
 }) {
   const router = useRouter();
   const [q, setQ] = useState('');
@@ -57,11 +59,14 @@ export default function AttendanceControls({
   const [faculty, setFaculty] = useState('');
   const [dept, setDept] = useState('');
 
-  const go = (cid: number | null, newPhotos: boolean, termId: number | null) => {
+  const go = (cid: number | null, newPhotos: boolean, termId: number | null, newSort: string) => {
     const params = new URLSearchParams();
     if (termId) params.set('term', String(termId));
     if (cid) params.set('cid', String(cid));
     if (newPhotos) params.set('photos', '1');
+    if (newSort && newSort !== 'name') params.set('sort', newSort);
+    // جستجو/فیلتر بعد از هر پیمایش ریست می‌شود تا «لیست قبلی» باقی نماند
+    setQ(''); setProf(''); setFaculty(''); setDept('');
     router.push(`/admin/attendance-list?${params.toString()}`);
   };
 
@@ -107,7 +112,7 @@ export default function AttendanceControls({
           نیمسال
           <select
             value={selectedTerm ?? ''}
-            onChange={e => go(selectedCid, photos, Number(e.target.value) || null)}
+            onChange={e => go(selectedCid, photos, Number(e.target.value) || null, sortKey)}
             className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
           >
             {terms.map(t => (
@@ -122,10 +127,22 @@ export default function AttendanceControls({
           <input
             type="checkbox"
             checked={photos}
-            onChange={e => go(selectedCid, e.target.checked, selectedTerm)}
+            onChange={e => go(selectedCid, e.target.checked, selectedTerm, sortKey)}
             className="h-4 w-4 accent-slate-900"
           />
           عکسدار
+        </label>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+          مرتب‌سازی
+          <select
+            value={sortKey}
+            onChange={e => go(selectedCid, photos, selectedTerm, e.target.value)}
+            className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+          >
+            <option value="name">نام خانوادگی</option>
+            <option value="code">شماره دانشجویی</option>
+            <option value="row">ترتیب ثبت‌نام</option>
+          </select>
         </label>
         {filtersActive && (
           <button
@@ -180,7 +197,7 @@ export default function AttendanceControls({
           <button
             key={o.id}
             type="button"
-            onClick={() => go(o.id, photos, selectedTerm)}
+            onClick={() => go(o.id, photos, selectedTerm, sortKey)}
             className={`block w-full text-right px-3 py-2 transition ${o.id === selectedCid ? 'bg-slate-900 text-white' : 'hover:bg-slate-50'}`}
           >
             <span className="flex flex-wrap items-center gap-2">
