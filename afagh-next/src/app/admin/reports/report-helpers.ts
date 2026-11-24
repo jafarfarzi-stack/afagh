@@ -296,7 +296,7 @@ export const ALL_REPORT_KINDS: string[] = [
   // گزارش‌های پرداختی/مالی هم‌ریخت با اسناد سما (r-finance)
   'total-payments', 'student-payments', 'term-payments', 'accounting-voucher', 'term-financial',
   // گزارش‌های مدیریتی تجمیعی شهریه (دانشکده/مقطع/رشته/ورودی)
-  'tuition-overview', 'tuition-faculty-detail', 'faculty-financial', 'major-financial',
+  'tuition-overview', 'tuition-faculty-detail', 'faculty-financial', 'major-financial', 'semester-financial',
   // فرمِ رسمیِ «گزارش تفصیلی مالی دانشجویان در نیمسال» (fqTrDaTe2)
   'semester-detail',
   // فرمِ رسمیِ «گزارش مالی نیمسال به تفکیک رشته تحصیلی و نیمسال ورود» (fqSumTa)

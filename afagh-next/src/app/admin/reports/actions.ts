@@ -66,6 +66,7 @@ const FINANCE_KINDS = new Set([
   'semester-detail',
   'semester-major-detail',
   'faculty-financial',
+  'semester-financial',
   'major-financial',
   // صورت‌های مالی کلان (r-finance-statements) — بدون این‌ها کارشناس مالی
   // این ۱۷ گزارش را در فهرست نمی‌دید و اجرای آن‌ها «دسترسی داده نشده» می‌داد.

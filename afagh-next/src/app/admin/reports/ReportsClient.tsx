@@ -103,7 +103,7 @@ const SUB: Record<string, string> = {
   'tuition-statement': 'شهریهٔ دانشجو', 'tuition-overview': 'شهریهٔ دانشجو',
   'tuition-faculty-detail': 'شهریهٔ دانشجو', 'semester-detail': 'شهریهٔ دانشجو',
   'semester-major-detail': 'شهریهٔ دانشجو', 'faculty-financial': 'شهریهٔ دانشجو',
-  'major-financial': 'شهریهٔ دانشجو', 'term-financial': 'شهریهٔ دانشجو',
+  'semester-financial': 'شهریهٔ دانشجو', 'major-financial': 'شهریهٔ دانشجو', 'term-financial': 'شهریهٔ دانشجو',
   'tuition-tariff': 'تعرفه', 'payroll-overview': 'حق‌التدریس',
   'bi-teaching-quality': 'کیفیت و امکانات', 'bi-facilities': 'کیفیت و امکانات',
   proposals: 'پروپوزال و دفاع', 'proposal-cap': 'پروپوزال و دفاع', defenses: 'پروپوزال و دفاع',
@@ -150,6 +150,10 @@ const DESC: Record<string, string> = {
   tuition: 'ریز تراکنش‌های شهریه',
   'tuition-statement': 'بدهی/تخفیف/پرداختی/مانده هر دانشجو',
   'tuition-overview': 'مانده + واحد و مساعده',
+  'semester-major-detail': 'گزارش مالی نیمسال به تفکیک رشته و نیمسال ورود — فرم رسمی fqSumTa.',
+  'faculty-financial': 'گزارش مالی تجمیعی به تفکیک دانشکده و ترم ورود — فرم رسمی fqTrDaTe.',
+  'semester-financial': 'گزارش مالی نیمسال به تفکیک نیمسال ورود — فرم رسمی fqTr.',
+  'major-financial': 'گزارش مالی تجمیعی به تفکیک مقطع و رشته.',
   'exam-entry-card': 'کارت ورود به جلسهٔ دانشجو',
   'transcript-card': 'کارنامهٔ تحصیلی',
   'graduation-dossiers': 'وضعیت پروندهٔ فراغت‌التحصیلی',
@@ -239,6 +243,7 @@ const CARDS: Card[] = [
   { kind: 'semester-detail', cat: 'finance-tuition', icon: '🧾', title: 'گزارش تفصیلی مالی دانشجویان در نیمسال', needsTerm: true },
   { kind: 'semester-major-detail', cat: 'finance-tuition', icon: '📐', title: 'گزارش مالی نیمسال (رشته × نیمسال ورود)', needsTerm: true },
   { kind: 'faculty-financial', cat: 'finance-tuition', icon: '🏢', title: 'گزارش مالی دانشکده‌ها', needsTerm: true },
+  { kind: 'semester-financial', cat: 'finance-tuition', icon: '🧮', title: 'گزارش مالی نیمسال (تجمیع ورودی‌ها)', needsTerm: true },
   { kind: 'major-financial', cat: 'finance-tuition', icon: '📚', title: 'گزارش مالی نیمسال (مقطع × رشته)', needsTerm: true },
   // ── گزارش‌های مالیِ کلان (r-finance-statements) ──
   // دسته‌هایی که در سیستم قدیم بود و در آفاق نبود: فروش، سود و زیان، ترازنامه،
@@ -256,7 +261,7 @@ const CARDS: Card[] = [
   { kind: 'legal-report', cat: 'finance-ops', icon: '⚖️', title: 'پرونده‌های حقوقی' },
   { kind: 'vat-report', cat: 'finance', icon: '🏷️', title: 'مالیات بر ارزش افزوده', needsTerm: true },
   { kind: 'general-ledger', cat: 'finance', icon: '📚', title: 'ریز دفتر کل', needsTerm: true },
-  { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'دفتر روزنامه (روزانه)', needsTerm: true },
+  { kind: 'daily-journal', cat: 'finance', icon: '📅', title: 'گزارش روزانهٔ مالی', needsTerm: true },
   { kind: 'inventory-report', cat: 'finance-ops', icon: '📦', title: 'موجودی کالا' },
   { kind: 'company-expenses', cat: 'finance', icon: '💸', title: 'هزینه‌های شرکت', needsTerm: true },
   { kind: 'allocation-report', cat: 'finance', icon: '🔀', title: 'تخصیص هزینه‌های مشترک', needsTerm: true },
@@ -592,10 +597,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
 
   return (
     <div className="space-y-4">
-      {/* زیرعنوان مرکز مالی */}
-      {scope === 'finance' && (
-        <p className="text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">مرکز گزارش‌های مالی</p>
-      )}
+
 
       {/* نوار دسته‌بندی (تب‌ها) — با شمارنده و تب «همه» */}
       {singleReport && (
@@ -732,6 +734,10 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                       // Exact SAMASOFT print shape uses a dedicated page.
                       if (c.kind === 'faculty-financial') {
                         router.push('/admin/finance/reports/faculty-financial');
+                        return;
+                      }
+                      if (c.kind === 'semester-financial') {
+                        router.push('/admin/finance/reports/semester-financial');
                         return;
                       }
                       router.push(`/admin/reports/${c.kind}${scope === 'finance' ? '?scope=finance' : ''}`);

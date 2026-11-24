@@ -6,6 +6,7 @@ import { CREDIT_LEDGER_TYPES, DEBT_LEDGER_TYPES, DISCOUNT_LEDGER_TYPES, PAID_LED
 import { escapeLikeChars } from '@/lib/persian-search';
 import { requireRole } from '@/lib/auth';
 import { faNum } from '@/lib/report-format';
+import { loadLegacyFinancial, sumTotals, withBalance } from '@/app/admin/finance/reports/legacy-financial';
 
 /**
  * عدد فارسی با جداکنندهٔ هزارگان — هم‌تراز با خروجی formatReportCell.
@@ -749,34 +750,8 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
     return r;
   }
 
-  // ── ۸) گزارش مالی دانشکده‌ها (دانشکده × ترم × سال ورودی) ──
-  if (kind === 'faculty-financial') {
-    const f8 = finBody();
-    const from = sql`FROM students s
-      JOIN users u ON u.id = s."userId"
-      LEFT JOIN majors m ON m.id = s."majorId"
-      LEFT JOIN faculties fc ON fc.id = m."facultyId"
-      LEFT JOIN degree_level_configs d ON d.id = s."degreeLevelId"
-      LEFT JOIN student_ledger sl ON sl."studentId" = s.id
-      ${f.term ? sql`JOIN academic_terms t ON t.id = sl."termId"` : sql`LEFT JOIN academic_terms t ON t.id = sl."termId"`}
-      ${f.term ? sql`AND t."termCode" = ${f.term}` : sql``}`;
-    const cols = sql`COALESCE(fc.name, '—') AS faculty, s."entryYear" AS y,
-      COALESCE(t."termCode", '—') AS term,
-      COUNT(DISTINCT s.id)::int AS students, ${f8.cols}`;
-    const r = await paged(
-      finCols([
-        { key: 'faculty', title: 'دانشکده' },
-        { key: 'term', title: 'ترم' },
-        { key: 'y', title: 'سال ورودی', format: 'YEAR' },
-        { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' },
-      ]),
-      from, [...studentWhere(f), uniCond], cols,
-      sql`ORDER BY COALESCE(fc.name, '—'), s."entryYear"`, f,
-      sql`fc.name, s."entryYear", t."termCode"`,
-    );
-    r.summary = `${faAmount(r.total)} ردیف (دانشکده × ورودی × ترم)${f.term ? ` — نیمسال ${f.term}` : ''}` + pagedNote(r);
-    return r;
-  }
+  // ── ۸) faculty-financial: فرم رسمی سما (fqTrDaTe) در صفحهٔ اختصاصی پیاده شده.
+  //     (src/app/admin/finance/reports/faculty-financial/page.tsx)
 
   // ── ۹) گزارش مالی نیمسال به تفکیک مقطع و رشته (و ورودی) ──
   if (kind === 'major-financial') return runQSumTa(f, false);
@@ -1008,7 +983,143 @@ export async function run(kind: string, f: ReportFilters): Promise<ReportResult 
   //  پایین = عنوانِ خطِ دوم) و همان گروه همان دو مقدار را نشان میدهد.
   //  همهٔ جمعها ترازند: جمع بدهکار − جمع بستانکار = ماندهِ هر گروه.
   // ══════════════════════════════════════════════════════════════════════
-  if (kind === 'semester-major-detail') return runQSumTa(f, true);
+  if (kind === 'semester-major-detail') {
+    if (!f.term || !f.universityId) {
+      return {
+        columns: [], rows: [], total: 0, page: 1, per: PER, totalPages: 1,
+        summary: !f.universityId
+          ? 'دانشگاه فعال مشخص نیست؛ ابتدا دانشگاه خود را انتخاب کنید.'
+          : 'برای این گزارش ابتدا یک نیمسال را در فیلترها انتخاب کنید.',
+      };
+    }
+
+    // fqSumTa / r1: ۱۱ ستون فیزیکی؛ بدون ستون ترکیبی «مانده/وضعیت».
+    const columns = [
+      { key: 'code', title: 'کد' },
+      { key: 'major', title: 'رشته' },
+      { key: 'entry', title: 'ورودی', format: 'YEAR' as const },
+      { key: 'students', title: 'تعداد دانشجو', format: 'NUMBER' as const },
+      { key: 'variable', title: 'شهریه متغیر', format: 'AMOUNT' as const, pair: 'p1', line: 'top' as const },
+      { key: 'fixed', title: 'شهریه ثابت', format: 'AMOUNT' as const, pair: 'p1', line: 'bottom' as const },
+      { key: 'discVar', title: 'تخفیفات متغیر', format: 'AMOUNT' as const, pair: 'p2', line: 'top' as const },
+      { key: 'discFixed', title: 'تخفیفات ثابت', format: 'AMOUNT' as const, pair: 'p2', line: 'bottom' as const },
+      { key: 'discAmount', title: 'تخفیفات مبلغی', format: 'AMOUNT' as const, pair: 'p3', line: 'top' as const },
+      { key: 'paid', title: 'پرداختیها', format: 'AMOUNT' as const, pair: 'p3', line: 'bottom' as const },
+      { key: 'loan', title: 'مساعده', format: 'AMOUNT' as const, pair: 'p4', line: 'top' as const },
+      { key: 'subject', title: 'مبالغ موضوعی', format: 'AMOUNT' as const, pair: 'p4', line: 'bottom' as const },
+      { key: 'debit', title: 'جمع بدهکار', format: 'AMOUNT' as const, pair: 'p5', line: 'top' as const },
+      { key: 'credit', title: 'جمع بستانکار', format: 'AMOUNT' as const, pair: 'p5', line: 'bottom' as const },
+      { key: 'debtBalance', title: 'مانده بدهکار', format: 'AMOUNT' as const },
+      { key: 'creditBalance', title: 'مانده بستانکار', format: 'AMOUNT' as const },
+    ];
+
+    const { rows: raw } = await loadLegacyFinancial({
+      termCode: String(f.term),
+      universityId: Number(f.universityId),
+    });
+
+    // تجمیع در سطح (دانشکدهٔ رشته × رشته × نیمسال ورود). باندِ دانشکده از رشتهٔ
+    // فعلی می‌آید تا با نام رشته هم‌خوان باشد (PDF سما همین ساختار را دارد).
+    type G = ReturnType<typeof withBalance> & {
+      majorFacultyId: number; majorFaculty: string;
+      majorCode: string; major: string; entryCode: string;
+    };
+    const map = new Map<string, G>();
+    for (const r of raw) {
+      const key = `${r.majorFacultyId}\x00${r.majorCode}\x00${r.entryCode}`;
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          majorFacultyId: r.majorFacultyId, majorFaculty: r.majorFaculty,
+          majorCode: r.majorCode, major: r.major, entryCode: r.entryCode,
+          students: 0, variable: 0, fixed: 0, discVar: 0, discFixed: 0,
+          discAmount: 0, paid: 0, loan: 0, subject: 0, debit: 0, credit: 0,
+          debtBalance: 0, creditBalance: 0,
+        };
+        map.set(key, g);
+      }
+      g.students += r.students; g.variable += r.variable; g.fixed += r.fixed;
+      g.discVar += r.discVar; g.discFixed += r.discFixed; g.discAmount += r.discAmount;
+      g.paid += r.paid; g.loan += r.loan; g.subject += r.subject;
+      g.debit += r.debit; g.credit += r.credit;
+    }
+    const gRows = Array.from(map.values()).map((g) => ({ ...g, ...withBalance(g) }));
+    gRows.sort((a, b) =>
+      a.majorFacultyId - b.majorFacultyId
+      || (Number(a.majorCode) || 0) - (Number(b.majorCode) || 0)
+      || (Number(a.entryCode) || 0) - (Number(b.entryCode) || 0)
+      || a.majorCode.localeCompare(b.majorCode),
+    );
+
+    const rows: ReportRow[] = [];
+    let curFacultyId = -1;
+    let curMajorCode = '';
+    let majorBucket: G[] = [];
+
+    const flushMajor = () => {
+      if (!majorBucket.length) return;
+      const sub = sumTotals(majorBucket);
+      rows.push({
+        __kind: 'subtotal', __label: 'جمع رشته', __labelCol: 'major',
+        code: '', major: 'جمع رشته', entry: '',
+        students: sub.students, variable: sub.variable, fixed: sub.fixed,
+        discVar: sub.discVar, discFixed: sub.discFixed, discAmount: sub.discAmount,
+        paid: sub.paid, loan: sub.loan, subject: sub.subject,
+        debit: sub.debit, credit: sub.credit,
+        debtBalance: sub.debtBalance, creditBalance: sub.creditBalance,
+      });
+    };
+
+    for (const g of gRows) {
+      if (g.majorFacultyId !== curFacultyId) {
+        flushMajor(); majorBucket = []; curMajorCode = '';
+        rows.push({ __kind: 'band', __label: `دانشکده\n${g.majorFaculty}` });
+        curFacultyId = g.majorFacultyId;
+      }
+      if (g.majorCode !== curMajorCode) {
+        flushMajor(); majorBucket = []; curMajorCode = g.majorCode;
+      }
+      rows.push({
+        code: g.majorCode,
+        major: g.major,
+        entry: g.entryCode,
+        students: g.students,
+        variable: g.variable, fixed: g.fixed,
+        discVar: g.discVar, discFixed: g.discFixed,
+        discAmount: g.discAmount, paid: g.paid,
+        loan: g.loan, subject: g.subject,
+        debit: g.debit, credit: g.credit,
+        debtBalance: g.debtBalance, creditBalance: g.creditBalance,
+      });
+      majorBucket.push(g);
+    }
+    flushMajor();
+
+    const grand = sumTotals(gRows);
+    const r2: ReportResult = {
+      columns,
+      rows,
+      total: gRows.length,
+      page: 1,
+      per: rows.length,
+      totalPages: 1,
+      totals: {
+        code: '', major: 'جمع کل', entry: '',
+        students: grand.students, variable: grand.variable, fixed: grand.fixed,
+        discVar: grand.discVar, discFixed: grand.discFixed, discAmount: grand.discAmount,
+        paid: grand.paid, loan: grand.loan, subject: grand.subject,
+        debit: grand.debit, credit: grand.credit,
+        debtBalance: grand.debtBalance, creditBalance: grand.creditBalance,
+      },
+      summary: '',
+    };
+    r2.summary = `${faAmount(gRows.length)} گروه (دانشکده × رشته × نیمسال ورود) — نیمسال ${faNum(String(f.term))}`
+      + ` · تعداد دانشجو ${faAmount(grand.students)}`
+      + ` · جمع بدهکار ${faAmount(grand.debit)}`
+      + ` · جمع بستانکار ${faAmount(grand.credit)}`
+      + pagedNote(r2);
+    return r2;
+  }
 
   return null;
 }
