@@ -44,6 +44,9 @@ async function main(): Promise<void> {
   // ── ریست جستجو بعد از انتخاب ──
   ok(/setQ\(''\); setProf\(''\); setFaculty\(''\); setDept\(''\)/.test(controls), 'جستجو/فیلتر بعد از هر پیمایش ریست می‌شود');
 
+  // ── اینتر = اولین نتیجه ──
+  ok(/onKeyDown=.*Enter.*filtered\[0\]/s.test(controls.replace(/\n/g, ' ')) || (/onKeyDown/.test(controls) && /filtered\[0\]\.id/.test(controls)), 'اینتر در کادر جستجو اولین نتیجه را مستقیم باز می‌کند');
+
   // ── جستجو و فیلتر ──
   ok(/normFa/.test(controls) && /جستجوی درس/.test(controls) && /استاد — کد یا نام/.test(controls), 'جستجوی درس و استاد (کد/نام) با نرمال‌سازی فارسی هست');
   ok(/همهٔ دانشکده‌ها/.test(controls) && /همهٔ گروه‌های آموزشی/.test(controls), 'فیلتر دانشکده و گروه آموزشی هست');

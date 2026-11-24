@@ -161,14 +161,23 @@ export default function AttendanceControls({
           type="search"
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="جستجوی درس — کد یا عنوان"
+          onKeyDown={e => {
+            // اینتر = مستقیم اولین نتیجهٔ جستجو باز می‌شود
+            if (e.key === 'Enter' && filtered.length > 0) { e.preventDefault(); go(filtered[0].id, photos, selectedTerm, sortKey); }
+          }}
+          placeholder="جستجوی درس — کد یا عنوان (اینتر = اولین نتیجه)"
+          title="با اینتر، اولین کلاسِ نتیجه مستقیم باز می‌شود"
           className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
         />
         <input
           type="search"
           value={prof}
           onChange={e => setProf(e.target.value)}
-          placeholder="استاد — کد یا نام"
+          onKeyDown={e => {
+            if (e.key === 'Enter' && filtered.length > 0) { e.preventDefault(); go(filtered[0].id, photos, selectedTerm, sortKey); }
+          }}
+          placeholder="استاد — کد یا نام (اینتر = اولین نتیجه)"
+          title="با اینتر، اولین کلاسِ نتیجه مستقیم باز می‌شود"
           className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
         />
         <select
