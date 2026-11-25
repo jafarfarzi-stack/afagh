@@ -55,6 +55,8 @@ interface RequestInboxItem {
   isBreached: boolean;
   formData: any;
   satisfactionScore?: number | null;
+  certificateNumber?: string | null;
+  digitalStampHash?: string | null;
   checkpoints: {
     id: number;
     departmentCode: string;
@@ -190,6 +192,7 @@ export default function AdminWorkflowsClient({
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detailReq, setDetailReq] = useState<RequestInboxItem | null>(null);
+  const [certReq, setCertReq] = useState<RequestInboxItem | null>(null);
 
   // دیالوگ اقدام روی پرونده
   const [decisionModal, setDecisionModal] = useState<{
@@ -1321,6 +1324,44 @@ export default function AdminWorkflowsClient({
               <span className="text-slate-500">نتیجه/وضعیت نهایی: </span>
               <b>{statusFa[detailReq.status] ?? detailReq.status}</b>
               {detailReq.satisfactionScore != null && <span className="ms-2 text-slate-500">امتیاز رضایت: <b>{detailReq.satisfactionScore}</b></span>}
+              {detailReq.processCode === 'ENROLLMENT_CERT' && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-slate-500">شماره گواهی:</span>
+                  <b className="font-mono" dir="ltr">{detailReq.certificateNumber || detailReq.trackingCode}</b>
+                  <button type="button" onClick={() => setCertReq(detailReq)} className="rounded-lg bg-emerald-700 px-3 py-1 text-2xs font-bold text-white hover:bg-emerald-800">مشاهده/چاپ گواهی</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {certReq && (
+        <Modal
+          open
+          onClose={() => setCertReq(null)}
+          title="گواهی اشتغال به تحصیل"
+          size="lg"
+          footer={(
+            <div className="ms-auto flex items-center gap-2">
+              <button onClick={() => window.print()} className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">چاپ</button>
+              <button onClick={() => setCertReq(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">بستن</button>
+            </div>
+          )}
+        >
+          <div className="space-y-3 text-sm text-slate-800 print:text-black">
+            <div className="rounded-xl border border-slate-200 p-4 bg-white">
+              <p className="text-center font-black text-base">گواهی اشتغال به تحصیل</p>
+              <p className="mt-3 leading-7">
+                گواهی می‌شود دانشجو <b>{certReq.studentName}</b> با شماره دانشجویی <b className="font-mono" dir="ltr">{certReq.studentCode}</b>
+                در این دانشگاه اشتغال به تحصیل دارد.
+              </p>
+              {certReq.formData?.recipientOrg && <p className="mt-2">جهت ارائه به: <b>{String(certReq.formData.recipientOrg)}</b></p>}
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                <div>کد رهگیری: <b className="font-mono" dir="ltr">{certReq.trackingCode}</b></div>
+                <div>شماره گواهی: <b className="font-mono" dir="ltr">{certReq.certificateNumber || certReq.trackingCode}</b></div>
+                <div className="col-span-2">هش مهر دیجیتال: <b className="font-mono break-all" dir="ltr">{certReq.digitalStampHash || '—'}</b></div>
+              </div>
             </div>
           </div>
         </Modal>

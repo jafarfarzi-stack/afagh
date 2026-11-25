@@ -100,6 +100,8 @@ export default async function AdminWorkflowsPage() {
       formData: student_requests.formData,
       currentStepId: student_requests.currentStepId,
       satisfactionScore: student_requests.satisfactionScore,
+      certificateNumber: student_requests.certificateNumber,
+      digitalStampHash: student_requests.digitalStampHash,
       // برای میان‌بر «مشاهدهٔ پروندهٔ مالی» در کارتابل (درخواست FINANCE_STATEMENT)
       studentId: student_requests.studentId,
       studentCode: students.studentCode,
@@ -190,6 +192,8 @@ export default async function AdminWorkflowsPage() {
       isBreached,
       formData: parsedForm,
       satisfactionScore: r.satisfactionScore,
+      certificateNumber: r.certificateNumber || null,
+      digitalStampHash: r.digitalStampHash || null,
       checkpoints: reqCheckpoints,
       logs: reqLogs,
     };
