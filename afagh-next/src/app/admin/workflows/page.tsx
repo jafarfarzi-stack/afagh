@@ -157,6 +157,22 @@ export default async function AdminWorkflowsPage() {
       notes: c.notes,
     }));
 
+    const reqLogs = allLogs
+      .filter((l) => l.requestId === r.id)
+      .sort((a, b) => (a.id || 0) - (b.id || 0))
+      .map((l) => {
+        const logStep = rawSteps.find((s) => s.id === l.stepId);
+        return {
+          id: l.id,
+          stepTitle: logStep?.title || `گام ${l.stepId}`,
+          actorRole: l.actorRole || '',
+          action: l.action || '',
+          notes: l.notes || '',
+          assignedAt: l.assignedAt ? l.assignedAt.toISOString() : null,
+          completedAt: l.completedAt ? l.completedAt.toISOString() : null,
+        };
+      });
+
     return {
       id: r.id,
       trackingCode: r.trackingCode,
@@ -175,6 +191,7 @@ export default async function AdminWorkflowsPage() {
       formData: parsedForm,
       satisfactionScore: r.satisfactionScore,
       checkpoints: reqCheckpoints,
+      logs: reqLogs,
     };
   });
 

@@ -62,6 +62,15 @@ interface RequestInboxItem {
     isCleared: number;
     notes?: string | null;
   }[];
+  logs: {
+    id: number;
+    stepTitle: string;
+    actorRole: string;
+    action: string;
+    notes: string;
+    assignedAt: string | null;
+    completedAt: string | null;
+  }[];
 }
 
 interface AnalyticsData {
@@ -180,6 +189,7 @@ export default function AdminWorkflowsClient({
   // پیام‌ها و لاگ‌ها
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [detailReq, setDetailReq] = useState<RequestInboxItem | null>(null);
 
   // دیالوگ اقدام روی پرونده
   const [decisionModal, setDecisionModal] = useState<{
@@ -554,68 +564,76 @@ export default function AdminWorkflowsClient({
                         </span>
                       </td>
                       <td className="p-3 text-left">
-                        {!isFinished ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() =>
-                                setDecisionModal({
-                                  requestId: req.id,
-                                  trackingCode: req.trackingCode,
-                                  studentName: req.studentName,
-                                  actionType: 'APPROVE',
-                                  note: '',
-                                })
-                              }
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs shadow transition"
-                            >
-                              ✓ تایید
-                            </button>
-                            <button
-                              onClick={() =>
-                                setDecisionModal({
-                                  requestId: req.id,
-                                  trackingCode: req.trackingCode,
-                                  studentName: req.studentName,
-                                  actionType: 'REJECT',
-                                  note: '',
-                                })
-                              }
-                              className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-2xs shadow transition"
-                            >
-                              ✗ رد
-                            </button>
-                            <button
-                              onClick={() =>
-                                setDecisionModal({
-                                  requestId: req.id,
-                                  trackingCode: req.trackingCode,
-                                  studentName: req.studentName,
-                                  actionType: 'RETURN',
-                                  note: '',
-                                })
-                              }
-                              className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-2xs transition"
-                            >
-                              اصلاح
-                            </button>
-                            <button
-                              onClick={() =>
-                                setDecisionModal({
-                                  requestId: req.id,
-                                  trackingCode: req.trackingCode,
-                                  studentName: req.studentName,
-                                  actionType: 'ESCALATE',
-                                  note: '',
-                                })
-                              }
-                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-2xs transition"
-                            >
-                              ارجاع
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 font-bold text-2xs">مختومه</span>
-                        )}
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setDetailReq(req)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold text-2xs transition"
+                          >
+                            جزئیات
+                          </button>
+                          {!isFinished ? (
+                            <>
+                              <button
+                                onClick={() =>
+                                  setDecisionModal({
+                                    requestId: req.id,
+                                    trackingCode: req.trackingCode,
+                                    studentName: req.studentName,
+                                    actionType: 'APPROVE',
+                                    note: '',
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs shadow transition"
+                              >
+                                ✓ تایید
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setDecisionModal({
+                                    requestId: req.id,
+                                    trackingCode: req.trackingCode,
+                                    studentName: req.studentName,
+                                    actionType: 'REJECT',
+                                    note: '',
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-2xs shadow transition"
+                              >
+                                ✗ رد
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setDecisionModal({
+                                    requestId: req.id,
+                                    trackingCode: req.trackingCode,
+                                    studentName: req.studentName,
+                                    actionType: 'RETURN',
+                                    note: '',
+                                  })
+                                }
+                                className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-2xs transition"
+                              >
+                                اصلاح
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setDecisionModal({
+                                    requestId: req.id,
+                                    trackingCode: req.trackingCode,
+                                    studentName: req.studentName,
+                                    actionType: 'ESCALATE',
+                                    note: '',
+                                  })
+                                }
+                                className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-2xs transition"
+                              >
+                                ارجاع
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 font-bold text-2xs">مختومه</span>
+                          )}
+                        </div>
 
                         {/* اگر چک‌پوینت موازی دارد */}
                         {hasParallel && (
@@ -1226,6 +1244,88 @@ export default function AdminWorkflowsClient({
       )}
 
       {/* دیالوگ اقدام تصمیم‌گیری */}
+      {detailReq && (
+        <Modal
+          open
+          onClose={() => setDetailReq(null)}
+          title={`جزئیات پرونده ${detailReq.trackingCode}`}
+          size="lg"
+          footer={(
+            <div className="ms-auto">
+              <button onClick={() => setDetailReq(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">بستن</button>
+            </div>
+          )}
+        >
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3">
+              <div><span className="text-slate-500">دانشجو:</span> <b>{detailReq.studentName}</b> <span className="font-mono text-slate-400" dir="ltr">{detailReq.studentCode}</span></div>
+              <div><span className="text-slate-500">فرآیند:</span> <b>{detailReq.processTitle}</b></div>
+              <div><span className="text-slate-500">وضعیت:</span> <span className={`px-2 py-0.5 rounded-full text-2xs font-bold border ${statusBadge[detailReq.status] || 'bg-slate-100'}`}>{statusFa[detailReq.status] ?? detailReq.status}</span></div>
+              <div><span className="text-slate-500">گام فعلی:</span> <b>{detailReq.currentStepTitle || '—'}</b></div>
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-black text-slate-800">فرم/اطلاعات درخواست</h3>
+              {detailReq.formData && Object.keys(detailReq.formData).length > 0 ? (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-right">
+                    <tbody>
+                      {Object.entries(detailReq.formData).map(([k, v]) => (
+                        <tr key={k} className="border-b border-slate-100 last:border-0">
+                          <td className="p-2 font-bold text-slate-600 bg-slate-50 w-40">{k}</td>
+                          <td className="p-2 text-slate-800 whitespace-pre-wrap break-words">{typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="text-slate-400">اطلاعات فرمی ثبت نشده است.</p>}
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-black text-slate-800">گام‌ها و یادداشت‌ها</h3>
+              {detailReq.logs.length > 0 ? (
+                <div className="space-y-2">
+                  {detailReq.logs.map((l) => (
+                    <div key={l.id} className="rounded-xl border border-slate-200 p-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <b className="text-slate-800">{l.stepTitle}</b>
+                        <span className="text-2xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{roleFa[l.actorRole] || l.actorRole || '—'}</span>
+                        <span className="text-2xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">{l.action || '—'}</span>
+                      </div>
+                      {l.notes && <p className="mt-1 text-slate-600 whitespace-pre-wrap">{l.notes}</p>}
+                      <p className="mt-1 text-3xs text-slate-400 font-mono" dir="ltr">
+                        {l.assignedAt ? `assign: ${new Date(l.assignedAt).toLocaleString('fa-IR')}` : ''}
+                        {l.completedAt ? ` · done: ${new Date(l.completedAt).toLocaleString('fa-IR')}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-slate-400">لاگی ثبت نشده است.</p>}
+            </div>
+
+            {detailReq.checkpoints.length > 0 && (
+              <div>
+                <h3 className="mb-2 font-black text-slate-800">تسویه‌های موازی</h3>
+                <div className="flex flex-wrap gap-2">
+                  {detailReq.checkpoints.map((cp) => (
+                    <span key={cp.id} className={`px-2 py-1 rounded-lg text-2xs font-bold border ${cp.isCleared ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+                      {cp.departmentTitle} — {cp.isCleared ? 'تسویه شده' : 'در انتظار'}{cp.notes ? ` (${cp.notes})` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <span className="text-slate-500">نتیجه/وضعیت نهایی: </span>
+              <b>{statusFa[detailReq.status] ?? detailReq.status}</b>
+              {detailReq.satisfactionScore != null && <span className="ms-2 text-slate-500">امتیاز رضایت: <b>{detailReq.satisfactionScore}</b></span>}
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {decisionModal && (
         <Modal
           open
