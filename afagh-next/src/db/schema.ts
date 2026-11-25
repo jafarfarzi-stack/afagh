@@ -971,6 +971,8 @@ export const academic_terms = pgTable('academic_terms', {
   classStartDate: timestamp('classStartDate'),
   classEndDate: timestamp('classEndDate'),
   gradeEntryDeadline: timestamp('gradeEntryDeadline'),
+  midtermGradeEntryStart: timestamp('midtermGradeEntryStart'),
+  midtermGradeEntryDeadline: timestamp('midtermGradeEntryDeadline'),
   // ── زمان‌بندی نیمسال از فایل سما (zamanbandi) ──
   singleDropStartDate: timestamp('singleDropStartDate'), // حذف تک‌درس از
   singleDropEndDate: timestamp('singleDropEndDate'),     // حذف تک‌درس تا
@@ -1061,6 +1063,7 @@ export const course_offerings = pgTable('course_offerings', {
   sharedScheduleGroupKey: varchar('sharedScheduleGroupKey', { length: 50 }),
   offeringType: varchar('offeringType', { length: 30 }).notNull().default('NORMAL'),
   customGradeDeadline: timestamp('customGradeDeadline'),
+  customMidtermGradeDeadline: timestamp('customMidtermGradeDeadline'),
   isActive: integer('isActive').notNull().default(1),
   gradesHash: text('gradesHash'),
   gradesTemporaryAt: timestamp('gradesTemporaryAt'),

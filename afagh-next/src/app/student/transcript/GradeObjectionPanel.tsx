@@ -10,6 +10,7 @@ export type ObjectionRow = {
   grade: number | null;
   gradeStatus: string | null;
   isFinalized: boolean;
+  canObjection?: boolean;
 };
 
 export type ObjectionTerm = {
@@ -78,9 +79,9 @@ export default function GradeObjectionPanel({
         <h3 className="font-extrabold text-sm">📑 کارنامه نیمسال و اعتراض به نمره</h3>
         <span className="text-2xs font-bold">
           {windowOpen ? (
-            <span className="text-emerald-200">پنجره اعتراض باز تا {jdate(deadline)}</span>
+            <span className="text-emerald-200">{deadline ? `پنجره اعتراض باز تا ${jdate(deadline)}` : 'بر اساس آیین‌نامه، برای برخی دروس باز است'}</span>
           ) : (
-            <span className="text-amber-200">پنجره اعتراض بسته است</span>
+            <span className="text-amber-200">در حال حاضر بازهٔ اعتراض فعالی وجود ندارد</span>
           )}
         </span>
       </div>
@@ -127,22 +128,24 @@ export default function GradeObjectionPanel({
                         {r.grade != null ? r.grade.toFixed(2) : '—'}
                       </td>
                       <td className="p-1.5 text-center">
-                        {badge ? (
-                          <span className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-full border ${badge.cls}`}>
-                            {badge.label}
-                          </span>
-                        ) : !r.isFinalized ? (
-                          <span className="text-3xs text-slate-400">نمره قطعی نشده</span>
-                        ) : !windowOpen ? (
-                          <span className="text-3xs text-slate-400">🔒 قفل</span>
-                        ) : (
-                          <button
-                            onClick={() => { setOpenId(r.enrollmentId); setDone(null); setError(null); setText(''); }}
-                            className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-3xs font-extrabold shadow"
-                          >
-                            اعتراض
-                          </button>
-                        )}
+                        {(() => {
+                          const canObj = r.canObjection ?? windowOpen;
+                          if (badge) return (
+                            <span className={`inline-block text-3xs font-bold px-2 py-0.5 rounded-full border ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          );
+                          if (!r.isFinalized) return <span className="text-3xs text-slate-400">نمره قطعی نشده</span>;
+                          if (!canObj) return <span className="text-3xs text-slate-400">خارج از بازه اعتراض</span>;
+                          return (
+                            <button
+                              onClick={() => { setOpenId(r.enrollmentId); setDone(null); setError(null); setText(''); }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-3xs font-extrabold shadow"
+                            >
+                              اعتراض
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

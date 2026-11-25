@@ -6,6 +6,7 @@ import { getStudentByUser, requireRole } from '@/lib/auth';
 import { calculateOfficialGPA, getRegulationConfig } from '@/lib/regulations-engine';
 import { maskNationalCode, issueTranscriptToken } from '@/lib/verification';
 import { getPublicBaseUrl, getSetting } from '@/lib/settings';
+import { objectionDeadlineFor } from '@/lib/compliance-integrations';
 import { qrSvg } from '@/lib/qr';
 import VerifyQrBlock from '@/components/VerifyQrBlock';
 import { isDemoStudentUser } from '@/lib/demo-accounts';
@@ -297,26 +298,39 @@ export default async function StudentTranscriptPage({
   for (const o of objectionExistingRows) {
     objectionExisting[o.enrollmentId] = { status: o.status, note: o.reviewerNote };
   }
-  const objectionDeadline = (await getSetting('GRADE_OBJECTION_DEADLINE').catch(() => '')) || null;
-  const objectionWindowOpen =
-    !!objectionDeadline &&
-    /^\d{4}-\d{2}-\d{2}$/.test(objectionDeadline) &&
-    new Date() <= new Date(objectionDeadline + 'T23:59:59');
-  const objectionTerms = academicYears
-    .flatMap(g => g.terms)
-    .map(t => ({
-      termTitle: t.title || `${t.normalized?.displayYear}/${t.normalized?.semester}`,
-      termCode: `${t.normalized?.displayYear ?? ''}/${t.normalized?.semester ?? ''}`,
-      isCurrent: t.isCurrent,
-      rows: t.rows.map(r => ({
-        enrollmentId: r.id,
-        code: r.code,
-        title: r.title,
-        grade: r.grade != null ? Number(r.grade) : null,
-        gradeStatus: r.gradeStatus,
-        isFinalized: r.gradeStatus === 'FINALIZED' || r.grade != null,
+  const announcedRows = objectionCourseIds.length
+    ? await db
+        .select({ id: enrollments.id, finalizedAt: course_offerings.gradesFinalizedAt })
+        .from(enrollments)
+        .leftJoin(course_offerings, eq(course_offerings.id, enrollments.offeringId))
+        .where(inArray(enrollments.id, objectionCourseIds))
+    : [];
+  const announcedAtByEnrollment = new Map(announcedRows.map((r) => [r.id, r.finalizedAt]));
+  const now = new Date();
+  const objectionTerms = await Promise.all(
+    academicYears
+      .flatMap(g => g.terms)
+      .map(async (t) => ({
+        termTitle: t.title || `${t.normalized?.displayYear}/${t.normalized?.semester}`,
+        termCode: `${t.normalized?.displayYear ?? ''}/${t.normalized?.semester ?? ''}`,
+        isCurrent: t.isCurrent,
+        rows: await Promise.all(t.rows.map(async (r) => {
+          const isFinalized = r.gradeStatus === 'FINALIZED' || r.grade != null;
+          const end = isFinalized ? await objectionDeadlineFor(me.id, announcedAtByEnrollment.get(r.id) ?? null).catch(() => null) : null;
+          return {
+            enrollmentId: r.id,
+            code: r.code,
+            title: r.title,
+            grade: r.grade != null ? Number(r.grade) : null,
+            gradeStatus: r.gradeStatus,
+            isFinalized,
+            canObjection: !!end && now <= end,
+          };
+        })),
       })),
-    }));
+  );
+  const objectionWindowOpen = objectionTerms.some((t) => t.rows.some((r) => r.canObjection));
+  const objectionDeadline = null;
 
   return (
     <div className="space-y-4">

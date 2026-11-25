@@ -757,6 +757,8 @@ export async function getTermRowAction(id: number): Promise<Record<string, strin
     addDropStartDate: dtRead(academic_terms.addDropStartDate),
     addDropEndDate: dtRead(academic_terms.addDropEndDate),
     gradeEntryDeadline: dtRead(academic_terms.gradeEntryDeadline),
+    midtermGradeEntryStart: dtRead(academic_terms.midtermGradeEntryStart),
+    midtermGradeEntryDeadline: dtRead(academic_terms.midtermGradeEntryDeadline),
     appealWindowDays: academic_terms.appealWindowDays,
     professorAppealSlaDays: academic_terms.professorAppealSlaDays,
     isCurrent: academic_terms.isCurrent,
@@ -783,6 +785,8 @@ export async function getTermRowAction(id: number): Promise<Record<string, strin
     addDropStartDate: r.addDropStartDate ?? '',
     addDropEndDate: r.addDropEndDate ?? '',
     gradeEntryDeadline: r.gradeEntryDeadline ?? '',
+    midtermGradeEntryStart: r.midtermGradeEntryStart ?? '',
+    midtermGradeEntryDeadline: r.midtermGradeEntryDeadline ?? '',
     appealWindowDays: r.appealWindowDays != null ? String(r.appealWindowDays) : '3',
     professorAppealSlaDays: r.professorAppealSlaDays != null ? String(r.professorAppealSlaDays) : '5',
     isCurrent: r.isCurrent === 1 ? '1' : '0',
@@ -838,7 +842,7 @@ export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; 
 
   // زمان‌بندی‌های datetime-local: خالی = null
   const DT_FIELDS = ['startDate', 'endDate', 'enrollmentStartDate', 'enrollmentEndDate',
-    'addDropStartDate', 'addDropEndDate', 'gradeEntryDeadline'] as const;
+    'addDropStartDate', 'addDropEndDate', 'gradeEntryDeadline', 'midtermGradeEntryStart', 'midtermGradeEntryDeadline'] as const;
   const vals: Record<string, string | null> = {};
   for (const f of DT_FIELDS) {
     const v = str(fd, f);
@@ -921,6 +925,8 @@ export async function updateTermRowAction(fd: FormData): Promise<{ ok: boolean; 
       addDropStartDate: dtWrite(vals.addDropStartDate),
       addDropEndDate: dtWrite(vals.addDropEndDate),
       gradeEntryDeadline: dtWrite(vals.gradeEntryDeadline),
+      midtermGradeEntryStart: dtWrite(vals.midtermGradeEntryStart),
+      midtermGradeEntryDeadline: dtWrite(vals.midtermGradeEntryDeadline),
       appealWindowDays: appeal,
       professorAppealSlaDays: sla,
       isCurrent: isCur,

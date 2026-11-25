@@ -27,7 +27,7 @@ import {
 } from '@/db/schema';
 import { getStaffByUser, isDemoMode, requireRole } from '@/lib/auth';
 import { globalCompliance } from '@/lib/compliance-integrations';
-import { assertGradeDeadline } from '@/lib/grades/finalize-lock';
+import { assertGradeDeadline, assertMidtermGradeWindow } from '@/lib/grades/finalize-lock';
 import { legacyOtpDigest, newOtpCode, otpDigest, otpEqual } from '@/lib/otp';
 import { rateLimit } from '@/lib/rateLimit';
 import { notifyUserMultichannel, sendSms } from '@/lib/messaging';
@@ -207,6 +207,10 @@ export async function saveGradeAction(
     // 🔒 مهلت ثبت نمره (مهلت اختصاصی ارائه یا مهلت ترم — مقایسه در SQL)
     const deadline = await assertGradeDeadline(payload.offeringId);
     if (!deadline.ok) return invalid(deadline.error!);
+    if (payload.field === 'midtermScore') {
+      const midtermWindow = await assertMidtermGradeWindow(payload.offeringId);
+      if (!midtermWindow.ok) return invalid(midtermWindow.error!);
+    }
 
     // 🔒 قفل نهایی: پس از finalize هیچ ویرایشی از این مسیر مجاز نیست.
     // بازگشایی فقط توسط مدیر انجام می‌شود (قلاب آینده: اکشن unfinalize مخصوص ADMIN که

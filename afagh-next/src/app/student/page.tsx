@@ -18,6 +18,7 @@ import {
 import { isDemoStudentUser } from '@/lib/demo-accounts';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import PanelHero from '@/components/PanelHero';
+import Icon from '@/components/ui/Icon';
 import Link from 'next/link';
 import { DemoDashboard } from './demo-sections';
 
@@ -118,9 +119,9 @@ export default async function StudentDashboardPage() {
           صفحهٔ اولِ کارتابل دانشجو هم‌تراز سه کارتابل دیگر باشد. */}
       <PanelHero
         tone="emerald"
-        icon="🎓"
+        icon={<Icon emoji="🎓" className="h-7 w-7" />}
         eyebrow="کارتابل دانشجو"
-        title={`سلام ${user.name.split(' ')[0]} 👋`}
+        title={`سلام ${user.name.split(' ')[0]}`}
         subtitle={
           term?.title
             ? `نیمسال ${term.title} — درس‌ها، وضعیت مالی و خدمات آموزشی شما یک‌جا`
@@ -187,8 +188,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-lime-50/50 border border-slate-200 hover:border-lime-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                🖨️
+              <div className="w-10 h-10 rounded-2xl bg-lime-100 text-lime-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="🖨️" className="h-5 w-5" />
               </div>
             </div>
             <div className="mt-3">
@@ -250,8 +251,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-amber-50/50 border border-slate-200 hover:border-amber-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                📅
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="📅" className="h-5 w-5" />
               </div>
               <span className="hidden sm:inline-flex text-3xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
                 تقویم شمسی
@@ -272,8 +273,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-purple-50/50 border border-slate-200 hover:border-purple-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                📋
+              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="📋" className="h-5 w-5" />
               </div>
               <span className="hidden sm:inline-flex text-3xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">
                 سجاد BPM
@@ -316,8 +317,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-400 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                📁
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="📁" className="h-5 w-5" />
               </div>
               <span className="hidden sm:inline-flex text-3xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full font-bold">
                 بایگانی

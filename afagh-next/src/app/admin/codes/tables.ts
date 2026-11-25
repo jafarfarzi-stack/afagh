@@ -201,6 +201,8 @@ export const EDIT_FIELDS: Partial<Record<CodeTable, NewField[]>> = {
     { name: 'addDropStartDate', label: 'شروع حذف و اضافه', kind: 'date' },
     { name: 'addDropEndDate', label: 'پایان حذف و اضافه', kind: 'date' },
     { name: 'gradeEntryDeadline', label: 'مهلت ثبت نمره', kind: 'date' },
+    { name: 'midtermGradeEntryStart', label: 'شروع ثبت نمره میان‌ترم', kind: 'date', hint: 'اختیاری؛ در صورت تنظیم، ویرایش نمره میان‌ترم فقط در این بازه مجاز است' },
+    { name: 'midtermGradeEntryDeadline', label: 'مهلت ثبت نمره میان‌ترم', kind: 'date', hint: 'اختیاری؛ زمان‌بندی دستی مخصوص میان‌ترم' },
     { name: 'examStartDate', label: 'شروع امتحانات', kind: 'jdate', hint: 'شمسی: 1404/01/15 — پنجرهٔ کل امتحانات (بازهٔ عمومی/تخصصی در ماژول امتحانات)' },
     { name: 'examEndDate', label: 'پایان امتحانات', kind: 'jdate' },
     { name: 'appealWindowDays', label: 'مهلت اعتراض دانشجو (روز)', kind: 'number', def: '3' },

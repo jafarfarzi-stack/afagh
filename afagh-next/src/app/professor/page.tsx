@@ -21,6 +21,7 @@ import { getStaffByUser, requireRole } from '@/lib/auth';
 import VirtualClassroomWidget from '@/components/VirtualClassroomWidget';
 import MessengerOnboardBanner from '@/components/MessengerOnboardBanner';
 import PanelHero from '@/components/PanelHero';
+import Icon from '@/components/ui/Icon';
 import { getTodayLiveClasses, hasVirtualClassroomSetup } from '@/lib/moodle-bbb';
 import { professorTermFilter } from '@/lib/professor-term-filter';
 import {
@@ -237,9 +238,9 @@ export default async function ProfessorHome() {
           href="/professor/schedule"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            🗓️
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="🗓️" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">برنامه هفتگی</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -252,9 +253,9 @@ export default async function ProfessorHome() {
           href="/professor/virtual-classes"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-sky-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📡
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📡" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">کلاس آنلاین</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -266,9 +267,9 @@ export default async function ProfessorHome() {
         <Link prefetch={false}
           href="/professor/attendance"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 hover:shadow-md transition space-y-2 group"
-        >          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📋
-          </div>
+        >          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📋" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">حضور و غیاب</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -281,9 +282,9 @@ export default async function ProfessorHome() {
           href="/professor/grades"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-purple-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📝
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📝" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">ثبت نمرات</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -296,9 +297,9 @@ export default async function ProfessorHome() {
           href="/professor/thesis"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-rose-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            🔬
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="🔬" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">پایان‌نامه‌های من</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -311,9 +312,9 @@ export default async function ProfessorHome() {
           href="/professor/contract"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-amber-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📑
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📑" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">قرارداد و مالی</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -326,9 +327,9 @@ export default async function ProfessorHome() {
           href="/professor/availability"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-teal-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            ⏰
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="⏰" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">ساعات حضور</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -341,9 +342,9 @@ export default async function ProfessorHome() {
           href="/professor/performance"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-sky-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📊
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📊" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">عملکرد</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -356,9 +357,9 @@ export default async function ProfessorHome() {
           href="/professor/evaluation"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-rose-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📈
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📈" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">ارزشیابی</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -371,9 +372,9 @@ export default async function ProfessorHome() {
           href="/professor/broadcast"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📣
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📣" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">پیام به کلاس</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -386,9 +387,9 @@ export default async function ProfessorHome() {
           href="/professor/documents"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📄
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📄" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">اسناد و امضا</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">
@@ -401,9 +402,9 @@ export default async function ProfessorHome() {
           href="/help/professor"
           className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-400 hover:shadow-md transition space-y-2 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg group-hover:scale-110 transition">
-            📖
-          </div>
+          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold group-hover:scale-110 transition">
+              <Icon emoji="📖" className="h-5 w-5" />
+            </div>
           <div>
             <h3 className="font-extrabold text-2xs sm:text-sm text-slate-900 leading-tight">راهنما</h3>
             <p className="hidden sm:block text-2xs text-slate-500 mt-0.5 leading-4">

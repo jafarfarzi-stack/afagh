@@ -1,8 +1,10 @@
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { course_offerings, enrollments, grade_unfinalize_requests } from '@/db/schema';
+import { course_offerings, enrollments, exam_sessions, grade_unfinalize_requests, schedules } from '@/db/schema';
+import { getSetting } from '@/lib/settings';
+import { examDateToGregorian, normalizeExamDate } from '@/lib/shamsi';
 
 /**
  * ══════════════════════════════════════════════════════════════════════
@@ -107,6 +109,75 @@ function isExemptGradeWindowCourse(courseNature: string | null | undefined, offe
  * و معرفی به استاد (از نحوه ارائه درس در ترم: DIRECTED_READING). این دروس هم فقط در
  * بازهٔ زمان‌بندی خودشان باز هستند؛ معمولاً از `customGradeDeadline` استفاده می‌کنند.
  */
+function addDays(d: Date, days: number) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+async function getExamGradeWindow(offeringId: number): Promise<{ open: Date; close: Date } | null> {
+  const [sched] = await db
+    .select({ examDate: schedules.examDate })
+    .from(schedules)
+    .where(and(eq(schedules.offeringId, offeringId), eq(schedules.scheduleType, 'EXAM')))
+    .orderBy(asc(schedules.examDate))
+    .limit(1);
+
+  let examDateRaw: unknown = sched?.examDate;
+  if (!examDateRaw) {
+    const [exam] = await db
+      .select({ examDate: exam_sessions.examDate })
+      .from(exam_sessions)
+      .innerJoin(schedules, and(eq(schedules.offeringId, offeringId), eq(schedules.scheduleType, 'EXAM')))
+      .limit(1);
+    examDateRaw = exam?.examDate;
+  }
+
+  const normalized = normalizeExamDate(examDateRaw);
+  if (!normalized) return null;
+  try {
+    const examDay = examDateToGregorian(normalized);
+    examDay.setHours(0, 0, 0, 0);
+    const daysRaw = await getSetting('EXAM_GRADE_DEADLINE_DAYS');
+    const days = Math.max(1, Number(daysRaw || '5') || 5);
+    const close = addDays(examDay, days);
+    close.setHours(23, 59, 59, 999);
+    return { open: examDay, close };
+  } catch {
+    return null;
+  }
+}
+
+export async function assertMidtermGradeWindow(offeringId: number): Promise<FinalizedWriteGate> {
+  const res = await db.execute(sql`
+    SELECT
+      o."customMidtermGradeDeadline" AS "offCustom",
+      t."midtermGradeEntryStart" AS "termStart",
+      t."midtermGradeEntryDeadline" AS "termDeadline"
+      FROM course_offerings o
+      JOIN academic_terms t ON t.id = o."termId"
+     WHERE o.id = ${offeringId}
+     LIMIT 1`);
+  const row = res.rows[0] as { offCustom: string | Date | null; termStart: string | Date | null; termDeadline: string | Date | null } | undefined;
+  if (!row) return { ok: false, allowed: false, error: 'ارائهٔ درس یافت نشد.' };
+
+  const deadline = row.offCustom ?? row.termDeadline;
+  const start = row.offCustom ? null : row.termStart;
+  const configured = !!(row.offCustom || row.termStart || row.termDeadline);
+  if (!configured) return { ok: true, allowed: true };
+
+  const now = new Date();
+  if (start && now < new Date(start)) {
+    return { ok: false, allowed: false, error: 'بازهٔ ثبت نمرهٔ میان‌ترم هنوز شروع نشده است.' };
+  }
+  if (deadline && now > new Date(deadline)) {
+    return { ok: false, allowed: false, error: 'مهلت ثبت نمرهٔ میان‌ترم به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.' };
+  }
+  if (!deadline && start && now >= new Date(start)) return { ok: true, allowed: true };
+  if (deadline && now <= new Date(deadline)) return { ok: true, allowed: true };
+  return { ok: true, allowed: true };
+}
+
 export async function assertGradeDeadline(offeringId: number): Promise<FinalizedWriteGate> {
   const res = await db.execute(sql`
     SELECT
@@ -131,19 +202,44 @@ export async function assertGradeDeadline(offeringId: number): Promise<Finalized
   // ارائه/ترم یافت نشد ⇒ بستنِ مسیر (fail closed)
   if (!row) return { ok: false, allowed: false, error: 'ارائهٔ درس یافت نشد.' };
 
-  if (!row.allowed) {
-    const exempt = isExemptGradeWindowCourse(row.courseNature, row.offeringType);
+  if (row.allowed) return { ok: true, allowed: true };
+
+  // مهلت صریح تنظیم شده ولی گذشته
+  if (row.deadline) {
     return {
       ok: false,
       allowed: false,
-      error: row.deadline
-        ? 'مهلت ثبت نمرهٔ این درس به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.'
-        : exempt
-          ? 'برای این درس (کارآموزی/پایان‌نامه/معرفی به استاد) بازهٔ زمان‌بندی ثبت نمره تعیین نشده است؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.'
-          : 'بازهٔ زمان‌بندی ثبت نمره برای این ترم/درس فعال نیست؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.',
+      error: 'مهلت ثبت نمرهٔ این درس به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.',
     };
   }
-  return { ok: true, allowed: true };
+
+  // بدون مهلت صریح: طبق آیین‌نامه، اگر درس امتحان دارد از تاریخ اولین امتحان تا مهلت قانونی باز است.
+  const examWindow = await getExamGradeWindow(offeringId);
+  if (examWindow) {
+    const now = new Date();
+    if (now >= examWindow.open && now <= examWindow.close) return { ok: true, allowed: true };
+    if (now < examWindow.open) {
+      return {
+        ok: false,
+        allowed: false,
+        error: 'ثبت نمره از تاریخ اولین امتحان این درس باز می‌شود (مطابق آیین‌نامه).',
+      };
+    }
+    return {
+      ok: false,
+      allowed: false,
+      error: 'مهلت قانونی ثبت نمره پس از امتحان به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.',
+    };
+  }
+
+  const exempt = isExemptGradeWindowCourse(row.courseNature, row.offeringType);
+  return {
+    ok: false,
+    allowed: false,
+    error: exempt
+      ? 'برای این درس (کارآموزی/پایان‌نامه/معرفی به استاد) بازهٔ زمان‌بندی ثبت نمره تعیین نشده است؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.'
+      : 'بازهٔ زمان‌بندی ثبت نمره برای این ترم/درس فعال نیست؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.',
+  };
 }
 
 /**
