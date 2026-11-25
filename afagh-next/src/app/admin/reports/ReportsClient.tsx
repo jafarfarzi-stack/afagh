@@ -497,11 +497,16 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
    * میکنند (انتخاب کارت فقط انتخاب است و اجرا با دکمهٔ صریح است).
    * تک اجرا با useRef گارد میشود تا تغییر فیلترها دوباره اجرا نکند.
    */
-  const autoStarted = useRef(false);
+  const autoStartedFor = useRef<string>('');
   useEffect(() => {
-    if (!initialAuto || !initialKind || autoStarted.current) return;
+    if (!initialKind) return;
+    setKind(initialKind);
+  }, [initialKind]);
+  useEffect(() => {
+    if (!initialAuto || !initialKind) return;
     if (!term || !universityId) return;
-    autoStarted.current = true;
+    if (autoStartedFor.current === initialKind) return;
+    autoStartedFor.current = initialKind;
     void run(1, initialKind);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAuto, initialKind, term, universityId]);
