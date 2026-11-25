@@ -4,6 +4,7 @@ import { getFilterOptions, allowedReportKinds } from '@/app/admin/reports/action
 import { ALL_REPORT_KINDS } from '@/app/admin/reports/report-helpers';
 import { getCurrentUniversity } from '@/lib/university-scope';
 import ReportsClient from '@/app/admin/reports/ReportsClient';
+import Icon from '@/components/ui/Icon';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,10 +20,10 @@ const TOOLS = [
 ] as const;
 
 const AUDIT_REPORTS = [
-  { href: '/admin/reports/semester-major-detail?scope=finance&auto=1', title: 'گزارش مالی دانشکده و رشته', desc: 'تجمیع به تفکیک رشته و نیمسال ورود' },
-  { href: '/admin/finance/reports/faculty-financial', title: 'گزارش مالی دانشکده‌ها', desc: 'تجمیع به تفکیک دانشکده و ترم ورود' },
-  { href: '/admin/reports/semester-detail?scope=finance&auto=1', title: 'گزارش تفصیلی دانشجویان نیمسال', desc: 'ریز مالی هر دانشجو در نیمسال' },
-  { href: '/admin/finance/reports/semester-financial', title: 'گزارش مالی نیمسال', desc: 'تجمیع به تفکیک نیمسال ورود' },
+  { href: '/admin/reports/semester-major-detail?scope=finance&auto=1', title: 'گزارش مالی دانشکده و رشته', desc: 'تجمیع به تفکیک رشته و نیمسال ورود', icon: '📊' },
+  { href: '/admin/finance/reports/faculty-financial', title: 'گزارش مالی دانشکده‌ها', desc: 'تجمیع به تفکیک دانشکده و ترم ورود', icon: '🏛️' },
+  { href: '/admin/reports/semester-detail?scope=finance&auto=1', title: 'گزارش تفصیلی دانشجویان نیمسال', desc: 'ریز مالی هر دانشجو در نیمسال', icon: '📋' },
+  { href: '/admin/finance/reports/semester-financial', title: 'گزارش مالی نیمسال', desc: 'تجمیع به تفکیک نیمسال ورود', icon: '🗓️' },
 ] as const;
 
 export default async function AdminFinanceReportsPage(props: {
@@ -70,10 +71,16 @@ export default async function AdminFinanceReportsPage(props: {
               prefetch={false}
               key={r.href}
               href={r.href}
-              className="group rounded-xl border border-slate-200 bg-slate-50/40 px-4 py-3 transition hover:border-emerald-400 hover:bg-white hover:shadow-sm dark:border-slate-700 dark:bg-slate-800/60 dark:hover:border-emerald-500 dark:hover:bg-slate-800"
+              className="group relative flex flex-col justify-between gap-2 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 text-start shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-emerald-500/60"
             >
-              <div className="text-[13px] font-black text-slate-800 group-hover:text-emerald-800 dark:text-slate-100 dark:group-hover:text-emerald-300">{r.title}</div>
-              <div className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">{r.desc}</div>
+              <span aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-emerald-500 opacity-0 transition-opacity group-hover:opacity-100" />
+              <span className="flex items-start gap-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 text-emerald-700 ring-1 ring-inset ring-emerald-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,.6)] dark:text-emerald-300">
+                  <Icon emoji={r.icon} className="h-5 w-5" />
+                </span>
+                <span className="line-clamp-2 min-w-0 text-[13px] font-extrabold leading-snug text-slate-800 dark:text-slate-100">{r.title}</span>
+              </span>
+              <span className="line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500 dark:text-slate-400">{r.desc}</span>
             </Link>
           ))}
         </div>

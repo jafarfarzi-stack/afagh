@@ -181,25 +181,24 @@ export default async function AdminHome({
               key={g.group.key}
               href={`/admin/c/${g.group.key}`}
               prefetch={false}
-              className="group relative flex h-full items-start gap-3 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg sm:p-4"
+              className="group relative flex h-full flex-col justify-between gap-2 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 text-start shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 sm:p-4"
             >
-              {/* نوارِ رنگیِ بالای کارت — فقط در hover ظاهر می‌شود؛ نشانهٔ «قابل کلیک» */}
-              <span
-                aria-hidden
-                className="absolute inset-x-0 top-0 h-0.5 origin-right scale-x-0 bg-gradient-to-l from-indigo-500 via-violet-500 to-fuchsia-500 transition-transform duration-200 group-hover:scale-x-100"
-              />
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-sm transition-transform group-hover:scale-105 [&>svg]:h-5 [&>svg]:w-5">
-                {g.group.icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[12px] font-extrabold leading-tight text-slate-800 sm:text-sm">{g.group.title}</h3>
-                {/* توضیح دسته فقط از sm به بالا — در موبایل کارت را بی‌دلیل بلند می‌کرد */}
-                <p className="mt-1 hidden text-2xs leading-5 text-slate-500 sm:block">{g.group.desc}</p>
-                <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-3xs font-black text-indigo-700">
+              <span aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-indigo-500 opacity-0 transition-opacity group-hover:opacity-100" />
+              <span className="flex items-start gap-2 sm:gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white ring-1 ring-inset ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25)] transition-transform group-hover:scale-[1.03] [&>svg]:h-4 [&>svg]:w-4 sm:h-10 sm:w-10">
+                  {g.group.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="line-clamp-2 text-[13px] font-extrabold leading-snug text-slate-800 sm:text-sm">{g.group.title}</span>
+                  <span className="mt-1 hidden line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500 sm:block">{g.group.desc}</span>
+                </span>
+              </span>
+              <span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-3xs font-bold text-slate-700 ring-1 ring-inset ring-slate-200/70">
                   {g.modules.length.toLocaleString('fa-IR')} ماژول
                   <span aria-hidden className="transition-transform group-hover:-translate-x-0.5">←</span>
                 </span>
-              </div>
+              </span>
             </Link>
           ))}
         </div>

@@ -67,19 +67,27 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
           <Link
             key={m.href}
             href={m.href}
-            title={m.title}
+            title={m.desc ? `${m.title} — ${m.desc}` : m.title}
             prefetch={false}
-            className="group flex min-h-[104px] flex-col items-center justify-start gap-2 rounded-2xl border border-slate-200 bg-white px-2 py-3 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+            className="group relative flex min-h-[96px] flex-col justify-between gap-2 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-3 text-start shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2"
           >
-            <div
-              aria-hidden
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-gradient-to-br ${m.accent} text-lg text-white shadow-sm transition-transform group-hover:scale-105`}
-            >
-              {m.icon}
-            </div>
-            <h3 className="line-clamp-3 text-2xs font-extrabold leading-tight text-slate-800 sm:text-xs">
-              {m.title}
-            </h3>
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-indigo-500 opacity-0 transition-opacity group-hover:opacity-100" />
+            <span className="flex items-start gap-2">
+              <span
+                aria-hidden
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${m.accent} text-base text-white ring-1 ring-inset ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25)] transition-transform group-hover:scale-[1.03]`}
+              >
+                {m.icon}
+              </span>
+              <span className="line-clamp-2 min-w-0 text-[13px] font-extrabold leading-snug text-slate-800">
+                {m.title}
+              </span>
+            </span>
+            {m.desc ? (
+              <span className="line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500">
+                {m.desc}
+              </span>
+            ) : null}
           </Link>
         );
 
