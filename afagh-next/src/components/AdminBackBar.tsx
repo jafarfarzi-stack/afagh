@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { resolveBackTarget } from '@/lib/admin-back';
 import { BACK_BTN_CLASS, BACK_HOME_CLASS } from '@/lib/back-button';
 
@@ -29,7 +29,15 @@ export default function AdminBackBar({
   homeHref?: string;
   homeLabel?: string;
 }) {
-  const target = resolveBackTarget(usePathname(), modules, homeHref, homeLabel);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  let target = resolveBackTarget(pathname, modules, homeHref, homeLabel);
+  // صفحات تک‌گزارش زیر /admin/reports/[id] وقتی با scope=finance باز می‌شوند
+  // باید به مرکز گزارش‌های مالی برگردند، نه مرکز گزارش‌های آموزشی.
+  if (pathname?.startsWith('/admin/reports/') && searchParams.get('scope') === 'finance') {
+    const fin = modules.find((m) => m.href === '/admin/finance/reports');
+    target = { href: '/admin/finance/reports', title: fin?.title ?? 'مرکز گزارش‌های مالی', isHome: false };
+  }
   // روی خودِ داشبورد، «بازگشت به داشبورد» معنا ندارد
   if (!target) return null;
 
