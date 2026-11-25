@@ -88,6 +88,9 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
   const draftOf = (r: BoardRow) => drafts[r.auditId] ?? emptyDraft(r);
   const setDraft = (auditId: number, patch: Partial<Draft>) =>
     setDrafts(prev => ({ ...prev, [auditId]: { ...(prev[auditId] ?? emptyDraft()), ...patch } }));
+  const poolStaffOptions = board.staffOptions.filter(
+    (s) => !poolForm.departmentCode || s.departmentCode === poolForm.departmentCode,
+  );
 
   const run = (fn: () => Promise<ActionResult>, okText: string) =>
     start(async () => {
@@ -239,7 +242,19 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
               <div className="grid sm:grid-cols-2 gap-2">
                 <label className="block">
                   <span className="text-2xs font-bold text-slate-700">دپارتمان / گروه آموزشی</span>
-                  <select value={poolForm.departmentCode} onChange={e => setPoolForm(f => ({ ...f, departmentCode: e.target.value }))}
+                  <select value={poolForm.departmentCode} onChange={e => {
+                    const departmentCode = e.target.value;
+                    const allowed = new Set(
+                      board.staffOptions.filter((s) => !departmentCode || s.departmentCode === departmentCode).map((s) => String(s.id)),
+                    );
+                    setPoolForm(f => ({
+                      ...f,
+                      departmentCode,
+                      chairId: f.chairId && allowed.has(f.chairId) ? f.chairId : '',
+                      internalIds: f.internalIds.filter((id) => allowed.has(id)),
+                      externalIds: f.externalIds.filter((id) => allowed.has(id)),
+                    }));
+                  }}
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white">
                     <option value="">انتخاب کنید</option>
                     {board.departments.map(d => <option key={d.code} value={d.code}>{d.name} ({d.code})</option>)}
@@ -258,7 +273,7 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
                   <select value={poolForm.chairId} onChange={e => setPoolForm(f => ({ ...f, chairId: e.target.value }))}
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs bg-white">
                     <option value="">—</option>
-                    {board.staffOptions.map(s => <option key={s.id} value={s.id}>{s.name}{s.rank ? ` — ${s.rank}` : ''}</option>)}
+                    {poolStaffOptions.map(s => <option key={s.id} value={s.id}>{s.name}{s.rank ? ` — ${s.rank}` : ''}</option>)}
                   </select>
                 </label>
                 <label className="block">
@@ -270,9 +285,9 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
                   </select>
                 </label>
               </div>
-              <MultiSelect label="داوران داخلی (چند انتخاب)" options={board.staffOptions} value={poolForm.internalIds}
+              <MultiSelect label="داوران داخلی (چند انتخاب)" options={poolStaffOptions} value={poolForm.internalIds}
                 onChange={v => setPoolForm(f => ({ ...f, internalIds: v }))} />
-              <MultiSelect label="داوران خارجی (چند انتخاب)" options={board.staffOptions} value={poolForm.externalIds}
+              <MultiSelect label="داوران خارجی (چند انتخاب)" options={poolStaffOptions} value={poolForm.externalIds}
                 onChange={v => setPoolForm(f => ({ ...f, externalIds: v }))} />
               <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
                 <input type="checkbox" checked={poolForm.isActive}

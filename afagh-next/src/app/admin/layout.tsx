@@ -193,6 +193,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <div aria-hidden className="w-14 shrink-0 lg:hidden" />
             {/* هویت: ارم + آواتار + عنوان */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              {curUni.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={curUni.logoUrl} alt="نشان دانشگاه" className="w-9 h-9 rounded-xl bg-white object-contain p-0.5 shadow-inner shrink-0" />
+              ) : (
+                <div className={`w-9 h-9 shrink-0 rounded-xl ${th.badge} flex items-center justify-center font-bold text-sm shadow-inner`}>
+                  {curUni.title.slice(0, 1)}
+                </div>
+              )}
               <UserAvatar userId={user.id} hasPhoto={!!photoRow?.photoKey} name={user.name} className="w-9 h-9 shrink-0" fallbackClass="bg-indigo-600" />
               <div className="min-w-0">
                 <Link href="/admin" prefetch={false} title="بازگشت به صفحه اول (داشبورد)" className="block hover:opacity-90 transition-opacity">

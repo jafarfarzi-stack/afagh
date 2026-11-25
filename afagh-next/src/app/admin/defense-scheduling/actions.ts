@@ -114,7 +114,7 @@ export type Board = {
   groups: { status: string; rows: BoardRow[] }[];
   pools: PoolRow[];
   rooms: { id: number; name: string; capacity: number }[];
-  staffOptions: { id: number; name: string; rank: string }[];
+  staffOptions: { id: number; name: string; rank: string; departmentCode: string | null }[];
   majors: { id: number; name: string }[];
   departments: { code: string; name: string }[];
   currentUserId: number;
@@ -180,7 +180,7 @@ async function loadBoard(): Promise<Board> {
     .orderBy(desc(thesis_progress.updatedAt));
 
   const staffRows = await db
-    .select({ id: staff.id, userId: staff.userId, firstName: users.firstName, lastName: users.lastName, rank: staff.academicRank, type: staff.staffType })
+    .select({ id: staff.id, userId: staff.userId, firstName: users.firstName, lastName: users.lastName, rank: staff.academicRank, type: staff.staffType, departmentId: staff.departmentId, isActive: staff.isActive })
     .from(staff)
     .innerJoin(users, eq(users.id, staff.userId))
     .where(scopeOf(staff.universityId))
@@ -215,8 +215,9 @@ async function loadBoard(): Promise<Board> {
     isActive: p.isActive === 1,
   }));
 
-  const deptRows = await db.select({ code: departments.departmentCode, name: departments.name })
+  const deptRows = await db.select({ id: departments.id, code: departments.departmentCode, name: departments.name })
     .from(departments).where(scopeOf(departments.universityId)).orderBy(asc(departments.name));
+  const deptCodeById = new Map(deptRows.map((d) => [d.id, d.code]));
 
   const tpIds = tpRows.map(r => r.thesisProgressId);
   const sessions = tpIds.length
@@ -295,7 +296,16 @@ async function loadBoard(): Promise<Board> {
     groups,
     pools: canManage ? pools : [],
     rooms: canManage ? roomRows.map(r => ({ id: r.id, name: r.name, capacity: r.capacity })) : [],
-    staffOptions: canManage ? staffRows.map(s => ({ id: s.id, name: `${s.firstName} ${s.lastName}`, rank: s.rank ?? s.type ?? '' })) : [],
+    staffOptions: canManage
+      ? staffRows
+          .filter((s) => s.isActive === 1)
+          .map((s) => ({
+            id: s.id,
+            name: `${s.firstName} ${s.lastName}`,
+            rank: s.rank ?? s.type ?? '',
+            departmentCode: s.departmentId == null ? null : (deptCodeById.get(s.departmentId) ?? null),
+          }))
+      : [],
     majors: canManage ? majorRows.map(m => ({ id: m.id, name: m.name })) : [],
     departments: canManage ? deptRows.filter(d => d.code).map(d => ({ code: d.code as string, name: d.name })) : [],
     currentUserId: user.id,
