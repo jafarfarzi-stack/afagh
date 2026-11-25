@@ -77,36 +77,70 @@ export async function assertGradeWriteAllowed(
   return { ok: true, allowed: true };
 }
 
+const EXEMPT_COURSE_NATURES = new Set([
+  'کارآموزی',
+  'پایان‌نامه',
+  'پایان نامه',
+  'رساله',
+  'THESIS',
+  'INTERNSHIP',
+]);
+
+function isExemptGradeWindowCourse(courseNature: string | null | undefined, offeringType: string | null | undefined) {
+  const nature = String(courseNature ?? '').trim();
+  const type = String(offeringType ?? '').trim().toUpperCase();
+  if (type === 'DIRECTED_READING') return true; // معرفی به استاد: از نحوه ارائه درس در ترم
+  if (!nature) return false;
+  if (EXEMPT_COURSE_NATURES.has(nature)) return true;
+  const normalized = nature.replace(/\s+/g, '');
+  return normalized.includes('کارآموزی') || normalized.includes('پایاننامه') || normalized.includes('رساله');
+}
+
 /**
  * مهلت ثبت نمرهٔ یک ارائه.
  *
- * مهلت اختصاصیِ ارائه (`customGradeDeadline`) بر مهلت کل ترم
- * (`academic_terms.gradeEntryDeadline`) اولویت دارد؛ اگر هیچ‌کدام تعیین نشده
- * باشد، ثبت نمره بدون محدودیت زمانی مجاز است. مقایسه در خودِ SQL و با
- * `now()` انجام می‌شود تا ساعت سرورِ برنامه ملاک نباشد.
+ * قانون: ثبت نمره فقط وقتی مجاز است که بازهٔ زمان‌بندی نمره فعال باشد.
+ * مهلت اختصاصی ارائه (`customGradeDeadline`) بر مهلت ترم (`academic_terms.gradeEntryDeadline`)
+ * اولویت دارد. اگر هیچ بازه‌ای تنظیم نشده باشد، ثبت نمره بسته است (نه همیشه باز).
  *
- * ⚠️ امروز `gradeEntryDeadline` ترم جاری NULL است؛ این تابع در آن حالت
- * «مجاز» برمی‌گرداند و رفتار فعلی را تغییر نمی‌دهد.
+ * استثناهای دارای زمان‌بندی جدا: کارآموزی/پایان‌نامه/رساله (از نوع/ماهیت درس)
+ * و معرفی به استاد (از نحوه ارائه درس در ترم: DIRECTED_READING). این دروس هم فقط در
+ * بازهٔ زمان‌بندی خودشان باز هستند؛ معمولاً از `customGradeDeadline` استفاده می‌کنند.
  */
 export async function assertGradeDeadline(offeringId: number): Promise<FinalizedWriteGate> {
   const res = await db.execute(sql`
-    SELECT (
-      COALESCE(o."customGradeDeadline", t."gradeEntryDeadline") IS NULL
-      OR now() <= COALESCE(o."customGradeDeadline", t."gradeEntryDeadline")
-    ) AS allowed
+    SELECT
+      o."offeringType" AS "offeringType",
+      c."courseNature" AS "courseNature",
+      COALESCE(o."customGradeDeadline", t."gradeEntryDeadline") AS "deadline",
+      (
+        COALESCE(o."customGradeDeadline", t."gradeEntryDeadline") IS NOT NULL
+        AND now() <= COALESCE(o."customGradeDeadline", t."gradeEntryDeadline")
+      ) AS allowed
       FROM course_offerings o
       JOIN academic_terms t ON t.id = o."termId"
+      LEFT JOIN courses c ON c.id = o."courseId"
      WHERE o.id = ${offeringId}
      LIMIT 1`);
-  const row = res.rows[0] as { allowed: boolean } | undefined;
+  const row = res.rows[0] as {
+    offeringType: string | null;
+    courseNature: string | null;
+    deadline: string | Date | null;
+    allowed: boolean;
+  } | undefined;
   // ارائه/ترم یافت نشد ⇒ بستنِ مسیر (fail closed)
   if (!row) return { ok: false, allowed: false, error: 'ارائهٔ درس یافت نشد.' };
 
   if (!row.allowed) {
+    const exempt = isExemptGradeWindowCourse(row.courseNature, row.offeringType);
     return {
       ok: false,
       allowed: false,
-      error: 'مهلت ثبت نمرهٔ این درس به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.',
+      error: row.deadline
+        ? 'مهلت ثبت نمرهٔ این درس به پایان رسیده است؛ برای تمدید با آموزش تماس بگیرید.'
+        : exempt
+          ? 'برای این درس (کارآموزی/پایان‌نامه/معرفی به استاد) بازهٔ زمان‌بندی ثبت نمره تعیین نشده است؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.'
+          : 'بازهٔ زمان‌بندی ثبت نمره برای این ترم/درس فعال نیست؛ ثبت نمره فقط در بازهٔ تعیین‌شده مجاز است.',
     };
   }
   return { ok: true, allowed: true };

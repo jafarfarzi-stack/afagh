@@ -436,7 +436,7 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                       <li>بازگشایی با نام شما در لاگ ممیزی ثبت می‌شود.</li>
                       <li>تا تأیید نهایی معاون آموزشی هیچ تغییری اعمال نمی‌شود.</li>
                       <li>پس از تأیید، نمرات به «موقت» برمی‌گردند و باید دوباره با OTP نهایی کنید.</li>
-                      <li>مهلت ثبت نمرهٔ ترم: {offering.gradeDeadline ? faNum(offering.gradeDeadline) : '—'} — پایان‌نامه‌ها و دروس دیرمعرفی‌شده با مهلت اختصاصی بررسی می‌شوند.</li>
+                      <li>مهلت ثبت نمره: {offering.gradeDeadline ? faNum(offering.gradeDeadline) : 'تنظیم نشده (ثبت نمره بسته است)'} — ثبت نمره فقط در بازهٔ زمان‌بندی مجاز است؛ کارآموزی/پایان‌نامه (نوع درس) و معرفی به استاد (نحوه ارائه) زمان‌بندی جداگانه دارند.</li>
                     </ol>
                   </div>
                   <textarea
