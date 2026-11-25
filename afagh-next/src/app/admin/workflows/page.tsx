@@ -167,7 +167,7 @@ export default async function AdminWorkflowsPage() {
           stepTitle: logStep?.title || `گام ${l.stepId}`,
           actorRole: l.actorRole || '',
           action: l.action || '',
-          notes: l.notes || '',
+          notes: l.note || '',
           assignedAt: l.assignedAt ? l.assignedAt.toISOString() : null,
           completedAt: l.completedAt ? l.completedAt.toISOString() : null,
         };

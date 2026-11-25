@@ -33,7 +33,8 @@ export default function UserAvatar({
   useEffect(() => { setFailed(false); }, [userId]);
 
   const initial = (name ?? '').trim().slice(0, 1) || '؟';
-  if (hasPhoto && Number.isInteger(userId) && userId > 0 && !failed) {
+  const canTryPhoto = Number.isInteger(userId) && userId > 0 && !failed;
+  if (canTryPhoto) {
     return (
       <img
         src={`/api/photo/${userId}`}
