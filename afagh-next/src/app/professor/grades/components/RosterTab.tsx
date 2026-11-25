@@ -512,7 +512,6 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                   <th scope="col" className="p-2 border border-slate-800 font-bold">پایان‌ترم ({faNum(offering.rubric.finalExam)})</th>
                 </>
               )}
-              <th scope="col" className="p-2 border border-slate-800 font-bold">اجزای ثبت‌شده</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-black bg-slate-950 text-amber-300">نمره کل (از ۲۰)</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-bold">نتیجه</th>
               <th scope="col" className="p-2.5 border border-slate-800 font-bold">وضعیت</th>
@@ -561,7 +560,6 @@ export default function RosterTab({ offering, termTitle, lastAutoSaveTime, onReq
                       <td className="p-1.5 border border-slate-200 text-center">{renderScoreInput(st, 'finalExamScore', offering.rubric.finalExam, 'slate', false)}</td>
                     </>
                   )}
-                  <td className="p-2 border border-slate-200 text-center">{renderComponentChips(st)}</td>
                   <td className="p-2 border border-slate-200 text-center font-black text-sm bg-slate-50">
                     <span className={isPass ? 'text-emerald-700' : isFail ? 'text-rose-700' : 'text-slate-500'}>
                       {finalScore !== undefined ? faNum(finalScore) : '—'}

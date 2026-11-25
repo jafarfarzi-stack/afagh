@@ -26,7 +26,7 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
   };
 
   return (
-    <div className="print-area bg-white rounded-3xl p-6 shadow-xl border-2 border-slate-800 space-y-6">
+    <div className="print-area bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-xl border-2 border-slate-800 dark:border-slate-600 space-y-6">
       {/* سربرگ رسمی */}
       <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -38,10 +38,10 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
             </div>
           )}
           <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-950">
+            <h2 className="text-base sm:text-lg font-black text-slate-950 dark:text-slate-100">
               {universityTitle || 'نام دانشگاه در سامانه ثبت نشده است'} — معاونت آموزشی و تحصیلات تکمیلی
             </h2>
-            <p className="text-xs font-bold text-slate-600">
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
               صورت‌جلسه رسمی و لیست نمرات نهایی پایان‌ترم · {termTitle || 'نیمسال تعیین نشده'}
             </p>
           </div>
@@ -108,7 +108,7 @@ export default function CertificateTab({ offering, termTitle, professorName, uni
                   <th scope="col" className="p-2 border border-slate-700 font-bold">نمره عملی ({faNum((offering.coTaughtDetails?.labWeightRatio || 0.4) * 100)}٪)</th>
                 </>
               ) : (
-                <th scope="col" className="p-2 border border-slate-700 font-bold">نمره مستمر و کلاسی</th>
+                <th scope="col" className="p-2 border border-slate-700 font-bold">نمره مستمر (غیر از پایان‌ترم)</th>
               )}
               <th scope="col" className="p-2 border border-slate-700 font-black text-amber-300">نمره نهایی (از ۲۰)</th>
               <th scope="col" className="p-2 border border-slate-700 font-bold">نتیجه ارزشیابی</th>

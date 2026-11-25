@@ -217,6 +217,33 @@ export type TourState = { step?: number; done?: boolean; skipped?: boolean };
  */
 const memoryState = new Map<Surface, TourState>();
 
+function cookieKey(surface: Surface): string {
+  return `afagh_tour_${TOUR_VERSION}_${surface}`;
+}
+
+function readCookie(surface: Surface): TourState | null {
+  try {
+    const key = `${cookieKey(surface)}=`;
+    const part = document.cookie.split('; ').find((c) => c.startsWith(key));
+    if (!part) return null;
+    const raw = decodeURIComponent(part.slice(key.length));
+    const parsed = JSON.parse(raw) as TourState | null;
+    if (parsed && typeof parsed === 'object') return parsed;
+    return {};
+  } catch {
+    return null;
+  }
+}
+
+function writeCookie(surface: Surface, state: TourState): void {
+  try {
+    const maxAge = 60 * 60 * 24 * 365;
+    document.cookie = `${cookieKey(surface)}=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } catch {
+    /* بی‌اثر */
+  }
+}
+
 export function readTourState(surface: Surface): TourState | null {
   try {
     const raw = window.localStorage.getItem(keyFor(surface));
@@ -226,8 +253,10 @@ export function readTourState(surface: Surface): TourState | null {
       return {};
     }
   } catch {
-    /* localStorage مسدود — از حافظهٔ درون‌صفحه استفاده می‌شود */
+    /* localStorage مسدود — از حافظهٔ درون‌صفحه/کوکی استفاده می‌شود */
   }
+  const cookie = readCookie(surface);
+  if (cookie) return cookie;
   return memoryState.get(surface) ?? null;
 }
 
@@ -236,8 +265,9 @@ export function writeTourState(surface: Surface, state: TourState): void {
   try {
     window.localStorage.setItem(keyFor(surface), JSON.stringify(state));
   } catch {
-    /* فقط حافظهٔ درون‌صفحه */
+    /* فقط حافظهٔ درون‌صفحه/کوکی */
   }
+  writeCookie(surface, state);
 }
 
 export function clearTourState(surface: Surface): void {

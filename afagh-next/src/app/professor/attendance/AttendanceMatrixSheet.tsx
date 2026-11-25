@@ -56,12 +56,21 @@ export default function AttendanceMatrixSheet({
           <tr className="tr-doc-row">
             <td className="tr-doc-cell">
               {/* ماتریس دانشجو × جلسه */}
-              <table className="tr-term-table w-full border-collapse text-center rt">
+              <table className="tr-term-table w-full table-fixed border-collapse text-center rt">
+                <colgroup>
+                  <col style={{ width: '8mm' }} />
+                  <col style={{ width: '24mm' }} />
+                  <col style={{ width: '42mm' }} />
+                  {sessions.map((s) => <col key={s.id} style={{ width: '7mm' }} />)}
+                  <col style={{ width: '10mm' }} />
+                  <col style={{ width: '10mm' }} />
+                  <col style={{ width: '12mm' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-100 text-3xs text-slate-700">
                     <th scope="col" className="border border-slate-300 px-1 py-1">ردیف</th>
-                    <th scope="col" className="border border-slate-300 px-1 py-1">شمارهٔ دانشجویی</th>
-                    <th scope="col" className="border border-slate-300 px-1 py-1 text-right">نام و نام خانوادگی</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1 whitespace-nowrap">شمارهٔ دانشجویی</th>
+                    <th scope="col" className="border border-slate-300 px-1 py-1 text-right whitespace-nowrap">نام و نام خانوادگی</th>
                     {sessions.map(s => (
                       <th scope="col" key={s.id} className="border border-slate-300 px-0.5 py-1">
                         {faNum(s.sessionNo)}
@@ -83,8 +92,8 @@ export default function AttendanceMatrixSheet({
                     return (
                       <tr key={st.id} className="border-t border-slate-200">
                         <td className="border border-slate-200 px-1 py-0.5 text-slate-500">{faNum(i + 1)}</td>
-                        <td className="border border-slate-200 px-1 py-0.5 font-mono" dir="ltr">{st.studentCode}</td>
-                        <td className="tr-course-title border border-slate-200 px-1 py-0.5 text-right font-bold">{st.fullName}</td>
+                        <td className="border border-slate-200 px-1 py-0.5 font-mono whitespace-nowrap overflow-hidden" dir="ltr">{st.studentCode}</td>
+                        <td className="tr-course-title border border-slate-200 px-1 py-0.5 text-right font-bold whitespace-nowrap overflow-hidden">{st.fullName}</td>
                         {cells.map((c, j) => (
                           <td key={j} className={`border border-slate-200 px-0.5 py-0.5 font-black ${
                             c === 'ABSENT' ? 'bg-rose-50 text-rose-700'

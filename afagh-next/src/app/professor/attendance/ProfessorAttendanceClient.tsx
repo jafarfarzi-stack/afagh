@@ -1329,8 +1329,8 @@ export default function ProfessorAttendanceClient({
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th scope="col" className="p-3 border border-slate-800 w-12 font-extrabold">ردیف</th>
-                <th scope="col" className="p-3 border border-slate-800 font-extrabold">شماره دانشجویی</th>
-                <th scope="col" className="p-3 border border-slate-800 font-extrabold">نام و نام خانوادگی دانشجو</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold min-w-[10rem] whitespace-nowrap">شماره دانشجویی</th>
+                <th scope="col" className="p-3 border border-slate-800 font-extrabold min-w-[14rem] whitespace-nowrap">نام و نام خانوادگی دانشجو</th>
                 <th scope="col" className="p-3 border border-slate-800 font-extrabold">جمع غیبت در سایر جلسات</th>
                 <th scope="col" className="p-3 border border-slate-800 font-extrabold min-w-[280px]">
                   <div className="flex flex-col items-center gap-1.5">
@@ -1360,12 +1360,12 @@ export default function ProfessorAttendanceClient({
                     <td className="p-3 border border-slate-200 text-center font-bold text-slate-500">
                       {faNum(idx + 1)}
                     </td>
-                    <td className="p-3 border border-slate-200 font-mono text-center font-bold text-indigo-950">
+                    <td className="p-3 border border-slate-200 font-mono text-center font-bold text-indigo-950 whitespace-nowrap" dir="ltr">
                       {faNum(st.studentCode)}
                     </td>
-                    <td className="p-3 border border-slate-200 font-extrabold text-slate-900">
+                    <td className="p-3 border border-slate-200 font-extrabold text-slate-900 whitespace-nowrap min-w-[14rem]">
                       <div className="flex items-center justify-between gap-2">
-                        <span>{st.fullName}</span>
+                        <span className="whitespace-nowrap">{st.fullName}</span>
                         {is3AbsencesWarning && (
                           <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-3xs border border-rose-300">
                             ⚠️ ماده ۳/۱۶ (غیبت: {faNum(totalAbsentsWithCurrent)})
