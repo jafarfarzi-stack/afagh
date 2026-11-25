@@ -19,9 +19,9 @@ const TOOLS = [
 ] as const;
 
 const AUDIT_REPORTS = [
-  { href: '/admin/finance/reports?kind=semester-major-detail&auto=1', title: 'گزارش مالی دانشکده و رشته', desc: 'تجمیع به تفکیک رشته و نیمسال ورود' },
+  { href: '/admin/reports/semester-major-detail?scope=finance&auto=1', title: 'گزارش مالی دانشکده و رشته', desc: 'تجمیع به تفکیک رشته و نیمسال ورود' },
   { href: '/admin/finance/reports/faculty-financial', title: 'گزارش مالی دانشکده‌ها', desc: 'تجمیع به تفکیک دانشکده و ترم ورود' },
-  { href: '/admin/finance/reports?kind=semester-detail&auto=1', title: 'گزارش تفصیلی دانشجویان نیمسال', desc: 'ریز مالی هر دانشجو در نیمسال' },
+  { href: '/admin/reports/semester-detail?scope=finance&auto=1', title: 'گزارش تفصیلی دانشجویان نیمسال', desc: 'ریز مالی هر دانشجو در نیمسال' },
   { href: '/admin/finance/reports/semester-financial', title: 'گزارش مالی نیمسال', desc: 'تجمیع به تفکیک نیمسال ورود' },
 ] as const;
 
@@ -105,6 +105,7 @@ export default async function AdminFinanceReportsPage(props: {
           initialKind={initialKind}
           initialAuto={initialAuto}
           initialTerm={sp?.term}
+          singleReport={!!initialKind}
         />
       </section>
     </div>

@@ -17,7 +17,7 @@ export default async function SingleReportPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ term?: string; courseCode?: string; scope?: string }>;
+  searchParams: Promise<{ term?: string; courseCode?: string; scope?: string; auto?: string }>;
 }) {
   // Report center routes are shared by the education and finance desks; the
   // ?scope=finance query selects the finance filter/signer set.
@@ -29,6 +29,7 @@ export default async function SingleReportPage({
   const sp = await searchParams;
   // لینکهای قدیمی ?kind=... هنوز کار میکنند؛ اسکوپ مالی از طریق query حفظ میشود.
   const scope: 'edu' | 'finance' = sp?.scope === 'finance' ? 'finance' : 'edu';
+  const initialAuto = sp?.auto === '1';
 
   const currentUniversity = await getCurrentUniversity();
   const universityId = currentUniversity?.id ?? null;
@@ -49,6 +50,7 @@ export default async function SingleReportPage({
         initialKind={id}
         initialTerm={sp?.term}
         initialExtra={sp?.courseCode ? { courseCode: sp.courseCode } : undefined}
+        initialAuto={initialAuto}
         singleReport
       />
     </div>
