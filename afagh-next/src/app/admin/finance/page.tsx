@@ -15,10 +15,11 @@ const fa = (n: number) => Number(n || 0).toLocaleString('fa-IR');
 
 /** ساخت URL صفحه‌بندی با حفظ پارامترهای فیلتر فعلی (رشته/مقطع/ورودی/جستجو/بدهکار). */
 function buildFinanceHref(
-  sp: { majorId?: string; degreeLevelId?: string; entryYear?: string; q?: string; debtors?: string },
+  sp: { majorId?: string; degreeLevelId?: string; entryYear?: string; q?: string; debtors?: string; run?: string },
   p: number,
 ): string {
   const params = new URLSearchParams();
+  if (sp.run) params.set('run', sp.run);
   if (sp.majorId) params.set('majorId', sp.majorId);
   if (sp.degreeLevelId) params.set('degreeLevelId', sp.degreeLevelId);
   if (sp.entryYear) params.set('entryYear', sp.entryYear);
@@ -89,6 +90,7 @@ export default async function FinanceWorklistPage(props: {
     debtors?: string;
     all?: string;
     page?: string;
+    run?: string;
   }>;
 }) {
   await requireRole(FINANCE);
@@ -104,6 +106,7 @@ export default async function FinanceWorklistPage(props: {
     : null;
 
   const sp = (await props.searchParams) || {};
+  const run = sp.run === '1';
   const majorId = Number(sp.majorId) || null;
   const degreeLevelId = Number(sp.degreeLevelId) || null;
   const entryYear = Number(sp.entryYear) || null;
@@ -125,20 +128,26 @@ export default async function FinanceWorklistPage(props: {
   //   • students → فقط صفحهٔ جاری (۵۰ ردیف) — بار شبکه/پارس ~۱۰برابر کمتر
   //   • summary  → جمع کل روی همهٔ دانشجویانِ فیلتر‌شده (نوار KPI همچنان درست)
   //   • count    → تعداد کل برای نوار صفحه‌بندی
-  const [options, students, summary] = await Promise.all([
-    listFinanceFilterOptions({ universityId: currentUniversityId }),
-    listFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
-      limit: pageSize, offset: (page - 1) * pageSize,
-      universityId: currentUniversityId,
-      termId: scopeTermId,
-    }),
-    summarizeFinanceStudents({
-      majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
-      universityId: currentUniversityId,
-      termId: scopeTermId,
-    }),
-  ]);
+  const emptySummary = {
+    studentCount: 0, debtorCount: 0, charges: 0, discounts: 0, sponsorships: 0,
+    payments: 0, loans: 0, chequesCleared: 0, pendingCheques: 0, balance: 0,
+  };
+  const [options, students, summary] = run
+    ? await Promise.all([
+        listFinanceFilterOptions({ universityId: currentUniversityId }),
+        listFinanceStudents({
+          majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
+          limit: pageSize, offset: (page - 1) * pageSize,
+          universityId: currentUniversityId,
+          termId: scopeTermId,
+        }),
+        summarizeFinanceStudents({
+          majorId, degreeLevelId, entryYear, search, onlyDebtors, status: statusScope,
+          universityId: currentUniversityId,
+          termId: scopeTermId,
+        }),
+      ])
+    : [await listFinanceFilterOptions({ universityId: currentUniversityId }), [], emptySummary];
   // تعداد کل از همان اسکن خلاصه (COUNT(*) OVER) — کوئری شمارش جدا حذف شد
   const count = summary.studentCount;
 
@@ -218,43 +227,51 @@ export default async function FinanceWorklistPage(props: {
         </div>
       </div>
 
-      {/* ── نوار KPI ── */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
-        <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
-        <Kpi icon="💸" label="شهریهٔ ناخالص (ریال)" value={fa(summary.charges)} tone="rose" />
-        <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(summary.discounts)} tone="violet" />
-        <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(summary.sponsorships)} tone="indigo" />
-        <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(summary.payments)} tone="emerald" sub={`وام: ${fa(summary.loans)}`} />
-        <Kpi icon="🧾" label="چک وصول‌شده (ریال)" value={fa(summary.chequesCleared)} tone="emerald" sub={`در انتظار: ${fa(summary.pendingCheques)}`} />
-        <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(summary.pendingCheques)} tone="amber" />
-        <Kpi
-          icon={summary.balance > 0 ? '🔴' : '🟢'}
-          label="ماندهٔ بدهی (ریال)"
-          value={fa(Math.abs(summary.balance))}
-          tone={summary.balance > 0 ? 'rose' : 'emerald'}
-          sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
-        />
-        {/* نرخ وصول — کارت تمام‌عرض */}
-        <div className="col-span-2 rounded-2xl border border-indigo-200/80 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-e1 md:col-span-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به شهریهٔ پس از تخفیف)</span>
-            <span className="text-3xl font-black tabular-nums text-indigo-700">{fa(collectionRate)}٪</span>
-          </div>
-          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
-            <div
-              className="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-400"
-              style={{ width: `${collectionRate}%` }}
-            />
-          </div>
-          <div className="mt-1.5 flex flex-wrap justify-between gap-2 text-2xs text-slate-500">
-            <span>جمع وصولی: <b className="text-emerald-700">{fa(collected)} ریال</b></span>
-            <span>خالص شهریه پس از تخفیف: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
+      {!run ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-6 text-center print:hidden">
+          <p className="text-sm font-bold text-slate-700">برای نمایش کارتابل مالی، فیلترها را تنظیم کنید و «نمایش» را بزنید.</p>
+          <p className="mt-1 text-xs text-slate-500">برای سرعت بیشتر، دادهٔ سنگین فقط پس از درخواست شما بارگذاری می‌شود.</p>
+        </div>
+      ) : (
+        /* ── نوار KPI ── */
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:hidden">
+          <Kpi icon="👥" label="دانشجوی فیلتر‌شده" value={fa(count)} tone="slate" sub={`${fa(summary.debtorCount)} بدهکار`} />
+          <Kpi icon="💸" label="شهریهٔ ناخالص (ریال)" value={fa(summary.charges)} tone="rose" />
+          <Kpi icon="🎁" label="جمع تخفیف (ریال)" value={fa(summary.discounts)} tone="violet" />
+          <Kpi icon="🏛️" label="پوشش بنیادها (ریال)" value={fa(summary.sponsorships)} tone="indigo" />
+          <Kpi icon="💵" label="پرداخت نقدی (ریال)" value={fa(summary.payments)} tone="emerald" sub={`وام: ${fa(summary.loans)}`} />
+          <Kpi icon="🧾" label="چک وصول‌شده (ریال)" value={fa(summary.chequesCleared)} tone="emerald" sub={`در انتظار: ${fa(summary.pendingCheques)}`} />
+          <Kpi icon="⏳" label="چک در انتظار (ریال)" value={fa(summary.pendingCheques)} tone="amber" />
+          <Kpi
+            icon={summary.balance > 0 ? '🔴' : '🟢'}
+            label="ماندهٔ بدهی (ریال)"
+            value={fa(Math.abs(summary.balance))}
+            tone={summary.balance > 0 ? 'rose' : 'emerald'}
+            sub={summary.balance > 0 ? 'بدهکار' : summary.balance < 0 ? 'بستانکار' : 'تسویه'}
+          />
+          {/* نرخ وصول — کارت تمام‌عرض */}
+          <div className="col-span-2 rounded-2xl border border-indigo-200/80 bg-gradient-to-b from-indigo-50 to-white p-3 shadow-e1 md:col-span-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-black text-indigo-800">📈 نرخ وصول شهریه (پرداخت + چک وصولی + وام نسبت به شهریهٔ پس از تخفیف)</span>
+              <span className="text-3xl font-black tabular-nums text-indigo-700">{fa(collectionRate)}٪</span>
+            </div>
+            <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
+              <div
+                className="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-400"
+                style={{ width: `${collectionRate}%` }}
+              />
+            </div>
+            <div className="mt-1.5 flex flex-wrap justify-between gap-2 text-2xs text-slate-500">
+              <span>جمع وصولی: <b className="text-emerald-700">{fa(collected)} ریال</b></span>
+              <span>خالص شهریه پس از تخفیف: <b className="text-rose-700">{fa(Math.max(0, netDebtBase))} ریال</b></span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── فیلترها ── */}
       <form method="get" className="card print:hidden">
+        <input type="hidden" name="run" value="1" />
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
           <h2 className="text-xs font-black text-slate-700">🔍 فیلترها</h2>
           <div className="flex items-center gap-3">
@@ -306,7 +323,7 @@ export default async function FinanceWorklistPage(props: {
 
           <div className="flex items-end gap-2">
             <button type="submit" className="rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-xs font-medium text-white shadow-sm">
-              اعمال فیلتر
+              نمایش
             </button>
             <Link prefetch={false} href="/admin/finance" className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
               پاک‌کردن
@@ -315,8 +332,10 @@ export default async function FinanceWorklistPage(props: {
         </div>
       </form>
 
-      {/* فهرست دانشجویان — تنها دکمهٔ باقیمانده (چاپ) در بالای جدول قرار میگیرد */}
-      <div className="card">
+      {run && (
+        <>
+          {/* فهرست دانشجویان — تنها دکمهٔ باقیمانده (چاپ) در بالای جدول قرار میگیرد */}
+          <div className="card">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
           <div className="min-w-0">
             <h2 className="font-bold text-slate-800">
@@ -374,7 +393,9 @@ export default async function FinanceWorklistPage(props: {
             </div>
           </div>
         )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

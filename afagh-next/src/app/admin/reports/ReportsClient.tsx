@@ -1206,7 +1206,12 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               <span role="status" aria-live="polite">
                 {faNum(res.total)} رکورد در {faNum(res.totalPages)} صفحه
               </span>
-              {res.summary && <span className="font-normal text-slate-600">{res.summary}</span>}
+              <span className="flex flex-wrap items-center gap-2">
+                {res.columns.some((c) => c.format === 'MONEY' || c.format === 'AMOUNT') && (
+                  <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-2xs font-bold text-slate-600">واحد مبالغ: ریال</span>
+                )}
+                {res.summary && <span className="font-normal text-slate-600">{res.summary}</span>}
+              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs rt">
@@ -1251,7 +1256,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         const b = pairBottomColumn(res.columns, c.pair);
                         if (b) {
                           return (
-                            <td key={c.key} className="p-2 font-mono text-left print:whitespace-normal print:break-words" dir="ltr">
+                            <td key={c.key} className="p-2 tabular-nums font-medium text-left print:whitespace-normal print:break-words" dir="ltr">
                               <div>{fmtCell(r[c.key], c.format)}</div>
                               <div>{fmtCell(r[b.key], b.format)}</div>
                             </td>
@@ -1269,7 +1274,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                               ? ' text-rose-700 font-extrabold print:text-rose-700'
                               : '';
                         return (
-                          <td key={c.key} className={`p-2 font-mono print:whitespace-normal print:break-words${tone}`} dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
+                          <td key={c.key} className={`p-2 tabular-nums font-medium print:whitespace-normal print:break-words${tone}`} dir={/^[0-9]/.test(String(r[c.key] ?? '')) ? 'ltr' : 'auto'}>
                             {shown}
                           </td>
                         );
@@ -1285,14 +1290,14 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         const b = pairBottomColumn(res.columns, c.pair);
                         if (b) {
                           return (
-                            <td key={c.key} className="p-2 font-mono text-left print:whitespace-normal print:break-words" dir="ltr">
+                            <td key={c.key} className="p-2 tabular-nums font-medium text-left print:whitespace-normal print:break-words" dir="ltr">
                               <div>{fmtCell(res.totals?.[c.key], c.format)}</div>
                               <div>{fmtCell(res.totals?.[b.key], b.format)}</div>
                             </td>
                           );
                         }
                         return (
-                          <td key={c.key} className="p-2 font-mono print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(res.totals?.[c.key] ?? '')) ? 'ltr' : 'auto'}>
+                          <td key={c.key} className="p-2 tabular-nums font-medium print:whitespace-normal print:break-words" dir={/^[0-9]/.test(String(res.totals?.[c.key] ?? '')) ? 'ltr' : 'auto'}>
                             {fmtCell(res.totals?.[c.key], c.format)}
                           </td>
                         );

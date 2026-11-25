@@ -34,6 +34,8 @@ export default function Modal({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const prev = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -46,13 +48,13 @@ export default function Modal({
         'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'
       ) ?? [];
 
-    // فوکوس روی اولین کنترلِ داخل دیالوگ — نه روی body
+    // فوکوس روی اولین کنترلِ داخل دیالوگ — فقط هنگام باز شدن.
     window.setTimeout(() => focusables()[0]?.focus(), 0);
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -75,7 +77,7 @@ export default function Modal({
       document.body.style.overflow = prevOverflow;
       prev.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

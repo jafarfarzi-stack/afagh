@@ -40,11 +40,12 @@ export function formatReportCell(value: unknown, format?: string): string {
     case 'MONEY': {
       /* 🔒 علامت منفی باید پیش از رقم بیاید؛ قبلاً «۱٬۰۰۰-» چاپ می‌شد
          (dash در RTL به سمت راست عدد می‌رفت) و با ستون‌های NUMBER ناهمخوان بود.
-         مقدار غیرعددی هم «—» می‌شود، نه صفرِ خاموش. */
+         مقدار غیرعددی هم «—» می‌شود، نه صفرِ خاموش.
+         واحد «ریال» یک‌بار در هدر/راهنمای جدول نشان داده می‌شود، نه در هر سلول. */
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
       const r = Math.round(n);
-      return `${r < 0 ? '−' : ''}${faNum(Math.abs(r).toLocaleString('en-US'))} ریال`;
+      return `${r < 0 ? '−' : ''}${faNum(Math.abs(r).toLocaleString('en-US'))}`;
     }
     /* مبلغ بدون واحد — فرم‌های رسمی قدیم (fqSumTa) خودشان واحد نمی‌نویسند و
        هر سلول دو عدد انباشته دارند؛ «ریال» در هر خط باعث شلوغی می‌شد. */
