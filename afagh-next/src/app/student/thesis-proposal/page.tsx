@@ -33,6 +33,7 @@ async function isThesisDegree(code: string | null | undefined): Promise<boolean>
 }
 
 export default async function StudentThesisProposalPage() {
+  try {
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
   if (!me) return <div className="card p-6 text-center text-slate-600 font-bold">پروندهٔ دانشجویی یافت نشد.</div>;
@@ -199,4 +200,8 @@ export default async function StudentThesisProposalPage() {
       }))}
     />
   );
+  } catch (e) {
+    const msg = e instanceof Error ? (e.message + '\n' + (e.stack || '')) : String(e);
+    return <pre className="card p-4 text-xs text-rose-700 whitespace-pre-wrap" dir="ltr">{msg}</pre>;
+  }
 }
