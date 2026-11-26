@@ -21,6 +21,7 @@ import BackToDashboard from '@/components/BackToDashboard';
 import RoleTour from '@/components/tour/RoleTour';
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
+  console.error('[diag-layout-student] start');
   const user = await requireRole(['STUDENT']);
 
   // پس از صدور مدرک، حساب کاربر از پورتال دانشجویی به پورتال دانش‌آموختگان منتقل می‌شود
