@@ -970,7 +970,9 @@ export default function StudentRequestsClient({
                   {universityLogo ? (
                     <img src={universityLogo} alt="آرم دانشگاه" className="w-12 h-12 object-contain" />
                   ) : null}
-                  <h3 className="font-black text-sm mt-1">{viewingCertificate.processTitle}</h3>
+                  <h3 className="font-black text-sm mt-1">
+                    {viewingCertificate.processCode === 'ENROLLMENT_CERT' ? 'گواهی اشتغال به تحصیل' : viewingCertificate.processTitle}
+                  </h3>
                 </div>
                 <div className="text-left font-mono text-2xs space-y-1">
                   <p>شماره سند: <b>{viewingCertificate.certificateNumber || viewingCertificate.trackingCode}</b></p>
