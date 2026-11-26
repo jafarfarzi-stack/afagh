@@ -76,7 +76,6 @@ export default function ProfessorNav() {
             className="flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <span className="text-lg leading-none" aria-hidden>☰</span>
-            <span className="text-2xs leading-tight">منو</span>
           </button>
         </div>
       </nav>

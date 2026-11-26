@@ -411,7 +411,8 @@ export default async function StudentTranscriptPage({
       </div>
 
       {/* سند رسمی کارنامه (کاغذ رسمی کارنامه دانشگاهی) */}
-      <div className="transcript-print-area bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans overflow-x-auto print:overflow-visible min-w-[700px] sm:min-w-0 print:min-w-0">
+      <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 print:overflow-visible print:mx-0 print:px-0">
+      <div className="transcript-print-area bg-white text-slate-900 border-2 border-slate-800 p-5 sm:p-8 shadow-xl print-area print:shadow-none print:border print:m-0 print:p-4 text-xs font-sans min-w-[700px] sm:min-w-0 print:min-w-0">
         
         {/* ۱. سربرگ سه‌بخشی رسمی دانشگاه */}
         <div className="border-b-2 border-slate-800 pb-4 mb-4">
@@ -767,6 +768,7 @@ export default async function StudentTranscriptPage({
           deadline={objectionDeadline}
           existing={objectionExisting}
         />
+      </div>
       </div>
 
     </div>

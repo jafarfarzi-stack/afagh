@@ -404,7 +404,7 @@ function Row({
           <div className="flex flex-wrap gap-2 items-center">
             <input value={d.tracking} onChange={e => onPatch({ tracking: e.target.value })} dir="ltr"
               placeholder="کد رهگیری ایرانداک"
-              className="border border-emerald-200 rounded-lg px-3 py-1.5 text-xs font-mono min-w-52" />
+              className="border border-emerald-200 rounded-lg px-3 py-2 text-xs font-mono min-w-0 w-full sm:w-auto sm:min-w-52" />
             <button onClick={onApprove} disabled={pending}
               className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-black disabled:opacity-50">
               تأیید پروپوزال

@@ -234,30 +234,66 @@ export default function ProfessorAttendanceClient({
     || (demo ? DEMO_ATTENDANCE_PROFESSOR_FALLBACK_NAME : 'استاد محترم');
 
   const [offerings, setOfferings] = useState<AttendanceCourseOffering[]>(initialOfferings);
-  const [selectedOfferingId, setSelectedOfferingId] = useState<number>(
-    defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
-      ? defaultOfferingId
-      : demo
-        ? initialOfferings[0]?.id || DEMO_ATTENDANCE_DEFAULT_OFFERING_ID
-        : initialOfferings[0]?.id ?? 0
-  );
-
-  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(() => {
-    if (demo) return DEMO_ATTENDANCE_DEFAULT_SESSION_NO;
-    const offeringId = defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
-      ? defaultOfferingId
-      : initialOfferings[0]?.id;
-    const sessions = initialOfferings.find(o => o.id === offeringId)?.sessions ?? initialOfferings[0]?.sessions ?? [];
-    if (sessions.length === 0) return 0;
-    const today = (todayJalali || '').replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
-    if (today) {
-      const upcoming = sessions.find(s => s.sessionDate && s.sessionDate >= today);
-      if (upcoming) return upcoming.sessionNo;
-      const past = [...sessions].reverse().find(s => s.sessionDate && s.sessionDate <= today);
-      if (past) return past.sessionNo;
+  const pickDefaultAttendance = () => {
+    if (demo) {
+      return {
+        offeringId: initialOfferings[0]?.id || DEMO_ATTENDANCE_DEFAULT_OFFERING_ID,
+        sessionNo: DEMO_ATTENDANCE_DEFAULT_SESSION_NO,
+      };
     }
-    return sessions[0].sessionNo ?? 0;
-  });
+    if (defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)) {
+      const sessions = initialOfferings.find(o => o.id === defaultOfferingId)?.sessions ?? [];
+      const today = (todayJalali || '').replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+      if (today && sessions.length) {
+        const upcoming = sessions.find(s => s.sessionDate && s.sessionDate >= today);
+        if (upcoming) return { offeringId: defaultOfferingId, sessionNo: upcoming.sessionNo };
+        const past = [...sessions].reverse().find(s => s.sessionDate && s.sessionDate <= today);
+        if (past) return { offeringId: defaultOfferingId, sessionNo: past.sessionNo };
+      }
+      return { offeringId: defaultOfferingId, sessionNo: sessions[0]?.sessionNo ?? 0 };
+    }
+
+    const today = (todayJalali || '').replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+    const now = new Date();
+    const nowHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    if (today) {
+      let bestToday: { offeringId: number; sessionNo: number; start: string } | null = null;
+      let bestUpcoming: { offeringId: number; sessionNo: number; date: string; start: string } | null = null;
+      let bestPast: { offeringId: number; sessionNo: number; date: string; start: string } | null = null;
+
+      for (const o of initialOfferings) {
+        for (const s of o.sessions ?? []) {
+          if (!s.sessionDate) continue;
+          const start = (s.startTime || '00:00').slice(0, 5);
+          if (s.sessionDate === today) {
+            const cand = { offeringId: o.id, sessionNo: s.sessionNo, start };
+            // ترجیح: جلسه جاری/بعدی امروز، سپس آخرین جلسه گذشته امروز
+            if (!bestToday) bestToday = cand;
+            else if (bestToday.start < nowHHMM && start >= nowHHMM) bestToday = cand;
+            else if (bestToday.start >= nowHHMM && start >= nowHHMM && start < bestToday.start) bestToday = cand;
+            else if (bestToday.start < nowHHMM && start < nowHHMM && start > bestToday.start) bestToday = cand;
+          } else if (s.sessionDate > today) {
+            const cand = { offeringId: o.id, sessionNo: s.sessionNo, date: s.sessionDate, start };
+            if (!bestUpcoming || cand.date < bestUpcoming.date || (cand.date === bestUpcoming.date && cand.start < bestUpcoming.start)) bestUpcoming = cand;
+          } else {
+            const cand = { offeringId: o.id, sessionNo: s.sessionNo, date: s.sessionDate, start };
+            if (!bestPast || cand.date > bestPast.date || (cand.date === bestPast.date && cand.start > bestPast.start)) bestPast = cand;
+          }
+        }
+      }
+      if (bestToday) return { offeringId: bestToday.offeringId, sessionNo: bestToday.sessionNo };
+      if (bestUpcoming) return { offeringId: bestUpcoming.offeringId, sessionNo: bestUpcoming.sessionNo };
+      if (bestPast) return { offeringId: bestPast.offeringId, sessionNo: bestPast.sessionNo };
+    }
+
+    const first = initialOfferings[0];
+    return { offeringId: first?.id ?? 0, sessionNo: first?.sessions?.[0]?.sessionNo ?? 0 };
+  };
+
+  const defaultAttendance = pickDefaultAttendance();
+  const [selectedOfferingId, setSelectedOfferingId] = useState<number>(defaultAttendance.offeringId);
+  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(defaultAttendance.sessionNo);
   // ── نمای «همهٔ جلسات»: یک فهرست تخت از جلساتِ همهٔ درس‌ها، با کلیک وارد جلسه می‌شود ──
   const [viewMode, setViewMode] = useState<'course' | 'all'>('course');
 

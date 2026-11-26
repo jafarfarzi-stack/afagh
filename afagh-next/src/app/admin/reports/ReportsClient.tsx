@@ -796,7 +796,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                         onChange={e => { setTermInput(e.target.value); setTermMsg(''); }}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyTermInput(); } }}
                         placeholder="تایپ: 14031-14035 یا 14031,14033 یا «۱۴۰۳۱ تا ۱۴۰۳۵»"
-                        className="min-w-64 flex-1 bg-white border border-slate-300 rounded px-2 py-1 font-mono text-xs"
+                        className="min-w-0 w-full sm:min-w-64 sm:flex-1 bg-white border border-slate-300 rounded px-2 py-1 font-mono text-xs"
                         dir="ltr"
                       />
                       <button type="button" onClick={applyTermInput} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-2xs">افزودن</button>
@@ -1001,7 +1001,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                   value={nationalCode} onChange={e => setNationalCode(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && run(1)}
                   placeholder="کد ملی..."
-                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-36 font-mono" dir="ltr"
+                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-full sm:w-36 font-mono" dir="ltr"
                 />
               </label>
             )}
@@ -1158,7 +1158,7 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
               value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && run(1)}
               placeholder="🔍 شماره/نام/کد ملی..."
-              className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-48"
+              className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 w-full sm:w-48"
             />
           </div>
         </div>
@@ -1213,8 +1213,8 @@ export default function ReportsClient({ opts, initialUniversityId, allowedKinds,
                 {res.summary && <span className="font-normal text-slate-600">{res.summary}</span>}
               </span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs rt">
+            <div className="overflow-x-auto rt-wrap">
+              <table className="w-full min-w-[720px] text-right text-xs rt rt--scroll">
                 <thead className="bg-slate-100 border-b border-slate-300 font-bold text-slate-700 sticky top-0">
                   <tr>
                     {visibleReportColumns(res.columns).map(c => {

@@ -150,7 +150,7 @@ export default async function ReconciliationPage() {
           </div>
           {sec.rows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-2xs">
+              <table className="w-full text-xs rt">
                 <thead>
                   <tr className="bg-slate-100 text-slate-700">
                     {sec.heads.map((h) => (

@@ -274,7 +274,7 @@ export default function BaseDataClient() {
             </div>
           </div>
         ) : (
-          <table className="w-full text-2xs">
+          <table className="w-full text-xs rt">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
                 <th scope="col" className="px-2 py-2 text-right font-bold">#</th>
@@ -296,20 +296,22 @@ export default function BaseDataClient() {
                     </td>
                   ))}
                   <td className="px-2 py-1.5 text-center">
-                    <button
-                      onClick={() => openEdit(row)}
-                      className="rounded px-1.5 py-0.5 text-indigo-700 hover:bg-indigo-50"
-                      title="ویرایش"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => remove(row)}
-                      className="rounded px-1.5 py-0.5 text-rose-700 hover:bg-rose-50"
-                      title="حذف"
-                    >
-                      🗑️
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => openEdit(row)}
+                        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50"
+                        title="ویرایش"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => remove(row)}
+                        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded px-2 py-1 text-rose-700 hover:bg-rose-50"
+                        title="حذف"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

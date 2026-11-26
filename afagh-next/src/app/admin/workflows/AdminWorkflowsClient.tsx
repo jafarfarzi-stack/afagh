@@ -570,7 +570,7 @@ export default function AdminWorkflowsClient({
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <button
                             onClick={() => setDetailReq(req)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold text-2xs transition"
+                            className="min-h-9 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs transition"
                           >
                             جزئیات
                           </button>
@@ -586,7 +586,7 @@ export default function AdminWorkflowsClient({
                                     note: '',
                                   })
                                 }
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs shadow transition"
+                                className="min-h-9 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition"
                               >
                                 ✓ تایید
                               </button>
@@ -600,7 +600,7 @@ export default function AdminWorkflowsClient({
                                     note: '',
                                   })
                                 }
-                                className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-2xs shadow transition"
+                                className="min-h-9 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow transition"
                               >
                                 ✗ رد
                               </button>
@@ -614,7 +614,7 @@ export default function AdminWorkflowsClient({
                                     note: '',
                                   })
                                 }
-                                className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-2xs transition"
+                                className="min-h-9 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition"
                               >
                                 اصلاح
                               </button>
