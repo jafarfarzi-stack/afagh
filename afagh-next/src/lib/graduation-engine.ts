@@ -1317,6 +1317,47 @@ export async function adminOverrideIrandocPrior(input: {
   return { thesisProgress: updated, changed: true };
 }
 
+/** بازبینی دستی استعلام نهایی ایرانداک توسط کارشناس/ادمین وقتی سرویس نتیجهٔ قطعی نمی‌دهد. */
+export async function adminOverrideIrandocFinal(input: {
+  auditId: number;
+  approvedBy: number;
+  note?: string;
+}) {
+  const tp = await getOrCreateThesisProgress(input.auditId);
+  if (!tp.finalThesisFileId) {
+    throw new Error('ابتدا نسخهٔ نهایی پایان‌نامه را بارگذاری کنید؛ استعلام نهایی پیش از آن مجاز نیست.');
+  }
+  if (tp.defenseRequestStatus !== 'PASSED') {
+    throw new Error('دفاع پایان‌نامه هنوز با موفقیت برگزار نشده است؛ ثبت استعلام نهایی پیش از قبولی دفاع مجاز نیست.');
+  }
+  if (tp.finalIrandocStatus === 'PASSED') {
+    return { thesisProgress: tp, changed: false };
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      finalIrandocStatus: 'PASSED',
+      finalIrandocCheckedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  await logIrandocCheck({
+    thesisProgressId: tp.id,
+    studentId: tp.studentId,
+    checkType: 'FINAL',
+    trackingCode: tp.finalIrandocTracking || 'MANUAL-OVERRIDE',
+    title: tp.titleFa,
+    similarity: tp.finalIrandocSimilarity == null ? null : Number(tp.finalIrandocSimilarity),
+    decision: 'MANUAL_REVIEW',
+    raw: { manualOverride: true, approvedBy: input.approvedBy, note: input.note ?? null, previousStatus: tp.finalIrandocStatus },
+  });
+
+  await advanceDossier(input.auditId);
+  return { thesisProgress: updated, changed: true };
+}
+
 /** فاز ۲: آپلود پروپوزال → بررسی همانندجویی → تأیید کارشناس → آپلود ایرانداک */
 export async function submitProposal(input: {
   auditId: number;

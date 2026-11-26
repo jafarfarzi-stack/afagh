@@ -17,6 +17,7 @@ import {
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
+  adminOverrideIrandocFinal,
   adminOverrideIrandocPrior,
   approveProposalAndUploadIrandoc,
   expertScheduleDefense,
@@ -82,6 +83,7 @@ export type BoardRow = {
   defenseResult: string | null;
   defenseNote: string | null;
   finalIrandocStatus: string | null;
+  finalThesisFileId: number | null;
   nextProgressReportDue: string | null;
   titleFa: string | null;
   supervisorId: number | null;
@@ -139,14 +141,11 @@ function pickPool(rows: PoolRow[], majorId: number | null) {
 
 /** تمام داده‌های نمایشی میز کار — منبع واحدِ صفحه و کنش‌ها */
 async function loadBoard(): Promise<Board> {
-  console.error('[diag-board] start');
   const user = await requireRole(BOARD_ROLES);
   const uni = await getCurrentUniversity().catch(() => null);
   const uid = uni?.id;
-  console.error('[diag-board] auth ok', {uid, roles:user.roles});
   const scopeOf = (c: any) => (isRealUniversityId(uid) ? or(eq(c, uid), isNull(c)) : sql`1 = 0`);
 
-  console.error('[diag-board] before tpRows');
   const tpRows = await db
     .select({
       auditId: graduation_audits.id,
@@ -163,6 +162,7 @@ async function loadBoard(): Promise<Board> {
       defenseResult: thesis_progress.defenseResult,
       defenseNote: thesis_progress.defenseNote,
       finalIrandocStatus: thesis_progress.finalIrandocStatus,
+      finalThesisFileId: thesis_progress.finalThesisFileId,
       nextProgressReportDue: thesis_progress.nextProgressReportDue,
       titleFa: thesis_progress.titleFa,
       supervisorId: thesis_progress.supervisorId,
@@ -184,7 +184,6 @@ async function loadBoard(): Promise<Board> {
       scopeOf(students.universityId),
     ))
     .orderBy(desc(thesis_progress.updatedAt));
-  console.error('[diag-board] tpRows', tpRows.length);
 
   const staffRows = await db
     .select({ id: staff.id, userId: staff.userId, firstName: users.firstName, lastName: users.lastName, rank: staff.academicRank, type: staff.staffType })
@@ -248,6 +247,7 @@ async function loadBoard(): Promise<Board> {
       defenseResult: r.defenseResult,
       defenseNote: r.defenseNote,
       finalIrandocStatus: r.finalIrandocStatus,
+      finalThesisFileId: r.finalThesisFileId,
       nextProgressReportDue: r.nextProgressReportDue ? r.nextProgressReportDue.toISOString() : null,
       titleFa: r.titleFa,
       supervisorId: r.supervisorId,
@@ -339,6 +339,20 @@ export async function overrideIrandocPriorAction(input: { auditId: number; note?
     const scope = await assertAuditInUni(Number(input.auditId));
     if (!scope.ok) return { ok: false as const, error: scope.error };
     await adminOverrideIrandocPrior({ auditId: Number(input.auditId), approvedBy: user.id, note: input.note });
+    revalidatePath(PATH);
+    revalidatePath('/admin/graduation');
+    revalidatePath('/student/thesis-proposal');
+    return { ok: true as const, board: await loadBoard() };
+  } catch (e) { return fail(e); }
+}
+
+/** ادامهٔ دستی مسیر وقتی استعلام نهایی ایرانداک نتیجهٔ قطعی نمی‌دهد یا سرویس در دسترس نیست */
+export async function overrideIrandocFinalAction(input: { auditId: number; note?: string }) {
+  const user = await guard();
+  try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
+    await adminOverrideIrandocFinal({ auditId: Number(input.auditId), approvedBy: user.id, note: input.note });
     revalidatePath(PATH);
     revalidatePath('/admin/graduation');
     revalidatePath('/student/thesis-proposal');

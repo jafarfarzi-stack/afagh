@@ -185,7 +185,7 @@ export default function ThesisProposalClient({
       kind: r.passed ? 'ok' : 'err',
       text: r.passed
         ? `استعلام نهایی ایرانداک قبول شد (${faNum(r.similarity)}٪).`
-        : `درصد همانندجویی (${faNum(r.similarity)}٪) بیش از سقف مجاز است.`,
+        : (r.reason || 'استعلام نهایی نتیجهٔ قطعی نداد؛ برای بررسی دستی با کارشناس آموزش تماس بگیرید.'),
     });
   });
 
@@ -271,7 +271,7 @@ export default function ThesisProposalClient({
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={proposalRef} type="file" accept="application/pdf" className="text-2xs" />
+            <input ref={proposalRef} type="file" accept="application/pdf" aria-label="فایل پروپوزال (PDF)" className="text-2xs" />
             <button onClick={sendProposal} disabled={pending}
               className="px-3 py-2 rounded-lg bg-sky-800 text-white text-xs font-black disabled:opacity-50">بارگذاری و ارسال پروپوزال</button>
           </div>
@@ -337,7 +337,7 @@ export default function ThesisProposalClient({
             نسخهٔ نهایی و مصوب هیأت داوران را بارگذاری کنید (PDF، حداکثر ۱۰ مگابایت).
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={finalRef} type="file" accept="application/pdf" className="text-2xs" />
+            <input ref={finalRef} type="file" accept="application/pdf" aria-label="فایل پایان‌نامهٔ نهایی (PDF)" className="text-2xs" />
             <button onClick={sendFinalThesis} disabled={pending}
               className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-black disabled:opacity-50">بارگذاری پایان‌نامهٔ نهایی</button>
           </div>

@@ -22,7 +22,6 @@ import { ADMIN_MODULES, canSeeModule } from '@/lib/admin-modules';
 import RoleTour from '@/components/tour/RoleTour';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  console.error('[diag-layout-admin] start');
   // نقش‌های اصلی شاخهٔ /admin — همان گارد پیشین بدون تغییر.
   const AREA_ROLES = [
     'ADMIN',

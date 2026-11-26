@@ -33,11 +33,8 @@ async function isThesisDegree(code: string | null | undefined): Promise<boolean>
 }
 
 export default async function StudentThesisProposalPage() {
-  try {
-  console.error('[diag-thesis] start');
   const user = await requireRole(['STUDENT']);
   const me = await getStudentByUser(user.id);
-  console.error('[diag-thesis] user', user.id, 'student', me?.id);
   if (!me) return <div className="card p-6 text-center text-slate-600 font-bold">پروندهٔ دانشجویی یافت نشد.</div>;
 
   const [level] = await db
@@ -150,9 +147,7 @@ export default async function StudentThesisProposalPage() {
     );
   }
 
-  console.error('[diag-thesis] before getThesisProgress', auditId);
   const progress = await getThesisProgress(auditId);
-  console.error('[diag-thesis] after getThesisProgress', progress?.id);
 
   const logs = await withUserRls(user.id, tx =>
     tx
@@ -204,8 +199,4 @@ export default async function StudentThesisProposalPage() {
       }))}
     />
   );
-  } catch (e) {
-    const msg = e instanceof Error ? (e.message + '\n' + (e.stack || '')) : String(e);
-    return <pre className="card p-4 text-xs text-rose-700 whitespace-pre-wrap" dir="ltr">{msg}</pre>;
-  }
 }

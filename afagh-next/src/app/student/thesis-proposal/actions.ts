@@ -152,6 +152,8 @@ export async function finalIrandocCheckAction(trackingCode: string) {
       ok: true as const,
       passed: r.passed,
       similarity: Number(r.similarity ?? 0),
+      status: r.status,
+      reason: r.reason,
       progress: await getThesisProgress(auditId),
     };
   } catch (e) { return fail(e); }
