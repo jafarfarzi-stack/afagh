@@ -150,8 +150,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                🛒
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="🛒" className="h-5 w-5" />
               </div>
             </div>
             <div className="mt-3">
@@ -295,8 +295,8 @@ export default async function StudentDashboardPage() {
             className="card p-4 bg-white hover:bg-rose-50/50 border border-slate-200 hover:border-rose-300 rounded-2xl shadow-xs transition-all group flex flex-col justify-between"
           >
             <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                🗺️
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Icon emoji="🗺️" className="h-5 w-5" />
               </div>
               <span className="hidden sm:inline-flex text-3xs bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">
                 سرفصل‌ها

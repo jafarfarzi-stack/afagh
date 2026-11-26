@@ -47,6 +47,7 @@ const EMOJI_TO_NAME: Record<string, string> = {
   '🖼️': 'image',
   '🗓️': 'calendar',
   '🗺️': 'map',
+  '🛒': 'cart',
   '🚦': 'traffic',
   '🧩': 'puzzle',
   '🧮': 'calculator',
@@ -232,6 +233,14 @@ function Shape({ name }: { name: string }) {
         <>
           <rect x="3.5" y="5.5" width="17" height="15" rx="2" />
           <path d="M8 3.5v4M16 3.5v4M3.5 10.5h17M8 14h3M8 17.5h3M14 14h2.5" />
+        </>
+      );
+    case 'cart':
+      return (
+        <>
+          <circle cx="9" cy="19" r="1.5" />
+          <circle cx="17" cy="19" r="1.5" />
+          <path d="M3 5h2l2.2 10.2a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.7L21 8H7" />
         </>
       );
     case 'map':

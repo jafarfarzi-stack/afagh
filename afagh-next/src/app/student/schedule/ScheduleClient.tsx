@@ -225,7 +225,11 @@ export default function ScheduleClient({
             با فیلتر «{weekFilterLabel}» کلاسی برای نمایش وجود ندارد.
           </div>
         ) : (
-          <ProfessorCalendarGrid entries={visibleEntries} orientation="days-rows" />
+          <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+            <div className="min-w-[560px] sm:min-w-0">
+              <ProfessorCalendarGrid entries={visibleEntries} orientation="days-rows" />
+            </div>
+          </div>
         )}
 
         {unscheduled.length > 0 && (
