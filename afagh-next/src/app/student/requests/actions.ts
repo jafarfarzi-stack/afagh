@@ -192,6 +192,55 @@ export async function issueApprovedTranscriptTokenAction(requestId: number): Pro
   }
 }
 
+export async function issueEnrollmentCertificateQrAction(requestId: number): Promise<{
+  ok: boolean;
+  error?: string;
+  url?: string;
+  qr?: string;
+  code?: string;
+}> {
+  const user = await requireRole(['STUDENT']);
+  const me = await getStudentByUser(user.id);
+  if (!me) return { ok: false, error: 'پروندهٔ دانشجویی یافت نشد.' };
+
+  try {
+    const [req] = await db
+      .select({
+        id: student_requests.id,
+        studentId: student_requests.studentId,
+        status: student_requests.status,
+        processId: student_requests.processId,
+        trackingCode: student_requests.trackingCode,
+        formData: student_requests.formData,
+      })
+      .from(student_requests)
+      .where(eq(student_requests.id, requestId))
+      .limit(1);
+    if (!req) return { ok: false, error: 'درخواست یافت نشد.' };
+    if (req.studentId !== me.id) return { ok: false, error: 'این درخواست متعلق به شما نیست.' };
+    if (req.status !== 'APPROVED') return { ok: false, error: 'درخواست هنوز تأیید نهایی نشده است.' };
+
+    const [proc] = await db
+      .select({ code: process_definitions.code })
+      .from(process_definitions)
+      .where(eq(process_definitions.id, req.processId))
+      .limit(1);
+    if (proc?.code !== 'ENROLLMENT_CERT') return { ok: false, error: 'این درخواست گواهی اشتغال به تحصیل نیست.' };
+
+    let formData: Record<string, any> = {};
+    try { formData = JSON.parse(req.formData || '{}'); } catch { /* ignore */ }
+    const code = String(formData.certificateNumber || req.trackingCode || '').trim();
+    if (!code) return { ok: false, error: 'شماره گواهی یافت نشد.' };
+
+    const publicBaseUrl = await getPublicBaseUrl();
+    const url = `${publicBaseUrl}/verify-certificate/${encodeURIComponent(code)}`;
+    const qr = await qrSvg(url, { errorCorrectionLevel: 'Q', size: 160, margin: 4 });
+    return { ok: true, url, qr, code };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'خطا در صدور QR گواهی.' };
+  }
+}
+
 /**
  * ثبت اعتراض به نمرهٔ یک درسِ قطعی — فقط در بازهٔ زمانی اعتراض
  * (تنظیم GRADE_OBJECTION_DEADLINE) و فقط برای ثبت‌نامِ متعلق به همین دانشجو.

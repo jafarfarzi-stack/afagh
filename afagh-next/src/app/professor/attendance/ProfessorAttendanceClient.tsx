@@ -242,13 +242,22 @@ export default function ProfessorAttendanceClient({
         : initialOfferings[0]?.id ?? 0
   );
 
-  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(
-    demo
-      ? DEMO_ATTENDANCE_DEFAULT_SESSION_NO
-      : initialOfferings.find(o => o.id === (defaultOfferingId ?? initialOfferings[0]?.id))?.sessions[0]?.sessionNo
-        ?? initialOfferings[0]?.sessions[0]?.sessionNo
-        ?? 0
-  );
+  const [selectedSessionNo, setSelectedSessionNo] = useState<number>(() => {
+    if (demo) return DEMO_ATTENDANCE_DEFAULT_SESSION_NO;
+    const offeringId = defaultOfferingId && initialOfferings.some(o => o.id === defaultOfferingId)
+      ? defaultOfferingId
+      : initialOfferings[0]?.id;
+    const sessions = initialOfferings.find(o => o.id === offeringId)?.sessions ?? initialOfferings[0]?.sessions ?? [];
+    if (sessions.length === 0) return 0;
+    const today = (todayJalali || '').replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+    if (today) {
+      const upcoming = sessions.find(s => s.sessionDate && s.sessionDate >= today);
+      if (upcoming) return upcoming.sessionNo;
+      const past = [...sessions].reverse().find(s => s.sessionDate && s.sessionDate <= today);
+      if (past) return past.sessionNo;
+    }
+    return sessions[0].sessionNo ?? 0;
+  });
   // ── نمای «همهٔ جلسات»: یک فهرست تخت از جلساتِ همهٔ درس‌ها، با کلیک وارد جلسه می‌شود ──
   const [viewMode, setViewMode] = useState<'course' | 'all'>('course');
 

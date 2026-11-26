@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormFieldSchema } from '@/lib/workflow-engine';
 import {
   issueApprovedTranscriptTokenAction,
+  issueEnrollmentCertificateQrAction,
   submitSatisfactionRatingAction,
   submitStudentRequestAction,
   uploadRequestAttachmentAction,
@@ -204,6 +205,29 @@ export default function StudentRequestsClient({
   const [validTranscriptQr, setValidTranscriptQr] = useState<{ requestId: number; url: string; qr: string; expiresAt: string | null } | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
+  const [certQr, setCertQr] = useState<{ requestId: number; url: string; qr: string; code?: string } | null>(null);
+  const [certQrLoading, setCertQrLoading] = useState(false);
+
+  useEffect(() => {
+    const req = viewingCertificate;
+    if (!req || req.processCode !== 'ENROLLMENT_CERT' || req.status !== 'APPROVED') {
+      setCertQr(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setCertQrLoading(true);
+      const res = await issueEnrollmentCertificateQrAction(req.id);
+      if (cancelled) return;
+      setCertQrLoading(false);
+      if (res.ok && res.url && res.qr) {
+        setCertQr({ requestId: req.id, url: res.url, qr: res.qr, code: res.code });
+      } else {
+        setCertQr(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewingCertificate]);
 
   const selectedProcess = processes.find(p => p.code === selectedProcessCode) || processes[0];
 
@@ -971,7 +995,7 @@ export default function StudentRequestsClient({
               </div>
 
               {/* امضا و بارکد امنیتی */}
-              <div className="grid grid-cols-2 pt-6 border-t border-slate-300 items-end">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-slate-300 items-end">
                 <div className="space-y-1">
                   <p className="font-mono text-3xs text-slate-500">کد اعتبارسنجی SHA-256:</p>
                   <p className="font-mono text-3xs break-all bg-slate-100 p-1.5 rounded" dir="ltr">
@@ -982,11 +1006,24 @@ export default function StudentRequestsClient({
                   </p>
                 </div>
 
-                <div className="text-center space-y-2">
-                  <div className="inline-block p-2 border-2 border-dashed border-slate-700 rounded-xl">
-                    <p className="font-bold text-xs text-indigo-950">مهر و امضای دیجیتال</p>
-                    <p className="text-3xs text-slate-500">اداره کل امور آموزشی و تحصیلات تکمیلی</p>
-                  </div>
+                <div className="space-y-2">
+                  {certQrLoading && viewingCertificate.processCode === 'ENROLLMENT_CERT' ? (
+                    <div className="text-xs text-slate-500">در حال آماده‌سازی QR اعتبارسنجی...</div>
+                  ) : certQr?.requestId === viewingCertificate.id ? (
+                    <VerifyQrBlock
+                      title="استعلام اصالت گواهی اشتغال به تحصیل"
+                      url={certQr.url}
+                      qr={certQr.qr}
+                      shortUrl
+                      compact
+                      code={certQr.code}
+                    />
+                  ) : (
+                    <div className="inline-block p-2 border-2 border-dashed border-slate-700 rounded-xl text-center">
+                      <p className="font-bold text-xs text-indigo-950">مهر و امضای دیجیتال</p>
+                      <p className="text-3xs text-slate-500">اداره کل امور آموزشی و تحصیلات تکمیلی</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
