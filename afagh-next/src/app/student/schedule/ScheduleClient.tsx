@@ -167,7 +167,7 @@ export default function ScheduleClient({
         </div>
       </div>
 
-      <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+      <div className="hidden sm:flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-2 tabstrip">
           <span className="text-xs font-bold text-slate-600">فیلتر نمایش هفته:</span>
           <button
