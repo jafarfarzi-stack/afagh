@@ -1281,6 +1281,42 @@ export async function submitThesisTitleAndSupervisor(input: {
   return { thesisProgress: updated, priorStatus, priorSim };
 }
 
+/** بازبینی دستی پیشینهٔ ایرانداک توسط کارشناس/ادمین وقتی سرویس رد کرده یا در دسترس نیست. */
+export async function adminOverrideIrandocPrior(input: {
+  auditId: number;
+  approvedBy: number;
+  note?: string;
+}) {
+  const tp = await getOrCreateThesisProgress(input.auditId);
+  if (!tp.titleFa) throw new Error('ابتدا عنوان و استاد راهنما ثبت شود.');
+  if (tp.irandocPriorStatus === 'PASSED') {
+    return { thesisProgress: tp, changed: false };
+  }
+
+  const [updated] = await db.update(thesis_progress)
+    .set({
+      irandocPriorStatus: 'PASSED',
+      irandocPriorCheckedAt: new Date(),
+      proposalStatus: tp.proposalStatus === 'PRIOR_REJECTED' ? 'NOT_STARTED' : tp.proposalStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(thesis_progress.id, tp.id))
+    .returning();
+
+  await logIrandocCheck({
+    thesisProgressId: tp.id,
+    studentId: tp.studentId,
+    checkType: 'PRIOR',
+    trackingCode: tp.irandocPriorTracking || 'MANUAL-OVERRIDE',
+    title: tp.titleFa,
+    similarity: tp.irandocPriorSimilarity == null ? null : Number(tp.irandocPriorSimilarity),
+    decision: 'MANUAL_REVIEW',
+    raw: { manualOverride: true, approvedBy: input.approvedBy, note: input.note ?? null, previousStatus: tp.irandocPriorStatus },
+  });
+
+  return { thesisProgress: updated, changed: true };
+}
+
 /** فاز ۲: آپلود پروپوزال → بررسی همانندجویی → تأیید کارشناس → آپلود ایرانداک */
 export async function submitProposal(input: {
   auditId: number;

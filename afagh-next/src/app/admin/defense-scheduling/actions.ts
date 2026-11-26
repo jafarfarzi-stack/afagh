@@ -17,6 +17,7 @@ import {
 } from '@/db/schema';
 import { getStaffByUser, requireRole } from '@/lib/auth';
 import {
+  adminOverrideIrandocPrior,
   approveProposalAndUploadIrandoc,
   expertScheduleDefense,
   recordDefenseResult,
@@ -72,6 +73,7 @@ export type BoardRow = {
   workflowStatus: string;
   proposalStatus: string | null;
   proposalSimilarity: number | null;
+  irandocPriorStatus: string | null;
   irandocUploadStatus: string | null;
   irandocUploadTracking: string | null;
   defenseRequestStatus: string | null;
@@ -149,6 +151,7 @@ async function loadBoard(): Promise<Board> {
       workflowStatus: graduation_audits.workflowStatus,
       proposalStatus: thesis_progress.proposalStatus,
       proposalSimilarity: thesis_progress.proposalSimilarity,
+      irandocPriorStatus: thesis_progress.irandocPriorStatus,
       irandocUploadStatus: thesis_progress.irandocUploadStatus,
       irandocUploadTracking: thesis_progress.irandocUploadTracking,
       defenseRequestStatus: thesis_progress.defenseRequestStatus,
@@ -232,6 +235,7 @@ async function loadBoard(): Promise<Board> {
       workflowStatus: r.workflowStatus,
       proposalStatus: r.proposalStatus,
       proposalSimilarity: r.proposalSimilarity == null ? null : Number(r.proposalSimilarity),
+      irandocPriorStatus: r.irandocPriorStatus,
       irandocUploadStatus: r.irandocUploadStatus,
       irandocUploadTracking: r.irandocUploadTracking,
       defenseRequestStatus: r.defenseRequestStatus,
@@ -320,6 +324,20 @@ export async function approveProposalAction(input: { auditId: number; irandocTra
     await approveProposalAndUploadIrandoc({ auditId: Number(input.auditId), approvedBy: user.id, irandocTrackingCode: code });
     revalidatePath(PATH);
     revalidatePath('/admin/graduation');
+    return { ok: true as const, board: await loadBoard() };
+  } catch (e) { return fail(e); }
+}
+
+/** ادامهٔ دستی مسیر وقتی پیشینهٔ ایرانداک رد شده یا سرویس در دسترس نیست */
+export async function overrideIrandocPriorAction(input: { auditId: number; note?: string }) {
+  const user = await guard();
+  try {
+    const scope = await assertAuditInUni(Number(input.auditId));
+    if (!scope.ok) return { ok: false as const, error: scope.error };
+    await adminOverrideIrandocPrior({ auditId: Number(input.auditId), approvedBy: user.id, note: input.note });
+    revalidatePath(PATH);
+    revalidatePath('/admin/graduation');
+    revalidatePath('/student/thesis-proposal');
     return { ok: true as const, board: await loadBoard() };
   } catch (e) { return fail(e); }
 }
