@@ -25,9 +25,9 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
 
   if (offerings.length === 0) {
     return (
-      <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+      <div className="hidden sm:block bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
         <h2 className="font-extrabold text-slate-900 text-base">
-          جدول نیمسالی تکلیف کارتابل جاری {termTitle ? `— ${termTitle}` : ''}
+          جدول نیمسالی کارتابل جاری {termTitle ? `— ${termTitle}` : ''}
         </h2>
         <div className="mt-4 text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-xs font-bold text-slate-500">
           در {scopeLabel} هیچ کلاسی برای شما تخصیص نیافته است. پس از تخصیص درس توسط مدیر گروه،
@@ -59,7 +59,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
   }));
 
   return (
-    <div className="print-area prof-week-print bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+    <div className="print-area prof-week-print hidden sm:block bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
       <style>{'@media print { @page { size: A4 landscape; margin: 8mm 7mm; } }'}</style>
       <div className="prof-week-print-head hidden print:block">
         <div style={{ display: 'flex', alignItems: 'center', gap: '4mm' }}>
@@ -75,7 +75,7 @@ export default function ProfessorWeekTable({ termTitle, selectedTermTitle, rows,
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200 print:hidden">
         <div>
           <h2 className="font-extrabold text-slate-900 text-base">
-            جدول نیمسالی تکلیف کارتابل جاری {termTitle ? `— ${termTitle}` : ''}
+            جدول نیمسالی کارتابل جاری {termTitle ? `— ${termTitle}` : ''}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             فقط کلاس‌هایی که ساعت ثبت‌شده دارند در جدول دیده می‌شوند؛ بقیه در فهرست پایین همین کارت آمده‌اند.

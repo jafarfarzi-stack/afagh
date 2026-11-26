@@ -428,7 +428,7 @@ export default async function ProfessorHome() {
 
       <div className="print:hidden grid gap-6 md:grid-cols-3">
 
-        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
+        <div className="hidden sm:block bg-white rounded-3xl p-5 shadow-sm border border-slate-200 md:col-span-2 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <div>
               <h2 className="font-extrabold text-slate-900 text-base">
@@ -488,7 +488,7 @@ export default async function ProfessorHome() {
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <div className="hidden sm:block bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
           <div className="pb-3 border-b border-slate-200">
             <h2 className="font-extrabold text-slate-900 text-base">قرارداد و وضعیت مالی</h2>
             <p className="text-xs text-slate-500 mt-0.5">محاسبه حق‌التدریس بر اساس احکام مصوب</p>
