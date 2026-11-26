@@ -1215,7 +1215,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </select>
               </div>
 
-              <div className="overflow-x-auto border border-slate-300 rounded hidden md:block">
+              <div className="overflow-x-auto border border-slate-300 rounded">
                 <table className="w-full min-w-[860px] table-fixed text-right text-xs rt rt--scroll">
                   <colgroup>
                     <col style={{ width: 150 }} />
@@ -1278,6 +1278,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 </table>
               </div>
 
+              <div className="hidden">
               <MobileCardList<StudentItem>
                 rows={props.students}
                 columns={[
@@ -1307,6 +1308,7 @@ getTranscript(currentStudent.id).then(r => { setTranscript(r); }).catch(e => { c
                 )}
                 empty={<div className="p-6 text-center text-xs text-slate-400">موردی یافت نشد.</div>}
               />
+              </div>
 
               {/* صفحه‌بندی */}
               {pg && pg.totalPages > 1 && (
