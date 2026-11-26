@@ -269,6 +269,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
         و تا زدن همین دکمه هیچ نوشتنی در دیتابیس رخ نمی‌دهد. پس از ذخیره هم
         «بازگردانی» (undo) در همین نوار می‌آید تا تخصیص اشتباه برگشت‌پذیر باشد.
       */}
+      {(isDirty || lastSave) && (
       <div
         className={`fixed bottom-3 left-1/2 z-50 w-[min(1180px,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border-2 px-3 py-2.5 shadow-2xl backdrop-blur flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 transition ${
           isDirty ? 'bg-amber-50/95 border-amber-400' : 'bg-white/95 border-slate-200'
@@ -323,6 +324,7 @@ export default function AdminPermissionsClient({ initial }: { initial: Permissio
           </button>
         </div>
       </div>
+      )}
 
       {/* Segregation of Duties Info Box */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
