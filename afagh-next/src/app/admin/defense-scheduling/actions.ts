@@ -139,11 +139,14 @@ function pickPool(rows: PoolRow[], majorId: number | null) {
 
 /** تمام داده‌های نمایشی میز کار — منبع واحدِ صفحه و کنش‌ها */
 async function loadBoard(): Promise<Board> {
+  console.error('[diag-board] start');
   const user = await requireRole(BOARD_ROLES);
   const uni = await getCurrentUniversity().catch(() => null);
   const uid = uni?.id;
+  console.error('[diag-board] auth ok', {uid, roles:user.roles});
   const scopeOf = (c: any) => (isRealUniversityId(uid) ? or(eq(c, uid), isNull(c)) : sql`1 = 0`);
 
+  console.error('[diag-board] before tpRows');
   const tpRows = await db
     .select({
       auditId: graduation_audits.id,
@@ -181,6 +184,7 @@ async function loadBoard(): Promise<Board> {
       scopeOf(students.universityId),
     ))
     .orderBy(desc(thesis_progress.updatedAt));
+  console.error('[diag-board] tpRows', tpRows.length);
 
   const staffRows = await db
     .select({ id: staff.id, userId: staff.userId, firstName: users.firstName, lastName: users.lastName, rank: staff.academicRank, type: staff.staffType })

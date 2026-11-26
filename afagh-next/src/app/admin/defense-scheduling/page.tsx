@@ -10,7 +10,10 @@ export default async function AdminDefenseSchedulingPage() {
   // کارشناسان کل میز را می‌بینند، استاد راهنما و مدیر گروه فقط پروندهٔ خودشان را.
   await requireRole(['ADMIN', 'EDU_EXPERT', 'GRADUATION_EXPERT', 'DEP_HEAD', 'PROFESSOR']);
 
+  const t0 = Date.now();
+  console.error('[diag-defense] before boardAction');
   const res = await boardAction();
+  console.error('[diag-defense] after boardAction', Date.now()-t0, res.ok);
   if (!res.ok) return <div className="card p-6 text-center text-rose-700 font-bold">{res.error}</div>;
 
   return (
