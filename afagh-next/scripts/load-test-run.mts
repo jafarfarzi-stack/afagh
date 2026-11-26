@@ -16,24 +16,84 @@ process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'warn';
 
 const URL = process.env.DATABASE_URL;
 if (!URL) { console.error('❌ DATABASE_URL الزامی است.'); process.exit(2); }
+
+// ── محافظ سخت production: باید قبل از پچ کوئریها و ایمپورت موتور اجرا شود ──
+// این اسکریپت payroll_statements و audit_logs مینویسد؛ اجرای تصادفی روی production خطرناک است.
+{
+  const guard = new pg.Client({ connectionString: URL });
+  let db = null;
+  let addr = null;
+  let denied = false;
+  try {
+    await guard.connect();
+    const row = (await guard.query('SELECT current_database() AS db, inet_server_addr()::text AS addr')).rows[0];
+    if (!row) {
+      console.error('❌ محافظ نتوانست هویت دیتابیس را شناسایی کند (کوئری بدون نتیجه) — اجرا متوقف میشود.');
+      denied = true;
+    } else {
+      db = row.db;
+      addr = row.addr;
+      denied = (db === 'afagh_db' || addr === '100.70.187.120') && process.env.ALLOW_PROD_BENCH !== '1';
+      if (denied) {
+        console.error('⛔ شناسایی دیتابیس production — اجرای bench ممنوع است.');
+        console.error(`   current_database=${db} · server_addr=${addr}`);
+        console.error('   از دیتابیس جداگانهٔ afagh_bench استفاده کنید یا ALLOW_PROD_BENCH=1 تنظیم نمایید.');
+      }
+    }
+  } catch (e) {
+    console.error('❌ نتوانستیم دیتابیس را برای بررسی محافظ شناسایی کنیم:', String(e));
+    denied = true;
+  } finally {
+    await guard.end().catch(() => {});
+  }
+  if (denied) process.exit(2);
+}
+
 const PHASE = (process.env.PHASE || 'all').split(',').map(s => s.trim());
 const has = (p) => PHASE.includes(p) || PHASE.includes('all');
 
 // ── شمارندهٔ دقیق کوئری‌ها: فقط Client.prototype (Pool.query در نهایت به Client می‌رسد؛
 //    در تراکنش هم drizzle مستقیم Client را صدا می‌زند؛ پس شمارش دوباره رخ نمی‌دهد) ──
-const stats = { sql: 0, bySql: new Map(), phase: null };
-function snap(sqlText) {
+const stats = { sql: 0, bySql: new Map(), phase: null, times: [] };
+function snap(sqlText, ms) {
   if (!stats.phase) return;
   stats.sql++;
+  stats.times.push(ms);
   const key = (sqlText ?? '').slice(0, 100).replace(/\s+/g, ' ').trim();
   stats.bySql.set(key, (stats.bySql.get(key) ?? 0) + 1);
 }
+const pct = (sorted, p) => sorted.length
+  ? sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]
+  : 0;
 const origClientQuery = pg.Client.prototype.query;
 pg.Client.prototype.query = function (...args) {
   const [a] = args;
   const text = typeof a === 'string' ? a : a?.text;
-  const ret = origClientQuery.apply(this, args);
-  snap(text);
+  const t0 = performance.now();
+  let recorded = false;
+  // once محافظت میکند؛ recorded تضمین میکند حتی اگرend و error هر دو آمدند دوبار شمارش نشود.
+  const record = () => {
+    if (recorded) return;
+    recorded = true;
+    snap(text, performance.now() - t0);
+  };
+  let ret;
+  try {
+    ret = origClientQuery.apply(this, args);
+  } catch (e) {
+    record(); // خطای همزمان هنگام ساخت کوئری
+    throw e;
+  }
+  if (ret && typeof ret.then === 'function') {
+    // Promise: موفقیت و شکست هر دو ثبت میشوند؛ همان promise اصلی به caller برگردانده میشود.
+    ret.then(record, record);
+  } else if (ret && typeof ret.on === 'function') {
+    // مسیر callback/Query-Emitter
+    ret.once('end', record);
+    ret.once('error', record);
+  } else {
+    record();
+  }
   return ret;
 };
 const origPoolQuery = pg.Pool.prototype.query;
@@ -50,8 +110,16 @@ async function timed(label, fn) {
   console.log(`⏱  ${label}: ${(ms / 1000).toFixed(2)} ثانیه`);
   return { result, ms };
 }
-const begin = (p) => { stats.phase = p; stats.sql = 0; stats.bySql.clear(); };
-const end = () => { stats.phase = null; return { sql: stats.sql, bySql: stats.bySql }; };
+const begin = (p) => { stats.phase = p; stats.sql = 0; stats.times = []; stats.bySql.clear(); };
+const end = () => {
+  const times = [...stats.times].sort((a, b) => a - b);
+  const mean = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+  const p95 = pct(times, 0.95);
+  const p99 = pct(times, 0.99);
+  console.log(`   ⏱  زمان کوئریها (${times.length}): mean=${mean.toFixed(2)}ms p95=${p95.toFixed(2)}ms p99=${p99.toFixed(2)}ms`);
+  stats.phase = null;
+  return { sql: stats.sql, bySql: stats.bySql, times: stats.times, mean, p95, p99 };
+};
 
 console.log('════════════ شروع تست سنگین بارگذاری ════════════');
 const term = await currentTerm();
