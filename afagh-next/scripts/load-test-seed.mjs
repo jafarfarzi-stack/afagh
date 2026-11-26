@@ -21,6 +21,41 @@ import pg from 'pg';
 const URL = process.env.DATABASE_URL;
 if (!URL) { console.error('❌ DATABASE_URL الزامی است.'); process.exit(2); }
 
+// ── محافظ سخت: جلوگیری از دستکاری تصادفی «isCurrent» ترمها در production ──
+// این اسکریپت ترم LOAD-1405 را جاری میکند و تمام ترمهای دیگر را isCurrent=0 مینویسد.
+// بدون مجوز صریح فقط روی دیتابیس جدای bench (یا LOCAL) اجرا میشود.
+{
+  const guard = new pg.Client({ connectionString: URL });
+  let db = null;
+  let addr = null;
+  let denied = false;
+  try {
+    await guard.connect();
+    const row = (await guard.query('SELECT current_database() AS db, inet_server_addr()::text AS addr')).rows[0];
+    if (!row) {
+      console.error('❌ محافظ نتوانست هویت دیتابیس را شناسایی کند (کوئری بدون نتیجه) — اجرا متوقف میشود.');
+      denied = true;
+    } else {
+      db = row.db;
+      addr = row.addr;
+    }
+  } catch (e) {
+    console.error('❌ نتوانستیم دیتابیس را برای بررسی محافظ شناسایی کنیم:', String(e));
+    denied = true;
+  } finally {
+    await guard.end().catch(() => {});
+  }
+  // هماهنگ با assert-bench-db.mjs: نام دیتابیس production یا آدرس سرور production.
+  if (!denied) denied = (db === 'afagh_db' || addr === '100.70.187.120') && process.env.ALLOW_PROD_BENCH !== '1';
+  if (denied) {
+    console.error('⛔ شناسایی دیتابیس production — اجرای seed bench ممنوع است.');
+    console.error(`   current_database=${db} · server_addr=${addr}`);
+    console.error('   این اسکریپت نشان isCurrent ترمها را تغییر میدهد.');
+    console.error('   از دیتابیس جداگانهٔ afagh_bench استفاده کنید یا ALLOW_PROD_BENCH=1 تنظیم نمایید.');
+    process.exit(2);
+  }
+}
+
 const STAFF = 1500;
 const STUDENTS = 3000;
 const COURSES = 300;

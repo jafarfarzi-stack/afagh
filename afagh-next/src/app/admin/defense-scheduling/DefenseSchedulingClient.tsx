@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import {
   approveProposalAction,
+  overrideIrandocFinalAction,
+  overrideIrandocPriorAction,
   boardAction,
   recordDefenseResultAction,
   saveJuryPoolAction,
@@ -179,6 +181,10 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
                   onPatch={patch => setDraft(r.auditId, patch)}
                   onApprove={() => run(() => approveProposalAction({ auditId: r.auditId, irandocTrackingCode: draftOf(r).tracking }),
                     'پروپوزال تأیید و کد رهگیری ایرانداک ثبت شد.')}
+                  onOverridePrior={() => run(() => overrideIrandocPriorAction({ auditId: r.auditId, note: 'تأیید دستی توسط کارشناس' }),
+                    'پیشینهٔ ایرانداک به‌صورت دستی تأیید شد؛ دانشجو می‌تواند ادامه دهد.')}
+                  onOverrideFinal={() => run(() => overrideIrandocFinalAction({ auditId: r.auditId, note: 'تأیید دستی توسط کارشناس' }),
+                    'استعلام نهایی ایرانداک به‌صورت دستی تأیید شد.')}
                   onSupervisor={approved => run(() => supervisorApproveDefenseAction({ auditId: r.auditId, approved }),
                     approved ? 'درخواست دفاع تأیید شد.' : 'درخواست دفاع به دانشجو بازگردانده شد.')}
                   onSchedule={() => run(() => scheduleDefenseAction({ auditId: r.auditId, scheduledAt: draftOf(r).scheduledAt }),
@@ -309,7 +315,7 @@ export default function DefenseSchedulingClient({ initial }: { initial: Board })
 }
 
 function Row({
-  r, d, pending, canManage, isSupervisor, onPatch, onApprove, onSupervisor, onSchedule, onResult,
+  r, d, pending, canManage, isSupervisor, onPatch, onApprove, onOverridePrior, onOverrideFinal, onSupervisor, onSchedule, onResult,
 }: {
   r: BoardRow;
   d: Draft;
@@ -318,6 +324,8 @@ function Row({
   isSupervisor: boolean;
   onPatch: (patch: Partial<Draft>) => void;
   onApprove: () => void;
+  onOverridePrior: () => void;
+  onOverrideFinal: () => void;
   onSupervisor: (approved: boolean) => void;
   onSchedule: () => void;
   onResult: () => void;
@@ -363,6 +371,32 @@ function Row({
           </span>
         )}
       </div>
+
+      {canManage && (r.proposalStatus === 'PRIOR_REJECTED' || r.irandocPriorStatus === 'REJECTED') && (
+        <div className="rounded-xl border-2 border-amber-200 bg-amber-50/60 p-2.5 space-y-2">
+          <div className="text-2xs font-black text-amber-900">پیشینهٔ ایرانداک رد شده یا در دسترس نیست — ادامهٔ دستی توسط کارشناس</div>
+          <p className="text-3xs text-amber-900 leading-5">
+            در صورت بررسی دستی و تأیید، دانشجو می‌تواند بدون گیر در مرحلهٔ ایرانداک ادامه دهد.
+          </p>
+          <button onClick={onOverridePrior} disabled={pending}
+            className="px-3 py-1.5 rounded-lg bg-amber-700 text-white text-xs font-black disabled:opacity-50">
+            تأیید دستی و ادامهٔ مسیر
+          </button>
+        </div>
+      )}
+
+      {canManage && r.finalThesisFileId != null && r.finalIrandocStatus !== 'PASSED' && (
+        <div className="rounded-xl border-2 border-amber-200 bg-amber-50/60 p-2.5 space-y-2">
+          <div className="text-2xs font-black text-amber-900">استعلام نهایی ایرانداک نتیجهٔ قطعی نداده — ادامهٔ دستی توسط کارشناس</div>
+          <p className="text-3xs text-amber-900 leading-5">
+            وقتی سرویس ایرانداک در دسترس نیست یا پاسخ «بررسی دستی» می‌دهد، پس از بررسی نسخهٔ نهایی می‌توانید این مرحله را دستی تأیید کنید.
+          </p>
+          <button onClick={onOverrideFinal} disabled={pending}
+            className="px-3 py-1.5 rounded-lg bg-amber-700 text-white text-xs font-black disabled:opacity-50">
+            تأیید دستی استعلام نهایی و بستن مرحله
+          </button>
+        </div>
+      )}
 
       {canManage && proposalOpen && (
         <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
