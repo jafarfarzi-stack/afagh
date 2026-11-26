@@ -80,7 +80,7 @@ export default async function AdminFinanceReportsPage(props: {
                 </span>
                 <span className="line-clamp-2 min-w-0 text-[13px] font-extrabold leading-snug text-slate-800 dark:text-slate-100">{r.title}</span>
               </span>
-              <span className="line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500 dark:text-slate-400">{r.desc}</span>
+              <span className="hidden sm:line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500 dark:text-slate-400">{r.desc}</span>
             </Link>
           ))}
         </div>

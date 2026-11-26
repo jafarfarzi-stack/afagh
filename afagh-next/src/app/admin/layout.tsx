@@ -157,13 +157,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       >
         <TermSwitcher terms={termScope.terms} selectedId={termScope.selectedId} />
       </div>
-      {canSwitchUniversity && (
-        <UniversitySwitcher
-          universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
-          currentCode={curUni.code}
-          buttonClass={th.badge}
-        />
-      )}
+
     </>
   );
   return (
@@ -191,8 +185,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {/* رزروِ جای دکمهٔ شناور «منو» (AdminNav: fixed top-3 right-3) — فقط موبایل؛
                 در دسکتاپ ناوبری به سایدبار منتقل شده و این فضا لازم نیست. */}
             <div aria-hidden className="w-14 shrink-0 lg:hidden" />
-            {/* هویت: ارم + آواتار + عنوان */}
+            {/* هویت: سوییچر دانشگاه + ارم + آواتار + عنوان */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              {canSwitchUniversity && (
+                <div className="shrink-0">
+                  <UniversitySwitcher
+                    universities={unis.map(u => ({ code: u.code, title: u.title, kind: u.kind }))}
+                    currentCode={curUni.code}
+                    buttonClass={th.badge}
+                  />
+                </div>
+              )}
               {curUni.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={curUni.logoUrl} alt="نشان دانشگاه" className="w-9 h-9 rounded-xl bg-white object-contain p-0.5 shadow-inner shrink-0" />
@@ -217,7 +220,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
 
           {/* ردیف ۲ (موبایل) / ستونِ میانیِ همان خط (دسکتاپ): سوییچرهای
-              کارتابل / نیمسال / دانشگاه — مشترک بین همهٔ نقش‌ها.
+              کارتابل / نیمسال — مشترک بین همهٔ نقش‌ها (سوییچر دانشگاه کنار ارم در ردیف ۱ است).
               `relative` لازم است: در موبایل پنل هر سوییچر تمام‌عرض و چسبیده به
               همین ردیف باز می‌شود تا از لبهٔ صفحه بیرون نزند.
               در دسکتاپ `lg:order-2` این بلوک را بین هویت و ابزارها می‌آورد تا

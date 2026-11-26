@@ -33,16 +33,18 @@ export default function HeaderActions({
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <Link prefetch={false} href={helpHref} className={`hidden sm:inline-flex ${ghost}`}>
-        <Icon emoji="📖" className="h-3.5 w-3.5" />
-        راهنما
-      </Link>
-      {pdfHref ? (
-        <a href={pdfHref} download className={`hidden md:inline-flex ${ghost}`}>
-          <Icon emoji="📕" className="h-3.5 w-3.5" />
-          PDF
-        </a>
-      ) : null}
+      <div className={`hidden sm:inline-flex items-center h-8 rounded-lg border overflow-hidden ${theme ? `${theme.soft} ${theme.ring}` : 'bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+        <Link prefetch={false} href={helpHref} className={`inline-flex h-full items-center gap-1.5 px-3 text-xs font-medium transition-colors hover:opacity-90 ${theme ? 'text-inherit' : 'text-slate-700 dark:text-slate-200'}`}>
+          <Icon emoji="📖" className="h-3.5 w-3.5" />
+          راهنما
+        </Link>
+        {pdfHref ? (
+          <a href={pdfHref} download title="دانلود PDF راهنما" className={`inline-flex h-full items-center gap-1 border-r px-2.5 text-xs font-medium transition-colors hover:opacity-90 ${theme ? `${theme.ring} text-inherit` : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}>
+            <Icon emoji="📕" className="h-3.5 w-3.5" />
+            PDF
+          </a>
+        ) : null}
+      </div>
       <ThemeToggle />
       <form action={logoutAction} className="shrink-0">
         <button

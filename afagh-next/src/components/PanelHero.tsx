@@ -87,7 +87,7 @@ export default function PanelHero({
   const t = TONES[tone] ?? TONES.indigo;
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-e2 [--enter-opacity:0] [animation:ui-enter_140ms_ease-out_both] print:hidden sm:p-5">
+    <section className="relative hidden overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-e2 [--enter-opacity:0] [animation:ui-enter_140ms_ease-out_both] sm:block sm:p-5 print:hidden">
       {/* هالهٔ نرمِ برند — تزئینی و بدون تأثیر بر چیدمان */}
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: t.glow }} />
 

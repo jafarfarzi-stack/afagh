@@ -84,7 +84,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ group
               </span>
             </span>
             {m.desc ? (
-              <span className="line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500">
+              <span className="hidden sm:line-clamp-2 text-2xs font-medium leading-[1.45] text-slate-500">
                 {m.desc}
               </span>
             ) : null}
