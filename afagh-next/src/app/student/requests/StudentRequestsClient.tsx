@@ -721,7 +721,9 @@ export default function StudentRequestsClient({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-black text-slate-900">{req.processTitle}</span>
+                        <span className="text-base font-black text-slate-900">
+                          {req.processCode === 'ENROLLMENT_CERT' ? 'گواهی اشتغال به تحصیل' : req.processTitle}
+                        </span>
                         <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                           {req.category}
                         </span>
