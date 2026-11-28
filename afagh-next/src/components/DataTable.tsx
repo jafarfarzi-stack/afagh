@@ -117,7 +117,7 @@ export function ClientTh<T>({
           onClick={onSort}
           title="مرتب‌سازی"
           aria-label={`مرتب‌سازی بر اساس ${col.label}`}
-          className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}
+          className={`inline-flex min-h-[44px] items-center font-bold hover:text-indigo-700 whitespace-nowrap sm:min-h-0 ${active ? 'text-indigo-700' : ''}`}
         >
           {col.label}{' '}
           <span className="inline-block w-4 text-center">
@@ -132,7 +132,7 @@ export function ClientTh<T>({
           onClick={e => e.stopPropagation()}
           placeholder="فیلتر…"
           aria-label={`فیلتر ${col.label}`}
-          className="mt-1 block h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-2xs font-normal"
+          className="mt-1 block min-h-[44px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-2 text-2xs font-normal sm:min-h-0 sm:h-7 sm:py-0.5"
         />
       )}
     </th>
@@ -198,12 +198,12 @@ export function ExportButtons({
       <button
         onClick={() => setOpen(o => !o)}
         disabled={pending || busy}
-        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold rounded disabled:opacity-50"
+        className="min-h-[44px] px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold rounded disabled:opacity-50 sm:min-h-0"
       >
         {busy ? 'در حال آماده‌سازی…' : '📤 خروجی'}
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 w-64 rounded-xl border border-slate-300 bg-white p-3 shadow-xl space-y-2">
+        <div className="absolute left-0 top-full mt-1 z-30 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-300 bg-white p-3 shadow-xl space-y-2">
           <p className="text-2xs font-bold text-slate-600">ستون‌های خروجی:</p>
           <div className="max-h-48 overflow-y-auto space-y-1">
             {columns.map(c => (
@@ -247,7 +247,7 @@ export function ServerTh({
   const active = activeKey === sortKey;
   return (
     <th scope="col" className={`p-2 align-top ${className ?? ''}`}>
-      <button onClick={onSort} title="مرتب‌سازی" className={`font-bold hover:text-indigo-700 whitespace-nowrap ${active ? 'text-indigo-700' : ''}`}>
+      <button onClick={onSort} title="مرتب‌سازی" className={`inline-flex min-h-[44px] items-center font-bold hover:text-indigo-700 whitespace-nowrap sm:min-h-0 ${active ? 'text-indigo-700' : ''}`}>
         {label}{' '}
         <span className="inline-block w-4 text-center">
           {active ? (dir === 'asc' ? '▲' : '▼') : <span className="opacity-30">⇅</span>}
@@ -259,7 +259,7 @@ export function ServerTh({
           onChange={e => onFilter(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onApply?.(); } }}
           placeholder={filterPlaceholder ?? 'فیلتر…'}
-          className="mt-1 block h-7 w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-2xs font-normal"
+          className="mt-1 block min-h-[44px] w-full min-w-0 rounded border border-slate-300 bg-white px-1.5 py-2 text-2xs font-normal sm:min-h-0 sm:h-7 sm:py-0.5"
         />
       )}
     </th>

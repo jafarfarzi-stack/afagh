@@ -159,7 +159,7 @@ function TempWeeklySchedule({ cart }: { cart: CartItem[] }) {
       <p className="text-2xs text-slate-500">
         این چیدمان بر اساس دروس فعلی سبد است و با هر افزودن/حذف به‌روز می‌شود تا پیش از ثبت نهایی ببینید تایم‌ها چگونه پر می‌شوند.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
         {days.map((dn, di) => (
           <div key={dn} className="rounded-xl border border-slate-200 bg-slate-50 p-2 space-y-1.5 min-h-[110px]">
             <p className="text-2xs font-black text-slate-700 text-center border-b border-slate-200 pb-1">{dn}</p>

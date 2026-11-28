@@ -12,18 +12,18 @@ export const dynamic = 'force-dynamic';
  * با جابه‌جاییِ برنامه خودکار به‌روز می‌ماند.
  *
  * زنجیرهٔ تصمیم (از دقیق به کلی):
- *   ۱) `course_offering_edu_experts` — استثنای همان درس (تبِ «استثناها»)
- *   ۲) `classroom_edu_experts`       — کارشناسِ اتاقِ همان سانس
- *   ۳) `expert_scopes`               — گروه/دانشکده/دانشگاه
+ * ۱) `course_offering_edu_experts` — استثنای همان درس (تبِ «استثناها»)
+ * ۲) `classroom_edu_experts` — کارشناسِ اتاقِ همان سانس
+ * ۳) `expert_scopes` — گروه/دانشکده/دانشگاه
  */
 export default async function EduExpertAssignPage({
-  searchParams,
+ searchParams,
 }: {
-  searchParams: Promise<{ term?: string }>;
+ searchParams: Promise<{ term?: string }>;
 }) {
-  const sp = await searchParams;
-  const termId = Number(sp.term) || undefined;
-  const init = await getEduExpertAssignInit(termId);
+ const sp = await searchParams;
+ const termId = Number(sp.term) || undefined;
+ const init = await getEduExpertAssignInit(termId);
 
-  return <EduExpertAssignClient init={init} />;
+ return <EduExpertAssignClient init={init} />;
 }

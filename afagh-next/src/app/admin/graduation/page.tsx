@@ -10,33 +10,33 @@ import GraduationClient from './GraduationClient';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminGraduationPage() {
-  await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
-  await ensureClearanceDepartments();
+ await requireRole(['ADMIN', 'GRADUATEAFFAIRS']);
+ await ensureClearanceDepartments();
 
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
+ const currentUniversity = await getCurrentUniversity();
+ const currentUniversityId = currentUniversity?.id ?? null;
 
-  const [rows, stats, departments, alumni, services] = await Promise.all([
-    listDossiers({ universityId: currentUniversityId }),
-    pipelineStats({ universityId: currentUniversityId }),
-    db.select().from(clearance_departments)
-      .where(isRealUniversityId(currentUniversityId) ? or(eq(clearance_departments.universityId, currentUniversityId), isNull(clearance_departments.universityId)) : sql`1 = 0`),
-    allRequests(),
-    serviceCatalog(),
-  ]);
+ const [rows, stats, departments, alumni, services] = await Promise.all([
+ listDossiers({ universityId: currentUniversityId }),
+ pipelineStats({ universityId: currentUniversityId }),
+ db.select().from(clearance_departments)
+ .where(isRealUniversityId(currentUniversityId) ? or(eq(clearance_departments.universityId, currentUniversityId), isNull(clearance_departments.universityId)) : sql`1 = 0`),
+ allRequests(),
+ serviceCatalog(),
+ ]);
 
-  return (
-    <GraduationClient
-      initialRows={rows}
-      initialStats={stats}
-      initialDepartments={departments.map(d => ({
-        id: d.id, code: d.code, title: d.title, autoCheck: d.autoCheck ?? 'NONE',
-        apiUrl: d.apiUrl, responsibleRoleCode: d.responsibleRoleCode,
-        sortOrder: d.sortOrder ?? 100, isActive: d.isActive === 1, hint: d.hint,
-      }))}
-      initialAlumniRequests={alumni}
-      services={services}
-      steps={WORKFLOW_STEPS.map(s => ({ code: s.code, title: s.title, actor: s.actor }))}
-    />
-  );
+ return (
+ <GraduationClient
+ initialRows={rows}
+ initialStats={stats}
+ initialDepartments={departments.map(d => ({
+ id: d.id, code: d.code, title: d.title, autoCheck: d.autoCheck ?? 'NONE',
+ apiUrl: d.apiUrl, responsibleRoleCode: d.responsibleRoleCode,
+ sortOrder: d.sortOrder ?? 100, isActive: d.isActive === 1, hint: d.hint,
+ }))}
+ initialAlumniRequests={alumni}
+ services={services}
+ steps={WORKFLOW_STEPS.map(s => ({ code: s.code, title: s.title, actor: s.actor }))}
+ />
+ );
 }

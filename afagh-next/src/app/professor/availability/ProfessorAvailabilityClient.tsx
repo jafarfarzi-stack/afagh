@@ -308,8 +308,8 @@ export default function ProfessorAvailabilityClient({ demo = false, professor, t
         </div>
 
         {/* Matrix Grid */}
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs rt">
+        <div className="overflow-x-auto rt-wrap">
+          <table className="w-full border-collapse text-xs rt rt--scroll min-w-[760px]">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th scope="col" className="p-3 border border-slate-800 w-28 font-extrabold">روز هفته</th>

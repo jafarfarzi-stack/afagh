@@ -27,13 +27,13 @@ export default function TermSwitcher({
   const current = terms.find(t => t.id === selectedId) ?? null;
 
   const rowClass = (active: boolean) =>
-    `flex w-full items-center gap-2 px-3 py-2 text-right text-xs transition-colors ${active ? 'bg-slate-700 font-extrabold text-white' : 'text-slate-200 hover:bg-slate-800'}`;
+    `flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-right text-xs transition-colors ${active ? 'bg-slate-700 font-extrabold text-white' : 'text-slate-200 hover:bg-slate-800'}`;
 
   return (
     <details className="md:relative">
       <summary
         title="نیمسال فعال — همهٔ فهرست‌ها و کارنامه‌ها بر اساس این انتخاب فیلتر می‌شوند"
-        className="list-none [&::-webkit-details-marker]:hidden bg-white/15 hover:bg-white/25 border-white/25 text-white border rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-1.5 select-none"
+        className="list-none [&::-webkit-details-marker]:hidden bg-white/15 hover:bg-white/25 border-white/25 text-white border rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer flex min-h-[44px] items-center gap-1.5 select-none sm:min-h-0"
       >
         <span className="text-3xs opacity-70">🗓</span>
         {/* برچسب «نیمسال» فقط از sm به بالا — در موبایل جا را برای سوییچر

@@ -31,8 +31,8 @@ export default function AttendanceMatrixSheet({
   if (!students.length || !sessions.length) return null;
 
   return (
-    <div className="transcript-print-area tr-root bg-white border-2 border-slate-800 shadow-sm text-xs text-slate-800">
-      <table className="tr-doc rt">
+    <div className="transcript-print-area tr-root overflow-x-auto bg-white border-2 border-slate-800 shadow-sm text-xs text-slate-800">
+      <table className="tr-doc rt rt--scroll min-w-[980px]">
         <thead>
           <tr>
             <td className="tr-doc-cell">
@@ -56,7 +56,7 @@ export default function AttendanceMatrixSheet({
           <tr className="tr-doc-row">
             <td className="tr-doc-cell">
               {/* ماتریس دانشجو × جلسه */}
-              <table className="tr-term-table w-full table-fixed border-collapse text-center rt">
+              <table className="tr-term-table w-full table-fixed border-collapse text-center rt rt--scroll">
                 <colgroup>
                   <col style={{ width: '8mm' }} />
                   <col style={{ width: '24mm' }} />

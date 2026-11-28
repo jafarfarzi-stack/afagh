@@ -6,23 +6,23 @@ import ExamPlanningClient from './ExamPlanningClient';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminExamsPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER']);
+ await requireRole(['ADMIN', 'EDU_EXPERT', 'VAULT_MANAGER']);
 
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
+ const currentUniversity = await getCurrentUniversity();
+ const currentUniversityId = currentUniversity?.id ?? null;
 
-  const workspace = await getExamWorkspaceAction(undefined, currentUniversityId ?? undefined);
-  if (!workspace.ok) {
-    return (
-      <div className="min-h-screen bg-sky-50/70 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-rose-200 p-6 max-w-md text-center space-y-2">
-          <div className="text-2xl">⚠️</div>
-          <h2 className="font-extrabold text-slate-900">بارگذاری کارتابل امتحانات ناموفق بود</h2>
-          <p className="text-xs text-slate-600 font-bold">{workspace.error}</p>
-        </div>
-      </div>
-    );
-  }
+ const workspace = await getExamWorkspaceAction(undefined, currentUniversityId ?? undefined);
+ if (!workspace.ok) {
+ return (
+ <div className="min-h-screen bg-sky-50/70 flex items-center justify-center p-6">
+ <div className="bg-white rounded-2xl shadow-sm border border-rose-200 p-6 max-w-md text-center space-y-2">
+ <div className="text-2xl">⚠️</div>
+ <h2 className="font-extrabold text-slate-900">بارگذاری کارتابل امتحانات ناموفق بود</h2>
+ <p className="text-xs text-slate-600 font-bold">{workspace.error}</p>
+ </div>
+ </div>
+ );
+ }
 
-  return <ExamPlanningClient initial={workspace.data} universityId={currentUniversityId ?? undefined} />;
+ return <ExamPlanningClient initial={workspace.data} universityId={currentUniversityId ?? undefined} />;
 }

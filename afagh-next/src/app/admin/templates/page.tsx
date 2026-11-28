@@ -11,42 +11,42 @@ export const dynamic = 'force-dynamic';
 const mask = (v: string) => (v ? SECRET_MASK : '');
 
 export default async function AdminTemplatesPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
+ await requireRole(['ADMIN', 'EDU_EXPERT']);
 
-  const currentUniversity = await getCurrentUniversity();
-  const currentUniversityId = currentUniversity?.id ?? null;
-  /* TODO: filter by universityId */
+ const currentUniversity = await getCurrentUniversity();
+ const currentUniversityId = currentUniversity?.id ?? null;
+ /* TODO: filter by universityId */
 
-  const [
-    bbbUrl, bbbSecret, moodleUrl, moodleToken, autoRecord,
-    baleToken, baleChannel, eitaaToken, eitaaChannel, telegramToken, telegramChannel,
-    soroushToken, soroushChannel,
-    smsProvider, smsApiKey, smsSender,
-    payProvider, payTerminal, payMerchant, payKey, payCallback, paySandbox, payWage,
-  ] = await Promise.all([
-    getSetting('BBB_URL'), getSetting('BBB_SECRET'), getSetting('MOODLE_URL'), getSetting('MOODLE_TOKEN'), getBool('BBB_AUTO_RECORD'),
-    getSetting('BALE_TOKEN'), getSetting('BALE_CHANNEL'), getSetting('EITAA_TOKEN'), getSetting('EITAA_CHANNEL'),
-    getSetting('TELEGRAM_TOKEN'), getSetting('TELEGRAM_CHANNEL'),
-    getSetting('SOROUSH_TOKEN'), getSetting('SOROUSH_CHANNEL'),
-    getSetting('SMS_PROVIDER'), getSetting('SMS_API_KEY'), getSetting('SMS_SENDER'),
-    getSetting('PAY_PROVIDER'), getSetting('PAY_TERMINAL_ID'), getSetting('PAY_MERCHANT_ID'),
-    getSetting('PAY_MERCHANT_KEY'), getSetting('PAY_CALLBACK_URL'), getBool('PAY_SANDBOX'), getSetting('PAY_WAGE_PERCENT'),
-  ]);
+ const [
+ bbbUrl, bbbSecret, moodleUrl, moodleToken, autoRecord,
+ baleToken, baleChannel, eitaaToken, eitaaChannel, telegramToken, telegramChannel,
+ soroushToken, soroushChannel,
+ smsProvider, smsApiKey, smsSender,
+ payProvider, payTerminal, payMerchant, payKey, payCallback, paySandbox, payWage,
+ ] = await Promise.all([
+ getSetting('BBB_URL'), getSetting('BBB_SECRET'), getSetting('MOODLE_URL'), getSetting('MOODLE_TOKEN'), getBool('BBB_AUTO_RECORD'),
+ getSetting('BALE_TOKEN'), getSetting('BALE_CHANNEL'), getSetting('EITAA_TOKEN'), getSetting('EITAA_CHANNEL'),
+ getSetting('TELEGRAM_TOKEN'), getSetting('TELEGRAM_CHANNEL'),
+ getSetting('SOROUSH_TOKEN'), getSetting('SOROUSH_CHANNEL'),
+ getSetting('SMS_PROVIDER'), getSetting('SMS_API_KEY'), getSetting('SMS_SENDER'),
+ getSetting('PAY_PROVIDER'), getSetting('PAY_TERMINAL_ID'), getSetting('PAY_MERCHANT_ID'),
+ getSetting('PAY_MERCHANT_KEY'), getSetting('PAY_CALLBACK_URL'), getBool('PAY_SANDBOX'), getSetting('PAY_WAGE_PERCENT'),
+ ]);
 
-  const settings: IntegrationSettingsProps = {
-    bbb: { url: bbbUrl, secret: mask(bbbSecret), moodleUrl, moodleToken: mask(moodleToken), autoRecord },
-    bots: {
-      baleToken: mask(baleToken), baleChannel,
-      eitaaToken: mask(eitaaToken), eitaaChannel,
-      telegramToken: mask(telegramToken), telegramChannel,
-      soroushToken: mask(soroushToken), soroushChannel,
-      smsProvider, smsApiKey: mask(smsApiKey), smsSender,
-    },
-    pay: {
-      provider: payProvider, terminalId: payTerminal, merchantId: payMerchant,
-      merchantKey: mask(payKey), callbackUrl: payCallback, sandbox: paySandbox, wagePercent: payWage,
-    },
-  };
+ const settings: IntegrationSettingsProps = {
+ bbb: { url: bbbUrl, secret: mask(bbbSecret), moodleUrl, moodleToken: mask(moodleToken), autoRecord },
+ bots: {
+ baleToken: mask(baleToken), baleChannel,
+ eitaaToken: mask(eitaaToken), eitaaChannel,
+ telegramToken: mask(telegramToken), telegramChannel,
+ soroushToken: mask(soroushToken), soroushChannel,
+ smsProvider, smsApiKey: mask(smsApiKey), smsSender,
+ },
+ pay: {
+ provider: payProvider, terminalId: payTerminal, merchantId: payMerchant,
+ merchantKey: mask(payKey), callbackUrl: payCallback, sandbox: paySandbox, wagePercent: payWage,
+ },
+ };
 
-  return <TemplateEngineClient settings={settings} initialTemplates={await listNotificationTemplates()} />;
+ return <TemplateEngineClient settings={settings} initialTemplates={await listNotificationTemplates()} />;
 }

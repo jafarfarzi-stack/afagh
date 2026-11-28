@@ -10,25 +10,25 @@ export const dynamic = 'force-dynamic';
  * هر ارسال با کد رهگیری یکتا (BROADCAST_*) لاگ می‌شود و سقف ۵۰۰۰ نفر دارد.
  */
 export default async function BroadcastPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT']);
-  const filters = await getBroadcastFilters().catch(() => ({
-    faculties: [],
-    departments: [],
-    majors: [],
-    entryYears: [],
-    terms: [],
-  }));
+ await requireRole(['ADMIN', 'EDU_EXPERT']);
+ const filters = await getBroadcastFilters().catch(() => ({
+ faculties: [],
+ departments: [],
+ majors: [],
+ entryYears: [],
+ terms: [],
+ }));
 
-  return (
-    <div className="max-w-4xl mx-auto space-y-4 p-4" dir="rtl">
-      <div className="card">
-        <h1 className="font-black text-base sm:text-lg">📣 ارسال پیام همگانی</h1>
-        <p className="mt-1 text-xs leading-6 text-slate-500">
-          به دانشجویان یا اساتید یک رشته، گروه، دانشکده یا ورودی خاص پیام بفرستید.
-          پیام در همهٔ کانال‌های انتخابی می‌رود و تحویل هر نفر ثبت می‌شود.
-        </p>
-      </div>
-      <BroadcastClient filters={filters} />
-    </div>
-  );
+ return (
+ <div className="max-w-4xl mx-auto space-y-4 p-4" dir="rtl">
+ <div className="card">
+ <h1 className="font-black text-base sm:text-lg">📣 ارسال پیام همگانی</h1>
+ <p className="mt-1 text-xs leading-6 text-slate-500">
+ به دانشجویان یا اساتید یک رشته، گروه، دانشکده یا ورودی خاص پیام بفرستید.
+ پیام در همهٔ کانال‌های انتخابی می‌رود و تحویل هر نفر ثبت می‌شود.
+ </p>
+ </div>
+ <BroadcastClient filters={filters} />
+ </div>
+ );
 }

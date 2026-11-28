@@ -94,13 +94,13 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby="afagh-modal-title"
         onClick={e => e.stopPropagation()}
-        className={`max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-xl sm:rounded-2xl dark:border-slate-700 dark:bg-slate-900 ${maxW}`}
+        className={`max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] shadow-xl sm:rounded-2xl sm:pb-4 dark:border-slate-700 dark:bg-slate-900 ${maxW}`}
       >
         <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
           <h2 id="afagh-modal-title" className="text-sm font-black text-slate-900 dark:text-slate-100">
             {title}
           </h2>
-          <Button size="icon" variant="ghost" aria-label="بستن" label="بستن" onClick={onClose}>
+          <Button size="icon" variant="ghost" aria-label="بستن" label="بستن" onClick={onClose} className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0">
             ✕
           </Button>
         </div>

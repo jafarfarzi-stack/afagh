@@ -423,12 +423,12 @@ export default function StudentRequestsClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 tabstrip">
+        <div className="flex w-full sm:w-auto flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveTab('MY_REQUESTS')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
+            className={`min-h-11 px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
               activeTab === 'MY_REQUESTS'
-                ? 'bg-white text-indigo-950 scale-105'
+                ? 'bg-white text-indigo-950 sm:scale-105'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
             }`}
           >
@@ -436,9 +436,9 @@ export default function StudentRequestsClient({
           </button>
           <button
             onClick={() => setActiveTab('NEW_REQUEST')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
+            className={`min-h-11 px-4 py-2 rounded-xl text-xs font-extrabold transition-all shadow ${
               activeTab === 'NEW_REQUEST'
-                ? 'bg-amber-400 text-slate-950 scale-105'
+                ? 'bg-amber-400 text-slate-950 sm:scale-105'
                 : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
             }`}
           >
@@ -719,8 +719,8 @@ export default function StudentRequestsClient({
                 >
                   {/* ردیف بالا: عنوان و وضعیت */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-black text-slate-900">
                           {req.processCode === 'ENROLLMENT_CERT' ? 'گواهی اشتغال به تحصیل' : req.processTitle}
                         </span>
@@ -728,12 +728,12 @@ export default function StudentRequestsClient({
                           {req.category}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-400 break-words">
                         کد رهگیری: <b className="font-mono text-slate-700" dir="ltr">{req.trackingCode}</b> · تاریخ ثبت: {req.created ? new Date(req.created).toLocaleDateString('fa-IR') : '—'}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className={`text-xs px-3 py-1 rounded-full border ${statusBadge[req.status] || 'bg-slate-100 text-slate-700'}`}>
                         {statusFa[req.status] ?? req.status}
                       </span>

@@ -21,7 +21,7 @@ export default function PrintTranscriptButton({
       onClick={() => doPrintTranscript(orientation)}
       className={
         className ??
-        'inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-slate-900 print:hidden'
+        'inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-slate-900 sm:min-h-0 print:hidden'
       }
     >
       <span>🖨️</span>

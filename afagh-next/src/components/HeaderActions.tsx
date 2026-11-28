@@ -27,7 +27,7 @@ export default function HeaderActions({
   /** رنگ‌های برندِ کارتابل (از `uniThemeResolved`) */
   theme?: Pick<UniTheme, 'soft' | 'ring'>;
 }) {
-  const ghost = `text-xs font-medium border px-3 h-8 inline-flex items-center gap-1.5 rounded-lg transition-colors ${
+  const ghost = `text-xs font-medium border px-3 min-h-[44px] sm:min-h-0 sm:h-8 inline-flex items-center gap-1.5 rounded-lg transition-colors ${
     theme ? `${theme.soft} ${theme.ring} hover:opacity-90` : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
   }`;
 
@@ -49,7 +49,7 @@ export default function HeaderActions({
       <form action={logoutAction} className="shrink-0">
         <button
           type="submit"
-          className="inline-flex h-8 items-center rounded-lg bg-rose-600 px-3 text-xs font-bold text-white transition-colors hover:bg-rose-500"
+          className="inline-flex min-h-[44px] items-center rounded-lg bg-rose-600 px-3 text-xs font-bold text-white transition-colors hover:bg-rose-500 sm:min-h-0 sm:h-8"
         >
           <span className="sm:hidden">خروج</span>
           <span className="hidden sm:inline">خروج از سامانه</span>

@@ -45,7 +45,7 @@ export default function PortalNav({
     .sort((a, b) => b.length - a.length)[0];
 
   const itemBase =
-    'group relative flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] leading-5 ui-t ' +
+    'group relative flex min-h-[44px] items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] leading-5 ui-t ' +
     'focus-visible:outline-none focus-visible:ring-2';
 
   return (

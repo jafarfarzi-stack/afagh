@@ -56,20 +56,20 @@ export default function AccountSwitcher({ siblings }: { siblings: SiblingAccount
                   {s.universityTitle ? ` · ${s.universityTitle}` : ''}
                 </span>
                 {openFor === key ? (
-                  <span className="flex items-center gap-1.5 mr-auto">
+                  <span className="flex w-full flex-wrap items-center gap-1.5 sm:mr-auto sm:w-auto">
                     <input
                       type="password"
                       dir="ltr"
                       placeholder="رمز این حساب"
                       value={pw}
                       onChange={(e) => setPw(e.target.value)}
-                      className="w-36 rounded-lg border border-slate-300 bg-white px-2 py-1 text-left text-xs"
+                      className="min-h-[44px] w-full min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-left text-xs sm:min-h-0 sm:w-36 sm:py-1"
                       autoComplete="current-password"
                     />
                     <button
                       disabled={busy}
                       onClick={() => go(s)}
-                      className="rounded-lg bg-emerald-700 px-3 py-1 font-bold text-white hover:bg-emerald-800 disabled:opacity-60"
+                      className="min-h-[44px] rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white hover:bg-emerald-800 disabled:opacity-60 sm:min-h-0 sm:py-1"
                     >
                       {busy ? '…' : 'ورود'}
                     </button>
@@ -80,7 +80,7 @@ export default function AccountSwitcher({ siblings }: { siblings: SiblingAccount
                         setPw('');
                         setErr('');
                       }}
-                      className="rounded-lg bg-white px-2 py-1 text-slate-500 hover:underline"
+                      className="min-h-[44px] rounded-lg bg-white px-2 py-2 text-slate-500 hover:underline sm:min-h-0 sm:py-1"
                     >
                       انصراف
                     </button>
@@ -92,7 +92,7 @@ export default function AccountSwitcher({ siblings }: { siblings: SiblingAccount
                       setPw('');
                       setErr('');
                     }}
-                    className="mr-auto rounded-lg bg-indigo-700 px-3 py-1 font-bold text-white hover:bg-indigo-800"
+                    className="mr-auto min-h-[44px] rounded-lg bg-indigo-700 px-3 py-2 font-bold text-white hover:bg-indigo-800 sm:min-h-0 sm:py-1"
                   >
                     مشاهده با این کد ←
                   </button>

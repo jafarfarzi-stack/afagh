@@ -44,7 +44,7 @@ export default function ProfessorNav() {
   return (
     <>
       <nav
-        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
+        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 pb-[env(safe-area-inset-bottom,0px)] print:hidden"
         style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         aria-label="ناوبری اصلی استاد"
       >
@@ -92,7 +92,7 @@ export default function ProfessorNav() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="بستن منو"
-                className="rounded-lg px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-xl leading-none text-slate-500 hover:bg-slate-100"
               >
                 ×
               </button>
@@ -105,7 +105,7 @@ export default function ProfessorNav() {
                     key={n.href}
                     href={n.href}
                     onClick={() => setOpen(false)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+                    className={`flex min-h-[44px] items-center gap-2.5 px-3 py-3 rounded-xl font-bold transition-all ${
                       active
                         ? 'bg-indigo-700 text-white shadow-md'
                         : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100'
@@ -119,7 +119,7 @@ export default function ProfessorNav() {
               <Link prefetch={false}
                 href="/help/professor"
                 onClick={() => setOpen(false)}
-                className="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:text-indigo-800 hover:bg-indigo-50 transition"
+                className="flex min-h-[44px] items-center justify-between px-3 py-3 rounded-xl text-sm font-bold text-slate-600 hover:text-indigo-800 hover:bg-indigo-50 transition"
               >
                 <div className="flex items-center gap-2.5">
                   <span>📖</span>

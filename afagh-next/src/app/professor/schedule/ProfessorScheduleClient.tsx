@@ -128,22 +128,22 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
             </h1>
           </div>
 
-          <div className="flex items-center gap-2 print:hidden">
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
             <button
               onClick={handlePrint}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition flex items-center gap-1.5"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition flex items-center gap-1.5"
             >
               <span>🖨️ چاپ برنامه هفتگی</span>
             </button>
             <Link prefetch={false}
               href="/professor/attendance"
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition"
+              className="min-h-[44px] inline-flex items-center px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition"
             >
               📋 ثبت حضور و غیاب
             </Link>
             <Link prefetch={false}
               href="/professor/grades"
-              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow transition"
+              className="min-h-[44px] inline-flex items-center px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow transition"
             >
               📝 بارم‌بندی و ثبت نمرات
             </Link>
@@ -215,12 +215,12 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
       </div>
 
       {/* Filter by Week Type */}
-      <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs print:hidden">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-slate-600">فیلتر نمایش هفته:</span>
           <button
             onClick={() => setSelectedWeekFilter('ALL')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold transition ${
               selectedWeekFilter === 'ALL' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
@@ -228,7 +228,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </button>
           <button
             onClick={() => setSelectedWeekFilter('EVEN')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold transition ${
               selectedWeekFilter === 'EVEN' ? 'bg-cyan-700 text-white' : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
             }`}
           >
@@ -236,7 +236,7 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
           </button>
           <button
             onClick={() => setSelectedWeekFilter('ODD')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold transition ${
               selectedWeekFilter === 'ODD' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
             }`}
           >
@@ -374,19 +374,19 @@ export default function ProfessorScheduleClient({ professor, termTitle, initialO
                     <div className="flex items-center justify-center gap-1.5">
                       <Link prefetch={false}
                         href={`/professor/attendance?offeringId=${item.id}`}
-                        className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-3xs transition"
+                        className="min-h-[44px] inline-flex items-center justify-center px-2.5 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-3xs transition"
                       >
                         📋 حضور و غیاب
                       </Link>
                       <Link prefetch={false}
                         href={`/professor/grades?offeringId=${item.id}`}
-                        className="px-2 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-3xs transition"
+                        className="min-h-[44px] inline-flex items-center justify-center px-2.5 py-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-3xs transition"
                       >
                         📝 ثبت نمره
                       </Link>
                       <Link prefetch={false}
                         href={`/professor/lesson-plan/${item.id}`}
-                        className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-3xs transition"
+                        className="min-h-[44px] inline-flex items-center justify-center px-2.5 py-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-3xs transition"
                       >
                         📋 طرح درس
                       </Link>

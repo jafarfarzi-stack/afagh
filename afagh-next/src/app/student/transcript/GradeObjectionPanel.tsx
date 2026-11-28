@@ -107,7 +107,8 @@ export default function GradeObjectionPanel({
               <span>📚 {t.termTitle}{t.isCurrent ? ' · جاری' : ''}</span>
               <span className="font-mono text-slate-500 text-3xs" dir="ltr">{t.termCode}</span>
             </div>
-            <table className="w-full text-right text-2xs border-collapse">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-right text-2xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
                   <th scope="col" className="p-1.5 text-center w-16">کد درس</th>
@@ -152,6 +153,7 @@ export default function GradeObjectionPanel({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         ))}
       </div>

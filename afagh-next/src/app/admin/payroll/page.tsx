@@ -13,119 +13,119 @@ type Tab = 'live' | 'simulator';
 
 /**
  * میز کار حق‌التدریس:
- *   • «محاسبهٔ واقعی» — دادهٔ زنده از موتور مالی (payroll-engine) روی PostgreSQL
- *   • «شبیه‌ساز سناریو» — پیش‌نمایش رابط کاربری با دادهٔ نمونه (بدون نوشتن در دیتابیس)
+ * • «محاسبهٔ واقعی» — دادهٔ زنده از موتور مالی (payroll-engine) روی PostgreSQL
+ * • «شبیه‌ساز سناریو» — پیش‌نمایش رابط کاربری با دادهٔ نمونه (بدون نوشتن در دیتابیس)
  */
 export default async function PayrollPage(props: { searchParams: Promise<{ tab?: string }> }) {
-  // زنجیرهٔ تأیید فیش: مدیر گروه (دامنهٔ گروه خودش) + معاونت آموزشی هم کارتابل را می‌بینند
-  const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE', 'DEP_HEAD']);
-  const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
+ // زنجیرهٔ تأیید فیش: مدیر گروه (دامنهٔ گروه خودش) + معاونت آموزشی هم کارتابل را می‌بینند
+ const user = await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU', 'FINANCE_EXPERT', 'FINANCE', 'DEP_HEAD']);
+ const isFinance = user.roles.some(r => r === 'FINANCE_EXPERT' || r === 'FINANCE');
 
-  const sp = await props.searchParams;
-  const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
+ const sp = await props.searchParams;
+ const tab: Tab = sp?.tab === 'simulator' ? 'simulator' : 'live';
 
-  if (tab === 'simulator') {
-    // نام دانشگاه برای سربرگ ابلاغیه/فیش — از دانشگاه فعال و سپس تنظیمات سراسری (بدون هاردکد)
-    const uni = await getCurrentUniversity().catch(() => null);
-    const uniTitle = uni?.title && uni.title !== '—'
-      ? uni.title
-      : (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
-    // عنوان ترمِ انتخابی از سوییچر سربرگ (کوکی afagh_term) — همان الگوی کارتابل مالی
-    const termScope = await getTermScope(uni?.id ?? null).catch(() => null);
-    const scopeTermTitle = termScope?.selectedId
-      ? (termScope.terms.find((t) => t.id === termScope.selectedId)?.title ?? null)
-      : null;
-    return <PayrollEngineClient universityTitle={uniTitle} termTitle={scopeTermTitle} />;
-  }
+ if (tab === 'simulator') {
+ // نام دانشگاه برای سربرگ ابلاغیه/فیش — از دانشگاه فعال و سپس تنظیمات سراسری (بدون هاردکد)
+ const uni = await getCurrentUniversity().catch(() => null);
+ const uniTitle = uni?.title && uni.title !== '—'
+ ? uni.title
+ : (await getSetting('UNIVERSITY_NAME').catch(() => '')) || null;
+ // عنوان ترمِ انتخابی از سوییچر سربرگ (کوکی afagh_term) — همان الگوی کارتابل مالی
+ const termScope = await getTermScope(uni?.id ?? null).catch(() => null);
+ const scopeTermTitle = termScope?.selectedId
+ ? (termScope.terms.find((t) => t.id === termScope.selectedId)?.title ?? null)
+ : null;
+ return <PayrollEngineClient universityTitle={uniTitle} termTitle={scopeTermTitle} />;
+ }
 
-  const term = await currentTerm();
-  // نمای دامنه‌دار: مدیر گروهِ خالص فقط فیش‌های گروه خودش را می‌بیند (داخل getScopedOverview)
-  const overview = term ? await getScopedOverview().catch(() => null) : null;
+ const term = await currentTerm();
+ // نمای دامنه‌دار: مدیر گروهِ خالص فقط فیش‌های گروه خودش را می‌بیند (داخل getScopedOverview)
+ const overview = term ? await getScopedOverview().catch(() => null) : null;
 
-  return (
-    <div className="space-y-4 p-4" dir="rtl">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <a
-          href="/admin/payroll?tab=live"
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
-        >
-          محاسبهٔ واقعی
-        </a>
-        <a
-          href="/admin/payroll?tab=simulator"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          شبیه‌ساز سناریو (دادهٔ نمونه)
-        </a>
-        <a
-          href="/admin/payroll/coverage"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          پوشش فرمول‌ها
-        </a>
-        <a
-          href="/admin/payroll/teaching-roles"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          نقش تدریس در درس‌ها
-        </a>
-        <a
-          href="/admin/payroll/roles"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          سمت‌ها و انتساب ترمی
-        </a>
-        <a
-          href="/admin/payroll/decrees"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          ابلاغ‌های آموزشی
-        </a>
-        <a
-          href="/admin/payroll/thesis"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          دفتر پایان‌نامه
-        </a>
-        <a
-          href="/admin/payroll/regulations"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          نسخه‌های آیین‌نامه
-        </a>
-        <a
-          href="/admin/payroll/exam-payments"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          پرداخت‌های امتحانی
-        </a>
-        <a
-          href="/admin/payroll/objections"
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
-        >
-          اعتراض‌ها
-        </a>
-      </div>
+ return (
+ <div className="space-y-4 p-4" dir="rtl">
+ <div className="flex flex-wrap items-center gap-2 text-sm">
+ <a
+ href="/admin/payroll?tab=live"
+ className="rounded-lg bg-slate-800 px-3 py-1.5 text-white"
+ >
+ محاسبهٔ واقعی
+ </a>
+ <a
+ href="/admin/payroll?tab=simulator"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ شبیه‌ساز سناریو (دادهٔ نمونه)
+ </a>
+ <a
+ href="/admin/payroll/coverage"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ پوشش فرمول‌ها
+ </a>
+ <a
+ href="/admin/payroll/teaching-roles"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ نقش تدریس در درس‌ها
+ </a>
+ <a
+ href="/admin/payroll/roles"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ سمت‌ها و انتساب ترمی
+ </a>
+ <a
+ href="/admin/payroll/decrees"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ ابلاغ‌های آموزشی
+ </a>
+ <a
+ href="/admin/payroll/thesis"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ دفتر پایان‌نامه
+ </a>
+ <a
+ href="/admin/payroll/regulations"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ نسخه‌های آیین‌نامه
+ </a>
+ <a
+ href="/admin/payroll/exam-payments"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ پرداخت‌های امتحانی
+ </a>
+ <a
+ href="/admin/payroll/objections"
+ className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700"
+ >
+ اعتراض‌ها
+ </a>
+ </div>
 
-      {isFinance && (
-        <a
-          href="/admin/student-finance"
-          className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-sm text-emerald-900 hover:bg-emerald-100 transition-colors"
-        >
-          <span className="font-bold">💳 امور مالی دانشجویان — شهریه، دفتر مالی و بدهی دانشجویان</span>
-          <span className="font-extrabold">←</span>
-        </a>
-      )}
+ {isFinance && (
+ <a
+ href="/admin/student-finance"
+ className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-sm text-emerald-900 hover:bg-emerald-100 transition-colors"
+ >
+ <span className="font-bold">💳 امور مالی دانشجویان — شهریه، دفتر مالی و بدهی دانشجویان</span>
+ <span className="font-extrabold">←</span>
+ </a>
+ )}
 
-      {!term ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          ترم جاری مشخص نیست. ابتدا در «مدیریت ترم‌ها» یک ترم را به‌عنوان ترم جاری علامت بزنید.
-        </div>
-      ) : null}
+ {!term ? (
+ <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+ ترم جاری مشخص نیست. ابتدا در «مدیریت ترم‌ها» یک ترم را به‌عنوان ترم جاری علامت بزنید.
+ </div>
+ ) : null}
 
-      {term && overview ? (
-        <LivePayrollClient initialTerm={overview.term} initialList={overview.list} initialTotals={overview.totals} userRoles={user.roles} />
-      ) : null}
-    </div>
-  );
+ {term && overview ? (
+ <LivePayrollClient initialTerm={overview.term} initialList={overview.list} initialTotals={overview.totals} userRoles={user.roles} />
+ ) : null}
+ </div>
+ );
 }

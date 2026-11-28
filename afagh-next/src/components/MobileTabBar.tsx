@@ -28,7 +28,7 @@ export default function MobileTabBar({
   return (
     <nav
       dir="rtl"
-      className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-slate-200 print:hidden"
+      className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom,0px)] print:hidden"
       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
       aria-label="ناوبری اصلی موبایل"
     >
@@ -40,7 +40,7 @@ export default function MobileTabBar({
               key={it.href}
               href={it.href}
               style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 transition active:bg-slate-100 active:scale-95 ${
+              className={`flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition active:bg-slate-100 active:scale-95 ${
                 active ? `${activeClass} font-bold` : 'text-slate-500'
               }`}
             >

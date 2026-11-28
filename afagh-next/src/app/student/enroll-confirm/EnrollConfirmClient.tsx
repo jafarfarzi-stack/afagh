@@ -65,13 +65,13 @@ export default function EnrollConfirmClient(props: {
   return (
     <div className="space-y-3">
       {/* نوار عملیات — در چاپ نمی‌آید */}
-      <div className="print:hidden flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+      <div className="print:hidden flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-slate-600">
           تأییدیهٔ انتخاب واحد <b>{termTitle}</b> — معتبر تا {expiresAt ? new Date(expiresAt).toLocaleDateString('fa-IR') : '—'}
         </div>
         <button
           onClick={() => window.print()}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-500"
+          className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-500 self-start sm:self-auto"
         >
           🖨️ چاپ تأییدیه
         </button>
@@ -103,7 +103,8 @@ export default function EnrollConfirmClient(props: {
           ))}
         </div>
 
-        <table className="w-full text-right text-xs rt">
+        <div className="overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0">
+        <table className="w-full min-w-[680px] text-right text-xs rt">
           <thead>
             <tr className="border-y-2 border-slate-800 text-slate-600">
               <th scope="col" className="p-2">ردیف</th>
@@ -140,6 +141,7 @@ export default function EnrollConfirmClient(props: {
             </tr>
           </tfoot>
         </table>
+        </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">

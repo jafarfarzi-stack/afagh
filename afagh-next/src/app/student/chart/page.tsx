@@ -421,7 +421,8 @@ export default async function StudentCurriculumChartPage() {
           {chartRows.length > 0 && (
             <div className="card !p-4 bg-white shadow-sm space-y-3">
               <h4 className="font-extrabold text-slate-900 text-sm">📋 جمع‌بندی نوع درس و پیشرفت شما</h4>
-              <table className="w-full border-collapse text-xs rt">
+              <div className="overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0">
+              <table className="w-full min-w-[520px] border-collapse text-xs rt">
                 <thead>
                   <tr className="bg-slate-100 text-center">
                     <th scope="col" className="p-2 border border-slate-300">نوع درس</th>
@@ -465,6 +466,7 @@ export default async function StudentCurriculumChartPage() {
                   </tr>
                 </tbody>
               </table>
+              </div>
               <p className="text-3xs text-slate-400 font-bold">خانهٔ تیک‌دار = همهٔ دروس آن نوع گذرانده شده‌اند؛ خالی = هنوز مانده.</p>
             </div>
           )}

@@ -229,13 +229,13 @@ export default async function StudentFinancePage({ searchParams }: { searchParam
           <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs font-bold">
             <a
               href={`/student/finance?${new URLSearchParams({ ...(wantedRecordId ? { record: String(wantedRecordId) } : {}) }).toString()}`}
-              className={!flatView ? 'bg-slate-800 px-3 py-1.5 text-white' : 'bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+              className={!flatView ? 'bg-slate-800 px-3 py-2.5 text-white' : 'bg-white px-3 py-2.5 text-slate-600 hover:bg-slate-50'}
             >
               نوع الف
             </a>
             <a
               href={`/student/finance?${new URLSearchParams({ ...(wantedRecordId ? { record: String(wantedRecordId) } : {}), format: 'flat' }).toString()}`}
-              className={flatView ? 'border-r border-slate-300 bg-slate-800 px-3 py-1.5 text-white' : 'border-r border-slate-300 bg-white px-3 py-1.5 text-slate-600 hover:bg-slate-50'}
+              className={flatView ? 'border-r border-slate-300 bg-slate-800 px-3 py-2.5 text-white' : 'border-r border-slate-300 bg-white px-3 py-2.5 text-slate-600 hover:bg-slate-50'}
             >
               نوع ب
             </a>

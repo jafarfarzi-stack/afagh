@@ -5,5 +5,5 @@ import PageSkeleton from '@/components/PageSkeleton';
  * و ناوبریِ سمتی سرور بی‌واکنش می‌ماند.
  */
 export default function Loading() {
-  return <PageSkeleton />;
+ return <PageSkeleton />;
 }

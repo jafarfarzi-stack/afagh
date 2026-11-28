@@ -122,15 +122,15 @@ export default function ScheduleClient({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
           <Link prefetch={false}
             href="/student/enroll"
-            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-1"
+            className="min-h-11 inline-flex items-center text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl font-bold transition-colors gap-1"
           >
             <span>بازگشت به انتخاب واحد</span>
           </Link>
-          <span className="text-xs text-slate-400">|</span>
+          <span className="hidden sm:inline text-xs text-slate-400">|</span>
           <span className="text-xs text-slate-600 font-bold">
             برنامه هفتگی — <bdi>{term.title}</bdi>
           </span>
@@ -167,12 +167,12 @@ export default function ScheduleClient({
         </div>
       </div>
 
-      <div className="hidden sm:flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
-        <div className="flex items-center gap-2 tabstrip">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-slate-600">فیلتر نمایش هفته:</span>
           <button
             onClick={() => setWeekFilter('ALL')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold transition ${
               weekFilter === 'ALL' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
@@ -180,7 +180,7 @@ export default function ScheduleClient({
           </button>
           <button
             onClick={() => setWeekFilter('EVEN')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold transition ${
               weekFilter === 'EVEN' ? 'bg-cyan-700 text-white' : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
             }`}
           >
@@ -188,14 +188,14 @@ export default function ScheduleClient({
           </button>
           <button
             onClick={() => setWeekFilter('ODD')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+            className={`min-h-11 px-3 py-2 rounded-lg text-xs font-bold transition ${
               weekFilter === 'ODD' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
             }`}
           >
             فقط هفته‌های فرد
           </button>
         </div>
-        <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2.5 py-0.5 rounded-lg font-bold">
+        <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2.5 py-1 rounded-lg font-bold self-start sm:self-auto">
           مجموع: {faNum(totalUnits)} واحد ({faNum(courses.length)} درس)
         </span>
       </div>

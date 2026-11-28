@@ -14,15 +14,15 @@ export const dynamic = 'force-dynamic';
  * به‌چشم خطای تازه نیاید.
  */
 export default async function ScheduleConflictsPage() {
-  await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU']);
-  const uni = await getCurrentUniversity().catch(() => null);
-  if (!uni || !(uni.id > 0)) {
-    return <div className="p-6 text-sm text-rose-700">دانشگاه فعال مشخص نیست.</div>;
-  }
-  const terms = await listTermsForConflicts(uni.id).catch(() => []);
-  return (
-    <div className="max-w-7xl mx-auto space-y-4 p-4 md:p-6">
-      <ScheduleConflictsClient terms={terms} />
-    </div>
-  );
+ await requireRole(['ADMIN', 'EDU_EXPERT', 'VICE_EDU']);
+ const uni = await getCurrentUniversity().catch(() => null);
+ if (!uni || !(uni.id > 0)) {
+ return <div className="p-6 text-sm text-rose-700">دانشگاه فعال مشخص نیست.</div>;
+ }
+ const terms = await listTermsForConflicts(uni.id).catch(() => []);
+ return (
+ <div className="max-w-7xl mx-auto space-y-4 p-4 md:p-6">
+ <ScheduleConflictsClient terms={terms} />
+ </div>
+ );
 }

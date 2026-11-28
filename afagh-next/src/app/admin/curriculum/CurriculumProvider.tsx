@@ -1,9 +1,9 @@
 'use client';
 
 // ════════════════════════════════════════════════════════════════════════
-//  تنها صاحب وضعیت ماژول برنامهٔ درسی: ۳۸ useState + Server Actionها + مشتقات.
-//  تب‌ها و مودال‌ها state خودی ندارند و فقط از useCurriculum() می‌خوانند؛
-//  محاسبات خالص هم در curriculum-core.ts است (قابل Unit Test).
+// تنها صاحب وضعیت ماژول برنامهٔ درسی: ۳۸ useState + Server Actionها + مشتقات.
+// تب‌ها و مودال‌ها state خودی ندارند و فقط از useCurriculum() می‌خوانند؛
+// محاسبات خالص هم در curriculum-core.ts است (قابل Unit Test).
 // ════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -23,1023 +23,1023 @@ import { roleFromBankType } from '@/lib/bank-roles';
 import { planSemesters, termCountForDegree } from '@/lib/term-plan';
 
 function useCurriculumWorkspace(
-  initial: CurriculumWorkspace,
-  initialTab?: string | null,
-  initialVersionId?: number | null,
-  initialDetail?: VersionDetail | null,
-  universityTitle?: string,
+ initial: CurriculumWorkspace,
+ initialTab?: string | null,
+ initialVersionId?: number | null,
+ initialDetail?: VersionDetail | null,
+ universityTitle?: string,
 ) {
-  const [majors, setMajors] = useState<MajorItem[]>(initial.majors);
-  const [versions, setVersions] = useState<VersionRow[]>(initial.versions);
-  const [tracks] = useState(initial.tracks);
-  const [terms, setTerms] = useState(initial.terms ?? []);
-  const [selectedMajorId, setSelectedMajorId] = useState<number>(
-    initial.versions.find(v => v.id === (initialVersionId ?? -1))?.majorId ?? initial.majors[0]?.id ?? 0
-  );
-  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
-  const [detail, setDetail] = useState<VersionDetail | null>(initialDetail ?? null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  /**
-   * خطای بارگذاری جزئیات — قبلاً اگر Promise سرور-اکشن reject می‌شد (قطعی شبکه،
-   * 502، تایم‌اوت) خطا بلعیده می‌شد و تب‌ها «صفحهٔ سفید» می‌شدند: نه پیام، نه
-   * راهِ تلاش دوباره. حالا پیام نگه داشته می‌شود تا UI کارت خطا نشان دهد.
-   */
-  const [detailError, setDetailError] = useState<string | null>(null);
-  const [bank, setBank] = useState<BankCourse[]>([]);
-  const [bankLoading, setBankLoading] = useState(false);
-  const [bankQuery, setBankQuery] = useState('');
-  const [codePrefix, setCodePrefix] = useState('');
-  const [bankSelected, setBankSelected] = useState<Set<number>>(new Set());
-  /** نمایش همهٔ نتایج بانک (نه فقط ۶۰ مورد اول) */
-  const [bankShowAll, setBankShowAll] = useState(false);
-  /** تعداد کلِ دروسِ هم‌خوان با جست‌وجو (برای برچسبِ «X از Y») */
-  const [bankTotal, setBankTotal] = useState(0);
-  /** غیرت: هر بار که تغییر کند، بانک دوباره از سرور خوانده می‌شود (دکمهٔ «به‌روزرسانی») */
-  const [bankNonce, setBankNonce] = useState(0);
-  const [bankRoles, setBankRoles] = useState<Record<number, string>>({});
-  const [bulkRoleType, setBulkRoleType] = useState('CORE');
+ const [majors, setMajors] = useState<MajorItem[]>(initial.majors);
+ const [versions, setVersions] = useState<VersionRow[]>(initial.versions);
+ const [tracks] = useState(initial.tracks);
+ const [terms, setTerms] = useState(initial.terms ?? []);
+ const [selectedMajorId, setSelectedMajorId] = useState<number>(
+ initial.versions.find(v => v.id === (initialVersionId ?? -1))?.majorId ?? initial.majors[0]?.id ?? 0
+ );
+ const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
+ const [detail, setDetail] = useState<VersionDetail | null>(initialDetail ?? null);
+ const [detailLoading, setDetailLoading] = useState(false);
+ /**
+ * خطای بارگذاری جزئیات — قبلاً اگر Promise سرور-اکشن reject می‌شد (قطعی شبکه،
+ * 502، تایم‌اوت) خطا بلعیده می‌شد و تب‌ها «صفحهٔ سفید» می‌شدند: نه پیام، نه
+ * راهِ تلاش دوباره. حالا پیام نگه داشته می‌شود تا UI کارت خطا نشان دهد.
+ */
+ const [detailError, setDetailError] = useState<string | null>(null);
+ const [bank, setBank] = useState<BankCourse[]>([]);
+ const [bankLoading, setBankLoading] = useState(false);
+ const [bankQuery, setBankQuery] = useState('');
+ const [codePrefix, setCodePrefix] = useState('');
+ const [bankSelected, setBankSelected] = useState<Set<number>>(new Set());
+ /** نمایش همهٔ نتایج بانک (نه فقط ۶۰ مورد اول) */
+ const [bankShowAll, setBankShowAll] = useState(false);
+ /** تعداد کلِ دروسِ هم‌خوان با جست‌وجو (برای برچسبِ «X از Y») */
+ const [bankTotal, setBankTotal] = useState(0);
+ /** غیرت: هر بار که تغییر کند، بانک دوباره از سرور خوانده می‌شود (دکمهٔ «به‌روزرسانی») */
+ const [bankNonce, setBankNonce] = useState(0);
+ const [bankRoles, setBankRoles] = useState<Record<number, string>>({});
+ const [bulkRoleType, setBulkRoleType] = useState('CORE');
 
-  const [modal, setModal] = useState<null | 'NEW_VERSION' | 'EDIT_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
-  const [busy, setBusy] = useState(false);
-  /**
-   * ردیف‌های «در حال ذخیره» — ویرایش تک‌فیلدیِ هر درس فقط همان ردیف را pending
-   * می‌کند (نه کل صفحه) تا کار روی بقیهٔ ۱۴۰ درسِ چارت متوقف نشود.
-   */
-  const [busyCourses, setBusyCourses] = useState<Set<number>>(() => new Set());
-  const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+ const [modal, setModal] = useState<null | 'NEW_VERSION' | 'EDIT_VERSION' | 'ADD_COURSE' | 'NEW_COURSE' | 'RULES' | 'REJECT'>(null);
+ const [busy, setBusy] = useState(false);
+ /**
+ * ردیف‌های «در حال ذخیره» — ویرایش تک‌فیلدیِ هر درس فقط همان ردیف را pending
+ * می‌کند (نه کل صفحه) تا کار روی بقیهٔ ۱۴۰ درسِ چارت متوقف نشود.
+ */
+ const [busyCourses, setBusyCourses] = useState<Set<number>>(() => new Set());
+ const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // فرم‌ها
-  const [newVersionForm, setNewVersionForm] = useState({
-    versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '',
-  });
-  // فرم ویرایش مشخصات نسخه (فقط DRAFT — اکشن خودش گیت می‌زند)
-  const [editVersionId, setEditVersionId] = useState<number | null>(null);
-  const [editVersionForm, setEditVersionForm] = useState({
-    versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20,
-  });
-  const [addCourseForm, setAddCourseForm] = useState({ courseId: '', roleType: 'CORE', recommendedSemester: '' });
-  const [rejectNote, setRejectNote] = useState('');
-  const [newCourseForm, setNewCourseForm] = useState({
-    code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '',
-  });
-  const [depts, setDepts] = useState<{ id: number; name: string }[]>([]);
-  const [deptsLoading, setDeptsLoading] = useState(false);
-  const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
-  const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '', minUnits: '', minTerm: '' });
-  const [activeTab, setActiveTab] = useState<CurriculumTab>(resolveTab(initialTab));
-  /** انتقال‌های اخیرِ قابل لغو (نسخه‌های DRAFT ساخته‌شده با کپی عمیق) — تب انتقال */
-  const [transfers, setTransfers] = useState<UndoableTransfer[]>([]);
-  const [transfersLoading, setTransfersLoading] = useState(false);
-  const [transferMajorId, setTransferMajorId] = useState(0);
-  /** نیم‌سال ورودیِ نسخهٔ مقصد در «انتقال کاتالوگ» (0 = تعیین‌نشده) */
-  const [transferEntryTermId, setTransferEntryTermId] = useState(0);
-  const [dragCourseId, setDragCourseId] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<number | 'pool' | null>(null);
-  const [facultyFilter, setFacultyFilter] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
+ // فرم‌ها
+ const [newVersionForm, setNewVersionForm] = useState({
+ versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '',
+ });
+ // فرم ویرایش مشخصات نسخه (فقط DRAFT — اکشن خودش گیت می‌زند)
+ const [editVersionId, setEditVersionId] = useState<number | null>(null);
+ const [editVersionForm, setEditVersionForm] = useState({
+ versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20,
+ });
+ const [addCourseForm, setAddCourseForm] = useState({ courseId: '', roleType: 'CORE', recommendedSemester: '' });
+ const [rejectNote, setRejectNote] = useState('');
+ const [newCourseForm, setNewCourseForm] = useState({
+ code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '',
+ });
+ const [depts, setDepts] = useState<{ id: number; name: string }[]>([]);
+ const [deptsLoading, setDeptsLoading] = useState(false);
+ const [ruleCourseId, setRuleCourseId] = useState<number | null>(null);
+ const [ruleForm, setRuleForm] = useState({ pre: [] as string[], preOp: 'AND' as 'AND' | 'OR', co: [] as string[], coOp: 'AND' as 'AND' | 'OR', minGrade: '', passGradeStatusCode: '', failGradeStatusCode: '', minUnits: '', minTerm: '' });
+ const [activeTab, setActiveTab] = useState<CurriculumTab>(resolveTab(initialTab));
+ /** انتقال‌های اخیرِ قابل لغو (نسخه‌های DRAFT ساخته‌شده با کپی عمیق) — تب انتقال */
+ const [transfers, setTransfers] = useState<UndoableTransfer[]>([]);
+ const [transfersLoading, setTransfersLoading] = useState(false);
+ const [transferMajorId, setTransferMajorId] = useState(0);
+ /** نیم‌سال ورودیِ نسخهٔ مقصد در «انتقال کاتالوگ» (0 = تعیین‌نشده) */
+ const [transferEntryTermId, setTransferEntryTermId] = useState(0);
+ const [dragCourseId, setDragCourseId] = useState<number | null>(null);
+ const [dropTarget, setDropTarget] = useState<number | 'pool' | null>(null);
+ const [facultyFilter, setFacultyFilter] = useState('');
+ const [deptFilter, setDeptFilter] = useState('');
 
-  const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 4200);
-  }, []);
+ const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'success') => {
+ setToast({ text, type });
+ setTimeout(() => setToast(null), 4200);
+ }, []);
 
-  const selectedVersion = versions.find(v => v.id === selectedVersionId) ?? null;
-  const majorVersions = versions.filter(v => v.majorId === selectedMajorId);
+ const selectedVersion = versions.find(v => v.id === selectedVersionId) ?? null;
+ const majorVersions = versions.filter(v => v.majorId === selectedMajorId);
 
-  const reloadOverview = useCallback(async () => {
-    const w = await getCurriculumOverviewAction();
-    if (!w.ok) { showToast(w.error, 'error'); return; }
-    setMajors(w.data.majors.map(m => ({ ...m, code: m.code ?? String(m.id) })));
-    setVersions(w.data.versions);
-    setTerms(w.data.terms ?? []);
-  }, []);
+ const reloadOverview = useCallback(async () => {
+ const w = await getCurriculumOverviewAction();
+ if (!w.ok) { showToast(w.error, 'error'); return; }
+ setMajors(w.data.majors.map(m => ({ ...m, code: m.code ?? String(m.id) })));
+ setVersions(w.data.versions);
+ setTerms(w.data.terms ?? []);
+ }, []);
 
-  const reloadDetail = useCallback(async (versionId: number) => {
-    setDetailLoading(true);
-    setDetailError(null);
-    try {
-      const r = await getCurriculumVersionDetailAction(versionId);
-      if (!r.ok) {
-        setDetailError(r.error);
-        showToast(r.error, 'error');
-        return;
-      }
-      setDetail(r.data as unknown as VersionDetail);
-    } catch (e) {
-      // خطای شبکه/سرور: قبلاً بی‌صدا بلعیده می‌شد و تب سفید می‌ماند
-      const msg = e instanceof Error ? e.message : String(e);
-      setDetailError(msg);
-      showToast(`بارگذاری جزئیات نسخه ناموفق بود: ${msg}`, 'error');
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [showToast]);
+ const reloadDetail = useCallback(async (versionId: number) => {
+ setDetailLoading(true);
+ setDetailError(null);
+ try {
+ const r = await getCurriculumVersionDetailAction(versionId);
+ if (!r.ok) {
+ setDetailError(r.error);
+ showToast(r.error, 'error');
+ return;
+ }
+ setDetail(r.data as unknown as VersionDetail);
+ } catch (e) {
+ // خطای شبکه/سرور: قبلاً بی‌صدا بلعیده می‌شد و تب سفید می‌ماند
+ const msg = e instanceof Error ? e.message : String(e);
+ setDetailError(msg);
+ showToast(`بارگذاری جزئیات نسخه ناموفق بود: ${msg}`, 'error');
+ } finally {
+ setDetailLoading(false);
+ }
+ }, [showToast]);
 
-  /** فهرست انتقال‌های قابل لغو (فقط تب «انتقال کاتالوگ» لازمش دارد) */
-  const reloadTransfers = useCallback(async () => {
-    setTransfersLoading(true);
-    try {
-      const r = await listUndoableTransfersAction();
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      setTransfers(r.data);
-    } finally {
-      setTransfersLoading(false);
-    }
-  }, [showToast]);
+ /** فهرست انتقال‌های قابل لغو (فقط تب «انتقال کاتالوگ» لازمش دارد) */
+ const reloadTransfers = useCallback(async () => {
+ setTransfersLoading(true);
+ try {
+ const r = await listUndoableTransfersAction();
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ setTransfers(r.data);
+ } finally {
+ setTransfersLoading(false);
+ }
+ }, [showToast]);
 
-  // پاک‌سازی انتخاب بانک هنگام بستن مودال
-  const closeAddCourse = () => {
-    setModal(null);
-    setBankQuery('');
-    setCodePrefix('');
-    setBankSelected(new Set());
-    setBankRoles({});
-  };
+ // پاک‌سازی انتخاب بانک هنگام بستن مودال
+ const closeAddCourse = () => {
+ setModal(null);
+ setBankQuery('');
+ setCodePrefix('');
+ setBankSelected(new Set());
+ setBankRoles({});
+ };
 
-  /**
-   * بارگذاری جزئیات با تغییر نسخهٔ انتخابی.
-   * روی mount، اگر `initialDetail` از سرور برای همین نسخه رسیده باشد دوباره
-   * خوانده **نمی‌شود**؛ پیش‌تر SSR داده را می‌داد و این effect بلافاصله کلِ
-   * payload را دوباره می‌گرفت (دو بار بارگذاری در هر ورود به صفحه).
-   */
-  const initialDetailRef = useRef<VersionDetail | null>(initialDetail ?? null);
-  const firstDetailEffectRef = useRef(true);
-  useEffect(() => {
-    if (selectedVersionId == null) { setDetail(null); return; }
-    if (firstDetailEffectRef.current) {
-      firstDetailEffectRef.current = false;
-      const seeded = initialDetailRef.current;
-      if (seeded != null && seeded.version?.id === selectedVersionId) return;
-    }
-    reloadDetail(selectedVersionId);
-  }, [selectedVersionId, reloadDetail]);
+ /**
+ * بارگذاری جزئیات با تغییر نسخهٔ انتخابی.
+ * روی mount، اگر `initialDetail` از سرور برای همین نسخه رسیده باشد دوباره
+ * خوانده **نمی‌شود**؛ پیش‌تر SSR داده را می‌داد و این effect بلافاصله کلِ
+ * payload را دوباره می‌گرفت (دو بار بارگذاری در هر ورود به صفحه).
+ */
+ const initialDetailRef = useRef<VersionDetail | null>(initialDetail ?? null);
+ const firstDetailEffectRef = useRef(true);
+ useEffect(() => {
+ if (selectedVersionId == null) { setDetail(null); return; }
+ if (firstDetailEffectRef.current) {
+ firstDetailEffectRef.current = false;
+ const seeded = initialDetailRef.current;
+ if (seeded != null && seeded.version?.id === selectedVersionId) return;
+ }
+ reloadDetail(selectedVersionId);
+ }, [selectedVersionId, reloadDetail]);
 
-  /**
-   * بازیابی خودکار «تب سفید»: اگر بارگذاری جزئیات شکست خورده باشد و کاربر
-   * روی تبی برود که به `detail` نیاز دارد، یک‌بار دیگر تلاش می‌کنیم.
-   * `retriedRef` جلوی حلقهٔ بی‌پایان را می‌گیرد: هر (نسخه، تب) فقط یک تلاش.
-   */
-  const retriedRef = useRef<string>('');
-  useEffect(() => {
-    if (selectedVersionId == null) return;
-    if (detail != null || detailLoading) return;
-    if (activeTab === 'CATALOG') return;
-    const key = `${selectedVersionId}:${activeTab}`;
-    if (retriedRef.current === key) return;
-    retriedRef.current = key;
-    reloadDetail(selectedVersionId);
-  }, [activeTab, selectedVersionId, detail, detailLoading, reloadDetail]);
+ /**
+ * بازیابی خودکار «تب سفید»: اگر بارگذاری جزئیات شکست خورده باشد و کاربر
+ * روی تبی برود که به `detail` نیاز دارد، یک‌بار دیگر تلاش می‌کنیم.
+ * `retriedRef` جلوی حلقهٔ بی‌پایان را می‌گیرد: هر (نسخه، تب) فقط یک تلاش.
+ */
+ const retriedRef = useRef<string>('');
+ useEffect(() => {
+ if (selectedVersionId == null) return;
+ if (detail != null || detailLoading) return;
+ if (activeTab === 'CATALOG') return;
+ const key = `${selectedVersionId}:${activeTab}`;
+ if (retriedRef.current === key) return;
+ retriedRef.current = key;
+ reloadDetail(selectedVersionId);
+ }, [activeTab, selectedVersionId, detail, detailLoading, reloadDetail]);
 
-  // «انتقال‌های اخیر» فقط وقتی تب انتقال باز است خوانده می‌شود (هزینهٔ کوئری بی‌مورد نه)
-  useEffect(() => {
-    if (activeTab !== 'TRANSFER') return;
-    reloadTransfers();
-  }, [activeTab, reloadTransfers]);
+ // «انتقال‌های اخیر» فقط وقتی تب انتقال باز است خوانده می‌شود (هزینهٔ کوئری بی‌مورد نه)
+ useEffect(() => {
+ if (activeTab !== 'TRANSFER') return;
+ reloadTransfers();
+ }, [activeTab, reloadTransfers]);
 
-  // بانک دروس — جست‌وجوی سمتِ سرور (کد یا عنوان درس) + سقف ردیف.
-  // پیش‌تر *همه* دروس دانشگاه بی‌سقف می‌آمد و این‌جا فیلتر می‌شد؛ حالا سرور
-  // فیلتر می‌کند و فقط ۱۰۰ ردیف برمی‌گرداند. هر بار که مودال باز شود یا
-  // کاربر جست‌وجو کند (debounce) یا روی «به‌روزرسانی» بزند (bankNonce)، بانک
-  // دوباره خوانده می‌شود.
-  useEffect(() => {
-    if (modal !== 'ADD_COURSE' && modal !== 'EDIT_VERSION') return;
-    let alive = true;
-    setBankLoading(true);
-    const t = setTimeout(() => {
-      listCourseBankAction(bankQuery.trim(), 100).then(r => {
-        if (!alive) return;
-        setBankLoading(false);
-        if (r.ok) { setBank(r.data); setBankTotal(r.total); }
-        else showToast(r.error, 'error');
-      }).catch(() => { if (alive) setBankLoading(false); });
-    }, bankQuery ? 350 : 0);
-    return () => { alive = false; clearTimeout(t); };
-  }, [modal, bankQuery, bankNonce, showToast]);
+ // بانک دروس — جست‌وجوی سمتِ سرور (کد یا عنوان درس) + سقف ردیف.
+ // پیش‌تر *همه* دروس دانشگاه بی‌سقف می‌آمد و این‌جا فیلتر می‌شد؛ حالا سرور
+ // فیلتر می‌کند و فقط ۱۰۰ ردیف برمی‌گرداند. هر بار که مودال باز شود یا
+ // کاربر جست‌وجو کند (debounce) یا روی «به‌روزرسانی» بزند (bankNonce)، بانک
+ // دوباره خوانده می‌شود.
+ useEffect(() => {
+ if (modal !== 'ADD_COURSE' && modal !== 'EDIT_VERSION') return;
+ let alive = true;
+ setBankLoading(true);
+ const t = setTimeout(() => {
+ listCourseBankAction(bankQuery.trim(), 100).then(r => {
+ if (!alive) return;
+ setBankLoading(false);
+ if (r.ok) { setBank(r.data); setBankTotal(r.total); }
+ else showToast(r.error, 'error');
+ }).catch(() => { if (alive) setBankLoading(false); });
+ }, bankQuery ? 350 : 0);
+ return () => { alive = false; clearTimeout(t); };
+ }, [modal, bankQuery, bankNonce, showToast]);
 
-  /** دکمهٔ «به‌روزرسانی» مودال‌ها: بانک را دوباره از سرور می‌خواند */
-  const refreshBank = () => setBankNonce(n => n + 1);
+ /** دکمهٔ «به‌روزرسانی» مودال‌ها: بانک را دوباره از سرور می‌خواند */
+ const refreshBank = () => setBankNonce(n => n + 1);
 
-  // گروه‌های آموزشی (هنگام نیاز برای تعریف درس جدید)
-  useEffect(() => {
-    if (modal !== 'NEW_COURSE' || depts.length > 0 || deptsLoading) return;
-    setDeptsLoading(true);
-    listDepartmentsAction().then(r => {
-      setDeptsLoading(false);
-      if (r.ok) setDepts(r.data);
-      else showToast(r.error, 'error');
-    });
-  }, [modal, depts.length, deptsLoading, showToast]);
+ // گروه‌های آموزشی (هنگام نیاز برای تعریف درس جدید)
+ useEffect(() => {
+ if (modal !== 'NEW_COURSE' || depts.length > 0 || deptsLoading) return;
+ setDeptsLoading(true);
+ listDepartmentsAction().then(r => {
+ setDeptsLoading(false);
+ if (r.ok) setDepts(r.data);
+ else showToast(r.error, 'error');
+ });
+ }, [modal, depts.length, deptsLoading, showToast]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const run = async (fn: () => Promise<any>, okText?: string) => {
-    setBusy(true);
-    try {
-      const res = await fn();
-      if (!res.ok) { showToast(res.error ?? 'عملیات ناموفق بود.', 'error'); return false; }
-      showToast(okText ?? res.message ?? 'انجام شد.', 'success');
-      return true;
-    } finally {
-      setBusy(false);
-    }
-  };
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ const run = async (fn: () => Promise<any>, okText?: string) => {
+ setBusy(true);
+ try {
+ const res = await fn();
+ if (!res.ok) { showToast(res.error ?? 'عملیات ناموفق بود.', 'error'); return false; }
+ showToast(okText ?? res.message ?? 'انجام شد.', 'success');
+ return true;
+ } finally {
+ setBusy(false);
+ }
+ };
 
-  // ── پچِ محلی برای ویرایش‌های تک‌فیلدی (بدون reload کاملِ نسخه) ──
-  /**
-   * یک ردیف درس را در `detail` محلی عوض می‌کند. جایگزینِ `reloadDetail` برای
-   * تغییر یک سلول است — reload قبلی کلِ payload (نسخه + دروس + قواعد + اسکن
-   * بانک + تأییدیه‌ها + اعتبارسنجی) را دوباره می‌گرفت و کل صفحه را re-render
-   * می‌کرد. چک‌ها/تاریخچهٔ تأیید دست‌نخورده می‌مانند تا اجرای بعدی «اعتبارسنجی».
-   */
-  const patchCourseRow = useCallback((courseId: number, patch: Partial<CourseRow>, versionId?: number | null) => {
-    setDetail(prev => {
-      if (!prev) return prev;
-      // پاسخِ دیرهنگامِ نسخهٔ قبلی نباید روی نسخهٔ تازه‌انتخاب‌شده اعمال شود
-      if (versionId != null && prev.version.id !== versionId) return prev;
-      let hit = false;
-      const courses = prev.courses.map(c => {
-        if (c.courseId !== courseId) return c;
-        hit = true;
-        return { ...c, ...patch };
-      });
-      return hit ? { ...prev, courses } : prev;
-    });
-  }, []);
+ // ── پچِ محلی برای ویرایش‌های تک‌فیلدی (بدون reload کاملِ نسخه) ──
+ /**
+ * یک ردیف درس را در `detail` محلی عوض می‌کند. جایگزینِ `reloadDetail` برای
+ * تغییر یک سلول است — reload قبلی کلِ payload (نسخه + دروس + قواعد + اسکن
+ * بانک + تأییدیه‌ها + اعتبارسنجی) را دوباره می‌گرفت و کل صفحه را re-render
+ * می‌کرد. چک‌ها/تاریخچهٔ تأیید دست‌نخورده می‌مانند تا اجرای بعدی «اعتبارسنجی».
+ */
+ const patchCourseRow = useCallback((courseId: number, patch: Partial<CourseRow>, versionId?: number | null) => {
+ setDetail(prev => {
+ if (!prev) return prev;
+ // پاسخِ دیرهنگامِ نسخهٔ قبلی نباید روی نسخهٔ تازه‌انتخاب‌شده اعمال شود
+ if (versionId != null && prev.version.id !== versionId) return prev;
+ let hit = false;
+ const courses = prev.courses.map(c => {
+ if (c.courseId !== courseId) return c;
+ hit = true;
+ return { ...c, ...patch };
+ });
+ return hit ? { ...prev, courses } : prev;
+ });
+ }, []);
 
-  /** pending فقط برای همان ردیف — بقیهٔ ردیف‌ها آزاد می‌مانند */
-  const setCourseBusy = (courseId: number, on: boolean) => {
-    setBusyCourses(prev => {
-      const next = new Set(prev);
-      if (on) next.add(courseId); else next.delete(courseId);
-      return next;
-    });
-  };
+ /** pending فقط برای همان ردیف — بقیهٔ ردیف‌ها آزاد می‌مانند */
+ const setCourseBusy = (courseId: number, on: boolean) => {
+ setBusyCourses(prev => {
+ const next = new Set(prev);
+ if (on) next.add(courseId); else next.delete(courseId);
+ return next;
+ });
+ };
 
-  /**
-   * اکشنِ تک‌ردیفی: تا رسیدن پاسخ، فقط همان ردیف pending است (نه کل صفحه).
-   * پس از `ok` مقدارِ ارسالی روی state محلی اعمال می‌شود؛ در `!ok` هیچ پچی
-   * انجام نمی‌شود ⇒ مقدار قبلیِ ردیف دست‌نخورده می‌ماند و خطای فارسی توست
-   * می‌شود. چون optimistic نیستیم، «rollback» لازم هم نیست.
-   */
-  const runRowAction = async (
-    courseId: number,
-    action: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>,
-    apply: () => void,
-  ): Promise<boolean> => {
-    if (busyCourses.has(courseId)) return false;
-    setCourseBusy(courseId, true);
-    try {
-      const r = await action();
-      if (!r.ok) { showToast(r.error, 'error'); return false; }
-      apply();
-      if (r.message) showToast(r.message, 'success');
-      return true;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showToast(`ذخیرهٔ تغییر ناموفق بود: ${msg}`, 'error');
-      return false;
-    } finally {
-      setCourseBusy(courseId, false);
-    }
-  };
+ /**
+ * اکشنِ تک‌ردیفی: تا رسیدن پاسخ، فقط همان ردیف pending است (نه کل صفحه).
+ * پس از `ok` مقدارِ ارسالی روی state محلی اعمال می‌شود؛ در `!ok` هیچ پچی
+ * انجام نمی‌شود ⇒ مقدار قبلیِ ردیف دست‌نخورده می‌ماند و خطای فارسی توست
+ * می‌شود. چون optimistic نیستیم، «rollback» لازم هم نیست.
+ */
+ const runRowAction = async (
+ courseId: number,
+ action: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>,
+ apply: () => void,
+ ): Promise<boolean> => {
+ if (busyCourses.has(courseId)) return false;
+ setCourseBusy(courseId, true);
+ try {
+ const r = await action();
+ if (!r.ok) { showToast(r.error, 'error'); return false; }
+ apply();
+ if (r.message) showToast(r.message, 'success');
+ return true;
+ } catch (e) {
+ const msg = e instanceof Error ? e.message : String(e);
+ showToast(`ذخیرهٔ تغییر ناموفق بود: ${msg}`, 'error');
+ return false;
+ } finally {
+ setCourseBusy(courseId, false);
+ }
+ };
 
-  // ── چرخهٔ حیات ──
-  const handleValidate = async () => {
-    if (selectedVersionId == null) return;
-    setBusy(true);
-    try {
-      const r = await validateCurriculumAction(selectedVersionId);
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      showToast(`اعتبارسنجی کامل شد: ${r.data.checks.length} یافته (${r.data.checks.filter(c => c.severity === 'ERROR').length} مانع جدی).`, 'success');
-    } finally {
-      setBusy(false);
-    }
-    reloadDetail(selectedVersionId);
-  };
+ // ── چرخهٔ حیات ──
+ const handleValidate = async () => {
+ if (selectedVersionId == null) return;
+ setBusy(true);
+ try {
+ const r = await validateCurriculumAction(selectedVersionId);
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ showToast(`اعتبارسنجی کامل شد: ${r.data.checks.length} یافته (${r.data.checks.filter(c => c.severity === 'ERROR').length} مانع جدی).`, 'success');
+ } finally {
+ setBusy(false);
+ }
+ reloadDetail(selectedVersionId);
+ };
 
-  const handleSubmit = async (note: string) => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => submitCurriculumForApprovalAction(selectedVersionId, note));
-    if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
-  };
+ const handleSubmit = async (note: string) => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => submitCurriculumForApprovalAction(selectedVersionId, note));
+ if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
+ };
 
-  const handleApprove = async (note: string) => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => approveCurriculumAction(selectedVersionId, note));
-    if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
-  };
+ const handleApprove = async (note: string) => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => approveCurriculumAction(selectedVersionId, note));
+ if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
+ };
 
-  const handleReject = async (note: string) => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => rejectCurriculumAction(selectedVersionId, note));
-    if (ok) { setModal(null); reloadOverview(); reloadDetail(selectedVersionId); }
-  };
+ const handleReject = async (note: string) => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => rejectCurriculumAction(selectedVersionId, note));
+ if (ok) { setModal(null); reloadOverview(); reloadDetail(selectedVersionId); }
+ };
 
-  const handlePublish = async () => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => publishCurriculumAction(selectedVersionId));
-    if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
-  };
+ const handlePublish = async () => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => publishCurriculumAction(selectedVersionId));
+ if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
+ };
 
-  const handleArchive = async () => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => archiveCurriculumAction(selectedVersionId));
-    if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
-  };
+ const handleArchive = async () => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => archiveCurriculumAction(selectedVersionId));
+ if (ok) { reloadOverview(); reloadDetail(selectedVersionId); }
+ };
 
-  /**
-   * حذف کاتالوگِ منتشرنشده (DRAFT) — برگشت‌ناپذیر.
-   * تأیید دومرحله‌ای: تعداد دروس در متنِ تأیید نوشته می‌شود تا کاربر بداند
-   * دقیقاً چه چیزی پاک می‌شود (نه یک «حذف» مبهم). گارد وضعیت سمتِ سرور است؛
-   * دکمه فقط برای DRAFT رندر می‌شود.
-   */
-  const handleDeleteVersion = async (v: { id: number; versionCode: string; title: string; courseCount: number }) => {
-    const ok = await askConfirm({
-      title: `حذف کاتالوگ «${v.versionCode}»؟`,
-      body: `«${v.title}» با ${v.courseCount} درس و همهٔ قواعد پیش‌نیاز/هم‌نیازش برای همیشه پاک می‌شود. `
-        + 'این عمل برگشت‌ناپذیر است و فقط برای کاتالوگ‌های پیش‌نویس (منتشرنشده) انجام می‌شود.',
-      confirmText: 'حذف قطعی',
-      cancelText: 'انصراف',
-      danger: true,
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      const r = await deleteCurriculumVersionAction(v.id);
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      showToast(r.message, 'success');
-      // اگر همان نسخه باز/در حال ویرایش بود، انتخاب و مودال پاک شود
-      if (selectedVersionId === v.id) { setSelectedVersionId(null); setDetail(null); }
-      if (editVersionId === v.id) { setEditVersionId(null); setModal(null); }
-      await reloadOverview();
-    } finally {
-      setBusy(false);
-    }
-  };
+ /**
+ * حذف کاتالوگِ منتشرنشده (DRAFT) — برگشت‌ناپذیر.
+ * تأیید دومرحله‌ای: تعداد دروس در متنِ تأیید نوشته می‌شود تا کاربر بداند
+ * دقیقاً چه چیزی پاک می‌شود (نه یک «حذف» مبهم). گارد وضعیت سمتِ سرور است؛
+ * دکمه فقط برای DRAFT رندر می‌شود.
+ */
+ const handleDeleteVersion = async (v: { id: number; versionCode: string; title: string; courseCount: number }) => {
+ const ok = await askConfirm({
+ title: `حذف کاتالوگ «${v.versionCode}»؟`,
+ body: `«${v.title}» با ${v.courseCount} درس و همهٔ قواعد پیش‌نیاز/هم‌نیازش برای همیشه پاک می‌شود. `
+ + 'این عمل برگشت‌ناپذیر است و فقط برای کاتالوگ‌های پیش‌نویس (منتشرنشده) انجام می‌شود.',
+ confirmText: 'حذف قطعی',
+ cancelText: 'انصراف',
+ danger: true,
+ });
+ if (!ok) return;
+ setBusy(true);
+ try {
+ const r = await deleteCurriculumVersionAction(v.id);
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ showToast(r.message, 'success');
+ // اگر همان نسخه باز/در حال ویرایش بود، انتخاب و مودال پاک شود
+ if (selectedVersionId === v.id) { setSelectedVersionId(null); setDetail(null); }
+ if (editVersionId === v.id) { setEditVersionId(null); setModal(null); }
+ await reloadOverview();
+ } finally {
+ setBusy(false);
+ }
+ };
 
-  /**
-   * «لغو انتقال» — نسخهٔ DRAFTی که با کپی عمیق ساخته شده پاک می‌شود و رشتهٔ
-   * مقصد به وضعیت قبل از انتقال برمی‌گردد. همان اکشن حذف را صدا می‌زند تا
-   * گاردها (DRAFT-only، نبودِ وابستگی دانشجو) یک‌جا اعمال شوند.
-   */
-  const handleUndoTransfer = async (t: UndoableTransfer) => {
-    const ok = await askConfirm({
-      title: `لغو انتقال «${t.versionCode}»؟`,
-      body: `نسخهٔ کپی‌شده در رشتهٔ «${t.majorName}» (${t.courseCount} درس) حذف می‌شود و آن رشته به وضعیت قبل از انتقال برمی‌گردد. `
-        + `منبع: ${t.sourceNote ?? 'نامشخص'}. این عمل برگشت‌ناپذیر است.`,
-      confirmText: 'لغو انتقال',
-      cancelText: 'انصراف',
-      danger: true,
-    });
-    if (!ok) return;
-    setBusy(true);
-    try {
-      const r = await deleteCurriculumVersionAction(t.id);
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      showToast(`انتقال لغو شد: ${r.message}`, 'success');
-      if (selectedVersionId === t.id) { setSelectedVersionId(null); setDetail(null); }
-      if (editVersionId === t.id) { setEditVersionId(null); setModal(null); }
-      await reloadOverview();
-      await reloadTransfers();
-    } finally {
-      setBusy(false);
-    }
-  };
+ /**
+ * «لغو انتقال» — نسخهٔ DRAFTی که با کپی عمیق ساخته شده پاک می‌شود و رشتهٔ
+ * مقصد به وضعیت قبل از انتقال برمی‌گردد. همان اکشن حذف را صدا می‌زند تا
+ * گاردها (DRAFT-only، نبودِ وابستگی دانشجو) یک‌جا اعمال شوند.
+ */
+ const handleUndoTransfer = async (t: UndoableTransfer) => {
+ const ok = await askConfirm({
+ title: `لغو انتقال «${t.versionCode}»؟`,
+ body: `نسخهٔ کپی‌شده در رشتهٔ «${t.majorName}» (${t.courseCount} درس) حذف می‌شود و آن رشته به وضعیت قبل از انتقال برمی‌گردد. `
+ + `منبع: ${t.sourceNote ?? 'نامشخص'}. این عمل برگشت‌ناپذیر است.`,
+ confirmText: 'لغو انتقال',
+ cancelText: 'انصراف',
+ danger: true,
+ });
+ if (!ok) return;
+ setBusy(true);
+ try {
+ const r = await deleteCurriculumVersionAction(t.id);
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ showToast(`انتقال لغو شد: ${r.message}`, 'success');
+ if (selectedVersionId === t.id) { setSelectedVersionId(null); setDetail(null); }
+ if (editVersionId === t.id) { setEditVersionId(null); setModal(null); }
+ await reloadOverview();
+ await reloadTransfers();
+ } finally {
+ setBusy(false);
+ }
+ };
 
-  const handleCreateRevision = async () => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => createCurriculumRevisionAction(selectedVersionId).then(r =>
-      r.ok ? { ok: true, message: `نسخهٔ جدید (${r.data.versionCode}) ساخته شد.` } : r
-    ));
-    if (ok) reloadOverview();
-  };
+ const handleCreateRevision = async () => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => createCurriculumRevisionAction(selectedVersionId).then(r =>
+ r.ok ? { ok: true, message: `نسخهٔ جدید (${r.data.versionCode}) ساخته شد.` } : r
+ ));
+ if (ok) reloadOverview();
+ };
 
-  const handleCreateVersion = async () => {
-    const f = newVersionForm;
-    if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
-    const ok = await run(() => createCurriculumVersionAction({
-      majorId: selectedMajorId,
-      versionCode: f.versionCode.trim(),
-      title: f.title.trim() || `برنامهٔ ${majors.find(m => m.id === selectedMajorId)?.name ?? ''} ${f.versionCode.trim()}`,
-      entryYearFrom: f.entryYearFrom,
-      // خالی = «به بعد» (کاتالوگی که سال‌ها بدون تغییر می‌ماند)
-      entryYearTo: f.entryYearTo ? Number(f.entryYearTo) : null,
-      totalRequiredUnits: f.totalRequiredUnits,
-      maxUnitsPerTerm: f.maxUnitsPerTerm || null,
-      cloneFromId: f.cloneFromId ? Number(f.cloneFromId) : undefined,
-    }));
-    if (ok) { setModal(null); setNewVersionForm({ versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '' }); reloadOverview(); }
-  };
+ const handleCreateVersion = async () => {
+ const f = newVersionForm;
+ if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
+ const ok = await run(() => createCurriculumVersionAction({
+ majorId: selectedMajorId,
+ versionCode: f.versionCode.trim(),
+ title: f.title.trim() || `برنامهٔ ${majors.find(m => m.id === selectedMajorId)?.name ?? ''} ${f.versionCode.trim()}`,
+ entryYearFrom: f.entryYearFrom,
+ // خالی = «به بعد» (کاتالوگی که سال‌ها بدون تغییر می‌ماند)
+ entryYearTo: f.entryYearTo ? Number(f.entryYearTo) : null,
+ totalRequiredUnits: f.totalRequiredUnits,
+ maxUnitsPerTerm: f.maxUnitsPerTerm || null,
+ cloneFromId: f.cloneFromId ? Number(f.cloneFromId) : undefined,
+ }));
+ if (ok) { setModal(null); setNewVersionForm({ versionCode: '', title: '', entryYearFrom: 1405, entryYearTo: '', totalRequiredUnits: 140, maxUnitsPerTerm: 20, cloneFromId: '' }); reloadOverview(); }
+ };
 
-  // ── ویرایش مشخصات نسخه (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
-  const openEditVersion = (v: { id: number; versionCode: string; title: string; entryYearFrom: number; entryYearTo: number | null; totalRequiredUnits: string }) => {
-    setEditVersionId(v.id);
-    setSelectedVersionId(v.id);
-    setEditVersionForm({
-      versionCode: v.versionCode,
-      title: v.title,
-      entryYearFrom: v.entryYearFrom,
-      entryYearTo: v.entryYearTo != null ? String(v.entryYearTo) : '',
-      totalRequiredUnits: Number(v.totalRequiredUnits) || 0,
-      maxUnitsPerTerm: (detail?.version.id === v.id ? detail.version.maxUnitsPerTerm : null) ?? 20,
-    });
-    setModal('EDIT_VERSION');
-  };
+ // ── ویرایش مشخصات نسخه (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
+ const openEditVersion = (v: { id: number; versionCode: string; title: string; entryYearFrom: number; entryYearTo: number | null; totalRequiredUnits: string }) => {
+ setEditVersionId(v.id);
+ setSelectedVersionId(v.id);
+ setEditVersionForm({
+ versionCode: v.versionCode,
+ title: v.title,
+ entryYearFrom: v.entryYearFrom,
+ entryYearTo: v.entryYearTo != null ? String(v.entryYearTo) : '',
+ totalRequiredUnits: Number(v.totalRequiredUnits) || 0,
+ maxUnitsPerTerm: (detail?.version.id === v.id ? detail.version.maxUnitsPerTerm : null) ?? 20,
+ });
+ setModal('EDIT_VERSION');
+ };
 
-  const handleUpdateVersion = async () => {
-    if (editVersionId == null) return;
-    const f = editVersionForm;
-    if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
-    // نسخهٔ منتشرشده: فقط پنجرهٔ ورودی فرستاده می‌شود (اکشن سرور هم بقیه را رد می‌کند)
-    const editing = versions.find(v => v.id === editVersionId);
-    const entryOnly = editing ? editing.status !== 'DRAFT' : !isDraft;
-    if (entryOnly && f.entryYearTo.trim() && Number(f.entryYearTo) < f.entryYearFrom) {
-      showToast('«ورودی تا» نمی‌تواند کوچک‌تر از «ورودی از» باشد.', 'error'); return;
-    }
-    const ok = await run(() => updateCurriculumMetaAction(editVersionId, entryOnly ? {
-      entryYearFrom: f.entryYearFrom,
-      entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
-    } : {
-      versionCode: f.versionCode.trim(),
-      title: f.title.trim(),
-      entryYearFrom: f.entryYearFrom,
-      entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
-      totalRequiredUnits: f.totalRequiredUnits,
-      maxUnitsPerTerm: f.maxUnitsPerTerm || null,
-    }));
-    if (ok) { setModal(null); setEditVersionId(null); reloadOverview(); reloadDetail(editVersionId); }
-  };
+ const handleUpdateVersion = async () => {
+ if (editVersionId == null) return;
+ const f = editVersionForm;
+ if (!f.versionCode.trim() || !f.entryYearFrom) { showToast('کد نسخه و سال ورودی الزامی است.', 'error'); return; }
+ // نسخهٔ منتشرشده: فقط پنجرهٔ ورودی فرستاده می‌شود (اکشن سرور هم بقیه را رد می‌کند)
+ const editing = versions.find(v => v.id === editVersionId);
+ const entryOnly = editing ? editing.status !== 'DRAFT' : !isDraft;
+ if (entryOnly && f.entryYearTo.trim() && Number(f.entryYearTo) < f.entryYearFrom) {
+ showToast('«ورودی تا» نمی‌تواند کوچک‌تر از «ورودی از» باشد.', 'error'); return;
+ }
+ const ok = await run(() => updateCurriculumMetaAction(editVersionId, entryOnly ? {
+ entryYearFrom: f.entryYearFrom,
+ entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
+ } : {
+ versionCode: f.versionCode.trim(),
+ title: f.title.trim(),
+ entryYearFrom: f.entryYearFrom,
+ entryYearTo: f.entryYearTo.trim() ? Number(f.entryYearTo) : null,
+ totalRequiredUnits: f.totalRequiredUnits,
+ maxUnitsPerTerm: f.maxUnitsPerTerm || null,
+ }));
+ if (ok) { setModal(null); setEditVersionId(null); reloadOverview(); reloadDetail(editVersionId); }
+ };
 
-  // ── افزودن گروهی درس بدون بستن مودال (برای مودال ویرایش نسخه) ──
-  const handleBulkAddCoursesKeepOpen = async () => {
-    if (selectedVersionId == null || bankSelected.size === 0) return;
-    const items = [...bankSelected].map(courseId => {
-      const b = bank.find(x => x.id === courseId);
-      return {
-        courseId,
-        roleType: b ? roleForBank(b) : addCourseForm.roleType,
-        recommendedSemester: null,
-      };
-    });
-    const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
-    if (ok) { setBankSelected(new Set()); setBankRoles({}); await reloadDetail(selectedVersionId); }
-  };
+ // ── افزودن گروهی درس بدون بستن مودال (برای مودال ویرایش نسخه) ──
+ const handleBulkAddCoursesKeepOpen = async () => {
+ if (selectedVersionId == null || bankSelected.size === 0) return;
+ const items = [...bankSelected].map(courseId => {
+ const b = bank.find(x => x.id === courseId);
+ return {
+ courseId,
+ roleType: b ? roleForBank(b) : addCourseForm.roleType,
+ recommendedSemester: null,
+ };
+ });
+ const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
+ if (ok) { setBankSelected(new Set()); setBankRoles({}); await reloadDetail(selectedVersionId); }
+ };
 
-  const handleTransferToMajor = async () => {
-    if (selectedVersionId == null) return;
-    const src = versions.find(v => v.id === selectedVersionId);
-    if (!src) return;
-    const targetMajor = majors.find(m => m.id === (transferMajorId || selectedMajorId));
-    if (!targetMajor) return;
-    // گارد انتخاب اشتباه مقصد: نام رشتهٔ مبدأ/مقصد + تعداد دروس قبل از کپی عمیق پرسیده شود
-    const courseCount = detail?.courses.length ?? 0;
-    const okCopy = await askConfirm({
-      title: `کپی عمیق چارت «${src.versionCode}» (${courseCount} درس) به رشتهٔ مقصد «${targetMajor.name}» انجام شود؟`,
-      body: 'یک نسخهٔ DRAFT جدید در رشتهٔ مقصد ساخته می‌شود و دروس + پیش‌نیازها + ترم‌بندی کامل کپی می‌شوند.',
-      confirmText: 'کپی کن',
-      cancelText: 'انصراف',
-      danger: false,
-    });
-    if (!okCopy) return;
-    // کد یکتا برای رشتهٔ مقصد: اگر «{سال}-T1» از قبل هست، به T2، T3، … برس
-    // (وگرنه انتقال دوم به همان رشته با خطای «کد تکراری» شکست می‌خورد)
-    const base = `${src.entryYearFrom}-T`;
-    let n = 1;
-    while (versions.some(v => v.majorId === targetMajor.id && v.versionCode === `${base}${n}`)) n += 1;
-    const newCode = `${base}${n}`;
-    setBusy(true);
-    try {
-      const r = await createCurriculumVersionAction({
-        majorId: targetMajor.id,
-        versionCode: newCode,
-        title: `${targetMajor.name} — کپی از نسخهٔ ${src.versionCode} (${src.title})`,
-        entryYearFrom: src.entryYearFrom,
-        entryTermId: transferEntryTermId || null,
-        totalRequiredUnits: Number(src.totalRequiredUnits) || 140,
-        maxUnitsPerTerm: detail?.version.maxUnitsPerTerm ?? 20,
-        cloneFromId: src.id,
-      });
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      await reloadOverview();
-      await reloadTransfers();
-      // پرش به رشته و نسخهٔ مقصد (تب دروس) تا کاربر فوراً دروس کپی‌شده را ببیند
-      setSelectedMajorId(targetMajor.id);
-      setSelectedVersionId(r.data.id);
-      setActiveTab('COURSES');
-      showToast(`کپی عمیق انجام شد: ${courseCount} درس به رشتهٔ «${targetMajor.name}» منتقل شد (نسخهٔ ${newCode}).`, 'success');
-    } finally {
-      setBusy(false);
-    }
-  };
+ const handleTransferToMajor = async () => {
+ if (selectedVersionId == null) return;
+ const src = versions.find(v => v.id === selectedVersionId);
+ if (!src) return;
+ const targetMajor = majors.find(m => m.id === (transferMajorId || selectedMajorId));
+ if (!targetMajor) return;
+ // گارد انتخاب اشتباه مقصد: نام رشتهٔ مبدأ/مقصد + تعداد دروس قبل از کپی عمیق پرسیده شود
+ const courseCount = detail?.courses.length ?? 0;
+ const okCopy = await askConfirm({
+ title: `کپی عمیق چارت «${src.versionCode}» (${courseCount} درس) به رشتهٔ مقصد «${targetMajor.name}» انجام شود؟`,
+ body: 'یک نسخهٔ DRAFT جدید در رشتهٔ مقصد ساخته می‌شود و دروس + پیش‌نیازها + ترم‌بندی کامل کپی می‌شوند.',
+ confirmText: 'کپی کن',
+ cancelText: 'انصراف',
+ danger: false,
+ });
+ if (!okCopy) return;
+ // کد یکتا برای رشتهٔ مقصد: اگر «{سال}-T1» از قبل هست، به T2، T3، … برس
+ // (وگرنه انتقال دوم به همان رشته با خطای «کد تکراری» شکست می‌خورد)
+ const base = `${src.entryYearFrom}-T`;
+ let n = 1;
+ while (versions.some(v => v.majorId === targetMajor.id && v.versionCode === `${base}${n}`)) n += 1;
+ const newCode = `${base}${n}`;
+ setBusy(true);
+ try {
+ const r = await createCurriculumVersionAction({
+ majorId: targetMajor.id,
+ versionCode: newCode,
+ title: `${targetMajor.name} — کپی از نسخهٔ ${src.versionCode} (${src.title})`,
+ entryYearFrom: src.entryYearFrom,
+ entryTermId: transferEntryTermId || null,
+ totalRequiredUnits: Number(src.totalRequiredUnits) || 140,
+ maxUnitsPerTerm: detail?.version.maxUnitsPerTerm ?? 20,
+ cloneFromId: src.id,
+ });
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ await reloadOverview();
+ await reloadTransfers();
+ // پرش به رشته و نسخهٔ مقصد (تب دروس) تا کاربر فوراً دروس کپی‌شده را ببیند
+ setSelectedMajorId(targetMajor.id);
+ setSelectedVersionId(r.data.id);
+ setActiveTab('COURSES');
+ showToast(`کپی عمیق انجام شد: ${courseCount} درس به رشتهٔ «${targetMajor.name}» منتقل شد (نسخهٔ ${newCode}).`, 'success');
+ } finally {
+ setBusy(false);
+ }
+ };
 
-  // ── ویرایش دروس (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
-  const handleAddCourse = async () => {
-    if (selectedVersionId == null || !addCourseForm.courseId) return;
-    const picked = bank.find(b => b.id === Number(addCourseForm.courseId));
-    const ok = await run(() => addCourseToCurriculumAction(selectedVersionId, {
-      courseId: Number(addCourseForm.courseId),
-      roleType: picked ? roleForBank(picked) : addCourseForm.roleType,
-      recommendedSemester: addCourseForm.recommendedSemester ? Number(addCourseForm.recommendedSemester) : null,
-    }));
-    if (ok) { setModal(null); setAddCourseForm({ courseId: '', roleType: 'CORE', recommendedSemester: '' }); reloadDetail(selectedVersionId); }
-  };
+ // ── ویرایش دروس (فقط DRAFT؛ اکشن خودش گیت می‌زند) ──
+ const handleAddCourse = async () => {
+ if (selectedVersionId == null || !addCourseForm.courseId) return;
+ const picked = bank.find(b => b.id === Number(addCourseForm.courseId));
+ const ok = await run(() => addCourseToCurriculumAction(selectedVersionId, {
+ courseId: Number(addCourseForm.courseId),
+ roleType: picked ? roleForBank(picked) : addCourseForm.roleType,
+ recommendedSemester: addCourseForm.recommendedSemester ? Number(addCourseForm.recommendedSemester) : null,
+ }));
+ if (ok) { setModal(null); setAddCourseForm({ courseId: '', roleType: 'CORE', recommendedSemester: '' }); reloadDetail(selectedVersionId); }
+ };
 
-  const handleBulkAddCourses = async () => {
-    if (selectedVersionId == null || bankSelected.size === 0) return;
-    const items = [...bankSelected].map(courseId => {
-      const b = bank.find(x => x.id === courseId);
-      return {
-        courseId,
-        roleType: b ? roleForBank(b) : addCourseForm.roleType,
-        recommendedSemester: null,
-      };
-    });
-    const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
-    if (ok) { closeAddCourse(); await reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
-  };
+ const handleBulkAddCourses = async () => {
+ if (selectedVersionId == null || bankSelected.size === 0) return;
+ const items = [...bankSelected].map(courseId => {
+ const b = bank.find(x => x.id === courseId);
+ return {
+ courseId,
+ roleType: b ? roleForBank(b) : addCourseForm.roleType,
+ recommendedSemester: null,
+ };
+ });
+ const ok = await run(() => bulkAddCoursesAction(selectedVersionId, items));
+ if (ok) { closeAddCourse(); await reloadDetail(selectedVersionId); setActiveTab('SEMESTERS'); }
+ };
 
-  const handleSyncRoles = async () => {
-    if (selectedVersionId == null) return;
-    const okSync = await askConfirm({
-      title: 'نقش همهٔ دروس این نسخه از روی «نوع درس» بانک بازخوانی می‌شود و تغییرات دستی نقش‌ها از بین می‌رود. ادامه می‌دهید؟',
-      confirmText: 'بازخوانی کن',
-      cancelText: 'انصراف',
-      danger: true,
-    });
-    if (!okSync) return;
-    const ok = await run(() => syncRolesFromBankAction(selectedVersionId));
-    if (ok) reloadDetail(selectedVersionId);
-  };
+ const handleSyncRoles = async () => {
+ if (selectedVersionId == null) return;
+ const okSync = await askConfirm({
+ title: 'نقش همهٔ دروس این نسخه از روی «نوع درس» بانک بازخوانی می‌شود و تغییرات دستی نقش‌ها از بین می‌رود. ادامه می‌دهید؟',
+ confirmText: 'بازخوانی کن',
+ cancelText: 'انصراف',
+ danger: true,
+ });
+ if (!okSync) return;
+ const ok = await run(() => syncRolesFromBankAction(selectedVersionId));
+ if (ok) reloadDetail(selectedVersionId);
+ };
 
-  /**
-   * «پیش‌نیاز / هم‌نیاز» را از **جدول دروس** می‌خواند و در قواعد همین نسخه
-   * ثبت می‌کند. قواعد دستیِ موجود دست نمی‌خورند (overwrite=false).
-   */
-  const handleSyncRequisites = async (overwrite = false) => {
-    if (selectedVersionId == null) { showToast('اول یک نسخه را انتخاب کنید.', 'error'); return; }
-    if (overwrite) {
-      const okOverwrite = await askConfirm({
-        title: 'قواعد پیش‌نیاز/هم‌نیازِ موجود این نسخه با متن «جدول دروس» بازنویسی می‌شود. ادامه می‌دهید؟',
-        confirmText: 'بازنویسی کن',
-        cancelText: 'انصراف',
-        danger: true,
-      });
-      if (!okOverwrite) return;
-    }
-    const ok = await run(() => syncRequisiteRulesAction(selectedVersionId, overwrite));
-    if (ok) await reloadDetail(selectedVersionId);
-  };
+ /**
+ * «پیش‌نیاز / هم‌نیاز» را از **جدول دروس** می‌خواند و در قواعد همین نسخه
+ * ثبت می‌کند. قواعد دستیِ موجود دست نمی‌خورند (overwrite=false).
+ */
+ const handleSyncRequisites = async (overwrite = false) => {
+ if (selectedVersionId == null) { showToast('اول یک نسخه را انتخاب کنید.', 'error'); return; }
+ if (overwrite) {
+ const okOverwrite = await askConfirm({
+ title: 'قواعد پیش‌نیاز/هم‌نیازِ موجود این نسخه با متن «جدول دروس» بازنویسی می‌شود. ادامه می‌دهید؟',
+ confirmText: 'بازنویسی کن',
+ cancelText: 'انصراف',
+ danger: true,
+ });
+ if (!okOverwrite) return;
+ }
+ const ok = await run(() => syncRequisiteRulesAction(selectedVersionId, overwrite));
+ if (ok) await reloadDetail(selectedVersionId);
+ };
 
-  const handleMarkGradReq = async () => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => markGraduationRequiredBulkAction(selectedVersionId));
-    if (ok) reloadDetail(selectedVersionId);
-  };
+ const handleMarkGradReq = async () => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => markGraduationRequiredBulkAction(selectedVersionId));
+ if (ok) reloadDetail(selectedVersionId);
+ };
 
-  const handleCreateBankCourse = async () => {
-    const f = newCourseForm;
-    if (!f.code.trim() || !f.title.trim()) { showToast('کد درس و نام درس الزامی است.', 'error'); return; }
-    const theo = Number(f.theo) || 0;
-    const prac = Number(f.prac) || 0;
-    if (theo < 0 || prac < 0 || theo + prac <= 0) { showToast('واحد نظری/عملی نامعتبر است.', 'error'); return; }
-    setBusy(true);
-    try {
-      const r = await createCourseBankAction({
-        code: f.code.trim(),
-        title: f.title.trim(),
-        theoreticalUnits: theo,
-        practicalUnits: prac,
-        courseType: f.courseType,
-        gradingType: f.grading === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
-        affectsGpa: f.gpa ? 1 : 0,
-        departmentId: f.departmentId ? Number(f.departmentId) : null,
-      });
-      if (!r.ok) { showToast(r.error, 'error'); return; }
-      showToast(r.message, 'success');
-      const newId = r.data.id;
-      const entry = { id: newId, code: f.code.trim(), title: f.title.trim(), units: String(theo + prac), courseType: f.courseType };
-      setBank(b => (b.some(x => x.id === newId) ? b : [...b, entry]));
-      setAddCourseForm(af => ({ ...af, courseId: String(newId) }));
-      setBankSelected(new Set([newId]));
-      setModal(null);
-      setNewCourseForm({ code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '' });
-    } finally {
-      setBusy(false);
-    }
-  };
+ const handleCreateBankCourse = async () => {
+ const f = newCourseForm;
+ if (!f.code.trim() || !f.title.trim()) { showToast('کد درس و نام درس الزامی است.', 'error'); return; }
+ const theo = Number(f.theo) || 0;
+ const prac = Number(f.prac) || 0;
+ if (theo < 0 || prac < 0 || theo + prac <= 0) { showToast('واحد نظری/عملی نامعتبر است.', 'error'); return; }
+ setBusy(true);
+ try {
+ const r = await createCourseBankAction({
+ code: f.code.trim(),
+ title: f.title.trim(),
+ theoreticalUnits: theo,
+ practicalUnits: prac,
+ courseType: f.courseType,
+ gradingType: f.grading === 'PASS_FAIL' ? 'PASS_FAIL' : 'NUMERIC',
+ affectsGpa: f.gpa ? 1 : 0,
+ departmentId: f.departmentId ? Number(f.departmentId) : null,
+ });
+ if (!r.ok) { showToast(r.error, 'error'); return; }
+ showToast(r.message, 'success');
+ const newId = r.data.id;
+ const entry = { id: newId, code: f.code.trim(), title: f.title.trim(), units: String(theo + prac), courseType: f.courseType };
+ setBank(b => (b.some(x => x.id === newId) ? b : [...b, entry]));
+ setAddCourseForm(af => ({ ...af, courseId: String(newId) }));
+ setBankSelected(new Set([newId]));
+ setModal(null);
+ setNewCourseForm({ code: '', title: '', theo: 3, prac: 0, courseType: 'تخصصی', grading: 'NUMERIC', gpa: true, departmentId: '' });
+ } finally {
+ setBusy(false);
+ }
+ };
 
-  // ── ویرایش پیش‌نیاز/هم‌نیاز (فقط DRAFT؛ اکشن‌ها گیت می‌زنند + audit) ──
-  // درخت فقط از کدهای دروس همین نسخه ساخته می‌شود → کد نامعتبر و خودارجاعی از ریشه غیرممکن است.
-  const openRules = (courseId: number) => {
-    const pre = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'PREREQ');
-    const co = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'COREQ');
-    const course = detail?.courses.find(c => c.courseId === courseId);
-    // شرط‌های غیردرسی («۴۷ واحد پاس‌کرده» / «حداقل ترم ۷») از همان درخت خوانده می‌شوند
-    const extra = nonCourseConditionsOf(pre?.logicTree);
-    setRuleForm({
-      pre: leafCourseCodesOf(pre?.logicTree), preOp: pre?.logicTree.operator ?? 'AND',
-      co: leafCourseCodesOf(co?.logicTree), coOp: co?.logicTree.operator ?? 'AND',
-      minGrade: course?.minGrade != null ? String(course.minGrade) : '',
-      passGradeStatusCode: course?.passGradeStatusCode ?? '',
-      failGradeStatusCode: course?.failGradeStatusCode ?? '',
-      minUnits: extra.unitsPassed.length > 0 ? String(extra.unitsPassed[0]) : (course?.prereqMinUnits != null ? String(course.prereqMinUnits) : ''),
-      minTerm: extra.minSemester.length > 0 ? String(extra.minSemester[0]) : (course?.prereqMinTerm != null ? String(course.prereqMinTerm) : ''),
-    });
-    setRuleCourseId(courseId);
-    setModal('RULES');
-  };
+ // ── ویرایش پیش‌نیاز/هم‌نیاز (فقط DRAFT؛ اکشن‌ها گیت می‌زنند + audit) ──
+ // درخت فقط از کدهای دروس همین نسخه ساخته می‌شود → کد نامعتبر و خودارجاعی از ریشه غیرممکن است.
+ const openRules = (courseId: number) => {
+ const pre = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'PREREQ');
+ const co = detail?.rules.find(r => r.courseId === courseId && r.ruleType === 'COREQ');
+ const course = detail?.courses.find(c => c.courseId === courseId);
+ // شرط‌های غیردرسی («۴۷ واحد پاس‌کرده» / «حداقل ترم ۷») از همان درخت خوانده می‌شوند
+ const extra = nonCourseConditionsOf(pre?.logicTree);
+ setRuleForm({
+ pre: leafCourseCodesOf(pre?.logicTree), preOp: pre?.logicTree.operator ?? 'AND',
+ co: leafCourseCodesOf(co?.logicTree), coOp: co?.logicTree.operator ?? 'AND',
+ minGrade: course?.minGrade != null ? String(course.minGrade) : '',
+ passGradeStatusCode: course?.passGradeStatusCode ?? '',
+ failGradeStatusCode: course?.failGradeStatusCode ?? '',
+ minUnits: extra.unitsPassed.length > 0 ? String(extra.unitsPassed[0]) : (course?.prereqMinUnits != null ? String(course.prereqMinUnits) : ''),
+ minTerm: extra.minSemester.length > 0 ? String(extra.minSemester[0]) : (course?.prereqMinTerm != null ? String(course.prereqMinTerm) : ''),
+ });
+ setRuleCourseId(courseId);
+ setModal('RULES');
+ };
 
-  const toggleRuleCode = (group: 'pre' | 'co', code: string) => {
-    setRuleForm(f => {
-      const arr = group === 'pre' ? f.pre : f.co;
-      const next = arr.includes(code) ? arr.filter(x => x !== code) : [...arr, code];
-      return group === 'pre' ? { ...f, pre: next } : { ...f, co: next };
-    });
-  };
+ const toggleRuleCode = (group: 'pre' | 'co', code: string) => {
+ setRuleForm(f => {
+ const arr = group === 'pre' ? f.pre : f.co;
+ const next = arr.includes(code) ? arr.filter(x => x !== code) : [...arr, code];
+ return group === 'pre' ? { ...f, pre: next } : { ...f, co: next };
+ });
+ };
 
-  const handleSaveRules = async () => {
-    if (selectedVersionId == null || ruleCourseId == null) return;
-    // شرط‌های غیردرسی هم داخل همان درخت PREREQ ذخیره می‌شوند (AND با شرط‌های درسی)
-    const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
-    const okPre = await run(() => setCoursePrerequisiteAction(
-      selectedVersionId, ruleCourseId,
-      buildRuleTree(ruleForm.pre, ruleForm.preOp, { unitsPassed: numOrNull(ruleForm.minUnits), minSemester: numOrNull(ruleForm.minTerm) }),
-    ));
-    if (!okPre) return;
-    const okCo = await run(() => setCourseCorequisiteAction(selectedVersionId, ruleCourseId, buildRuleTree(ruleForm.co, ruleForm.coOp)));
-    if (!okCo) return;
-    const chk = validateMinGrade(ruleForm.minGrade, ruleCourse?.minGrade != null ? String(ruleCourse.minGrade) : '');
-    if (chk.error) { showToast(chk.error, 'error'); return; }
-    if (chk.changed) {
-      const okMin = await run(() => setCoursePassingGradeAction(selectedVersionId, ruleCourseId, chk.value));
-      if (!okMin) return;
-    }
-    const statusChanged = (ruleForm.passGradeStatusCode || null) !== (ruleCourse?.passGradeStatusCode ?? null)
-      || (ruleForm.failGradeStatusCode || null) !== (ruleCourse?.failGradeStatusCode ?? null);
-    if (statusChanged) {
-      const okStatus = await run(() => setCourseGradeStatusCodesAction(
-        selectedVersionId, ruleCourseId,
-        ruleForm.passGradeStatusCode || null,
-        ruleForm.failGradeStatusCode || null,
-      ));
-      if (!okStatus) return;
-    }
-    setModal(null);
-    setRuleCourseId(null);
-    reloadDetail(selectedVersionId);
-  };
+ const handleSaveRules = async () => {
+ if (selectedVersionId == null || ruleCourseId == null) return;
+ // شرط‌های غیردرسی هم داخل همان درخت PREREQ ذخیره می‌شوند (AND با شرط‌های درسی)
+ const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+ const okPre = await run(() => setCoursePrerequisiteAction(
+ selectedVersionId, ruleCourseId,
+ buildRuleTree(ruleForm.pre, ruleForm.preOp, { unitsPassed: numOrNull(ruleForm.minUnits), minSemester: numOrNull(ruleForm.minTerm) }),
+ ));
+ if (!okPre) return;
+ const okCo = await run(() => setCourseCorequisiteAction(selectedVersionId, ruleCourseId, buildRuleTree(ruleForm.co, ruleForm.coOp)));
+ if (!okCo) return;
+ const chk = validateMinGrade(ruleForm.minGrade, ruleCourse?.minGrade != null ? String(ruleCourse.minGrade) : '');
+ if (chk.error) { showToast(chk.error, 'error'); return; }
+ if (chk.changed) {
+ const okMin = await run(() => setCoursePassingGradeAction(selectedVersionId, ruleCourseId, chk.value));
+ if (!okMin) return;
+ }
+ const statusChanged = (ruleForm.passGradeStatusCode || null) !== (ruleCourse?.passGradeStatusCode ?? null)
+ || (ruleForm.failGradeStatusCode || null) !== (ruleCourse?.failGradeStatusCode ?? null);
+ if (statusChanged) {
+ const okStatus = await run(() => setCourseGradeStatusCodesAction(
+ selectedVersionId, ruleCourseId,
+ ruleForm.passGradeStatusCode || null,
+ ruleForm.failGradeStatusCode || null,
+ ));
+ if (!okStatus) return;
+ }
+ setModal(null);
+ setRuleCourseId(null);
+ reloadDetail(selectedVersionId);
+ };
 
-  const ruleText = (courseId: number, type: string): string | null => {
-    const r = detail?.rules.find(x => x.courseId === courseId && x.ruleType === type);
-    if (!r || (r.logicTree.conditions ?? []).length === 0) return null;
-    // عنوان از چارت، و اگر کد در چارت نبود از بانک (extraTitles) — بعد کد خام
-    const titleOf = (code: string) => detail?.courses.find(x => x.code === code)?.title ?? detail?.extraTitles?.[code] ?? code;
-    // sortByCode: دروس بر اساس کد مرتب شوند (نه ترتیب ذخیره‌شده و نه الفبای عنوان)
-    return describeLogicNode(r.logicTree, titleOf, { sortByCode: true });
-  };
+ const ruleText = (courseId: number, type: string): string | null => {
+ const r = detail?.rules.find(x => x.courseId === courseId && x.ruleType === type);
+ if (!r || (r.logicTree.conditions ?? []).length === 0) return null;
+ // عنوان از چارت، و اگر کد در چارت نبود از بانک (extraTitles) — بعد کد خام
+ const titleOf = (code: string) => detail?.courses.find(x => x.code === code)?.title ?? detail?.extraTitles?.[code] ?? code;
+ // sortByCode: دروس بر اساس کد مرتب شوند (نه ترتیب ذخیره‌شده و نه الفبای عنوان)
+ return describeLogicNode(r.logicTree, titleOf, { sortByCode: true });
+ };
 
-  const ruleCourse = ruleCourseId != null ? detail?.courses.find(c => c.courseId === ruleCourseId) ?? null : null;
+ const ruleCourse = ruleCourseId != null ? detail?.courses.find(c => c.courseId === ruleCourseId) ?? null : null;
 
-  const handleRemoveCourse = async (courseId: number) => {
-    if (selectedVersionId == null) return;
-    const c = detail?.courses.find(x => x.courseId === courseId);
-    const ok = await askConfirm({
-      title: `برداشتن درس «${c?.title ?? courseId}» از کاتالوگ؟`,
-      body: `${c ? `درس ${c.code} (${c.units} واحد) ` : ''}به‌همراه قواعد پیش‌نیاز/هم‌نیازش از این نسخه حذف می‌شود. `
-        + 'خودِ درس در بانک دروس دست‌نخورده می‌ماند و در نسخه‌های دیگر تغییری نمی‌کند.',
-      confirmText: 'برداشتن از کاتالوگ',
-      cancelText: 'انصراف',
-      danger: true,
-    });
-    if (!ok) return;
-    const done = await run(() => removeCourseFromCurriculumAction(selectedVersionId, courseId));
-    if (done) reloadDetail(selectedVersionId);
-  };
+ const handleRemoveCourse = async (courseId: number) => {
+ if (selectedVersionId == null) return;
+ const c = detail?.courses.find(x => x.courseId === courseId);
+ const ok = await askConfirm({
+ title: `برداشتن درس «${c?.title ?? courseId}» از کاتالوگ؟`,
+ body: `${c ? `درس ${c.code} (${c.units} واحد) ` : ''}به‌همراه قواعد پیش‌نیاز/هم‌نیازش از این نسخه حذف می‌شود. `
+ + 'خودِ درس در بانک دروس دست‌نخورده می‌ماند و در نسخه‌های دیگر تغییری نمی‌کند.',
+ confirmText: 'برداشتن از کاتالوگ',
+ cancelText: 'انصراف',
+ danger: true,
+ });
+ if (!ok) return;
+ const done = await run(() => removeCourseFromCurriculumAction(selectedVersionId, courseId));
+ if (done) reloadDetail(selectedVersionId);
+ };
 
-  /**
-   * ترم‌بندی یک درس (درگ‌اندراپ یا منوی «→ ترم»): بعد از `ok` فقط همان ردیف
-   * بین ترم‌ها جابه‌جا می‌شود؛ در شکست، درس سرِ جای قبلی می‌ماند و خطای فارسی
-   * توست می‌شود (پیش‌تر در هر دو حالت reload کامل انجام می‌شد).
-   */
-  const handleAssignSemester = async (courseId: number, semesterNo: number | null) => {
-    if (selectedVersionId == null) return;
-    await runRowAction(
-      courseId,
-      () => assignCourseToSemesterAction(selectedVersionId, courseId, semesterNo),
-      () => patchCourseRow(courseId, { recommendedSemester: semesterNo }, selectedVersionId),
-    );
-  };
+ /**
+ * ترم‌بندی یک درس (درگ‌اندراپ یا منوی «→ ترم»): بعد از `ok` فقط همان ردیف
+ * بین ترم‌ها جابه‌جا می‌شود؛ در شکست، درس سرِ جای قبلی می‌ماند و خطای فارسی
+ * توست می‌شود (پیش‌تر در هر دو حالت reload کامل انجام می‌شد).
+ */
+ const handleAssignSemester = async (courseId: number, semesterNo: number | null) => {
+ if (selectedVersionId == null) return;
+ await runRowAction(
+ courseId,
+ () => assignCourseToSemesterAction(selectedVersionId, courseId, semesterNo),
+ () => patchCourseRow(courseId, { recommendedSemester: semesterNo }, selectedVersionId),
+ );
+ };
 
-  // ── درگ‌اندراپ ترم‌بندی (بومی، بدون کتابخانه) ──
-  const onCourseDragStart = (e: React.DragEvent, courseId: number) => {
-    if (!isDraft) { e.preventDefault(); return; }
-    e.dataTransfer.setData('text/plain', String(courseId));
-    e.dataTransfer.effectAllowed = 'move';
-    setDragCourseId(courseId);
-  };
-  const onCourseDragEnd = () => { setDragCourseId(null); setDropTarget(null); };
-  const onDropToSemester = (e: React.DragEvent, sem: number | null) => {
-    e.preventDefault();
-    setDropTarget(null);
-    const id = Number(e.dataTransfer.getData('text/plain'));
-    setDragCourseId(null);
-    if (!id || selectedVersionId == null || !isDraft) return;
-    const cur = detail?.courses.find(c => c.courseId === id)?.recommendedSemester ?? null;
-    if (cur === sem) return;
-    handleAssignSemester(id, sem);
-  };
+ // ── درگ‌اندراپ ترم‌بندی (بومی، بدون کتابخانه) ──
+ const onCourseDragStart = (e: React.DragEvent, courseId: number) => {
+ if (!isDraft) { e.preventDefault(); return; }
+ e.dataTransfer.setData('text/plain', String(courseId));
+ e.dataTransfer.effectAllowed = 'move';
+ setDragCourseId(courseId);
+ };
+ const onCourseDragEnd = () => { setDragCourseId(null); setDropTarget(null); };
+ const onDropToSemester = (e: React.DragEvent, sem: number | null) => {
+ e.preventDefault();
+ setDropTarget(null);
+ const id = Number(e.dataTransfer.getData('text/plain'));
+ setDragCourseId(null);
+ if (!id || selectedVersionId == null || !isDraft) return;
+ const cur = detail?.courses.find(c => c.courseId === id)?.recommendedSemester ?? null;
+ if (cur === sem) return;
+ handleAssignSemester(id, sem);
+ };
 
-  /** سقف واحد ترمِ نسخه — تک‌مقدار است، پس فقط `detail.version` پچ می‌شود */
-  const handleUpdateMaxUnits = async (value: number) => {
-    if (selectedVersionId == null) return;
-    const next = value || null;
-    try {
-      const r = await updateCurriculumMetaAction(selectedVersionId, { maxUnitsPerTerm: next });
-      if (!r.ok) {
-        showToast('error' in r ? r.error : 'به‌روزرسانی سقف واحد ترم ناموفق بود.', 'error');
-        return;
-      }
-      setDetail(prev => (prev ? { ...prev, version: { ...prev.version, maxUnitsPerTerm: next } } : prev));
-      showToast('سقف واحد ترم به‌روزرسانی شد.', 'success');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showToast(`ذخیرهٔ سقف واحد ناموفق بود: ${msg}`, 'error');
-    }
-  };
+ /** سقف واحد ترمِ نسخه — تک‌مقدار است، پس فقط `detail.version` پچ می‌شود */
+ const handleUpdateMaxUnits = async (value: number) => {
+ if (selectedVersionId == null) return;
+ const next = value || null;
+ try {
+ const r = await updateCurriculumMetaAction(selectedVersionId, { maxUnitsPerTerm: next });
+ if (!r.ok) {
+ showToast('error' in r ? r.error : 'به‌روزرسانی سقف واحد ترم ناموفق بود.', 'error');
+ return;
+ }
+ setDetail(prev => (prev ? { ...prev, version: { ...prev.version, maxUnitsPerTerm: next } } : prev));
+ showToast('سقف واحد ترم به‌روزرسانی شد.', 'success');
+ } catch (e) {
+ const msg = e instanceof Error ? e.message : String(e);
+ showToast(`ذخیرهٔ سقف واحد ناموفق بود: ${msg}`, 'error');
+ }
+ };
 
-  /** تیک «الزامی در ترم» — پچ محلی یک ردیف (بدون reload نسخه) */
-  const handleUpdateRequired = async (courseId: number, isRequired: number) => {
-    if (selectedVersionId == null) return;
-    const prev = detail?.courses.find(c => c.courseId === courseId);
-    await runRowAction(
-      courseId,
-      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isRequired }),
-      // سرور هنگام روشن‌شدن «الزامی» شرط فارغ‌التحصیلی را هم تیک می‌زند ⇒ آینهٔ همان قاعده در state محلی
-      () => patchCourseRow(courseId, {
-        isRequired,
-        ...(isRequired === 1 && prev?.isRequired !== 1 ? { isGraduationRequired: 1 } : {}),
-      }, selectedVersionId),
-    );
-  };
+ /** تیک «الزامی در ترم» — پچ محلی یک ردیف (بدون reload نسخه) */
+ const handleUpdateRequired = async (courseId: number, isRequired: number) => {
+ if (selectedVersionId == null) return;
+ const prev = detail?.courses.find(c => c.courseId === courseId);
+ await runRowAction(
+ courseId,
+ () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isRequired }),
+ // سرور هنگام روشن‌شدن «الزامی» شرط فارغ‌التحصیلی را هم تیک می‌زند ⇒ آینهٔ همان قاعده در state محلی
+ () => patchCourseRow(courseId, {
+ isRequired,
+ ...(isRequired === 1 && prev?.isRequired !== 1 ? { isGraduationRequired: 1 } : {}),
+ }, selectedVersionId),
+ );
+ };
 
-  /** نقش درس — پچ محلی همان ردیف */
-  const handleUpdateRole = async (courseId: number, roleType: string) => {
-    if (selectedVersionId == null) return;
-    await runRowAction(
-      courseId,
-      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { roleType }),
-      () => patchCourseRow(courseId, { roleType }, selectedVersionId),
-    );
-  };
+ /** نقش درس — پچ محلی همان ردیف */
+ const handleUpdateRole = async (courseId: number, roleType: string) => {
+ if (selectedVersionId == null) return;
+ await runRowAction(
+ courseId,
+ () => updateCourseInCurriculumAction(selectedVersionId, courseId, { roleType }),
+ () => patchCourseRow(courseId, { roleType }, selectedVersionId),
+ );
+ };
 
-  /** «شرط فارغ‌التحصیلی» — پچ محلی همان ردیف */
-  const handleUpdateGradReq = async (courseId: number, isGraduationRequired: number) => {
-    if (selectedVersionId == null) return;
-    await runRowAction(
-      courseId,
-      () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isGraduationRequired }),
-      () => patchCourseRow(courseId, { isGraduationRequired }, selectedVersionId),
-    );
-  };
+ /** «شرط فارغ‌التحصیلی» — پچ محلی همان ردیف */
+ const handleUpdateGradReq = async (courseId: number, isGraduationRequired: number) => {
+ if (selectedVersionId == null) return;
+ await runRowAction(
+ courseId,
+ () => updateCourseInCurriculumAction(selectedVersionId, courseId, { isGraduationRequired }),
+ () => patchCourseRow(courseId, { isGraduationRequired }, selectedVersionId),
+ );
+ };
 
-  /** کدهای وضعیت قبولی/مردودی — پچ محلی همان ردیف */
-  const handleUpdateGradeStatusCodes = async (courseId: number, passCode: string | null, failCode: string | null) => {
-    if (selectedVersionId == null) return;
-    await runRowAction(
-      courseId,
-      () => setCourseGradeStatusCodesAction(selectedVersionId, courseId, passCode, failCode),
-      () => patchCourseRow(courseId, { passGradeStatusCode: passCode, failGradeStatusCode: failCode }, selectedVersionId),
-    );
-  };
+ /** کدهای وضعیت قبولی/مردودی — پچ محلی همان ردیف */
+ const handleUpdateGradeStatusCodes = async (courseId: number, passCode: string | null, failCode: string | null) => {
+ if (selectedVersionId == null) return;
+ await runRowAction(
+ courseId,
+ () => setCourseGradeStatusCodesAction(selectedVersionId, courseId, passCode, failCode),
+ () => patchCourseRow(courseId, { passGradeStatusCode: passCode, failGradeStatusCode: failCode }, selectedVersionId),
+ );
+ };
 
-  // ── فیلتر درختی رشته: دانشکده → گروه → رشته ──
-  const faculties = useMemo(() => facultyNames(majors), [majors]);
-  const departments = useMemo(() => departmentNames(majors, facultyFilter), [majors, facultyFilter]);
-  const filteredMajors = useMemo(() => filterMajorsByTree(majors, facultyFilter, deptFilter), [majors, facultyFilter, deptFilter]);
+ // ── فیلتر درختی رشته: دانشکده → گروه → رشته ──
+ const faculties = useMemo(() => facultyNames(majors), [majors]);
+ const departments = useMemo(() => departmentNames(majors, facultyFilter), [majors, facultyFilter]);
+ const filteredMajors = useMemo(() => filterMajorsByTree(majors, facultyFilter, deptFilter), [majors, facultyFilter, deptFilter]);
 
-  useEffect(() => {
-    // اگر رشتهٔ انتخابی بعد از فیلتر مخفی شد، به اولین رشتهٔ قابل‌نمایش سوییچ کن
-    if (filteredMajors.length > 0 && !filteredMajors.some(m => m.id === selectedMajorId)) {
-      setSelectedMajorId(filteredMajors[0].id);
-      setSelectedVersionId(null);
-      setDetail(null);
-    }
-  }, [filteredMajors, selectedMajorId]);
+ useEffect(() => {
+ // اگر رشتهٔ انتخابی بعد از فیلتر مخفی شد، به اولین رشتهٔ قابل‌نمایش سوییچ کن
+ if (filteredMajors.length > 0 && !filteredMajors.some(m => m.id === selectedMajorId)) {
+ setSelectedMajorId(filteredMajors[0].id);
+ setSelectedVersionId(null);
+ setDetail(null);
+ }
+ }, [filteredMajors, selectedMajorId]);
 
-  // ── رندر ──
-  const courseCodeOf = new Map((detail?.courses ?? []).map(c => [c.courseId, c.code]));
-  const isDraft = (detail?.version.status ?? selectedVersion?.status) === 'DRAFT';
-  const { bySemester: semesterCourses, unassigned: unassignedCourses } = useMemo(() => groupBySemester(detail?.courses), [detail?.courses]);
-  const totalPlannedUnits = semesterUnitTotal(detail?.courses);
-  // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز (نمایش هنگام چیدمان)
-  const depWarnings = useMemo(() => dependencyWarningsMap(detail?.courses, detail?.rules), [detail?.courses, detail?.rules]);
+ // ── رندر ──
+ const courseCodeOf = new Map((detail?.courses ?? []).map(c => [c.courseId, c.code]));
+ const isDraft = (detail?.version.status ?? selectedVersion?.status) === 'DRAFT';
+ const { bySemester: semesterCourses, unassigned: unassignedCourses } = useMemo(() => groupBySemester(detail?.courses), [detail?.courses]);
+ const totalPlannedUnits = semesterUnitTotal(detail?.courses);
+ // هشدار پوشش/ترتیب پیش‌نیاز و هم‌نیاز (نمایش هنگام چیدمان)
+ const depWarnings = useMemo(() => dependencyWarningsMap(detail?.courses, detail?.rules), [detail?.courses, detail?.rules]);
 
-  // ── چارت ترمی بر اساس مقطع: تعداد ترم از DB، وگرنه استنتاج ──
-  const degreeMajor = majors.find(m => m.id === (selectedVersion?.majorId ?? selectedMajorId));
-  const chartTermCount = termCountForDegree({
-    termCount: degreeMajor?.degreeTermCount,
-    code: degreeMajor?.degreeCode,
-    title: degreeMajor?.degreeTitle,
-  });
-  const planTerms = planSemesters(chartTermCount);
-  const overflowTerms = overflowSemesters(semesterCourses.keys(), planTerms);
-  const gridTerms = termGrid(planTerms, semesterCourses.keys());
-  const isOverflowTerm = (sem: number) => isOverflowSemester(sem, planTerms);
+ // ── چارت ترمی بر اساس مقطع: تعداد ترم از DB، وگرنه استنتاج ──
+ const degreeMajor = majors.find(m => m.id === (selectedVersion?.majorId ?? selectedMajorId));
+ const chartTermCount = termCountForDegree({
+ termCount: degreeMajor?.degreeTermCount,
+ code: degreeMajor?.degreeCode,
+ title: degreeMajor?.degreeTitle,
+ });
+ const planTerms = planSemesters(chartTermCount);
+ const overflowTerms = overflowSemesters(semesterCourses.keys(), planTerms);
+ const gridTerms = termGrid(planTerms, semesterCourses.keys());
+ const isOverflowTerm = (sem: number) => isOverflowSemester(sem, planTerms);
 
-  // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
-  // دروسی که همین حالا در چارتِ این نسخه هستند از فهرست بانک حذف می‌شوند؛
-  // این‌طور بعد از افزودن ۶۰ درسِ اول، ۶۰ درسِ بعدی خودشان دیده می‌شوند.
-  const inChartIds = useMemo(() => new Set((detail?.courses ?? []).map(c => c.courseId)), [detail?.courses]);
-  const bankFiltered = useMemo(
-    () => filterBankCourses(bank, bankQuery, codePrefix).filter(b => !inChartIds.has(b.id)),
-    [bank, bankQuery, codePrefix, inChartIds],
-  );
-  const bankVisible = bankShowAll ? bankFiltered : visibleBank(bankFiltered);
-  const allFilteredSelected = allBankSelected(bankVisible, bankSelected);
-  const roleForBank = (b: { id: number; courseType: string }) => bankRoles[b.id] ?? roleFromBankType(b.courseType);
-  const toggleSelectAllBank = () => {
-    const ids = bankVisible.map(b => b.id);
-    if (allFilteredSelected) {
-      setBankSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
-      setBankRoles(prev => { const next = { ...prev }; ids.forEach(id => { delete next[id]; }); return next; });
-    } else {
-      setBankSelected(prev => new Set([...prev, ...ids]));
-      setBankRoles(prev => { const next = { ...prev }; bankVisible.forEach(b => { if (!(b.id in next)) next[b.id] = roleFromBankType(b.courseType); }); return next; });
-      const last = bankVisible[bankVisible.length - 1];
-      if (last) setAddCourseForm(f => ({ ...f, courseId: String(last.id) }));
-    }
-  };
+ // ── فیلتر بانک: جستجو + پیشوند کد رشته ──
+ // دروسی که همین حالا در چارتِ این نسخه هستند از فهرست بانک حذف می‌شوند؛
+ // این‌طور بعد از افزودن ۶۰ درسِ اول، ۶۰ درسِ بعدی خودشان دیده می‌شوند.
+ const inChartIds = useMemo(() => new Set((detail?.courses ?? []).map(c => c.courseId)), [detail?.courses]);
+ const bankFiltered = useMemo(
+ () => filterBankCourses(bank, bankQuery, codePrefix).filter(b => !inChartIds.has(b.id)),
+ [bank, bankQuery, codePrefix, inChartIds],
+ );
+ const bankVisible = bankShowAll ? bankFiltered : visibleBank(bankFiltered);
+ const allFilteredSelected = allBankSelected(bankVisible, bankSelected);
+ const roleForBank = (b: { id: number; courseType: string }) => bankRoles[b.id] ?? roleFromBankType(b.courseType);
+ const toggleSelectAllBank = () => {
+ const ids = bankVisible.map(b => b.id);
+ if (allFilteredSelected) {
+ setBankSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+ setBankRoles(prev => { const next = { ...prev }; ids.forEach(id => { delete next[id]; }); return next; });
+ } else {
+ setBankSelected(prev => new Set([...prev, ...ids]));
+ setBankRoles(prev => { const next = { ...prev }; bankVisible.forEach(b => { if (!(b.id in next)) next[b.id] = roleFromBankType(b.courseType); }); return next; });
+ const last = bankVisible[bankVisible.length - 1];
+ if (last) setAddCourseForm(f => ({ ...f, courseId: String(last.id) }));
+ }
+ };
 
-  // ── جمع‌بندی نوع درس نسخه (معادل «نمایش اطلاعات نوع درس» مدل قدیم: جمع ۲) ──
-  const typeSummary = useMemo(() => typeSummaryRows(detail?.courses), [detail?.courses]);
-  // ── سهم واحد مقرر هر نقش (ستون minRoleUnits نسخه) + واحد موجود هر نقش ──
-  const roleTargets = useMemo(
-    () => parseRoleUnitTargets((detail?.version as { minRoleUnits?: unknown } | undefined)?.minRoleUnits),
-    [detail?.version]
-  );
-  const unitsByRole = useMemo(() => unitsByRoleMap(detail?.courses), [detail?.courses]);
-  const countsByRole = useMemo(() => countsByRoleMap(detail?.courses), [detail?.courses]);
-  const roleTargetsKey = `${detail?.version.id ?? 0}:${JSON.stringify(roleTargets)}`;
+ // ── جمع‌بندی نوع درس نسخه (معادل «نمایش اطلاعات نوع درس» مدل قدیم: جمع ۲) ──
+ const typeSummary = useMemo(() => typeSummaryRows(detail?.courses), [detail?.courses]);
+ // ── سهم واحد مقرر هر نقش (ستون minRoleUnits نسخه) + واحد موجود هر نقش ──
+ const roleTargets = useMemo(
+ () => parseRoleUnitTargets((detail?.version as { minRoleUnits?: unknown } | undefined)?.minRoleUnits),
+ [detail?.version]
+ );
+ const unitsByRole = useMemo(() => unitsByRoleMap(detail?.courses), [detail?.courses]);
+ const countsByRole = useMemo(() => countsByRoleMap(detail?.courses), [detail?.courses]);
+ const roleTargetsKey = `${detail?.version.id ?? 0}:${JSON.stringify(roleTargets)}`;
 
-  const handleSaveRoleTargets = async (targets: Record<string, number>) => {
-    if (selectedVersionId == null) return;
-    const ok = await run(() => updateCurriculumMetaAction(selectedVersionId, { minRoleUnits: targets }));
-    if (ok) handleValidate();
-  };
+ const handleSaveRoleTargets = async (targets: Record<string, number>) => {
+ if (selectedVersionId == null) return;
+ const ok = await run(() => updateCurriculumMetaAction(selectedVersionId, { minRoleUnits: targets }));
+ if (ok) handleValidate();
+ };
 
-  return {
-    activeTab,
-    addCourseForm,
-    universityTitle: universityTitle ?? '',
-    allFilteredSelected,
-    bank,
-    bankFiltered,
-    bankLoading,
-    bankQuery,
-    bankRoles,
-    bankSelected,
-    bankVisible,
-    bankShowAll,
-    bankTotal,
-    refreshBank,
-    showMoreBank: () => setBankShowAll(true),
-    bulkRoleType,
-    busy,
-    busyCourses,
-    chartTermCount,
-    closeAddCourse,
-    codePrefix,
-    courseCodeOf,
-    degreeMajor,
-    departments,
-    deptFilter,
-    depts,
-    deptsLoading,
-    detail,
-    detailLoading,
-    detailError,
-    reloadDetail,
-    depWarnings,
-    dragCourseId,
-    dropTarget,
-    editVersionForm,
-    editVersionId,
-    faculties,
-    facultyFilter,
-    filteredMajors,
-    gridTerms,
-    handleAddCourse,
-    handleApprove,
-    handleArchive,
-    handleAssignSemester,
-    handleBulkAddCourses,
-    handleBulkAddCoursesKeepOpen,
-    handleCreateBankCourse,
-    handleCreateRevision,
-    handleCreateVersion,
-    handleDeleteVersion,
-    handleMarkGradReq,
-    handlePublish,
-    handleReject,
-    handleRemoveCourse,
-    handleSaveRoleTargets,
-    handleSaveRules,
-    handleSubmit,
-    handleSyncRequisites,
-    handleSyncRoles,
-    handleTransferToMajor,
-    handleUndoTransfer,
-    handleUpdateGradReq,
-    handleUpdateVersion,
-    handleUpdateGradeStatusCodes,
-    handleUpdateMaxUnits,
-    handleUpdateRequired,
-    handleUpdateRole,
-    handleValidate,
-    isDraft,
-    isOverflowTerm,
-    majorVersions,
-    majors,
-    modal,
-    newCourseForm,
-    newVersionForm,
-    onCourseDragEnd,
-    onCourseDragStart,
-    onDropToSemester,
-    openEditVersion,
-    openRules,
-    overflowTerms,
-    planTerms,
-    rejectNote,
-    reloadOverview,
-    roleForBank,
-    roleTargets,
-    roleTargetsKey,
-    ruleCourse,
-    ruleCourseId,
-    ruleForm,
-    ruleText,
-    run,
-    selectedMajorId,
-    selectedVersion,
-    selectedVersionId,
-    semesterCourses,
-    setActiveTab,
-    setAddCourseForm,
-    setBank,
-    setBankLoading,
-    setBankQuery,
-    setBankRoles,
-    setBankSelected,
-    setBulkRoleType,
-    setBusy,
-    setCodePrefix,
-    setDeptFilter,
-    setDepts,
-    setDeptsLoading,
-    setDetail,
-    setDetailLoading,
-    setDragCourseId,
-    setDropTarget,
-    setEditVersionForm,
-    setFacultyFilter,
-    setMajors,
-    setModal,
-    setNewCourseForm,
-    setNewVersionForm,
-    setRejectNote,
-    setRuleCourseId,
-    setRuleForm,
-    setSelectedMajorId,
-    setSelectedVersionId,
-    setToast,
-    setTransferMajorId,
-    setVersions,
-    showToast,
-    toast,
-    toggleRuleCode,
-    toggleSelectAllBank,
-    totalPlannedUnits,
-    tracks,
-    transferMajorId,
-    transferEntryTermId,
-    setTransferEntryTermId,
-    transfers,
-    transfersLoading,
-    reloadTransfers,
-    terms,
-    typeSummary,
-    unassignedCourses,
-    unitsByRole,
-    countsByRole,
-    versions,
-  };
+ return {
+ activeTab,
+ addCourseForm,
+ universityTitle: universityTitle ?? '',
+ allFilteredSelected,
+ bank,
+ bankFiltered,
+ bankLoading,
+ bankQuery,
+ bankRoles,
+ bankSelected,
+ bankVisible,
+ bankShowAll,
+ bankTotal,
+ refreshBank,
+ showMoreBank: () => setBankShowAll(true),
+ bulkRoleType,
+ busy,
+ busyCourses,
+ chartTermCount,
+ closeAddCourse,
+ codePrefix,
+ courseCodeOf,
+ degreeMajor,
+ departments,
+ deptFilter,
+ depts,
+ deptsLoading,
+ detail,
+ detailLoading,
+ detailError,
+ reloadDetail,
+ depWarnings,
+ dragCourseId,
+ dropTarget,
+ editVersionForm,
+ editVersionId,
+ faculties,
+ facultyFilter,
+ filteredMajors,
+ gridTerms,
+ handleAddCourse,
+ handleApprove,
+ handleArchive,
+ handleAssignSemester,
+ handleBulkAddCourses,
+ handleBulkAddCoursesKeepOpen,
+ handleCreateBankCourse,
+ handleCreateRevision,
+ handleCreateVersion,
+ handleDeleteVersion,
+ handleMarkGradReq,
+ handlePublish,
+ handleReject,
+ handleRemoveCourse,
+ handleSaveRoleTargets,
+ handleSaveRules,
+ handleSubmit,
+ handleSyncRequisites,
+ handleSyncRoles,
+ handleTransferToMajor,
+ handleUndoTransfer,
+ handleUpdateGradReq,
+ handleUpdateVersion,
+ handleUpdateGradeStatusCodes,
+ handleUpdateMaxUnits,
+ handleUpdateRequired,
+ handleUpdateRole,
+ handleValidate,
+ isDraft,
+ isOverflowTerm,
+ majorVersions,
+ majors,
+ modal,
+ newCourseForm,
+ newVersionForm,
+ onCourseDragEnd,
+ onCourseDragStart,
+ onDropToSemester,
+ openEditVersion,
+ openRules,
+ overflowTerms,
+ planTerms,
+ rejectNote,
+ reloadOverview,
+ roleForBank,
+ roleTargets,
+ roleTargetsKey,
+ ruleCourse,
+ ruleCourseId,
+ ruleForm,
+ ruleText,
+ run,
+ selectedMajorId,
+ selectedVersion,
+ selectedVersionId,
+ semesterCourses,
+ setActiveTab,
+ setAddCourseForm,
+ setBank,
+ setBankLoading,
+ setBankQuery,
+ setBankRoles,
+ setBankSelected,
+ setBulkRoleType,
+ setBusy,
+ setCodePrefix,
+ setDeptFilter,
+ setDepts,
+ setDeptsLoading,
+ setDetail,
+ setDetailLoading,
+ setDragCourseId,
+ setDropTarget,
+ setEditVersionForm,
+ setFacultyFilter,
+ setMajors,
+ setModal,
+ setNewCourseForm,
+ setNewVersionForm,
+ setRejectNote,
+ setRuleCourseId,
+ setRuleForm,
+ setSelectedMajorId,
+ setSelectedVersionId,
+ setToast,
+ setTransferMajorId,
+ setVersions,
+ showToast,
+ toast,
+ toggleRuleCode,
+ toggleSelectAllBank,
+ totalPlannedUnits,
+ tracks,
+ transferMajorId,
+ transferEntryTermId,
+ setTransferEntryTermId,
+ transfers,
+ transfersLoading,
+ reloadTransfers,
+ terms,
+ typeSummary,
+ unassignedCourses,
+ unitsByRole,
+ countsByRole,
+ versions,
+ };
 }
 
 export type CurriculumValue = ReturnType<typeof useCurriculumWorkspace>;
 
 export function CurriculumProvider({ initial, tab, version, detail, universityTitle, children }: {
-  initial: CurriculumWorkspace; tab?: string | null; version?: number | null; detail?: VersionDetail | null; universityTitle?: string; children: ReactNode;
+ initial: CurriculumWorkspace; tab?: string | null; version?: number | null; detail?: VersionDetail | null; universityTitle?: string; children: ReactNode;
 }) {
-  const value = useCurriculumWorkspace(initial, tab, version, detail, universityTitle);
-  return <CurriculumCtx.Provider value={value}>{children}</CurriculumCtx.Provider>;
+ const value = useCurriculumWorkspace(initial, tab, version, detail, universityTitle);
+ return <CurriculumCtx.Provider value={value}>{children}</CurriculumCtx.Provider>;
 }

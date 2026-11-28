@@ -320,7 +320,7 @@ export default function ProfessorContractClient({ demo = false, initialContract,
         </div>
 
         {/* Signatures Box */}
-        <div className="pt-6 border-t-2 border-slate-900 grid grid-cols-2 gap-6 text-center text-xs">
+        <div className="pt-6 border-t-2 border-slate-900 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 text-center text-xs">
           <div className="space-y-8 p-4 bg-slate-50 rounded-2xl border border-slate-200">
             <p className="font-extrabold text-slate-900">طرف اول: معاونت آموزشی و ریاست دانشکده</p>
             <div className="h-16 flex items-center justify-center">

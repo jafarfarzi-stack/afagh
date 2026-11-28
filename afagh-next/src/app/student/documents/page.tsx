@@ -40,15 +40,15 @@ export default async function MyDocuments() {
       <div className="card space-y-2">
         {rows.length === 0 && <p className="text-sm text-slate-500">مدرکی بارگذاری نکرده‌اید.</p>}
         {rows.map(d => (
-          <div key={d.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm">
-            <div>
-              <p className="font-medium">{d.type ?? d.category ?? 'مدرک'}</p>
+          <div key={d.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium break-words">{d.type ?? d.category ?? 'مدرک'}</p>
               <p className="text-xs text-slate-500">{d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString('fa-IR') : ''}</p>
               {d.status === 'REJECTED' && d.reason && <p className="text-2xs text-red-600">دلیل رد: {d.reason}</p>}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <span className={'badge ' + (stColor[d.status ?? 'PENDING'] ?? '')}>{stFa[d.status ?? 'PENDING'] ?? d.status}</span>
-              <a className="btn-ghost !py-1 text-xs" href={'/api/archive/' + d.id} target="_blank" rel="noreferrer">مشاهده</a>
+              <a className="btn-ghost !min-h-11 !py-2 text-xs" href={'/api/archive/' + d.id} target="_blank" rel="noreferrer">مشاهده</a>
             </div>
           </div>
         ))}

@@ -45,7 +45,7 @@ export default function StudentNav() {
       {/* ⚡ نوار پایین بدون backdrop-blur (بلور روی المان fixed = عامل اصلی تأخیر
           لمسی در موبایل) + touch-action:manipulation برای پاسخ فوری تب‌ها */}
       <nav
-        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 print:hidden"
+        className="ui-bottom-nav lg:hidden fixed inset-x-0 bottom-0 z-50 pb-[env(safe-area-inset-bottom,0px)] print:hidden"
         style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         aria-label="ناوبری اصلی دانشجو"
       >
@@ -77,7 +77,7 @@ export default function StudentNav() {
             type="button"
             onClick={() => setOpen(true)}
             aria-label="باز کردن منوی کامل"
-            className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all"
+            className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all"
           >
             <span className="text-base leading-none">☰</span>
             <span className="text-3xs leading-tight">منو</span>
@@ -96,7 +96,7 @@ export default function StudentNav() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="بستن منو"
-                className="rounded-lg px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-xl leading-none text-slate-500 hover:bg-slate-100"
               >
                 ×
               </button>

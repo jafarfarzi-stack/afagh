@@ -880,7 +880,7 @@ export default function ProfessorAttendanceClient({
       <div className="print:hidden flex flex-wrap items-center gap-2">
         <button
           onClick={() => setViewMode('course')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black transition ${
             viewMode === 'course' && allSessionsFlat.length > 0
               ? 'bg-indigo-700 text-white shadow'
               : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
@@ -890,7 +890,7 @@ export default function ProfessorAttendanceClient({
         </button>
         <button
           onClick={() => setViewMode('all')}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-black transition ${
             viewMode === 'all'
               ? 'bg-indigo-700 text-white shadow'
               : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
@@ -1015,16 +1015,16 @@ export default function ProfessorAttendanceClient({
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowMakeupModal(true)}
-              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition flex items-center gap-1.5"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow transition inline-flex items-center gap-1.5"
             >
               <span>➕ ایجاد جلسه جدید جبرانی</span>
             </button>
             <Link prefetch={false}
               href="/professor/schedule"
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
+              className="min-h-[44px] inline-flex items-center px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition"
             >
               🗓️ برنامه هفتگی
             </Link>
@@ -1369,8 +1369,8 @@ export default function ProfessorAttendanceClient({
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs rt">
+        <div className="overflow-x-auto rt-wrap">
+          <table className="w-full border-collapse text-xs rt rt--scroll min-w-[980px]">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th scope="col" className="p-3 border border-slate-800 w-12 font-extrabold">ردیف</th>
@@ -1579,7 +1579,7 @@ export default function ProfessorAttendanceClient({
       {/* MODAL: Professor Creates Make-up Session & Selects Free Classrooms Directly */}
       {showMakeupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 space-y-4 animate-scaleUp text-slate-900">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <h3 className="font-extrabold text-base text-slate-900">
                 ➕ ایجاد و تخصیص کلاس جلسه جبرانی

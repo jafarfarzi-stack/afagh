@@ -184,19 +184,21 @@ export default async function StudentLayout({ children }: { children: React.Reac
             {/* نظام وظیفه فقط برای دانشجویان مرد معنادار است (بانوان معف‌اند) */}
             {userRow?.gender !== 'FEMALE' && (
               <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-teal-500/20 border border-teal-400/30 px-1.5 py-0.5 font-bold text-teal-100">
-                <span>🪖 سخا:</span>
+                <span className="hidden sm:inline">🪖 سخا:</span>
+                <span className="sm:hidden">🪖</span>
                 <b className="font-black text-white">{me?.militaryStatus || 'ثبت نشده'}</b>
               </span>
             )}
             <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-indigo-500/20 border border-indigo-400/30 px-1.5 py-0.5 font-bold text-indigo-100">
-              <span>🎓 ترم:</span>
+              <span className="hidden sm:inline">🎓 ترم:</span>
+                <span className="sm:hidden">🎓</span>
               <b className="font-black text-white">
                 {(studentTermOrdinal ?? me?.currentTermNo ?? 0).toLocaleString('fa-IR')}
               </b>
             </span>
 
             {/* سوییچر ترم و کارتابل — `relative` برای باز شدن پنل کشویی موبایل در همین ردیف */}
-            <div className="relative flex items-center gap-1.5 ms-auto shrink-0">
+            <div className="relative flex w-full sm:w-auto items-center justify-end gap-1.5 sm:ms-auto shrink-0">
               <TermSwitcher
                 terms={termScope.terms}
                 selectedId={termScope.selectedId}

@@ -134,7 +134,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
               </div>
             </div>
             {/* یک ارتفاع و یک تراز برای همهٔ کنترل‌ها (`.hdr-controls` در globals.css) */}
-            <div className="hdr-controls flex flex-wrap items-center gap-2 shrink-0">
+            <div className="hdr-controls flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
               <TermSwitcher
                 terms={termScope.terms}
                 selectedId={termScope.selectedId}

@@ -18,7 +18,7 @@ function Radar({ axes }: { axes: { label: string; mine: number | null; dept: num
     axes.map((a, i) => pt(i, a[key] ?? 0).map(n => n.toFixed(1)).join(',')).join(' ');
 
   return (
-    <svg width={size} height={size} className="mx-auto">
+    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} className="mx-auto h-auto max-w-full">
       {[0.25, 0.5, 0.75, 1].map(k => (
         <polygon
           key={k}

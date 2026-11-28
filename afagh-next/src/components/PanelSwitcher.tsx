@@ -93,7 +93,7 @@ export default function PanelSwitcher({
         onClick={() => (open ? close() : setOpen(true))}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/20"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/20 sm:min-h-0"
         title="تعویض کارتابل (نقش) یا حساب دیگری با همین کدملی"
       >
         <span aria-hidden>🔀</span>
@@ -136,7 +136,7 @@ export default function PanelSwitcher({
                   <div
                     key={l.key}
                     aria-current="page"
-                    className="flex items-start gap-2 rounded-lg bg-indigo-50 px-2 py-2 ring-1 ring-inset ring-indigo-200"
+                    className="flex min-h-[44px] items-start gap-2 rounded-lg bg-indigo-50 px-2 py-2 ring-1 ring-inset ring-indigo-200"
                   >
                     {body}
                   </div>
@@ -146,7 +146,7 @@ export default function PanelSwitcher({
                     href={l.href}
                     role="menuitem"
                     onClick={close}
-                    className="flex items-start gap-2 rounded-lg px-2 py-2 transition hover:bg-slate-50"
+                    className="flex min-h-[44px] items-start gap-2 rounded-lg px-2 py-2 transition hover:bg-slate-50"
                   >
                     {body}
                   </Link>
@@ -177,7 +177,7 @@ export default function PanelSwitcher({
                         <button
                           type="button"
                           onClick={() => { setOpenFor(key); setPw(''); setErr(''); }}
-                          className="shrink-0 rounded-lg bg-indigo-700 px-2.5 py-1 text-2xs font-bold text-white hover:bg-indigo-800"
+                          className="shrink-0 rounded-lg bg-indigo-700 px-2.5 py-2 text-2xs font-bold text-white hover:bg-indigo-800 min-h-[44px] sm:min-h-0 sm:py-1"
                         >
                           ورود با این کد ←
                         </button>
@@ -191,7 +191,7 @@ export default function PanelSwitcher({
                           placeholder="رمز این حساب"
                           value={pw}
                           onChange={(e) => setPw(e.target.value)}
-                          className="w-32 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-left text-xs"
+                          className="w-32 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-left text-xs min-h-[44px] sm:min-h-0 sm:py-1"
                           autoComplete="current-password"
                           autoFocus
                         />
@@ -199,7 +199,7 @@ export default function PanelSwitcher({
                           type="button"
                           disabled={busy}
                           onClick={() => go(s)}
-                          className="rounded-lg bg-emerald-700 px-2.5 py-1 text-2xs font-bold text-white hover:bg-emerald-800 disabled:opacity-60"
+                          className="rounded-lg bg-emerald-700 px-2.5 py-2 text-2xs font-bold text-white hover:bg-emerald-800 disabled:opacity-60 min-h-[44px] sm:min-h-0 sm:py-1"
                         >
                           {busy ? '…' : 'ورود'}
                         </button>
@@ -207,7 +207,7 @@ export default function PanelSwitcher({
                           type="button"
                           disabled={busy}
                           onClick={() => { setOpenFor(null); setPw(''); setErr(''); }}
-                          className="rounded-lg bg-white px-1.5 py-1 text-2xs text-slate-500 hover:underline"
+                          className="rounded-lg bg-white px-1.5 py-2 text-2xs text-slate-500 hover:underline min-h-[44px] sm:min-h-0 sm:py-1"
                         >
                           انصراف
                         </button>

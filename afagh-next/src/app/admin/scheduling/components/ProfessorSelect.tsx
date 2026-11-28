@@ -25,42 +25,42 @@ import type { ProfessorOption } from '../types';
 export type ProfessorSelectGroup = { label: string; professors: ProfessorOption[] };
 
 export function ProfessorSelect({
-  professors, value, onChange, className, label, groups,
+ professors, value, onChange, className, label, groups,
 }: {
-  professors: ProfessorOption[];
-  value: number;
-  onChange: (id: number) => void;
-  className?: string;
-  label?: (p: ProfessorOption) => string;
-  groups?: ProfessorSelectGroup[];
+ professors: ProfessorOption[];
+ value: number;
+ onChange: (id: number) => void;
+ className?: string;
+ label?: (p: ProfessorOption) => string;
+ groups?: ProfessorSelectGroup[];
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const text = label ?? ((p: ProfessorOption) => `${p.name} (${p.academicRank})`);
-  const selected = professors.find(p => p.id === value);
-  const list = expanded ? professors : (selected ? [selected] : professors.slice(0, 1));
-  const open = () => { if (!expanded) setExpanded(true); };
-  const hasGroups = expanded && groups && groups.some(g => g.professors.length > 0);
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(Number(e.target.value))}
-      onMouseDown={open}
-      onFocus={open}
-      onTouchStart={open}
-      onKeyDown={open}
-      className={className}
-    >
-      {hasGroups
-        ? groups!.map(g => (
-            <optgroup key={g.label} label={g.label}>
-              {g.professors.map(p => (
-                <option key={p.id} value={p.id}>{text(p)}</option>
-              ))}
-            </optgroup>
-          ))
-        : list.map(p => (
-            <option key={p.id} value={p.id}>{text(p)}</option>
-          ))}
-    </select>
-  );
+ const [expanded, setExpanded] = useState(false);
+ const text = label ?? ((p: ProfessorOption) => `${p.name} (${p.academicRank})`);
+ const selected = professors.find(p => p.id === value);
+ const list = expanded ? professors : (selected ? [selected] : professors.slice(0, 1));
+ const open = () => { if (!expanded) setExpanded(true); };
+ const hasGroups = expanded && groups && groups.some(g => g.professors.length > 0);
+ return (
+ <select
+ value={value}
+ onChange={e => onChange(Number(e.target.value))}
+ onMouseDown={open}
+ onFocus={open}
+ onTouchStart={open}
+ onKeyDown={open}
+ className={className}
+ >
+ {hasGroups
+ ? groups!.map(g => (
+ <optgroup key={g.label} label={g.label}>
+ {g.professors.map(p => (
+ <option key={p.id} value={p.id}>{text(p)}</option>
+ ))}
+ </optgroup>
+ ))
+ : list.map(p => (
+ <option key={p.id} value={p.id}>{text(p)}</option>
+ ))}
+ </select>
+ );
 }
